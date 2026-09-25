@@ -10,33 +10,22 @@
 }
 ```
 
-`code = 0` 表示成功。业务错误走 `AppError`，返回非 0 的 `code`。
+`code = 0` 表示成功。业务错误走 `AppError`。
 
-## M1 接口
+## 健康检查
 
-### `GET /api/v1/health`
+`GET /api/v1/health`
 
-用途：探活应用、MySQL、Redis。
+依赖不可用时 HTTP 仍为 200，字段标记 `unavailable`。当前 `milestone` 为 `V2.1`。
 
-输入：无。
+## 认证
 
-输出：
+详见 `docs/auth.md`。
 
-```json
-{
-  "code": 0,
-  "message": "ok",
-  "data": {
-    "app": "ok",
-    "mysql": "ok",
-    "redis": "ok",
-    "milestone": "M1"
-  }
-}
-```
+- `POST /api/v1/auth/register`
+- `POST /api/v1/auth/login`
+- `POST /api/v1/auth/refresh`
+- `POST /api/v1/auth/logout`
+- `GET /api/v1/auth/me`
 
-规则：依赖不可用时 HTTP 仍为 200，`mysql` / `redis` 标记为 `unavailable`。
-
-Swagger：http://localhost:8001/docs
-
-认证、租户、业务接口从 M2 开始补充。
+Swagger：http://localhost:8011/docs

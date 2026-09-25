@@ -40,7 +40,7 @@ export function DashboardPage() {
                 type="warning"
                 showIcon
                 title="无法连接后端"
-                description={error instanceof Error ? error.message : '请启动 FastAPI 8001 端口'}
+                description={error instanceof Error ? error.message : '请启动 FastAPI 8011 端口'}
               />
             ) : null}
             {data ? (

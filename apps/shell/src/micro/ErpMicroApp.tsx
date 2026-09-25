@@ -1,30 +1,48 @@
-import { ERP_APP_NAME, ERP_ROUTES, type ShellToErpProps } from '@neorvion/shared';
+import { currentUserQueryKey, ERP_APP_NAME, ERP_ROUTES, type ShellToErpProps } from '@neorvion/shared';
+import { useQuery } from '@tanstack/react-query';
 import { Alert, Button } from 'antd';
 import { useMemo, useState } from 'react';
 import { useLocation } from 'react-router-dom';
+import { fetchCurrentUser } from '@/api/auth';
 import { WujieHost } from '@/micro/wujie-host';
+import { useAuthStore } from '@/stores/auth-store';
 import { useShellStore } from '@/stores/shell-store';
 
+function getErpEntry() {
+  return (import.meta.env.VITE_ERP_ENTRY || 'http://localhost:8016').replace(/\/$/, '');
+}
+
 function buildErpUrl(pathname: string) {
-  const entry = import.meta.env.VITE_ERP_ENTRY.replace(/\/$/, '');
+  const entry = getErpEntry();
   const normalizedPath = pathname.startsWith('/erp') ? pathname : ERP_ROUTES.dashboard;
-  return `${entry}${normalizedPath}`;
+  const withDashboard = normalizedPath === '/erp' || normalizedPath === '/erp/'
+    ? ERP_ROUTES.dashboard
+    : normalizedPath;
+  return `${entry}${withDashboard}`;
 }
 
 export function ErpMicroApp() {
   const location = useLocation();
   const tenantId = useShellStore((state) => state.currentTenantId);
+  const accessToken = useAuthStore((state) => state.accessToken);
   const [loadFailed, setLoadFailed] = useState(false);
+  const { data: currentUser } = useQuery({
+    queryKey: currentUserQueryKey(),
+    queryFn: fetchCurrentUser,
+    enabled: Boolean(accessToken),
+  });
 
   const url = buildErpUrl(location.pathname);
 
   const props = useMemo<ShellToErpProps>(
     () => ({
-      token: null,
+      token: accessToken,
       tenantId,
-      user: null,
+      user: currentUser
+        ? { id: currentUser.id, displayName: currentUser.display_name }
+        : null,
     }),
-    [tenantId],
+    [accessToken, currentUser, tenantId],
   );
 
   return (

@@ -5,7 +5,7 @@ import react from '@vitejs/plugin-react';
 import { defineConfig } from 'vite';
 
 const rootDir = fileURLToPath(new URL('.', import.meta.url));
-const erpOrigin = 'http://localhost:5174';
+const erpOrigin = 'http://localhost:8016';
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],
@@ -22,7 +22,8 @@ export default defineConfig({
   },
   server: {
     host: '0.0.0.0',
-    port: 5174,
+    port: 8016,
+    strictPort: true,
     // 子应用 HTML 被主应用跨源拉取时，必须把资源写成绝对地址。
     origin: erpOrigin,
     cors: true,

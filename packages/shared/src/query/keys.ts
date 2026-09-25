@@ -5,3 +5,7 @@
 export function healthQueryKey(tenantId: number | null) {
   return ['health', tenantId] as const;
 }
+
+export function currentUserQueryKey() {
+  return ['current-user'] as const;
+}

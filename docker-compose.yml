@@ -50,9 +50,15 @@ services:
     environment:
       APP_ENV: development
       APP_HOST: 0.0.0.0
-      APP_PORT: 8001
+      APP_PORT: 8011
       SECRET_KEY: ${SECRET_KEY:-change-me-in-local-dev}
-      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173,http://localhost:5174}
+      JWT_ACCESS_EXPIRE_MINUTES: 30
+      JWT_REFRESH_EXPIRE_DAYS: 7
+      REFRESH_COOKIE_NAME: neorvion_refresh
+      REFRESH_COOKIE_PATH: /api/v1/auth
+      REFRESH_COOKIE_SAMESITE: lax
+      REFRESH_COOKIE_SECURE: "false"
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:8015,http://localhost:8016,http://127.0.0.1:8015,http://127.0.0.1:8016}
       MYSQL_HOST: mysql
       MYSQL_PORT: 3306
       MYSQL_USER: ${MYSQL_USER:-neorvion}
@@ -63,10 +69,10 @@ services:
       REDIS_PASSWORD: ${REDIS_PASSWORD:-}
       REDIS_DB: 0
     ports:
-      - "8001:8001"
+      - "8011:8011"
     command: >
       sh -c "uv run --no-dev alembic upgrade head &&
-             uv run --no-dev uvicorn app.main:app --host 0.0.0.0 --port 8001"
+             uv run --no-dev uvicorn app.main:app --host 0.0.0.0 --port 8011"
 
   nginx:
     image: nginx:1.27-alpine

@@ -1,6 +1,7 @@
 from typing import Any
 
 from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
@@ -27,4 +28,15 @@ def register_exception_handlers(app: FastAPI) -> None:
         return JSONResponse(
             status_code=exc.status_code,
             content=ErrorBody(code=exc.code, message=exc.message).model_dump(),
+        )
+
+    @app.exception_handler(RequestValidationError)
+    async def handle_validation_error(
+        _request: Request,
+        exc: RequestValidationError,
+    ) -> JSONResponse:
+        details = [{"loc": err.get("loc"), "msg": err.get("msg")} for err in exc.errors()]
+        return JSONResponse(
+            status_code=422,
+            content=ErrorBody(code=40000, message="请求参数不合法", data=details).model_dump(),
         )

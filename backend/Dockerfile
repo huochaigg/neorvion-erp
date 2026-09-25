@@ -14,6 +14,6 @@ COPY alembic.ini ./
 COPY alembic ./alembic
 COPY app ./app
 
-EXPOSE 8001
+EXPOSE 8011
 
-CMD ["uv", "run", "--no-dev", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8001"]
+CMD ["uv", "run", "--no-dev", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8011"]

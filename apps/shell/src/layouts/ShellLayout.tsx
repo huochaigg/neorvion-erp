@@ -1,16 +1,20 @@
 import {
   AppstoreOutlined,
+  LogoutOutlined,
   MenuFoldOutlined,
   MenuUnfoldOutlined,
   TeamOutlined,
   UserOutlined,
 } from '@ant-design/icons';
-import { ERP_ROUTES, SHELL_ROUTES } from '@neorvion/shared';
-import { Avatar, Button, Layout, Menu, Space, Tag } from 'antd';
+import { currentUserQueryKey, ERP_ROUTES, SHELL_ROUTES } from '@neorvion/shared';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { Avatar, Button, Dropdown, Layout, Menu, Space, Tag } from 'antd';
 import type { ReactNode } from 'react';
 import { useMemo } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
+import { fetchCurrentUser, logoutAccount } from '@/api/auth';
 import { AppLogo } from '@/components/AppLogo';
+import { useAuthStore } from '@/stores/auth-store';
 import { useShellStore } from '@/stores/shell-store';
 
 const { Header, Sider, Content } = Layout;
@@ -22,8 +26,17 @@ interface ShellLayoutProps {
 export function ShellLayout({ children }: ShellLayoutProps) {
   const navigate = useNavigate();
   const location = useLocation();
+  const queryClient = useQueryClient();
   const siderCollapsed = useShellStore((state) => state.siderCollapsed);
   const toggleSider = useShellStore((state) => state.toggleSider);
+  const accessToken = useAuthStore((state) => state.accessToken);
+  const resetAuth = useAuthStore((state) => state.reset);
+
+  const { data: currentUser } = useQuery({
+    queryKey: currentUserQueryKey(),
+    queryFn: fetchCurrentUser,
+    enabled: Boolean(accessToken),
+  });
 
   const selectedKey = location.pathname.startsWith(SHELL_ROUTES.erp)
     ? SHELL_ROUTES.erp
@@ -37,16 +50,44 @@ export function ShellLayout({ children }: ShellLayoutProps) {
     [],
   );
 
+  const onLogout = async () => {
+    try {
+      await logoutAccount();
+    } finally {
+      resetAuth();
+      queryClient.clear();
+      navigate(SHELL_ROUTES.login, { replace: true });
+    }
+  };
+
   return (
     <Layout className="min-h-screen">
       <Header className="flex items-center justify-between px-4">
         <div className="flex items-center gap-4">
           <AppLogo compact={siderCollapsed} />
-          <Tag color="processing">M1 基础设施</Tag>
+          <Tag color="processing">V2.1 认证</Tag>
         </div>
         <Space size={12}>
-          <span className="text-sm text-white/70">租户：尚未接入（M2）</span>
-          <Avatar size={32} icon={<UserOutlined />} />
+          <span className="text-sm text-white/70">租户：尚未接入（V2.2）</span>
+          <Dropdown
+            menu={{
+              items: [
+                {
+                  key: 'logout',
+                  icon: <LogoutOutlined />,
+                  label: '退出登录',
+                  onClick: () => {
+                    void onLogout();
+                  },
+                },
+              ],
+            }}
+          >
+            <Space className="cursor-pointer text-white">
+              <Avatar size={32} icon={<UserOutlined />} />
+              <span className="text-sm">{currentUser?.display_name ?? '已登录'}</span>
+            </Space>
+          </Dropdown>
         </Space>
       </Header>
       <Layout className="h-[calc(100vh-56px)]">
@@ -83,7 +124,7 @@ export function ShellLayout({ children }: ShellLayoutProps) {
             </div>
           </div>
         </Sider>
-        <Content className="h-full min-h-0 min-w-0 overflow-hidden">{children}</Content>
+        <Content className="h-full min-h-0 min-w-0 overflow-auto">{children}</Content>
       </Layout>
     </Layout>
   );
