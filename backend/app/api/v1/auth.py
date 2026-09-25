@@ -3,7 +3,7 @@ from fastapi import APIRouter, Request, Response
 from app.api.deps import CurrentUser, DbSession
 from app.core.config import settings
 from app.core.exceptions import AppError
-from app.schemas.auth import LoginRequest, PublicKeyOut, RegisterRequest, TokenResponse, UserOut
+from app.schemas.auth import LoginRequest, RegisterRequest, TokenResponse, UserOut
 from app.schemas.common import ApiResponse, ok
 from app.services.auth import AuthService
 
@@ -35,21 +35,6 @@ def _clear_refresh_cookie(response: Response) -> None:
 
 def _read_refresh_cookie(request: Request) -> str | None:
     return request.cookies.get(settings.refresh_cookie_name)
-
-
-@router.get(
-    "/public-key",
-    response_model=ApiResponse[PublicKeyOut],
-    summary="获取 RSA 公钥",
-)
-def public_key() -> ApiResponse[PublicKeyOut]:
-    """发放当前 RSA 公钥和一次性 challenge。
-
-    输入：无。
-    输出：key_id、PEM 公钥、algorithm、challenge_id、expires_in。
-    私钥永不返回。challenge 默认 300 秒内一次性有效。
-    """
-    return ok(AuthService.issue_public_key())
 
 
 @router.post(

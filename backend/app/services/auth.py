@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from app.core import challenge_store, token_store
 from app.core.config import settings
 from app.core.exceptions import AppError
-from app.core.rsa_crypto import RSA_ALGORITHM, RsaCryptoError, get_rsa_store
+from app.core.rsa_crypto import RsaCryptoError, get_rsa_store
 from app.core.security import (
     create_access_token,
     create_refresh_token,
@@ -15,7 +15,7 @@ from app.core.security import (
 )
 from app.models.user import User, UserStatus
 from app.repositories.user import UserRepository
-from app.schemas.auth import PublicKeyOut, TokenResponse, UserOut
+from app.schemas.auth import TokenResponse, UserOut
 
 
 def _validate_plain_password(plain_password: str) -> None:
@@ -33,19 +33,6 @@ class AuthService:
     def __init__(self, session: Session) -> None:
         self.session = session
         self.users = UserRepository(session)
-
-    @staticmethod
-    def issue_public_key() -> PublicKeyOut:
-        """发放当前 RSA 公钥和一次性 challenge。私钥永不返回。"""
-        store = get_rsa_store()
-        challenge_id = challenge_store.issue_challenge(store.current_key_id)
-        return PublicKeyOut(
-            key_id=store.current_key_id,
-            public_key=store.current_public_pem,
-            algorithm=RSA_ALGORITHM,
-            challenge_id=challenge_id,
-            expires_in=settings.rsa_challenge_ttl_seconds,
-        )
 
     def register(
         self,
@@ -103,12 +90,11 @@ class AuthService:
         payload = decode_token(refresh_token, expected_type="refresh")
         jti = str(payload["jti"])
         user_id = int(payload["sub"])
-        stored_user_id = token_store.get_refresh_user_id(jti)
+        stored_user_id = token_store.consume_refresh_session(jti)
         if stored_user_id is None or stored_user_id != user_id:
             raise AppError("登录已失效，请重新登录", code=40104, status_code=401)
 
         user = self._require_active_user(user_id)
-        token_store.revoke_refresh_session(jti)
         return self._issue_tokens(user.id)
 
     def logout(self, refresh_token: str | None) -> None:

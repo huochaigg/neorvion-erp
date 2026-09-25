@@ -1,7 +1,9 @@
-import axios, { isAxiosError, isCancel, type AxiosError, type InternalAxiosRequestConfig } from 'axios';
+import axios, { isCancel, type AxiosError, type InternalAxiosRequestConfig } from 'axios';
 import { ApiError, type ApiResponse, type TokenPayload } from '@neorvion/shared';
 import { SHELL_ROUTES } from '@neorvion/shared';
 import { useAuthStore } from '@/stores/auth-store';
+import { authClient } from './auth-client';
+import { toApiError, unwrapApi } from './http';
 
 export const apiClient = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL,
@@ -10,72 +12,27 @@ export const apiClient = axios.create({
 });
 
 const AUTH_REFRESH_URL = '/api/v1/auth/refresh';
-const AUTH_ANONYMOUS = new Set([
-  '/api/v1/auth/login',
-  '/api/v1/auth/register',
-  '/api/v1/auth/public-key',
-  AUTH_REFRESH_URL,
-]);
-const AUTH_SKIP_REFRESH = new Set([...AUTH_ANONYMOUS, '/api/v1/auth/logout']);
 
-let refreshPromise: Promise<string | null> | null = null;
-
-export function apiPathname(url?: string, baseURL?: string): string {
-  if (!url) {
-    return '';
-  }
-  try {
-    const origin = baseURL && /^https?:\/\//i.test(baseURL) ? baseURL : 'http://local.invalid';
-    const parsed = new URL(url, origin);
-    return parsed.pathname.replace(/\/$/, '') || '/';
-  } catch {
-    return (url.split('?')[0] ?? '').replace(/\/$/, '');
-  }
-}
-
-function shouldSkipAuthRefresh(config?: InternalAxiosRequestConfig): boolean {
-  if (!config) {
-    return false;
-  }
-  if (config.skipAuthRefresh) {
-    return true;
-  }
-  return AUTH_SKIP_REFRESH.has(apiPathname(config.url, config.baseURL));
-}
+let refreshPromise: Promise<string> | null = null;
 
 function redirectToLogin() {
   const from = `${window.location.pathname}${window.location.search}`;
   if (window.location.pathname === SHELL_ROUTES.login) {
     return;
   }
-  const target = `${SHELL_ROUTES.login}?from=${encodeURIComponent(from)}`;
-  window.location.assign(target);
+  window.location.assign(`${SHELL_ROUTES.login}?from=${encodeURIComponent(from)}`);
 }
 
-function toApiError(error: AxiosError<ApiResponse<unknown>>): ApiError {
-  const status = error.response?.status ?? 0;
-  const code = error.response?.data?.code ?? 0;
-  if (!error.response) {
-    return new ApiError('网络异常', { status, code });
-  }
-  if (status >= 500) {
-    return new ApiError(error.response.data?.message || '服务暂时不可用', { status, code });
-  }
-  return new ApiError(error.response.data?.message || error.message, { status, code });
-}
-
-async function refreshAccessToken(): Promise<string | null> {
+/**
+ * 全局只允许一个正在执行的 Refresh。
+ * 启动恢复、业务 401、React Strict Mode 双调用共享同一 Promise，避免轮换后第二次 401 把会话清掉。
+ */
+function refreshAccessToken(): Promise<string> {
   if (!refreshPromise) {
-    refreshPromise = apiClient
-      .post<ApiResponse<TokenPayload>>(AUTH_REFRESH_URL, undefined, { skipAuthRefresh: true })
-      .then((response) => {
-        const token = response.data.data.access_token;
-        useAuthStore.getState().setAccessToken(token);
-        return token;
-      })
-      .catch((error: unknown) => {
-        useAuthStore.getState().reset();
-        throw error;
+    refreshPromise = unwrapApi(authClient.post<ApiResponse<TokenPayload>>(AUTH_REFRESH_URL))
+      .then((tokens) => {
+        useAuthStore.getState().markAuthenticated(tokens.access_token);
+        return tokens.access_token;
       })
       .finally(() => {
         refreshPromise = null;
@@ -85,11 +42,6 @@ async function refreshAccessToken(): Promise<string | null> {
 }
 
 apiClient.interceptors.request.use((config) => {
-  const path = apiPathname(config.url, config.baseURL);
-  if (AUTH_ANONYMOUS.has(path)) {
-    delete config.headers.Authorization;
-    return config;
-  }
   const token = useAuthStore.getState().accessToken;
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
@@ -103,44 +55,37 @@ apiClient.interceptors.response.use(
     if (isCancel(error)) {
       return Promise.reject(error);
     }
+    const original = error.config as InternalAxiosRequestConfig | undefined;
     const status = error.response?.status;
-    const original = error.config;
-    const skipRefresh = shouldSkipAuthRefresh(original);
+    const skipRefresh = Boolean(original?.skipAuthRefresh);
 
     if (status !== 401 || !original || original._retried || skipRefresh) {
-      return Promise.reject(isAxiosError(error) ? toApiError(error) : error);
+      return Promise.reject(toApiError(error));
     }
 
     original._retried = true;
     try {
       const token = await refreshAccessToken();
-      if (!token) {
-        redirectToLogin();
-        return Promise.reject(new ApiError('登录已过期，请重新登录', { status: 401, code: 40100 }));
-      }
       original.headers.Authorization = `Bearer ${token}`;
       return apiClient.request(original);
     } catch {
+      useAuthStore.getState().markUnauthenticated();
       redirectToLogin();
       return Promise.reject(new ApiError('登录已过期，请重新登录', { status: 401, code: 40104 }));
     }
   },
 );
 
-export async function unwrapApi<T>(promise: Promise<{ data: ApiResponse<T> }>): Promise<T> {
-  const { data } = await promise;
-  if (data.code !== 0) {
-    throw new ApiError(data.message, { code: data.code });
-  }
-  return data.data;
-}
+export { unwrapApi };
 
-export async function refreshSession(): Promise<TokenPayload | null> {
+/** 仅用于应用启动恢复会话。401 表示没有有效 Refresh Cookie，属于预期结果。 */
+export async function restoreSession(): Promise<string | null> {
   try {
-    return await unwrapApi(
-      apiClient.post<ApiResponse<TokenPayload>>(AUTH_REFRESH_URL, undefined, { skipAuthRefresh: true }),
-    );
+    return await refreshAccessToken();
   } catch (error) {
+    if (useAuthStore.getState().status !== 'authenticated') {
+      useAuthStore.getState().markUnauthenticated();
+    }
     if (error instanceof ApiError && error.status === 401) {
       return null;
     }

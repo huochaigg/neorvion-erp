@@ -65,7 +65,7 @@ export function ShellLayout({ children }: ShellLayoutProps) {
       <Header className="flex items-center justify-between px-4">
         <div className="flex items-center gap-4">
           <AppLogo compact={siderCollapsed} />
-          <Tag color="processing">V2.1.1</Tag>
+          <Tag color="processing">V2.1.2</Tag>
         </div>
         <Space size={12}>
           <span className="text-sm text-white/70">租户：尚未接入（V2.2）</span>

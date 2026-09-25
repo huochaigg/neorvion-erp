@@ -2,7 +2,7 @@
 
 多租户跨境电商 ERP。当前仓库按里程碑持续迭代，**不要为每个版本重建项目**。
 
-当前里程碑：**V2.1.1**（V2.1 认证 + 配置化路由 / Refresh 白名单）。
+当前里程碑：**V2.1.2**。
 
 ## 技术栈
 
@@ -115,6 +115,12 @@ uv run ruff check app tests
 pnpm --filter @neorvion/shell build
 pnpm --filter @neorvion/erp build
 ```
+
+## V2.1.2
+
+- 公钥改为公开接口 `GET /api/crypto/public-key`
+- 认证状态：`initializing` / `authenticated` / `unauthenticated`
+- 独立 `authClient`；登录成功不立刻 Refresh；ERP 不轮换 Refresh
 
 ## V2.1.1
 

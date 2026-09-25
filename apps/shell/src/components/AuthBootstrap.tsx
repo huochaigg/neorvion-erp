@@ -1,7 +1,7 @@
 import { currentUserQueryKey } from '@neorvion/shared';
 import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, type ReactNode } from 'react';
-import { refreshSession } from '@/api/client';
+import { restoreSession } from '@/api/client';
 import { useAuthStore } from '@/stores/auth-store';
 
 interface AuthBootstrapProps {
@@ -9,36 +9,46 @@ interface AuthBootstrapProps {
 }
 
 export function AuthBootstrap({ children }: AuthBootstrapProps) {
-  const hydrated = useAuthStore((state) => state.hydrated);
-  const setAccessToken = useAuthStore((state) => state.setAccessToken);
-  const setHydrated = useAuthStore((state) => state.setHydrated);
+  const status = useAuthStore((state) => state.status);
+  const markAuthenticated = useAuthStore((state) => state.markAuthenticated);
+  const markUnauthenticated = useAuthStore((state) => state.markUnauthenticated);
   const queryClient = useQueryClient();
 
   useEffect(() => {
     let cancelled = false;
     void (async () => {
-      try {
-        const tokens = await refreshSession();
+      const existing = useAuthStore.getState().accessToken;
+      if (existing) {
         if (!cancelled) {
-          setAccessToken(tokens?.access_token ?? null);
+          markAuthenticated(existing);
+        }
+        return;
+      }
+      try {
+        const token = await restoreSession();
+        if (cancelled) {
+          return;
+        }
+        if (token) {
+          return;
+        }
+        queryClient.removeQueries({ queryKey: currentUserQueryKey() });
+        if (useAuthStore.getState().status === 'initializing') {
+          markUnauthenticated();
         }
       } catch {
-        if (!cancelled) {
-          setAccessToken(null);
+        if (!cancelled && useAuthStore.getState().status === 'initializing') {
+          markUnauthenticated();
           queryClient.removeQueries({ queryKey: currentUserQueryKey() });
-        }
-      } finally {
-        if (!cancelled) {
-          setHydrated(true);
         }
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, [queryClient, setAccessToken, setHydrated]);
+  }, [markAuthenticated, markUnauthenticated, queryClient]);
 
-  if (!hydrated) {
+  if (status === 'initializing') {
     return (
       <div className="flex min-h-screen items-center justify-center bg-[#f3f5f8] text-sm text-slate-500">
         正在恢复登录状态…

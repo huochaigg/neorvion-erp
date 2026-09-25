@@ -4,6 +4,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.api.crypto import router as crypto_router
 from app.api.v1.router import api_router
 from app.core.config import settings
 from app.core.exceptions import register_exception_handlers
@@ -24,7 +25,7 @@ def create_app() -> FastAPI:
     app = FastAPI(
         title=settings.app_name,
         version="0.1.0",
-        description="多租户跨境电商 ERP 后端。当前里程碑：V2.1.1。",
+        description="多租户跨境电商 ERP 后端。当前里程碑：V2.1.2。",
         lifespan=lifespan,
         docs_url="/docs",
         redoc_url="/redoc",
@@ -38,6 +39,7 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
     register_exception_handlers(app)
+    app.include_router(crypto_router)
     app.include_router(api_router)
     return app
 

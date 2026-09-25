@@ -1,17 +1,19 @@
 import { create } from 'zustand';
 
+export type AuthStatus = 'initializing' | 'authenticated' | 'unauthenticated';
+
 interface AuthState {
   accessToken: string | null;
-  hydrated: boolean;
-  setAccessToken: (token: string | null) => void;
-  setHydrated: (hydrated: boolean) => void;
+  status: AuthStatus;
+  markAuthenticated: (token: string) => void;
+  markUnauthenticated: () => void;
   reset: () => void;
 }
 
 export const useAuthStore = create<AuthState>((set) => ({
   accessToken: null,
-  hydrated: false,
-  setAccessToken: (accessToken) => set({ accessToken }),
-  setHydrated: (hydrated) => set({ hydrated }),
-  reset: () => set({ accessToken: null }),
+  status: 'initializing',
+  markAuthenticated: (accessToken) => set({ accessToken, status: 'authenticated' }),
+  markUnauthenticated: () => set({ accessToken: null, status: 'unauthenticated' }),
+  reset: () => set({ accessToken: null, status: 'unauthenticated' }),
 }));

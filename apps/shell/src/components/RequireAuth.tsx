@@ -8,10 +8,13 @@ interface RequireAuthProps {
 }
 
 export function RequireAuth({ children }: RequireAuthProps) {
-  const accessToken = useAuthStore((state) => state.accessToken);
+  const status = useAuthStore((state) => state.status);
   const location = useLocation();
 
-  if (!accessToken) {
+  if (status === 'initializing') {
+    return null;
+  }
+  if (status !== 'authenticated') {
     return <Navigate to={SHELL_ROUTES.login} replace state={{ from: location }} />;
   }
 

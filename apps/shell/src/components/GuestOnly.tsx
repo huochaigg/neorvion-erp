@@ -8,8 +8,11 @@ interface GuestOnlyProps {
 }
 
 export function GuestOnly({ children }: GuestOnlyProps) {
-  const accessToken = useAuthStore((state) => state.accessToken);
-  if (accessToken) {
+  const status = useAuthStore((state) => state.status);
+  if (status === 'initializing') {
+    return null;
+  }
+  if (status === 'authenticated') {
     return <Navigate to={SHELL_ROUTES.home} replace />;
   }
   return children;

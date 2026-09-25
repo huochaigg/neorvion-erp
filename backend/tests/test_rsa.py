@@ -55,7 +55,7 @@ def test_invalid_ciphertext_raises_generic_error() -> None:
 
 def test_webcrypto_rsa_oaep_sha256_interop(client: TestClient) -> None:
     """Node Web Crypto 与后端 cryptography 使用相同 RSA-OAEP + SHA-256。"""
-    material = client.get("/api/v1/auth/public-key").json()["data"]
+    material = client.get("/api/crypto/public-key").json()["data"]
     assert material["algorithm"] == RSA_ALGORITHM
     try:
         result = subprocess.run(
@@ -85,7 +85,7 @@ def test_webcrypto_rsa_oaep_sha256_interop(client: TestClient) -> None:
         },
     )
     assert response.status_code == 200, response.text
-    fresh = client.get("/api/v1/auth/public-key").json()["data"]
+    fresh = client.get("/api/crypto/public-key").json()["data"]
     login = client.post(
         "/api/v1/auth/login",
         json={

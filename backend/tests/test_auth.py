@@ -1,7 +1,7 @@
 from datetime import timedelta
 from time import sleep
 
-from app.core import challenge_store
+from app.core import challenge_store, token_store
 from app.core.config import settings
 from app.core.redis import redis_client
 from app.core.rsa_crypto import RSA_ALGORITHM, encrypt_with_public_pem, get_rsa_store
@@ -17,7 +17,7 @@ DISPLAY_NAME = "Alice"
 
 
 def _public_key(client: TestClient) -> dict[str, object]:
-    response = client.get("/api/v1/auth/public-key")
+    response = client.get("/api/crypto/public-key")
     assert response.status_code == 200, response.text
     data = response.json()["data"]
     assert data["algorithm"] == RSA_ALGORITHM
@@ -69,6 +69,31 @@ def test_public_key_endpoint(client: TestClient) -> None:
     assert data["expires_in"] == settings.rsa_challenge_ttl_seconds
     assert data["challenge_id"]
     assert redis_client.get(f"auth:challenge:{data['challenge_id']}") == data["key_id"]
+
+
+def test_public_key_ignores_access_token(client: TestClient) -> None:
+    response = client.get(
+        "/api/crypto/public-key",
+        headers=_auth_header("not-a-jwt"),
+    )
+    assert response.status_code == 200
+    assert "BEGIN PRIVATE KEY" not in response.json()["data"]["public_key"]
+
+
+def test_public_key_by_key_id(client: TestClient) -> None:
+    previous_id = settings.rsa_previous_key_id
+    response = client.get("/api/crypto/public-key", params={"key_id": previous_id})
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert data["key_id"] == previous_id
+    stored = redis_client.get(f"auth:challenge:{data['challenge_id']}")
+    assert stored == previous_id
+
+
+def test_public_key_unknown_key_id(client: TestClient) -> None:
+    response = client.get("/api/crypto/public-key", params={"key_id": "retired"})
+    assert response.status_code == 404
+    assert response.json()["code"] == 40024
 
 
 def test_register_success(client: TestClient) -> None:
@@ -327,8 +352,9 @@ def test_refresh_route_is_public_and_has_no_current_user_dependency() -> None:
 
     assert is_public_route("POST", "/api/v1/auth/refresh")
     assert is_public_route("GET", "/api/v1/health")
+    assert is_public_route("GET", "/api/crypto/public-key")
     assert not is_public_route("GET", "/api/v1/auth/me")
-    assert not is_public_route("POST", "/api/v1/auth")
+    assert not is_public_route("GET", "/api/v1/auth/public-key")
 
     paths = app.openapi()["paths"]
     assert "/api/v1/auth/refresh" in paths
@@ -343,3 +369,40 @@ def test_refresh_route_is_public_and_has_no_current_user_dependency() -> None:
     parameters = inspect.signature(auth_module.refresh).parameters
     assert "user" not in parameters
     assert "request" in parameters
+
+
+def test_expired_refresh_token_returns_401(client: TestClient) -> None:
+    _register(client)
+    login_response = _login(client)
+    access_token = login_response.json()["data"]["access_token"]
+    me = client.get("/api/v1/auth/me", headers=_auth_header(access_token)).json()["data"]
+    expired, jti = create_token(
+        user_id=me["id"],
+        token_type="refresh",
+        expires_delta=timedelta(seconds=-30),
+    )
+    token_store.save_refresh_session(jti=jti, user_id=me["id"], ttl_seconds=60)
+    client.cookies.set(settings.refresh_cookie_name, expired)
+    response = client.post("/api/v1/auth/refresh")
+    assert response.status_code == 401
+    assert response.json()["code"] == 40103
+
+
+def test_invalid_refresh_token_returns_401(client: TestClient) -> None:
+    client.cookies.set(settings.refresh_cookie_name, "not-a-jwt")
+    response = client.post("/api/v1/auth/refresh")
+    assert response.status_code == 401
+    assert response.json()["code"] == 40102
+
+
+def test_rotated_refresh_cookie_cannot_be_reused(client: TestClient) -> None:
+    _register(client)
+    login_response = _login(client)
+    old_cookie = login_response.cookies.get(settings.refresh_cookie_name)
+    assert old_cookie
+    first = client.post("/api/v1/auth/refresh")
+    assert first.status_code == 200
+    client.cookies.set(settings.refresh_cookie_name, old_cookie)
+    reused = client.post("/api/v1/auth/refresh")
+    assert reused.status_code == 401
+    assert reused.json()["code"] == 40104

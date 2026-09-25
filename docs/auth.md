@@ -1,4 +1,4 @@
-# 认证说明（V2.1 / V2.1.1）
+# 认证说明（V2.1.2）
 
 本阶段只实现全局用户身份与 JWT，不实现租户和 RBAC。`users` 表没有 `tenant_id`，也没有角色字段。
 
@@ -13,7 +13,7 @@ sequenceDiagram
     participant D as MySQL
 
     U->>F: 输入邮箱与明文密码
-    F->>A: GET /api/v1/auth/public-key
+    F->>A: GET /api/crypto/public-key
     A->>R: SET auth:challenge:{id} = key_id (TTL 300s)
     A-->>F: key_id, PEM 公钥, challenge_id, algorithm
     Note over A: 私钥永不返回
@@ -42,7 +42,7 @@ sequenceDiagram
     Note over F: 明文与密文都不写入 Zustand / localStorage
 ```
 
-1. 前端请求公钥。
+1. 注册/登录前请求 `GET /api/crypto/public-key`。这是公开接口，与 JWT 无关。
 2. 服务端返回当前 RSA Public Key、`key_id`、一次性 `challenge_id`。
 3. 前端用浏览器 Web Crypto 以 RSA-OAEP + SHA-256 加密用户输入的密码。
 4. 请求体只传 `encrypted_password`（Base64），不传明文。
@@ -60,7 +60,7 @@ sequenceDiagram
 | 泄露后果 | 攻击者可加密，但不能读已有密文 | 传输中的密码可被解密 |
 | 格式 | PEM / SPKI | PEM / PKCS#8 |
 
-RSA 是非对称算法：用公钥加密的数据，只能用配对的私钥解开。前端永远拿不到私钥。
+RSA 公钥只用于加密密码；JWT Access / Refresh 用另一套 `SECRET_KEY` 做 HMAC 签名。二者不能混用。
 
 ## RSA 加密 vs Argon2id 哈希
 
@@ -141,12 +141,12 @@ Refresh Token 不能当作 Access Token 访问 `/me`。
 
 ## 认证白名单
 
-公开接口写在 `app/core/auth_public.py`，按 **HTTP Method + 完整路径** 精确匹配，不能用 `/api/v1/auth` 前缀一把放行。
+公开接口写在 `app/core/auth_public.py`，按 **HTTP Method + 完整路径** 精确匹配。
 
 | 方法 | 路径 | 校验什么 |
 | --- | --- | --- |
 | GET | /api/v1/health | 无 |
-| GET | /api/v1/auth/public-key | 无 |
+| GET | /api/crypto/public-key | 无（RSA 公钥，可选 `key_id`） |
 | POST | /api/v1/auth/register | RSA challenge，无 JWT |
 | POST | /api/v1/auth/login | RSA challenge，无 JWT |
 | POST | /api/v1/auth/refresh | **只校验 Refresh Cookie** |
@@ -154,22 +154,25 @@ Refresh Token 不能当作 Access Token 访问 `/me`。
 
 `GET /api/v1/auth/me` 必须带有效 Access Token。
 
-### Access Token 与 Refresh Token 的区别
+### Access Token 与 Refresh Token 的生命周期
 
-- Access Token：`Authorization: Bearer`，`type=access`，短时，给业务接口用。过期后不能访问 `/me`。
-- Refresh Token：HttpOnly Cookie，`Path=/api/v1/auth`，`type=refresh`，存在 Redis `auth:refresh:{jti}`。只给 `/refresh` 和 `/logout` 用。
+- Access Token：约 30 分钟，内存保存，过期后业务接口 401。
+- Refresh Token：约 7 天，HttpOnly Cookie，`Path=/api/v1/auth`。每次 `/refresh` 成功会用 Redis `GETDEL` 原子消费旧 jti 再签发新 Cookie，并发刷新时只有一个请求能成功。
 
-`/refresh` **不走** `get_current_user()`。请求里即使带着过期 Access Token 也会被忽略。没有 Cookie、Cookie 无效、过期、已撤销或 type 不是 refresh 时，仍然返回 401。
+`/refresh` **不走** `get_current_user()`。没有 Cookie、过期、无效或已撤销时返回 **401**。这是正常认证结果，不要改成 200。前端不能用 `document.cookie` 判断 HttpOnly Cookie 是否存在。
+
+开发请统一 `http://localhost:8011` / `http://localhost:8015`，不要混用 `127.0.0.1`，否则 Cookie 不会带上。前端直连 API，没有 Vite 代理；Cookie Domain 不设置（host-only），`SameSite=Lax`，开发环境 `Secure=false`。不同端口的 `localhost` 视为同站，Refresh Cookie 可以随跨端口 XHR 发送。
 
 ## Axios 自动刷新
 
-1. 业务接口 401 → 尝试一次 `/refresh`（单飞，并发共用同一个 Promise）。
-2. `/refresh` 本身带 `skipAuthRefresh`，失败不再刷新，避免递归。
-3. 登录、注册、公钥、refresh 请求不附加 Access Token。
-4. 刷新成功后重放原请求；失败则清状态并跳转 `/login`。
-5. 打开应用时 `AuthBootstrap` 会调一次 refresh：没有 Cookie 时后端 401，前端视为「未登录」，不弹错误。
+Shell 有两个客户端：
 
-Cookie 只发给设置它的主机。请统一用 `http://localhost:8011`，不要把页面开在 `localhost`、接口却打到 `127.0.0.1`。
+- `authClient`：公钥、登录、注册、Refresh、Logout。不带 Access Token，也不触发自动刷新。
+- `apiClient`：业务接口。401 时用 `authClient` 刷新一次（模块级单飞 Promise），成功后重放原请求，每条最多重试一次。
+
+登录成功后 **不会** 立刻再打 Refresh。只有刷新页面且内存没有 Access Token 时，`AuthBootstrap` 才调用一次 Restore，并与业务 401 刷新共用同一个 Promise。Restore 收到 401 视为未登录，不弹窗。
+
+ERP **不调用 Refresh**，只用 Shell 通过 Wujie props 传入的 token，避免双边轮换把 Redis 会话作废。独立启动 ERP 时没有 Shell token，业务接口可能 401，但不会去轮换 Cookie。
 
 ## 前端异常处理
 
@@ -180,37 +183,31 @@ Cookie 只发给设置它的主机。请统一用 `http://localhost:8011`，不�
 
 ## API
 
-前缀：`/api/v1/auth`
-
 | 方法 | 路径 | 说明 | 鉴权 |
 | --- | --- | --- | --- |
-| GET | /public-key | 当前 RSA 公钥与一次性 challenge | 否 |
-| POST | /register | 注册（RSA 密文） | 否 |
-| POST | /login | 登录（RSA 密文） | 否 |
-| POST | /refresh | 刷新 Access Token | Refresh Cookie |
-| POST | /logout | 撤销 Refresh 并清 Cookie | Refresh Cookie（可空） |
-| GET | /me | 当前用户 | Access Token |
+| GET | /api/crypto/public-key | RSA 公钥与一次性 challenge，可选 `key_id` | 否 |
+| POST | /api/v1/auth/register | 注册（RSA 密文） | 否 |
+| POST | /api/v1/auth/login | 登录（RSA 密文） | 否 |
+| POST | /api/v1/auth/refresh | 刷新 Access Token | Refresh Cookie |
+| POST | /api/v1/auth/logout | 撤销 Refresh 并清 Cookie | Refresh Cookie（可空） |
+| GET | /api/v1/auth/me | 当前用户 | Access Token |
 
-`GET /public-key` 返回 `key_id`、`public_key`、`algorithm`（`RSA-OAEP-SHA256`）、`challenge_id`、`expires_in`。
+公钥返回 `key_id`、`public_key`、`algorithm`、`challenge_id`、`expires_in`。未知 `key_id` 返回 404。私钥永不返回。
 
-注册 / 登录提交 `email`、`encrypted_password`、`key_id`、`challenge_id`（注册另加 `display_name`）。请求里出现明文 `password` 字段会 422。
-
-统一响应仍是 `{ code, message, data }`。
-
-算法：RSA-2048、OAEP、SHA-256、MGF1-SHA-256。后端用 `cryptography`，前端用 `crypto.subtle`。不用 PKCS#1 v1.5。
+注册 / 登录提交 `email`、`encrypted_password`、`key_id`、`challenge_id`（注册另加 `display_name`）。
 
 ## 前端流程
 
-1. 打开应用时调用 `/refresh` 尝试恢复登录。
-2. 无有效 Cookie 则停在登录页。
-3. 登录 / 注册由 `encryptAuthPassword` 统一取公钥并加密，页面不重复实现 RSA。
-4. 登录成功后内存保存 Access Token，并跳转原目标页。
-5. 业务请求自动带 `Authorization: Bearer`。
-6. 多个请求同时 401 时共用同一个 Refresh Promise，避免并发重复刷新。
-7. Refresh 失败则清空状态并跳转 `/login`。
-8. ERP 不实现登录页，只通过 Wujie props 接收 token 与用户快照。
+Zustand `status`：`initializing` → `authenticated` | `unauthenticated`。初始化结束前不把「没有 Access Token」当成已判定未登录去跳转。
 
-明文密码不得写入 Zustand、localStorage 或 sessionStorage，也不得打印到控制台。
+1. 启动：若内存无 Access Token，用 `authClient` 调一次 `/refresh`。
+2. 200：写入 Access Token，进入 `authenticated`，再按需请求 `/me`。
+3. 401：进入 `unauthenticated`，不弹窗。随后访客页可访问，受保护路由去登录。
+4. 登录成功：直接保存 Access Token，**不再打 Refresh**。
+5. 业务 401：`apiClient` 单飞 Refresh，成功重放，失败清状态并去登录。
+6. ERP 只消费 Shell 传入的 token。
+
+明文密码不得写入 Zustand、localStorage 或 sessionStorage。
 
 ## 环境变量
 
