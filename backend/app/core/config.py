@@ -47,6 +47,13 @@ class Settings(BaseSettings):
     redis_password: str = ""
     redis_db: int = 0
 
+    rsa_key_id: str = "v1"
+    rsa_private_key_path: str = "secrets/rsa/v1/private.pem"
+    rsa_public_key_path: str = "secrets/rsa/v1/public.pem"
+    rsa_previous_key_id: str = ""
+    rsa_previous_private_key_path: str = ""
+    rsa_challenge_ttl_seconds: int = 300
+
     @property
     def is_production(self) -> bool:
         return self.app_env.lower() in {"prod", "production"}

@@ -3,7 +3,6 @@ import { App, Button, Card, Form, Input, Typography } from 'antd';
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { loginAccount } from '@/api/auth';
 import { AuthLayout } from '@/layouts/AuthLayout';
-import { digestPassword } from '@/lib/password';
 import { useAuthStore } from '@/stores/auth-store';
 
 interface LoginFormValues {
@@ -25,7 +24,7 @@ export function LoginPage() {
     try {
       const tokens = await loginAccount({
         email: values.email,
-        password: await digestPassword(values.password),
+        password: values.password,
       });
       setAccessToken(tokens.access_token);
       navigate(redirectTo, { replace: true });

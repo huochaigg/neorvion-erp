@@ -20,7 +20,7 @@ export function AuthBootstrap({ children }: AuthBootstrapProps) {
       try {
         const tokens = await refreshSession();
         if (!cancelled) {
-          setAccessToken(tokens.access_token);
+          setAccessToken(tokens?.access_token ?? null);
         }
       } catch {
         if (!cancelled) {

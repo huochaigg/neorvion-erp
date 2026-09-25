@@ -3,7 +3,6 @@ import { App, Button, Card, Form, Input, Typography } from 'antd';
 import { Link, useNavigate } from 'react-router-dom';
 import { registerAccount } from '@/api/auth';
 import { AuthLayout } from '@/layouts/AuthLayout';
-import { digestPassword } from '@/lib/password';
 
 interface RegisterFormValues {
   email: string;
@@ -20,7 +19,7 @@ export function RegisterPage() {
     try {
       await registerAccount({
         email: values.email,
-        password: await digestPassword(values.password),
+        password: values.password,
         display_name: values.display_name,
       });
       message.success('注册成功，请登录');

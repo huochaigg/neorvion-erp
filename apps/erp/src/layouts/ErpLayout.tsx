@@ -1,16 +1,12 @@
-import {
-  AppstoreOutlined,
-  DatabaseOutlined,
-  HomeOutlined,
-  ShoppingCartOutlined,
-  ShopOutlined,
-} from '@ant-design/icons';
-import { ERP_PATHS } from '@neorvion/shared';
 import { Layout, Menu, Tag } from 'antd';
 import type { ReactNode } from 'react';
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
+import { AppBreadcrumb } from '@/components/AppBreadcrumb';
 import { isEmbeddedInWujie } from '@/lib/runtime';
+import { buildMenuItems } from '@/router/menu';
+import { getOpenKeysForPath, getSelectedMenuKey, matchRoute, resolveNavigatePath } from '@/router/match';
+import { routes } from '@/router/routes';
 import { useErpStore } from '@/stores/erp-store';
 
 const { Header, Sider, Content } = Layout;
@@ -25,21 +21,18 @@ export function ErpLayout({ children }: ErpLayoutProps) {
   const siderCollapsed = useErpStore((state) => state.siderCollapsed);
   const setSiderCollapsed = useErpStore((state) => state.setSiderCollapsed);
   const embedded = isEmbeddedInWujie();
-
-  const selectedKey = (Object.values(ERP_PATHS) as string[]).includes(location.pathname)
-    ? location.pathname
-    : ERP_PATHS.dashboard;
-
-  const menuItems = useMemo(
-    () => [
-      { key: ERP_PATHS.dashboard, icon: <HomeOutlined />, label: '工作台' },
-      { key: ERP_PATHS.products, icon: <AppstoreOutlined />, label: '商品' },
-      { key: ERP_PATHS.warehouses, icon: <ShopOutlined />, label: '仓库' },
-      { key: ERP_PATHS.inventory, icon: <DatabaseOutlined />, label: '库存' },
-      { key: ERP_PATHS.orders, icon: <ShoppingCartOutlined />, label: '订单' },
-    ],
-    [],
+  const menuItems = useMemo(() => buildMenuItems(routes), []);
+  const match = useMemo(() => matchRoute(routes, location.pathname), [location.pathname]);
+  const selectedKey = getSelectedMenuKey(match);
+  const computedOpenKeys = useMemo(
+    () => getOpenKeysForPath(routes, location.pathname),
+    [location.pathname],
   );
+  const [openKeys, setOpenKeys] = useState<string[]>(computedOpenKeys);
+
+  useEffect(() => {
+    setOpenKeys(computedOpenKeys);
+  }, [computedOpenKeys]);
 
   return (
     <Layout className="h-full min-h-full">
@@ -59,13 +52,20 @@ export function ErpLayout({ children }: ErpLayoutProps) {
         >
           <Menu
             mode="inline"
-            selectedKeys={[selectedKey]}
+            selectedKeys={selectedKey ? [selectedKey] : []}
+            openKeys={siderCollapsed ? [] : openKeys}
+            onOpenChange={setOpenKeys}
             items={menuItems}
             className="border-none pt-3"
-            onClick={({ key }) => navigate(key)}
+            onClick={({ key }) => {
+              navigate(resolveNavigatePath(routes, key));
+            }}
           />
         </Sider>
-        <Content className="min-w-0 overflow-auto p-5">{children}</Content>
+        <Content className="min-w-0 overflow-auto p-5">
+          <AppBreadcrumb pathname={location.pathname} />
+          {children}
+        </Content>
       </Layout>
     </Layout>
   );

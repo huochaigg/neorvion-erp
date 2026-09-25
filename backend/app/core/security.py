@@ -1,6 +1,5 @@
-"""密码哈希与 JWT 签发/校验。密钥只从环境变量读取。"""
+"""密码哈希与 JWT 签发/校验。JWT 密钥与 RSA 传输密钥必须分开。"""
 
-import hashlib
 from datetime import UTC, datetime, timedelta
 from typing import Any, Literal
 from uuid import uuid4
@@ -12,32 +11,21 @@ from argon2.exceptions import InvalidHashError, VerifyMismatchError
 from app.core.config import settings
 from app.core.exceptions import AppError
 
-# Argon2id 是当前推荐的密码哈希算法，由 PasswordHasher 默认启用。
-# 不要用 MD5/SHA-256 直接入库：它们算得太快，容易被撞库。
+# Argon2id 只用于入库，不能代替传输层 RSA。
 _password_hasher = PasswordHasher()
 
 TokenType = Literal["access", "refresh"]
 
 
-def digest_password(plain_password: str) -> str:
-    """传输层摘要：SHA-256(明文) 的十六进制。
-
-    前端注册/登录先算这一步，请求体里不再出现明文密码。
-    这不是存储哈希。入库仍然必须再走 hash_password()（Argon2id）。
-    不用 MD5：MD5 已不适合保护口令。
-    """
-    return hashlib.sha256(plain_password.encode("utf-8")).hexdigest()
+def hash_password(plain_password: str) -> str:
+    """生成不可逆存储哈希。明文不得入库、不得写日志。"""
+    return _password_hasher.hash(plain_password)
 
 
-def hash_password(password_digest: str) -> str:
-    """生成不可逆存储哈希。明文和传输摘要都不得入库、不得写日志。"""
-    return _password_hasher.hash(password_digest)
-
-
-def verify_password(password_digest: str, password_hash: str) -> bool:
-    """校验传输摘要是否匹配库中的 Argon2id。哈希损坏时视为失败。"""
+def verify_password(plain_password: str, password_hash: str) -> bool:
+    """校验明文是否匹配 Argon2id。哈希损坏时视为失败。"""
     try:
-        return _password_hasher.verify(password_hash, password_digest)
+        return _password_hasher.verify(password_hash, plain_password)
     except (VerifyMismatchError, InvalidHashError):
         return False
 

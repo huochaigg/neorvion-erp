@@ -35,6 +35,7 @@ select = ["E", "F", "I", "UP", "B"]
 
 [tool.ruff.lint.per-file-ignores]
 "tests/conftest.py" = ["E402"]
+"scripts/*.py" = ["E402"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

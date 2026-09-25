@@ -46,3 +46,8 @@ pnpm-debug.log*
 coverage/
 .python-version
 !backend/.python-version
+
+# RSA 私钥与本地密钥目录，禁止提交
+backend/secrets/
+*.pem
+

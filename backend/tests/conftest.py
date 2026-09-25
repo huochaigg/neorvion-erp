@@ -3,10 +3,48 @@
 from __future__ import annotations
 
 import os
+import tempfile
+from pathlib import Path
+
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric import rsa
 
 os.environ["APP_ENV"] = "test"
 os.environ["MYSQL_DATABASE"] = "neorvion_erp_test"
 os.environ["REDIS_DB"] = "15"
+
+_RSA_ROOT = Path(tempfile.mkdtemp(prefix="neorvion-rsa-"))
+
+
+def _write_rsa_pair(directory: Path) -> None:
+    key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    directory.mkdir(parents=True, exist_ok=True)
+    (directory / "private.pem").write_bytes(
+        key.private_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PrivateFormat.PKCS8,
+            encryption_algorithm=serialization.NoEncryption(),
+        )
+    )
+    (directory / "public.pem").write_bytes(
+        key.public_key().public_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PublicFormat.SubjectPublicKeyInfo,
+        )
+    )
+
+
+_CURRENT = _RSA_ROOT / "v1"
+_PREVIOUS = _RSA_ROOT / "v0"
+_write_rsa_pair(_CURRENT)
+_write_rsa_pair(_PREVIOUS)
+
+os.environ["RSA_KEY_ID"] = "v1"
+os.environ["RSA_PRIVATE_KEY_PATH"] = str(_CURRENT / "private.pem")
+os.environ["RSA_PUBLIC_KEY_PATH"] = str(_CURRENT / "public.pem")
+os.environ["RSA_PREVIOUS_KEY_ID"] = "v0"
+os.environ["RSA_PREVIOUS_PRIVATE_KEY_PATH"] = str(_PREVIOUS / "private.pem")
+os.environ["RSA_CHALLENGE_TTL_SECONDS"] = "300"
 
 from collections.abc import Iterator
 

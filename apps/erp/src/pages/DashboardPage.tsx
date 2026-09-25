@@ -5,8 +5,9 @@ import { fetchHealth } from '@/api/health';
 import { PageHeader } from '@/components/PageHeader';
 import { StatusTag } from '@/components/StatusTag';
 import { getShellProps } from '@/lib/runtime';
+import type { PageProps } from '@/router/types';
 
-export function DashboardPage() {
+export function DashboardPage(props: PageProps) {
   const shellProps = getShellProps();
   const { data, isLoading, isError, error } = useQuery({
     queryKey: healthQueryKey(shellProps.tenantId),
@@ -17,8 +18,8 @@ export function DashboardPage() {
   return (
     <div>
       <PageHeader
-        title="业务工作台"
-        description="ERP 子应用已接入。商品、库存、订单等业务页面从 M3 开始实现。"
+        title={props.title ?? '业务工作台'}
+        description={props.description ?? 'ERP 子应用已接入。商品、库存、订单等业务页面从 M3 开始实现。'}
         extra={<StatusTag tone="ready">M1 骨架就绪</StatusTag>}
       />
       <Row gutter={[16, 16]}>

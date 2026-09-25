@@ -1,8 +1,10 @@
-import { ERP_PATHS } from '@neorvion/shared';
+import { ERP_DEFAULT_PATH } from '@neorvion/shared';
+import { Spin } from 'antd';
+import { Suspense } from 'react';
 import { BrowserRouter, Navigate, Outlet, Route, Routes } from 'react-router-dom';
 import { ErpLayout } from '@/layouts/ErpLayout';
-import { DashboardPage } from '@/pages/DashboardPage';
-import { PlaceholderPage } from '@/pages/PlaceholderPage';
+import { buildRouteElements } from '@/router/build-routes';
+import { PAGE_COMPONENTS } from '@/router/pages';
 
 function LayoutFrame() {
   return (
@@ -12,46 +14,29 @@ function LayoutFrame() {
   );
 }
 
+function NotFoundPage() {
+  const Page = PAGE_COMPONENTS.Placeholder;
+  return (
+    <Suspense
+      fallback={
+        <div className="flex min-h-[240px] items-center justify-center">
+          <Spin />
+        </div>
+      }
+    >
+      <Page title="未找到页面" description={`可返回 ${ERP_DEFAULT_PATH}`} />
+    </Suspense>
+  );
+}
+
 export function AppRouter() {
   return (
     <BrowserRouter>
       <Routes>
         <Route element={<LayoutFrame />}>
-          <Route index element={<Navigate to={ERP_PATHS.dashboard} replace />} />
-          <Route path="dashboard" element={<DashboardPage />} />
-          <Route
-            path="products"
-            element={
-              <PlaceholderPage title="商品管理" description="M3 将实现 SPU / SKU、编码与状态筛选。" />
-            }
-          />
-          <Route
-            path="warehouses"
-            element={
-              <PlaceholderPage title="仓库管理" description="M3 将实现仓库启停与库存查询。" />
-            }
-          />
-          <Route
-            path="inventory"
-            element={
-              <PlaceholderPage
-                title="库存管理"
-                description="M3 将实现实际库存、预占库存与库存流水。"
-              />
-            }
-          />
-          <Route
-            path="orders"
-            element={
-              <PlaceholderPage title="销售订单" description="M5 将实现审核、预占、出库与发货。" />
-            }
-          />
-          <Route
-            path="*"
-            element={
-              <PlaceholderPage title="未找到页面" description={`可返回 ${ERP_PATHS.dashboard}`} />
-            }
-          />
+          <Route index element={<Navigate to={ERP_DEFAULT_PATH} replace />} />
+          {buildRouteElements()}
+          <Route path="*" element={<NotFoundPage />} />
         </Route>
       </Routes>
     </BrowserRouter>

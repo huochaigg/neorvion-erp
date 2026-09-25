@@ -2,9 +2,10 @@ from datetime import datetime
 
 from sqlalchemy.orm import Session
 
-from app.core import token_store
+from app.core import challenge_store, token_store
 from app.core.config import settings
 from app.core.exceptions import AppError
+from app.core.rsa_crypto import RSA_ALGORITHM, RsaCryptoError, get_rsa_store
 from app.core.security import (
     create_access_token,
     create_refresh_token,
@@ -14,7 +15,16 @@ from app.core.security import (
 )
 from app.models.user import User, UserStatus
 from app.repositories.user import UserRepository
-from app.schemas.auth import TokenResponse, UserOut
+from app.schemas.auth import PublicKeyOut, TokenResponse, UserOut
+
+
+def _validate_plain_password(plain_password: str) -> None:
+    if len(plain_password) < 8 or len(plain_password) > 72:
+        raise AppError("密码长度须为 8-72 位", code=40023, status_code=400)
+    if not any(char.isalpha() for char in plain_password) or not any(
+        char.isdigit() for char in plain_password
+    ):
+        raise AppError("密码需同时包含字母和数字", code=40023, status_code=400)
 
 
 class AuthService:
@@ -24,14 +34,39 @@ class AuthService:
         self.session = session
         self.users = UserRepository(session)
 
-    def register(self, *, email: str, password: str, display_name: str) -> UserOut:
-        """password 参数是前端 SHA-256 摘要，这里再做 Argon2id 后入库。"""
+    @staticmethod
+    def issue_public_key() -> PublicKeyOut:
+        """发放当前 RSA 公钥和一次性 challenge。私钥永不返回。"""
+        store = get_rsa_store()
+        challenge_id = challenge_store.issue_challenge(store.current_key_id)
+        return PublicKeyOut(
+            key_id=store.current_key_id,
+            public_key=store.current_public_pem,
+            algorithm=RSA_ALGORITHM,
+            challenge_id=challenge_id,
+            expires_in=settings.rsa_challenge_ttl_seconds,
+        )
+
+    def register(
+        self,
+        *,
+        email: str,
+        encrypted_password: str,
+        key_id: str,
+        challenge_id: str,
+        display_name: str,
+    ) -> UserOut:
         if self.users.get_by_email(email) is not None:
             raise AppError("该邮箱已被注册", code=40011, status_code=409)
 
+        plain_password = self._unlock_password(
+            encrypted_password=encrypted_password,
+            key_id=key_id,
+            challenge_id=challenge_id,
+        )
         user = User(
             email=email,
-            password_hash=hash_password(password),
+            password_hash=hash_password(plain_password),
             display_name=display_name,
             status=UserStatus.ACTIVE.value,
         )
@@ -40,10 +75,22 @@ class AuthService:
         self.session.refresh(user)
         return UserOut.model_validate(user)
 
-    def login(self, *, email: str, password: str) -> tuple[TokenResponse, str, int]:
-        """校验传输摘要后签发双 Token。失败信息故意保持模糊，避免枚举邮箱。"""
+    def login(
+        self,
+        *,
+        email: str,
+        encrypted_password: str,
+        key_id: str,
+        challenge_id: str,
+    ) -> tuple[TokenResponse, str, int]:
+        """解密后校验 Argon2id。失败信息故意保持模糊，避免枚举邮箱。"""
+        plain_password = self._unlock_password(
+            encrypted_password=encrypted_password,
+            key_id=key_id,
+            challenge_id=challenge_id,
+        )
         user = self.users.get_by_email(email)
-        if user is None or not verify_password(password, user.password_hash):
+        if user is None or not verify_password(plain_password, user.password_hash):
             raise AppError("邮箱或密码错误", code=40010, status_code=401)
         if user.status != UserStatus.ACTIVE.value:
             raise AppError("账号已被禁用", code=40300, status_code=403)
@@ -75,6 +122,29 @@ class AuthService:
 
     def get_profile(self, user: User) -> UserOut:
         return UserOut.model_validate(user)
+
+    def _unlock_password(
+        self,
+        *,
+        encrypted_password: str,
+        key_id: str,
+        challenge_id: str,
+    ) -> str:
+        """原子消费 challenge，再用对应私钥做 RSA-OAEP 解密。"""
+        bound_key_id = challenge_store.consume_challenge(challenge_id)
+        if bound_key_id is None:
+            raise AppError("认证凭证已失效，请重试", code=40020, status_code=400)
+        if bound_key_id != key_id:
+            raise AppError("认证凭证无效", code=40021, status_code=400)
+        try:
+            plain_password = get_rsa_store().decrypt(
+                encrypted_password=encrypted_password,
+                key_id=key_id,
+            )
+        except RsaCryptoError:
+            raise AppError("认证凭证无效", code=40022, status_code=400) from None
+        _validate_plain_password(plain_password)
+        return plain_password
 
     def _require_active_user(self, user_id: int) -> User:
         user = self.users.get_by_id(user_id)

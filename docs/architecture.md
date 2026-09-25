@@ -1,6 +1,6 @@
 # 架构说明
 
-当前里程碑：V2.1 用户认证。
+当前里程碑：V2.1.1。
 
 ## 目标
 
@@ -12,15 +12,16 @@
 
 - `apps/shell`：统一登录、注册、认证状态、顶部导航、微前端注册。
 - `apps/erp`：业务菜单、业务页面、业务客户端状态。可独立启动，便于调试。
-- `packages/shared`：路由常量、API 响应类型、Wujie 通信类型、Query Key。
+- `packages/shared`：主应用路由常量、API 响应类型、Wujie 通信类型、Query Key、`ApiError`。ERP 业务菜单不放在这里。
 
 主应用不得读取 ERP 内部 store；ERP 只能通过 `window.$wujie.props` 与 `bus` 接收主应用显式传入的状态。
 
 ### 路由
 
 - 主应用：`/` 工作台，`/erp/*` 挂载子应用。主应用根路径不会打开 ERP。
-- 子应用独立运行在 `http://localhost:8016/`，内部路径为 `/dashboard`、`/products` 等，**没有** `/erp` 前缀。
-- 主应用浏览器地址是 `/erp/dashboard`；无界会把它映射成子应用的 `/dashboard`。刷新后仍由主应用按 `/erp/*` 加载子应用。
+- 子应用独立运行在 `http://localhost:8016/`，内部路径由 `apps/erp/src/router/routes.ts` 配置（如 `/dashboard`、`/products/list`），**没有** `/erp` 前缀。
+- 主应用浏览器地址是 `/erp/products/list`；无界会把它映射成子应用的 `/products/list`。刷新后仍由主应用按 `/erp/*` 加载子应用。
+- 主应用侧栏只进入 ERP 入口；ERP 内部菜单不在 Shell 维护。
 
 ### 无界
 
@@ -55,8 +56,9 @@
 
 认证：
 
-- `get_current_user()` 统一解析 Access Token。
+- `get_current_user()` 只给受保护接口解析 Access Token。`POST /refresh` 在白名单中，只校验 Refresh Cookie。
 - Refresh Token 会话写在 Redis，便于注销。
+- 密码传输使用独立 RSA-OAEP 密钥（`app/core/rsa_crypto.py`），与 JWT `SECRET_KEY` 分开；一次性 `challenge_id` 写在 Redis。
 - 后续 V2.2 增加 `get_current_tenant()` / `get_tenant_context()`，不要把租户 ID 塞进 `users` 表。
 
 AI 与异步：

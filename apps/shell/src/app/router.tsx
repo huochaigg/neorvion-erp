@@ -1,4 +1,4 @@
-import { ERP_BASENAME, SHELL_ROUTES } from '@neorvion/shared';
+import { ERP_BASENAME, ERP_DEFAULT_PATH, SHELL_ROUTES } from '@neorvion/shared';
 import { BrowserRouter, Navigate, Outlet, Route, Routes } from 'react-router-dom';
 import { AuthBootstrap } from '@/components/AuthBootstrap';
 import { GuestOnly } from '@/components/GuestOnly';
@@ -47,10 +47,13 @@ export function AppRouter() {
             }
           >
             <Route path={SHELL_ROUTES.home} element={<HomePage />} />
-            <Route path={ERP_BASENAME} element={<Navigate to={`${ERP_BASENAME}/dashboard`} replace />} />
+            <Route
+              path={ERP_BASENAME}
+              element={<Navigate to={`${ERP_BASENAME}${ERP_DEFAULT_PATH}`} replace />}
+            />
             <Route
               path={`${ERP_BASENAME}/`}
-              element={<Navigate to={`${ERP_BASENAME}/dashboard`} replace />}
+              element={<Navigate to={`${ERP_BASENAME}${ERP_DEFAULT_PATH}`} replace />}
             />
             <Route path={`${ERP_BASENAME}/*`} element={<ErpMicroApp />} />
             <Route path="*" element={<NotFoundPage />} />
