@@ -1,4 +1,6 @@
-# 开发说明（M1）
+# 开发说明
+
+当前里程碑：V2.1 用户认证。
 
 ## 前置
 
@@ -27,7 +29,7 @@ pnpm dev
 ```bash
 cd backend
 uv sync
-uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 8001
+uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 8011
 ```
 
 数据库迁移：
@@ -39,7 +41,12 @@ uv run alembic upgrade head
 uv run alembic revision --autogenerate -m "your message"
 ```
 
-M1 的初始迁移是空结构，只验证 Alembic 链路。M2 才会创建 `users`、`tenants` 等表。
+M1 的初始迁移为空。V2.1 增加 `users` 表，执行：
+
+```bash
+cd backend
+uv run alembic upgrade head
+```
 
 代码检查：
 
@@ -56,36 +63,35 @@ pnpm build
 
 ## 验证清单
 
-1. 打开 http://localhost:5173 ，工作台能显示。
-2. 点击「ERP 业务」，能加载子应用，地址为 `/erp/dashboard`。
-3. 刷新 `/erp/products` 不应丢失子应用。
-4. 直接打开 http://localhost:5174/erp/dashboard ，子应用可独立运行。
-5. http://localhost:8001/docs 可打开 Swagger。
-6. `/api/v1/health` 返回统一 `{ code, message, data }`。
-7. Tailwind 布局类生效；ERP 页头使用 SCSS Module。
-8. 主应用与子应用样式没有明显互相污染。
+1. 打开 http://localhost:8015/login 可以注册并登录。
+2. 登录后进入工作台，刷新页面应仍保持登录。
+3. 未登录访问 `/erp/dashboard` 会跳到登录页，成功后回到原地址。
+4. 直接打开 http://localhost:8016/erp/dashboard ，子应用可独立运行。
+5. http://localhost:8011/docs 可打开 Swagger。
+6. `/api/v1/health` 与 `/api/v1/auth/me` 可用。
 
 ## 常见问题
 
-**本机 8001 已被其他进程占用**
+**本机 8011 已被其他进程占用**
 
-Neorvion 后端必须使用 8001。如果 `127.0.0.1:8001` 已经被别的 FastAPI 占用，浏览器访问 `localhost:8001/docs` 会看到旧应用。请先结束占用进程，再启动本仓库后端：
+Neorvion 后端必须使用 8011。如果该端口已被占用，浏览器访问 `localhost:8011/docs` 会看到别的应用。请先结束占用进程，再启动本仓库后端：
 
 ```powershell
-Get-NetTCPConnection -LocalPort 8001 | Select-Object OwningProcess,State
+Get-NetTCPConnection -LocalPort 8011 | Select-Object OwningProcess,State
 ```
 
 **子应用白屏**
 
-- 确认 ERP 已启动在 5174。
-- 确认 CORS 与 `server.origin` 仍为 `http://localhost:5174`。
+- 确认 ERP 已启动在 8016。
+- 确认 CORS 与 `server.origin` 仍为 `http://localhost:8016`。
 - 确认入口调用了 `window.__WUJIE.mount()`。
-- 无界依赖 iframe 沙箱。部分内嵌浏览器会拦截 iframe 的 `contentWindow`，请用系统 Chrome 打开 http://localhost:5173/erp/dashboard。
-- 子应用本身可用 http://localhost:5174/erp/dashboard 独立验证。
+- 无界依赖 iframe 沙箱。部分内嵌浏览器会拦截 iframe 的 `contentWindow`，请用系统 Chrome 打开 http://localhost:8015/erp/dashboard。
+- 子应用本身可用 http://localhost:8016/erp/dashboard 独立验证。
 
 **MySQL / Redis 为 unavailable**
 
-- 检查 `backend/.env` 账号是否与实际实例一致。
+- 检查 `backend/.env` 账号是否与实际实例一致。FastAPI 只读取 `backend/.env`，仓库根目录 `.env` 给 Docker Compose 使用，二者可以不同。
+- 业务库必须是 `neorvion_erp`，测试库是 `neorvion_erp_test`，不要复用其他项目数据库。
 - 本机 3306/6379 可能已被其他服务占用，不要和 Docker 映射冲突。
 
 **Docker 守护进程未启动**

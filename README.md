@@ -2,7 +2,7 @@
 
 多租户跨境电商 ERP。当前仓库按里程碑持续迭代，**不要为每个版本重建项目**。
 
-当前里程碑：**M1 项目初始化与基础设施**。
+当前里程碑：**V2.1 用户认证与 JWT**。
 
 ## 技术栈
 
@@ -69,19 +69,19 @@ docker compose up -d mysql redis
 
 如果本机已经有 MySQL / Redis，把 `backend/.env` 中的连接信息改成实际值。
 
-### 3. 启动后端（端口 8001）
+### 3. 启动后端（端口 8011）
 
 ```bash
 cd backend
 uv sync
 uv run alembic upgrade head
-uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 8001
+uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 8011
 ```
 
 验证：
 
-- Swagger：http://localhost:8001/docs
-- 健康检查：http://localhost:8001/api/v1/health
+- Swagger：http://localhost:8011/docs
+- 健康检查：http://localhost:8011/api/v1/health
 
 ### 4. 启动前端
 
@@ -92,9 +92,9 @@ pnpm install
 pnpm dev
 ```
 
-- 主应用：http://localhost:5173
-- ERP 子应用独立运行：http://localhost:5174/erp/dashboard
-- 主应用接入 ERP：http://localhost:5173/erp/dashboard
+- 主应用：http://localhost:8015
+- ERP 子应用独立运行：http://localhost:8016/erp/dashboard
+- 主应用接入 ERP：http://localhost:8015/erp/dashboard
 
 分别启动：
 
@@ -116,23 +116,23 @@ pnpm --filter @neorvion/shell build
 pnpm --filter @neorvion/erp build
 ```
 
-## M1 完成内容
+## V2.1 完成内容
 
-- 主应用基础布局、工作台、`/erp` 微前端接入
-- ERP 子应用基础布局、业务菜单占位页，可独立运行
-- Tailwind CSS 4 + SCSS CSS Modules + Ant Design Design Token
-- FastAPI、SQLAlchemy 2.x、Alembic、健康检查
-- Docker Compose（MySQL / Redis / Backend）
-- 基础 pytest（Swagger、健康检查响应结构、OpenAPI 路径）
+- 全局 `users` 表与 Alembic 迁移
+- 注册、登录、Refresh Cookie、退出登录、`/me`
+- Argon2id 密码哈希 + Access/Refresh JWT
+- Shell 登录/注册页、路由守卫、Axios 单飞刷新
+- ERP 不重复登录，只接收主应用传入的 token
+- pytest 使用独立测试库 `neorvion_erp_test`
 
 本地注意：
 
-- 后端端口固定 8001。若本机 `127.0.0.1:8001` 已被其他项目占用，请先释放端口。
-- MySQL 账号以 `.env` 为准；未创建 `neorvion` 用户时，健康检查会返回 `mysql: unavailable`，Alembic 也无法升级。
-- 无界依赖 iframe 沙箱，请用系统 Chrome 打开主应用验证嵌入；ERP 可先在 5174 独立确认。
+- 后端端口固定 8011，避免和本机其他 FastAPI（常见 8001）冲突。
+- MySQL 必须指向独立库 `neorvion_erp`，不要使用其他项目的业务库。
+- 无界依赖 iframe 沙箱，请用系统 Chrome 打开主应用验证嵌入。
 
-## M1 不包含
+## 尚未开始
 
-用户认证、RBAC、商品库存、采购、销售订单。这些从 M2 开始在同一仓库扩展。
+多租户、RBAC、商品库存、采购、销售订单。这些从 V2.2 起在同一仓库扩展。
 
-更细的说明见 `docs/development.md` 与 `docs/architecture.md`。
+更细的说明见 `docs/development.md`、`docs/architecture.md` 与 `docs/auth.md`。

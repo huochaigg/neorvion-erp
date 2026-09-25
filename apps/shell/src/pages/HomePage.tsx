@@ -1,7 +1,9 @@
-import { healthQueryKey } from '@neorvion/shared';
+import { currentUserQueryKey, healthQueryKey } from '@neorvion/shared';
 import { useQuery } from '@tanstack/react-query';
 import { Alert, Card, Col, Row, Spin, Tag, Typography } from 'antd';
+import { fetchCurrentUser } from '@/api/auth';
 import { fetchHealth } from '@/api/health';
+import { useAuthStore } from '@/stores/auth-store';
 import { useShellStore } from '@/stores/shell-store';
 
 const { Title, Paragraph, Text } = Typography;
@@ -12,10 +14,16 @@ function statusColor(status: string) {
 
 export function HomePage() {
   const tenantId = useShellStore((state) => state.currentTenantId);
+  const accessToken = useAuthStore((state) => state.accessToken);
   const { data, isLoading, isError, error } = useQuery({
     queryKey: healthQueryKey(tenantId),
     queryFn: fetchHealth,
     retry: false,
+  });
+  const { data: currentUser } = useQuery({
+    queryKey: currentUserQueryKey(),
+    queryFn: fetchCurrentUser,
+    enabled: Boolean(accessToken),
   });
 
   return (
@@ -24,7 +32,8 @@ export function HomePage() {
         Neorvion ERP 工作台
       </Title>
       <Paragraph className="text-slate-500">
-        M1 完成主应用、ERP 微前端、FastAPI 与本地基础设施骨架。业务能力从 M2 开始接入。
+        当前用户：{currentUser?.display_name ?? '加载中'}（{currentUser?.email ?? '-'}）。V2.1
+        已接入 JWT 认证，租户与 RBAC 将在 V2.2 继续。
       </Paragraph>
 
       <Row gutter={[16, 16]}>
@@ -36,7 +45,7 @@ export function HomePage() {
                 type="warning"
                 showIcon
                 title="暂时无法连接 FastAPI"
-                description={error instanceof Error ? error.message : '请先启动 backend（端口 8001）'}
+                description={error instanceof Error ? error.message : '请先启动 backend（端口 8011）'}
               />
             ) : null}
             {data ? (
@@ -52,10 +61,10 @@ export function HomePage() {
         <Col xs={24} lg={12}>
           <Card title="本阶段能力">
             <ul className="m-0 list-disc space-y-1 pl-5 text-sm text-slate-600">
-              <li>主应用统一导航、登录占位、租户占位</li>
-              <li>无界接入 ERP，支持 /erp 深链接与刷新</li>
-              <li>ERP 子应用可独立运行于 5174 端口</li>
-              <li>Tailwind + SCSS Modules 共存，Ant Design 走 Design Token</li>
+              <li>注册、登录、Refresh Cookie、退出登录</li>
+              <li>Access Token 仅保存在内存，刷新页面后自动恢复</li>
+              <li>未登录访问 /erp 会跳转登录并在成功后回到原页面</li>
+              <li>ERP 子应用通过 Wujie props 接收 token，不单独做登录页</li>
             </ul>
           </Card>
         </Col>

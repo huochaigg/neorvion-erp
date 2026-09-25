@@ -1,6 +1,8 @@
 /** 主应用路由。ERP 业务页也使用 /erp 前缀，便于深链接与刷新。 */
 export const SHELL_ROUTES = {
   home: '/',
+  login: '/login',
+  register: '/register',
   erp: '/erp',
 } as const;
 

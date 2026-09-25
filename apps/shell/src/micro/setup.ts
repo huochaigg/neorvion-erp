@@ -2,7 +2,7 @@ import { ERP_APP_NAME } from '@neorvion/shared';
 import { setupApp } from '@/micro/wujie-host';
 
 export function setupMicroApps() {
-  const erpEntry = import.meta.env.VITE_ERP_ENTRY.replace(/\/$/, '');
+  const erpEntry = (import.meta.env.VITE_ERP_ENTRY || 'http://localhost:8016').replace(/\/$/, '');
   setupApp({
     name: ERP_APP_NAME,
     url: `${erpEntry}/erp/dashboard`,

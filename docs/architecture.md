@@ -1,4 +1,6 @@
-# 架构说明（M1）
+# 架构说明
+
+当前里程碑：V2.1 用户认证。
 
 ## 目标
 
@@ -8,7 +10,7 @@
 
 ### 应用边界
 
-- `apps/shell`：统一登录占位、租户占位、顶部导航、微前端注册。
+- `apps/shell`：统一登录、注册、认证状态、顶部导航、微前端注册。
 - `apps/erp`：业务菜单、业务页面、业务客户端状态。可独立启动，便于调试。
 - `packages/shared`：路由常量、API 响应类型、Wujie 通信类型、Query Key。
 
@@ -30,9 +32,9 @@
 
 ### 状态
 
-- Zustand：仅客户端 UI 状态（侧栏折叠、当前租户占位）。
-- React Query：服务端数据。Query Key 必须包含 `tenantId`。
-- 租户切换时取消未完成请求并 `queryClient.clear()`。M2 接入真实租户后生效。
+- Zustand：仅客户端 UI 与 Access Token（内存）。用户资料走 React Query。
+- React Query：服务端数据。业务 Query Key 必须包含 `tenantId`；当前用户使用 `current-user`。
+- 租户切换时取消未完成请求并 `queryClient.clear()`。V2.2 接入真实租户后生效。
 
 ### 样式
 
@@ -51,12 +53,11 @@
 4. Model / Schema：ORM 与 Pydantic。
 5. Core：配置、安全、异常、日志、租户 ContextVar。
 
-多租户策略（M2 落地，M1 先把挂钩留好）：
+认证：
 
-- 共享库 + `tenant_id`。
-- JWT 解析用户，服务端解析当前租户，不信任前端传入的 `tenant_id`。
-- Repository 统一租户过滤。
-- Redis、任务、操作日志读取 `app.core.context`。
+- `get_current_user()` 统一解析 Access Token。
+- Refresh Token 会话写在 Redis，便于注销。
+- 后续 V2.2 增加 `get_current_tenant()` / `get_tenant_context()`，不要把租户 ID 塞进 `users` 表。
 
 AI 与异步：
 
@@ -67,9 +68,9 @@ AI 与异步：
 
 | 服务 | 端口 |
 | --- | --- |
-| Shell | 5173 |
-| ERP | 5174 |
-| FastAPI | 8001 |
+| Shell | 8015 |
+| ERP | 8016 |
+| FastAPI | 8011 |
 | MySQL | 3306 |
 | Redis | 6379 |
 | Nginx（可选） | 8080 |
