@@ -1,0 +1,27 @@
+@import 'tailwindcss';
+
+:root {
+  --nv-bg: #f3f5f8;
+  --nv-header: #0f2744;
+  --nv-primary: #0f4c81;
+  --nv-header-height: 56px;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--nv-bg);
+  color: #1f2937;
+  font-family: 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+}
+
+wujie-app {
+  display: block;
+  width: 100%;
+  height: 100%;
+}

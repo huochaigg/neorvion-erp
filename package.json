@@ -1,0 +1,17 @@
+{
+  "name": "neorvion-erp",
+  "private": true,
+  "version": "0.1.0",
+  "packageManager": "pnpm@12.3.4",
+  "scripts": {
+    "dev": "pnpm --filter @neorvion/shell --filter @neorvion/erp --parallel run dev",
+    "dev:shell": "pnpm --filter @neorvion/shell dev",
+    "dev:erp": "pnpm --filter @neorvion/erp dev",
+    "build": "pnpm --filter @neorvion/shell --filter @neorvion/erp run build",
+    "lint": "pnpm --filter @neorvion/shell --filter @neorvion/erp run lint",
+    "format": "prettier --write ."
+  },
+  "devDependencies": {
+    "prettier": "^3.6.2"
+  }
+}

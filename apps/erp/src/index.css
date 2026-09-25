@@ -1,0 +1,19 @@
+@import 'tailwindcss';
+
+:root {
+  --nv-bg: #f3f5f8;
+  --nv-primary: #0f4c81;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--nv-bg);
+  color: #1f2937;
+  font-family: 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+}

@@ -1,0 +1,75 @@
+# 架构说明（M1）
+
+## 目标
+
+用模块化单体支撑后续采购、库存、订单、物流和 AI Agent，而不是一上来拆微服务。
+
+## 前端
+
+### 应用边界
+
+- `apps/shell`：统一登录占位、租户占位、顶部导航、微前端注册。
+- `apps/erp`：业务菜单、业务页面、业务客户端状态。可独立启动，便于调试。
+- `packages/shared`：路由常量、API 响应类型、Wujie 通信类型、Query Key。
+
+主应用不得读取 ERP 内部 store；ERP 只能通过 `window.$wujie.props` 与 `bus` 接收主应用显式传入的状态。
+
+### 路由
+
+- 主应用：`/` 工作台，`/erp/*` 挂载子应用。
+- 子应用 `basename` 为 `/erp`，内部路径为 `/dashboard`、`/products` 等。
+- 浏览器地址统一为 `/erp/dashboard` 这种深链接，刷新后仍由主应用按路径加载子应用。
+
+### 无界
+
+- 子应用名称固定为 `erp`。
+- Vite 子应用关闭 fiber，并在入口调用 `window.__WUJIE.mount()`。
+- 开发服务器开启 CORS，并用 `server.origin` 输出绝对资源地址。
+- CSS Loader 把 `:root` 映射为 `:host`，减少 Tailwind 主题变量泄漏。
+- Ant Design Portal 组件通过 `ConfigProvider.getPopupContainer` 挂到当前应用 `#root`。
+
+### 状态
+
+- Zustand：仅客户端 UI 状态（侧栏折叠、当前租户占位）。
+- React Query：服务端数据。Query Key 必须包含 `tenantId`。
+- 租户切换时取消未完成请求并 `queryClient.clear()`。M2 接入真实租户后生效。
+
+### 样式
+
+- 优先 Tailwind CSS 4（`@tailwindcss/vite` + `@import "tailwindcss"`）。
+- 复杂品牌/页头使用 `*.module.scss`。
+- 全局 CSS 只放 reset、字体和主题变量。
+- Ant Design 主题只通过 ConfigProvider Token 定制，不使用 `!important` 覆盖。
+
+## 后端
+
+分层：
+
+1. API Router：HTTP、校验、依赖注入。
+2. Service：业务规则、事务、状态机。后续库存事务在这里 `session.begin()`。
+3. Repository：查询与持久化，禁止 commit。
+4. Model / Schema：ORM 与 Pydantic。
+5. Core：配置、安全、异常、日志、租户 ContextVar。
+
+多租户策略（M2 落地，M1 先把挂钩留好）：
+
+- 共享库 + `tenant_id`。
+- JWT 解析用户，服务端解析当前租户，不信任前端传入的 `tenant_id`。
+- Repository 统一租户过滤。
+- Redis、任务、操作日志读取 `app.core.context`。
+
+AI 与异步：
+
+- `app/agents`：后续 OpenAI Agents SDK，Tool 调 Service。
+- `app/tasks`：后续 Celery。
+
+## 端口
+
+| 服务 | 端口 |
+| --- | --- |
+| Shell | 5173 |
+| ERP | 5174 |
+| FastAPI | 8001 |
+| MySQL | 3306 |
+| Redis | 6379 |
+| Nginx（可选） | 8080 |
