@@ -153,4 +153,4 @@ pnpm --filter @neorvion/erp build
 
 完整 RBAC、商品库存、采购、销售订单。前端租户切换在 V2.2.2 对接本阶段接口。
 
-更细的说明见 `docs/development.md`、`docs/architecture.md`、`docs/auth.md`、`docs/multi-tenancy.md` 与 `docs/routing.md`。
+更细的说明见 `docs/development.md`、`docs/architecture.md`、`docs/auth.md`、`docs/multi-tenancy.md`、`docs/routing.md`、`docs/micro-frontend-integration.md` 与 `docs/micro-frontend-interview.md`。

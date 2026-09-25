@@ -22,5 +22,6 @@ interface Window {
   $wujie?: {
     bus: WujieBus;
     props?: import('@neorvion/shared').ShellToErpProps;
+    shadowRoot?: ShadowRoot;
   };
 }

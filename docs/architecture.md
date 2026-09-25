@@ -25,11 +25,11 @@
 
 ### 无界
 
-- 子应用名称固定为 `erp`。
-- Vite 子应用关闭 fiber，并在入口调用 `window.__WUJIE.mount()`。
+- 宿主封装集中在 `apps/shell/src/micro`。子应用清单见 `apps.ts`，接入步骤见 `docs/micro-frontend-integration.md`，白屏排查与架构复盘见 `docs/micro-frontend-interview.md`。
+- 默认 Shadow DOM（`degrade: false`）。Vite 子应用关闭 fiber，入口调用 `window.__WUJIE.mount()`。
 - 开发服务器开启 CORS，并用 `server.origin` 输出绝对资源地址。
-- CSS Loader 把 `:root` 映射为 `:host`，减少 Tailwind 主题变量泄漏。
-- Ant Design Portal 组件通过 `ConfigProvider.getPopupContainer` 挂到当前应用 `#root`。
+- Tailwind v4 的 `:root` → `:host` 只挂在需要它的子应用上，不是全局默认。
+- Ant Design Portal 由子应用自己的 `ConfigProvider.getPopupContainer` 处理，不是宿主强制方案。
 
 ### 状态
 

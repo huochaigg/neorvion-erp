@@ -1,29 +1,13 @@
-import { currentUserQueryKey, ERP_APP_NAME, ERP_BASENAME, ERP_DEFAULT_PATH, type ShellToErpProps } from '@neorvion/shared';
+import { currentUserQueryKey, ERP_APP_NAME, type ShellToErpProps } from '@neorvion/shared';
 import { useQuery } from '@tanstack/react-query';
 import { Alert, Button } from 'antd';
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { fetchCurrentUser } from '@/api/auth';
-// import { setupMicroApps } from '@/micro/setup';
+import { buildMicroAppUrl, getMicroApp } from '@/micro/apps';
 import { WujieHost } from '@/micro/wujie-host';
 import { useAuthStore } from '@/stores/auth-store';
 import { useShellStore } from '@/stores/shell-store';
-
-function getErpEntry() {
-  return (import.meta.env.VITE_ERP_ENTRY || 'http://localhost:8016').replace(/\/$/, '');
-}
-
-/** 主应用 /erp/dashboard → 子应用 http://localhost:8016/dashboard，禁止拼出 /erp/erp。 */
-function buildErpUrl(pathname: string) {
-  const entry = getErpEntry();
-  if (pathname === ERP_BASENAME || pathname === `${ERP_BASENAME}/`) {
-    return `${entry}${ERP_DEFAULT_PATH}`;
-  }
-  if (pathname.startsWith(`${ERP_BASENAME}/`)) {
-    return `${entry}${pathname.slice(ERP_BASENAME.length)}`;
-  }
-  return `${entry}${ERP_DEFAULT_PATH}`;
-}
 
 export function ErpMicroApp() {
   const location = useLocation();
@@ -36,7 +20,8 @@ export function ErpMicroApp() {
     enabled: Boolean(accessToken),
   });
 
-  const url = buildErpUrl(location.pathname);
+  const app = getMicroApp(ERP_APP_NAME);
+  const url = buildMicroAppUrl(app, location.pathname);
 
   const props = useMemo<ShellToErpProps>(
     () => ({
@@ -69,17 +54,11 @@ export function ErpMicroApp() {
         <WujieHost
           width="100%"
           height="100%"
-          name={ERP_APP_NAME}
+          name={app.name}
           url={url}
-          sync
-          alive={false}
-          prefix={{ [ERP_APP_NAME]: ERP_BASENAME }}
           props={props}
-          fiber={false}
-          degrade={false}
-          loadError={(err) => {
-            console.log('loadError', err)
-            setLoadFailed(true)
+          loadError={() => {
+            setLoadFailed(true);
           }}
         />
       )}
