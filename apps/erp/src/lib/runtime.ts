@@ -21,5 +21,16 @@ export function getPopupContainer(node?: HTMLElement) {
       return overlayRoot;
     }
   }
+  const shadowRoot = window.$wujie?.shadowRoot;
+  if (shadowRoot) {
+    const shadowAppRoot = shadowRoot.querySelector('#root');
+    if (shadowAppRoot instanceof HTMLElement) {
+      return shadowAppRoot;
+    }
+    const shadowBody = shadowRoot.querySelector('body');
+    if (shadowBody instanceof HTMLElement) {
+      return shadowBody;
+    }
+  }
   return document.getElementById('root') ?? document.body;
 }
