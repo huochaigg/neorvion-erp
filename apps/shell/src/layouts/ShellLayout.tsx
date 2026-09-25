@@ -6,7 +6,7 @@ import {
   TeamOutlined,
   UserOutlined,
 } from '@ant-design/icons';
-import { currentUserQueryKey, ERP_ROUTES, SHELL_ROUTES } from '@neorvion/shared';
+import { currentUserQueryKey, ERP_BASENAME, ERP_DEFAULT_PATH, SHELL_ROUTES } from '@neorvion/shared';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Avatar, Button, Dropdown, Layout, Menu, Space, Tag } from 'antd';
 import type { ReactNode } from 'react';
@@ -65,7 +65,7 @@ export function ShellLayout({ children }: ShellLayoutProps) {
       <Header className="flex items-center justify-between px-4">
         <div className="flex items-center gap-4">
           <AppLogo compact={siderCollapsed} />
-          <Tag color="processing">V2.1 认证</Tag>
+          <Tag color="processing">V2.1.1</Tag>
         </div>
         <Space size={12}>
           <span className="text-sm text-white/70">租户：尚未接入（V2.2）</span>
@@ -106,7 +106,7 @@ export function ShellLayout({ children }: ShellLayoutProps) {
               className="flex-1 border-none pt-2"
               onClick={({ key }) => {
                 if (key === SHELL_ROUTES.erp) {
-                  navigate(ERP_ROUTES.dashboard);
+                  navigate(`${ERP_BASENAME}${ERP_DEFAULT_PATH}`);
                   return;
                 }
                 navigate(key);

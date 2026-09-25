@@ -1,4 +1,4 @@
-import { currentUserQueryKey, ERP_APP_NAME, ERP_BASENAME, ERP_PATHS, type ShellToErpProps } from '@neorvion/shared';
+import { currentUserQueryKey, ERP_APP_NAME, ERP_BASENAME, ERP_DEFAULT_PATH, type ShellToErpProps } from '@neorvion/shared';
 import { useQuery } from '@tanstack/react-query';
 import { Alert, Button } from 'antd';
 import { useEffect, useMemo, useState } from 'react';
@@ -13,16 +13,16 @@ function getErpEntry() {
   return (import.meta.env.VITE_ERP_ENTRY || 'http://localhost:8016').replace(/\/$/, '');
 }
 
-/** 主应用 /erp/dashboard → 子应用 http://localhost:8016/dashboard */
+/** 主应用 /erp/dashboard → 子应用 http://localhost:8016/dashboard，禁止拼出 /erp/erp。 */
 function buildErpUrl(pathname: string) {
   const entry = getErpEntry();
   if (pathname === ERP_BASENAME || pathname === `${ERP_BASENAME}/`) {
-    return `${entry}${ERP_PATHS.dashboard}`;
+    return `${entry}${ERP_DEFAULT_PATH}`;
   }
   if (pathname.startsWith(`${ERP_BASENAME}/`)) {
     return `${entry}${pathname.slice(ERP_BASENAME.length)}`;
   }
-  return `${entry}${ERP_PATHS.dashboard}`;
+  return `${entry}${ERP_DEFAULT_PATH}`;
 }
 
 export function ErpMicroApp() {

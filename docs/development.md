@@ -1,6 +1,6 @@
 # 开发说明
 
-当前里程碑：V2.1 用户认证。
+当前里程碑：V2.1.1（路由配置化、Refresh 白名单、异常处理）。
 
 ## 前置
 
@@ -48,6 +48,15 @@ cd backend
 uv run alembic upgrade head
 ```
 
+生成本地 RSA 密钥（私钥不会提交到 Git）：
+
+```bash
+cd backend
+uv run python scripts/generate_rsa_keys.py --key-id v1
+```
+
+把输出的 `RSA_KEY_ID` / `RSA_PRIVATE_KEY_PATH` / `RSA_PUBLIC_KEY_PATH` 写入 `backend/.env`。生产环境改为从密钥管理系统加载同一路径变量，不要把 PEM 打进镜像。
+
 代码检查：
 
 ```bash
@@ -69,6 +78,14 @@ pnpm build
 4. 直接打开 http://localhost:8016 或 http://localhost:8016/dashboard ，子应用可独立运行。
 5. http://localhost:8011/docs 可打开 Swagger。
 6. `/api/v1/health` 与 `/api/v1/auth/me` 可用。
+7. 未登录打开主应用时，Network 里 `/auth/refresh` 可能 401，这表示没有 Refresh Cookie，不是 Access Token 拦截。已登录刷新页面应自动恢复会话。
+8. ERP 侧栏由 `apps/erp/src/router/routes.ts` 生成，访问 `/products/create` 仍高亮商品列表。
+
+路由配置说明见 `docs/routing.md`。
+
+## 浏览器进 debugger
+
+业务错误会 `Promise.reject(ApiError)`。若一报错就停在 Sources 面板，检查 DevTools → Pause on exceptions，以及 Cursor/VS Code 调试器的 Caught Exceptions。代码里没有 `debugger`。
 
 ## 常见问题
 

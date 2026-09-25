@@ -1,16 +1,30 @@
 import type { ApiResponse, TokenPayload, UserProfile } from '@neorvion/shared';
+import { encryptAuthPassword } from '@/lib/password';
 import { apiClient, unwrapApi } from './client';
 
-export function registerAccount(payload: {
+export async function registerAccount(payload: {
   email: string;
   password: string;
   display_name: string;
 }) {
-  return unwrapApi(apiClient.post<ApiResponse<UserProfile>>('/api/v1/auth/register', payload));
+  const encrypted = await encryptAuthPassword(payload.password);
+  return unwrapApi(
+    apiClient.post<ApiResponse<UserProfile>>('/api/v1/auth/register', {
+      email: payload.email,
+      display_name: payload.display_name,
+      ...encrypted,
+    }),
+  );
 }
 
-export function loginAccount(payload: { email: string; password: string }) {
-  return unwrapApi(apiClient.post<ApiResponse<TokenPayload>>('/api/v1/auth/login', payload));
+export async function loginAccount(payload: { email: string; password: string }) {
+  const encrypted = await encryptAuthPassword(payload.password);
+  return unwrapApi(
+    apiClient.post<ApiResponse<TokenPayload>>('/api/v1/auth/login', {
+      email: payload.email,
+      ...encrypted,
+    }),
+  );
 }
 
 export function logoutAccount() {

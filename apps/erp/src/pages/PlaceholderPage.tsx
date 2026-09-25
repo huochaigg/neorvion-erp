@@ -1,13 +1,9 @@
 import { Card } from 'antd';
 import { PageHeader } from '@/components/PageHeader';
 import { StatusTag } from '@/components/StatusTag';
+import type { PageProps } from '@/router/types';
 
-interface PlaceholderPageProps {
-  title: string;
-  description: string;
-}
-
-export function PlaceholderPage({ title, description }: PlaceholderPageProps) {
+export function PlaceholderPage({ title = '占位页', description }: PageProps) {
   return (
     <div>
       <PageHeader

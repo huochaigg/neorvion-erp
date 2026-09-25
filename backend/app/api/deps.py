@@ -26,10 +26,10 @@ def _extract_bearer_token(request: Request) -> str:
 
 
 def get_current_user(request: Request, session: DbSession) -> User:
-    """解析 Access Token 并加载当前用户。
+    """解析 Access Token 并加载当前用户。仅供受保护接口通过 CurrentUser 注入。
 
-    流程：提取 Bearer → 验签/过期/类型 → 取 sub → 查库 → 校验状态。
-    后续 V2.2 可在此之后追加 get_current_tenant()，不要把租户逻辑塞进 JWT type=access 以外的字段。
+    公开接口见 app.core.auth_public.PUBLIC_ROUTES，尤其是 POST /api/v1/auth/refresh
+    不得依赖本函数：Refresh 只校验 Cookie 中的 Refresh Token。
     """
     token = _extract_bearer_token(request)
     payload = decode_token(token, expected_type="access")

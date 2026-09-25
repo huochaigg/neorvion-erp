@@ -3,7 +3,7 @@ from fastapi import APIRouter, Request, Response
 from app.api.deps import CurrentUser, DbSession
 from app.core.config import settings
 from app.core.exceptions import AppError
-from app.schemas.auth import LoginRequest, RegisterRequest, TokenResponse, UserOut
+from app.schemas.auth import LoginRequest, PublicKeyOut, RegisterRequest, TokenResponse, UserOut
 from app.schemas.common import ApiResponse, ok
 from app.services.auth import AuthService
 
@@ -37,6 +37,21 @@ def _read_refresh_cookie(request: Request) -> str | None:
     return request.cookies.get(settings.refresh_cookie_name)
 
 
+@router.get(
+    "/public-key",
+    response_model=ApiResponse[PublicKeyOut],
+    summary="获取 RSA 公钥",
+)
+def public_key() -> ApiResponse[PublicKeyOut]:
+    """发放当前 RSA 公钥和一次性 challenge。
+
+    输入：无。
+    输出：key_id、PEM 公钥、algorithm、challenge_id、expires_in。
+    私钥永不返回。challenge 默认 300 秒内一次性有效。
+    """
+    return ok(AuthService.issue_public_key())
+
+
 @router.post(
     "/register",
     response_model=ApiResponse[UserOut],
@@ -45,13 +60,15 @@ def _read_refresh_cookie(request: Request) -> str | None:
 def register(payload: RegisterRequest, session: DbSession) -> ApiResponse[UserOut]:
     """注册全局用户。
 
-    输入：email、password（SHA-256 摘要）、display_name。
+    输入：email、encrypted_password、key_id、challenge_id、display_name。
     输出：用户公开资料，不含 password_hash。
-    规则：email 唯一；传输用 SHA-256，入库用 Argon2id。不要使用 MD5。
+    规则：email 唯一；RSA-OAEP 解密后用 Argon2id 入库。
     """
     user = AuthService(session).register(
         email=payload.email,
-        password=payload.password,
+        encrypted_password=payload.encrypted_password,
+        key_id=payload.key_id,
+        challenge_id=payload.challenge_id,
         display_name=payload.display_name,
     )
     return ok(user, "注册成功")
@@ -69,13 +86,15 @@ def login(
 ) -> ApiResponse[TokenResponse]:
     """邮箱密码登录。
 
-    输入：email、password（SHA-256 摘要，不是明文）。
+    输入：email、encrypted_password、key_id、challenge_id。
     输出：Access Token；Refresh Token 写入 HttpOnly Cookie。
     规则：失败信息不区分邮箱是否存在。
     """
     tokens, refresh_token, ttl = AuthService(session).login(
         email=payload.email,
-        password=payload.password,
+        encrypted_password=payload.encrypted_password,
+        key_id=payload.key_id,
+        challenge_id=payload.challenge_id,
     )
     _set_refresh_cookie(response, refresh_token, ttl)
     return ok(tokens)
@@ -87,7 +106,11 @@ def login(
     summary="刷新访问令牌",
 )
 def refresh(request: Request, session: DbSession, response: Response) -> ApiResponse[TokenResponse]:
-    """用 Refresh Cookie 换发新的 Access Token，并轮换 Refresh Token。"""
+    """用 Refresh Cookie 换发新的 Access Token，并轮换 Refresh Token。
+
+    本接口在认证白名单中，不读取、不校验 Authorization 里的 Access Token。
+    Access Token 过期时仍可刷新。没有有效 Refresh Cookie 时返回 401。
+    """
     refresh_token = _read_refresh_cookie(request)
     if not refresh_token:
         raise AppError("未登录", code=40100, status_code=401)

@@ -1,23 +1,33 @@
 from datetime import datetime
 from typing import Annotated
 
-from pydantic import BaseModel, EmailStr, Field, field_validator
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
-# 接口收到的是 SHA-256 摘要，不是用户输入的明文。强度规则在前端校验。
-PasswordDigest = Annotated[
+EncryptedPassword = Annotated[
     str,
     Field(
         min_length=64,
-        max_length=64,
-        pattern=r"^[0-9a-f]{64}$",
-        description="SHA-256(明文密码) 的 64 位小写十六进制",
+        max_length=1024,
+        description="RSA-OAEP 密文的 Base64，不是明文密码",
     ),
 ]
 
 
+class PublicKeyOut(BaseModel):
+    key_id: str
+    public_key: str
+    algorithm: str
+    challenge_id: str
+    expires_in: int
+
+
 class RegisterRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     email: EmailStr
-    password: PasswordDigest
+    encrypted_password: EncryptedPassword
+    key_id: str = Field(min_length=1, max_length=64)
+    challenge_id: str = Field(min_length=8, max_length=64)
     display_name: str = Field(min_length=1, max_length=64)
 
     @field_validator("email")
@@ -33,15 +43,29 @@ class RegisterRequest(BaseModel):
             raise ValueError("显示名称不能为空")
         return name
 
+    @field_validator("key_id", "challenge_id")
+    @classmethod
+    def strip_ids(cls, value: str) -> str:
+        return value.strip()
+
 
 class LoginRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     email: EmailStr
-    password: PasswordDigest
+    encrypted_password: EncryptedPassword
+    key_id: str = Field(min_length=1, max_length=64)
+    challenge_id: str = Field(min_length=8, max_length=64)
 
     @field_validator("email")
     @classmethod
     def normalize_email(cls, value: str) -> str:
         return value.strip().lower()
+
+    @field_validator("key_id", "challenge_id")
+    @classmethod
+    def strip_ids(cls, value: str) -> str:
+        return value.strip()
 
 
 class TokenResponse(BaseModel):
