@@ -18,9 +18,9 @@
 
 ### 路由
 
-- 主应用：`/` 工作台，`/erp/*` 挂载子应用。
-- 子应用 `basename` 为 `/erp`，内部路径为 `/dashboard`、`/products` 等。
-- 浏览器地址统一为 `/erp/dashboard` 这种深链接，刷新后仍由主应用按路径加载子应用。
+- 主应用：`/` 工作台，`/erp/*` 挂载子应用。主应用根路径不会打开 ERP。
+- 子应用独立运行在 `http://localhost:8016/`，内部路径为 `/dashboard`、`/products` 等，**没有** `/erp` 前缀。
+- 主应用浏览器地址是 `/erp/dashboard`；无界会把它映射成子应用的 `/dashboard`。刷新后仍由主应用按 `/erp/*` 加载子应用。
 
 ### 无界
 

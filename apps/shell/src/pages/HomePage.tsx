@@ -29,11 +29,11 @@ export function HomePage() {
   return (
     <div className="p-6">
       <Title level={3} className="!mb-2">
-        Neorvion ERP 工作台
+        主应用工作台
       </Title>
       <Paragraph className="text-slate-500">
-        当前用户：{currentUser?.display_name ?? '加载中'}（{currentUser?.email ?? '-'}）。V2.1
-        已接入 JWT 认证，租户与 RBAC 将在 V2.2 继续。
+        当前用户：{currentUser?.display_name ?? '加载中'}（{currentUser?.email ?? '-'}）。这是
+        Shell 主应用首页，ERP 业务请从左侧「ERP 业务」进入。
       </Paragraph>
 
       <Row gutter={[16, 16]}>
@@ -63,6 +63,7 @@ export function HomePage() {
             <ul className="m-0 list-disc space-y-1 pl-5 text-sm text-slate-600">
               <li>注册、登录、Refresh Cookie、退出登录</li>
               <li>Access Token 仅保存在内存，刷新页面后自动恢复</li>
+              <li>首页 / 只显示主应用工作台，不会打开 ERP</li>
               <li>未登录访问 /erp 会跳转登录并在成功后回到原页面</li>
               <li>ERP 子应用通过 Wujie props 接收 token，不单独做登录页</li>
             </ul>

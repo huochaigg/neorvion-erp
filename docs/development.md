@@ -66,7 +66,7 @@ pnpm build
 1. 打开 http://localhost:8015/login 可以注册并登录。
 2. 登录后进入工作台，刷新页面应仍保持登录。
 3. 未登录访问 `/erp/dashboard` 会跳到登录页，成功后回到原地址。
-4. 直接打开 http://localhost:8016/erp/dashboard ，子应用可独立运行。
+4. 直接打开 http://localhost:8016 或 http://localhost:8016/dashboard ，子应用可独立运行。
 5. http://localhost:8011/docs 可打开 Swagger。
 6. `/api/v1/health` 与 `/api/v1/auth/me` 可用。
 
@@ -85,8 +85,8 @@ Get-NetTCPConnection -LocalPort 8011 | Select-Object OwningProcess,State
 - 确认 ERP 已启动在 8016。
 - 确认 CORS 与 `server.origin` 仍为 `http://localhost:8016`。
 - 确认入口调用了 `window.__WUJIE.mount()`。
-- 无界依赖 iframe 沙箱。部分内嵌浏览器会拦截 iframe 的 `contentWindow`，请用系统 Chrome 打开 http://localhost:8015/erp/dashboard。
-- 子应用本身可用 http://localhost:8016/erp/dashboard 独立验证。
+- 无界依赖 iframe 沙箱。部分内嵌浏览器会拦截 iframe 的 `contentWindow`，请用系统 Chrome 打开 http://localhost:8015/erp。
+- 子应用本身可用 http://localhost:8016 独立验证。
 
 **MySQL / Redis 为 unavailable**
 
