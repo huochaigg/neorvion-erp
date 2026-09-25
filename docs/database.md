@@ -1,15 +1,16 @@
 # 数据库说明
 
-V1 使用 **共享 MySQL + 共享业务表 + tenant_id**，不用每租户独立库。
+使用 **共享 MySQL + 共享业务表 + tenant_id**，不用每租户独立库。
 
-当前里程碑 M1 **尚未创建业务表**。Alembic 已初始化，初始 revision `20260925_0001` 为空，仅用于打通迁移命令。
+当前里程碑 V2.2.1 已创建：
 
-M2 将创建：
+- `users`：全局用户身份，**没有** `tenant_id`
+- `tenants`：企业；`code` 唯一，不用名称当唯一键
+- `tenant_members`：用户与企业的多对多；`UNIQUE(tenant_id, user_id)`
 
-- `users`、`tenants`、`tenant_members`
-- `roles`、`permissions`、`member_roles`、`role_permissions`
+V2.3 再创建 `roles`、`permissions` 等 RBAC 表。
 
-M3 起创建商品、仓库、库存等表。所有业务表必须包含 `tenant_id`，唯一约束必须带上租户，例如：
+M3 起创建商品、仓库、库存等表。所有业务表必须包含 `tenant_id`（`TenantMixin`），唯一约束必须带上租户，例如：
 
 ```sql
 UNIQUE (tenant_id, sku_code)

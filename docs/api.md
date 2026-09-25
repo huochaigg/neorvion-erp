@@ -16,7 +16,7 @@
 
 `GET /api/v1/health`
 
-依赖不可用时 HTTP 仍为 200，字段标记 `unavailable`。当前 `milestone` 为 `V2.1.2`。
+依赖不可用时 HTTP 仍为 200，字段标记 `unavailable`。当前 `milestone` 为 `V2.2.1`。
 
 ## 认证
 
@@ -28,5 +28,17 @@
 - `POST /api/v1/auth/refresh`
 - `POST /api/v1/auth/logout`
 - `GET /api/v1/auth/me`
+
+## 租户
+
+详见 `docs/multi-tenancy.md`。除「创建 / 我的列表」外，租户业务接口使用请求头 `X-Tenant-ID`。
+
+- `POST /api/v1/tenants`
+- `GET /api/v1/tenants`
+- `GET /api/v1/tenants/current`（需要 `X-Tenant-ID`）
+- `GET /api/v1/tenants/{tenant_id}`
+- `GET /api/v1/tenants/{tenant_id}/members`
+- `POST /api/v1/tenants/{tenant_id}/members`
+- `PATCH /api/v1/tenants/{tenant_id}/members/{member_id}`
 
 Swagger：http://localhost:8011/docs

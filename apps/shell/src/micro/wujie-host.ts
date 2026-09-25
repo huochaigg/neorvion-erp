@@ -11,6 +11,7 @@ export interface WujieHostProps {
   alive?: boolean;
   prefix?: Record<string, string>;
   props?: object;
+  degrade?: boolean;
   afterMount?: () => void;
   loadError?: (url: string, error: Error) => void;
 }

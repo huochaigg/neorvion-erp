@@ -1,11 +1,15 @@
 from datetime import datetime
 from enum import StrEnum
+from typing import TYPE_CHECKING
 
 from sqlalchemy import BigInteger, DateTime, String
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
 from app.db.mixins import TimestampMixin
+
+if TYPE_CHECKING:
+    from app.models.tenant import TenantMember
 
 
 class UserStatus(StrEnum):
@@ -28,3 +32,5 @@ class User(TimestampMixin, Base):
         server_default=UserStatus.ACTIVE.value,
     )
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    # 一个用户可加入多个租户；关系行在 tenant_members，不要在本表写死 tenant_id。
+    memberships: Mapped[list["TenantMember"]] = relationship(back_populates="user")

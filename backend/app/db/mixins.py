@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import BigInteger, DateTime, func
+from sqlalchemy import BigInteger, DateTime, ForeignKey, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 
@@ -19,6 +19,15 @@ class TimestampMixin:
 
 
 class TenantMixin:
-    """共享库 + tenant_id 隔离。业务表必须携带该字段。"""
+    """后续 products / inventories 等业务表混入本字段。
 
-    tenant_id: Mapped[int] = mapped_column(BigInteger, nullable=False, index=True)
+    共享库隔离靠「每行带 tenant_id」，不是独立库。Repository 查询/更新/删除
+    必须带上该列，不能只靠前端过滤。tenant_members 是关系表，不要混入本 Mixin。
+    """
+
+    tenant_id: Mapped[int] = mapped_column(
+        BigInteger,
+        ForeignKey("tenants.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
