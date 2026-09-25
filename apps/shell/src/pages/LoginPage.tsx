@@ -15,7 +15,7 @@ export function LoginPage() {
   const location = useLocation();
   const [params] = useSearchParams();
   const { message } = App.useApp();
-  const setAccessToken = useAuthStore((state) => state.setAccessToken);
+  const markAuthenticated = useAuthStore((state) => state.markAuthenticated);
   const fromState = (location.state as { from?: { pathname: string; search: string } } | null)?.from;
   const fromQuery = params.get('from');
   const redirectTo = fromState ? `${fromState.pathname}${fromState.search}` : (fromQuery ?? SHELL_ROUTES.home);
@@ -26,7 +26,7 @@ export function LoginPage() {
         email: values.email,
         password: values.password,
       });
-      setAccessToken(tokens.access_token);
+      markAuthenticated(tokens.access_token);
       navigate(redirectTo, { replace: true });
     } catch (error) {
       message.error(error instanceof Error ? error.message : '登录失败');

@@ -9,7 +9,7 @@ PUBLIC_ROUTES: frozenset[tuple[str, str]] = frozenset(
     {
         ("POST", "/api/v1/auth/register"),
         ("POST", "/api/v1/auth/login"),
-        ("GET", "/api/v1/auth/public-key"),
+        ("GET", "/api/crypto/public-key"),
         ("POST", "/api/v1/auth/refresh"),
         ("POST", "/api/v1/auth/logout"),
         ("GET", "/api/v1/health"),

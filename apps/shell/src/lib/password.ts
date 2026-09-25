@@ -1,5 +1,6 @@
 import type { ApiResponse, AuthPublicKey, EncryptedPasswordPayload } from '@neorvion/shared';
-import { apiClient, unwrapApi } from '@/api/client';
+import { authClient } from '@/api/auth-client';
+import { unwrapApi } from '@/api/http';
 
 function pemToArrayBuffer(pem: string): ArrayBuffer {
   const body = pem
@@ -24,7 +25,7 @@ function arrayBufferToBase64(buffer: ArrayBuffer): string {
 }
 
 async function fetchAuthPublicKey(): Promise<AuthPublicKey> {
-  return unwrapApi(apiClient.get<ApiResponse<AuthPublicKey>>('/api/v1/auth/public-key'));
+  return unwrapApi(authClient.get<ApiResponse<AuthPublicKey>>('/api/crypto/public-key'));
 }
 
 async function encryptWithPublicKey(plainPassword: string, publicKeyPem: string): Promise<string> {

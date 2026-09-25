@@ -1,6 +1,6 @@
 # 开发说明
 
-当前里程碑：V2.1.1（路由配置化、Refresh 白名单、异常处理）。
+当前里程碑：V2.1.2（公钥独立接口、认证状态机、Refresh 调用时机）。
 
 ## 前置
 
@@ -78,10 +78,13 @@ pnpm build
 4. 直接打开 http://localhost:8016 或 http://localhost:8016/dashboard ，子应用可独立运行。
 5. http://localhost:8011/docs 可打开 Swagger。
 6. `/api/v1/health` 与 `/api/v1/auth/me` 可用。
-7. 未登录打开主应用时，Network 里 `/auth/refresh` 可能 401，这表示没有 Refresh Cookie，不是 Access Token 拦截。已登录刷新页面应自动恢复会话。
-8. ERP 侧栏由 `apps/erp/src/router/routes.ts` 生成，访问 `/products/create` 仍高亮商品列表。
+7. 未登录打开主应用时，Network 里 `/auth/refresh` 可能 401，这表示没有 Refresh Cookie，属于预期，不应弹窗。
+8. 公钥走 `GET /api/crypto/public-key`，不要求登录。
+9. ERP 侧栏由 `apps/erp/src/router/routes.ts` 生成。
+10. 登录成功后 Network 里不应立刻再出现 `/auth/refresh`；刷新页面才应恢复会话。
+11. 开发环境前端直连 `http://localhost:8011`，没有 Vite 代理。Cookie `Path=/api/v1/auth`，不要混用 `127.0.0.1`。
 
-路由配置说明见 `docs/routing.md`。
+路由配置说明见 `docs/routing.md`。认证流程见 `docs/auth.md`。
 
 ## 浏览器进 debugger
 

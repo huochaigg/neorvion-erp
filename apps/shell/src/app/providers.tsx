@@ -1,3 +1,4 @@
+import { ApiError } from '@neorvion/shared';
 import { App as AntdApp, ConfigProvider } from 'antd';
 import zhCN from 'antd/locale/zh_CN';
 import type { ReactNode } from 'react';
@@ -52,7 +53,12 @@ export function AppProviders({ children }: AppProvidersProps) {
       new QueryClient({
         defaultOptions: {
           queries: {
-            retry: 1,
+            retry: (failureCount, error) => {
+              if (error instanceof ApiError && (error.status === 401 || error.status === 403)) {
+                return false;
+              }
+              return failureCount < 1;
+            },
             refetchOnWindowFocus: false,
           },
         },

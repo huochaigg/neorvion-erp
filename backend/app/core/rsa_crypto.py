@@ -139,11 +139,17 @@ class RsaKeyStore:
     def current_public_pem(self) -> str:
         return self._keys[self.current_key_id].public_pem
 
-    def public_pem_for(self, key_id: str) -> str:
+    def has_key(self, key_id: str) -> bool:
+        return key_id in self._keys
+
+    def material_for(self, key_id: str) -> RsaKeyMaterial:
         material = self._keys.get(key_id)
         if material is None:
-            raise RsaCryptoError()
-        return material.public_pem
+            raise AppError("公钥不存在或已停用", code=40024, status_code=404)
+        return material
+
+    def public_pem_for(self, key_id: str) -> str:
+        return self.material_for(key_id).public_pem
 
     def decrypt(self, *, encrypted_password: str, key_id: str) -> str:
         material = self._keys.get(key_id)

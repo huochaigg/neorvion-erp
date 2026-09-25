@@ -16,13 +16,13 @@
 
 `GET /api/v1/health`
 
-依赖不可用时 HTTP 仍为 200，字段标记 `unavailable`。当前 `milestone` 为 `V2.1.1`。
+依赖不可用时 HTTP 仍为 200，字段标记 `unavailable`。当前 `milestone` 为 `V2.1.2`。
 
 ## 认证
 
 详见 `docs/auth.md`。
 
-- `GET /api/v1/auth/public-key`
+- `GET /api/crypto/public-key`
 - `POST /api/v1/auth/register`
 - `POST /api/v1/auth/login`
 - `POST /api/v1/auth/refresh`

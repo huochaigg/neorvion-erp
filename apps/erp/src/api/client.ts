@@ -2,6 +2,7 @@ import axios, { isAxiosError, isCancel, type AxiosError } from 'axios';
 import { ApiError, type ApiResponse } from '@neorvion/shared';
 import { getShellProps } from '@/lib/runtime';
 
+/** ERP 只使用 Shell 传入的 Access Token，不调用 Refresh，避免双边轮换 Cookie。 */
 export const apiClient = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL,
   timeout: 8000,

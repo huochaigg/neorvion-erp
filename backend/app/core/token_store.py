@@ -13,8 +13,9 @@ def save_refresh_session(*, jti: str, user_id: int, ttl_seconds: int) -> None:
     redis_client.set(_key(jti), str(user_id), ex=ttl_seconds)
 
 
-def get_refresh_user_id(jti: str) -> int | None:
-    value = redis_client.get(_key(jti))
+def consume_refresh_session(jti: str) -> int | None:
+    """GETDEL：并发刷新时只有一个请求能拿到旧会话。"""
+    value = redis_client.getdel(_key(jti))
     if value is None:
         return None
     return int(value)
