@@ -25,7 +25,7 @@ def create_app() -> FastAPI:
     app = FastAPI(
         title=settings.app_name,
         version="0.1.0",
-        description="多租户跨境电商 ERP 后端。当前里程碑：V2.1.2。",
+        description="多租户跨境电商 ERP 后端。当前里程碑：V2.2.1。",
         lifespan=lifespan,
         docs_url="/docs",
         redoc_url="/redoc",

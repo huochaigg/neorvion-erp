@@ -2,7 +2,7 @@
 
 多租户跨境电商 ERP。当前仓库按里程碑持续迭代，**不要为每个版本重建项目**。
 
-当前里程碑：**V2.1.2**。
+当前里程碑：**V2.2.1**。
 
 ## 技术栈
 
@@ -116,6 +116,12 @@ pnpm --filter @neorvion/shell build
 pnpm --filter @neorvion/erp build
 ```
 
+## V2.2.1
+
+- 共享库多租户：`tenants`、`tenant_members`
+- `X-Tenant-ID` + `TenantContext`；创建者预留 OWNER
+- 一个用户可加入多家企业；成员管理最小权限
+
 ## V2.1.2
 
 - 公钥改为公开接口 `GET /api/crypto/public-key`
@@ -145,6 +151,6 @@ pnpm --filter @neorvion/erp build
 
 ## 尚未开始
 
-多租户、RBAC、商品库存、采购、销售订单。这些从 V2.2 起在同一仓库扩展。
+完整 RBAC、商品库存、采购、销售订单。前端租户切换在 V2.2.2 对接本阶段接口。
 
-更细的说明见 `docs/development.md`、`docs/architecture.md`、`docs/auth.md` 与 `docs/routing.md`。
+更细的说明见 `docs/development.md`、`docs/architecture.md`、`docs/auth.md`、`docs/multi-tenancy.md` 与 `docs/routing.md`。

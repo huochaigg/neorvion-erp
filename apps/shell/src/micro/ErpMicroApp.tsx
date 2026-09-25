@@ -4,7 +4,7 @@ import { Alert, Button } from 'antd';
 import { useEffect, useMemo, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { fetchCurrentUser } from '@/api/auth';
-import { setupMicroApps } from '@/micro/setup';
+// import { setupMicroApps } from '@/micro/setup';
 import { WujieHost } from '@/micro/wujie-host';
 import { useAuthStore } from '@/stores/auth-store';
 import { useShellStore } from '@/stores/shell-store';
@@ -35,10 +35,6 @@ export function ErpMicroApp() {
     queryFn: fetchCurrentUser,
     enabled: Boolean(accessToken),
   });
-
-  useEffect(() => {
-    setupMicroApps();
-  }, []);
 
   const url = buildErpUrl(location.pathname);
 
@@ -80,7 +76,11 @@ export function ErpMicroApp() {
           prefix={{ [ERP_APP_NAME]: ERP_BASENAME }}
           props={props}
           fiber={false}
-          loadError={() => setLoadFailed(true)}
+          degrade={false}
+          loadError={(err) => {
+            console.log('loadError', err)
+            setLoadFailed(true)
+          }}
         />
       )}
     </div>

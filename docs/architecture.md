@@ -1,6 +1,6 @@
 # 架构说明
 
-当前里程碑：V2.1.2。
+当前里程碑：V2.2.1。
 
 ## 目标
 
@@ -35,7 +35,7 @@
 
 - Zustand：仅客户端 UI 与 Access Token（内存）。用户资料走 React Query。
 - React Query：服务端数据。业务 Query Key 必须包含 `tenantId`；当前用户使用 `current-user`。
-- 租户切换时取消未完成请求并 `queryClient.clear()`。V2.2 接入真实租户后生效。
+- 租户切换时取消未完成请求并 `queryClient.clear()`。V2.2.2 对接真实租户列表与 `X-Tenant-ID`。
 
 ### 样式
 
@@ -60,7 +60,7 @@
 - Refresh Token 会话写在 Redis（`GETDEL` 原子轮换），便于注销。
 - 密码传输使用独立 RSA-OAEP 密钥（`GET /api/crypto/public-key`），与 JWT `SECRET_KEY` 分开；一次性 `challenge_id` 写在 Redis。
 - Shell 独占 Refresh；ERP 只消费 Wujie props 里的 Access Token。
-- 后续 V2.2 增加 `get_current_tenant()` / `get_tenant_context()`，不要把租户 ID 塞进 `users` 表。
+- 后续业务接口注入 `get_tenant_context()` / `TenantContextDep`。`X-Tenant-ID` 只表示意愿，必须再查 `tenant_members`。不要把租户 ID 塞进 `users` 表或 JWT。
 
 AI 与异步：
 

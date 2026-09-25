@@ -1,6 +1,6 @@
 # 开发说明
 
-当前里程碑：V2.1.2（公钥独立接口、认证状态机、Refresh 调用时机）。
+当前里程碑：V2.2.1（SaaS 多租户库表与后端接口）。
 
 ## 前置
 
@@ -82,9 +82,10 @@ pnpm build
 8. 公钥走 `GET /api/crypto/public-key`，不要求登录。
 9. ERP 侧栏由 `apps/erp/src/router/routes.ts` 生成。
 10. 登录成功后 Network 里不应立刻再出现 `/auth/refresh`；刷新页面才应恢复会话。
-11. 开发环境前端直连 `http://localhost:8011`，没有 Vite 代理。Cookie `Path=/api/v1/auth`，不要混用 `127.0.0.1`。
+12. `POST /api/v1/tenants` 可创建企业；`GET /api/v1/tenants` 只返回自己加入的企业。
+13. 业务接口用请求头 `X-Tenant-ID`，服务端会校验成员关系。创建租户和「我的租户」不需要该头。
 
-路由配置说明见 `docs/routing.md`。认证流程见 `docs/auth.md`。
+多租户说明见 `docs/multi-tenancy.md`。路由配置说明见 `docs/routing.md`。认证流程见 `docs/auth.md`。
 
 ## 浏览器进 debugger
 
