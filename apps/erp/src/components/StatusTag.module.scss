@@ -1,0 +1,18 @@
+.tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.ready {
+  background: #ecfdf5;
+  color: #047857;
+}
+
+.pending {
+  background: #eff6ff;
+  color: #1d4ed8;
+}
