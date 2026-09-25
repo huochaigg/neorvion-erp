@@ -1,10 +1,7 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './App';
-import { setupMicroApps } from './micro/setup';
 import './index.css';
-
-setupMicroApps();
 
 const container = document.getElementById('root');
 if (!container) {

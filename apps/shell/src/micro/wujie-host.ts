@@ -8,6 +8,8 @@ export interface WujieHostProps {
   url: string;
   sync?: boolean;
   fiber?: boolean;
+  alive?: boolean;
+  prefix?: Record<string, string>;
   props?: object;
   afterMount?: () => void;
   loadError?: (url: string, error: Error) => void;

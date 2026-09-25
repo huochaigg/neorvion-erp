@@ -1,4 +1,4 @@
-import { ERP_ROUTES } from '@neorvion/shared';
+import { ERP_PATHS } from '@neorvion/shared';
 import { BrowserRouter, Navigate, Outlet, Route, Routes } from 'react-router-dom';
 import { ErpLayout } from '@/layouts/ErpLayout';
 import { DashboardPage } from '@/pages/DashboardPage';
@@ -16,9 +16,8 @@ export function AppRouter() {
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/" element={<Navigate to={ERP_ROUTES.dashboard} replace />} />
-        <Route path="/erp" element={<LayoutFrame />}>
-          <Route index element={<Navigate to="dashboard" replace />} />
+        <Route element={<LayoutFrame />}>
+          <Route index element={<Navigate to={ERP_PATHS.dashboard} replace />} />
           <Route path="dashboard" element={<DashboardPage />} />
           <Route
             path="products"
@@ -50,7 +49,7 @@ export function AppRouter() {
           <Route
             path="*"
             element={
-              <PlaceholderPage title="未找到页面" description={`可返回 ${ERP_ROUTES.dashboard}`} />
+              <PlaceholderPage title="未找到页面" description={`可返回 ${ERP_PATHS.dashboard}`} />
             }
           />
         </Route>

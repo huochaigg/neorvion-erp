@@ -5,7 +5,7 @@ import {
   ShoppingCartOutlined,
   ShopOutlined,
 } from '@ant-design/icons';
-import { ERP_ROUTES } from '@neorvion/shared';
+import { ERP_PATHS } from '@neorvion/shared';
 import { Layout, Menu, Tag } from 'antd';
 import type { ReactNode } from 'react';
 import { useMemo } from 'react';
@@ -26,17 +26,17 @@ export function ErpLayout({ children }: ErpLayoutProps) {
   const setSiderCollapsed = useErpStore((state) => state.setSiderCollapsed);
   const embedded = isEmbeddedInWujie();
 
-  const selectedKey = location.pathname.startsWith('/erp')
+  const selectedKey = (Object.values(ERP_PATHS) as string[]).includes(location.pathname)
     ? location.pathname
-    : ERP_ROUTES.dashboard;
+    : ERP_PATHS.dashboard;
 
   const menuItems = useMemo(
     () => [
-      { key: ERP_ROUTES.dashboard, icon: <HomeOutlined />, label: '工作台' },
-      { key: ERP_ROUTES.products, icon: <AppstoreOutlined />, label: '商品' },
-      { key: ERP_ROUTES.warehouses, icon: <ShopOutlined />, label: '仓库' },
-      { key: ERP_ROUTES.inventory, icon: <DatabaseOutlined />, label: '库存' },
-      { key: ERP_ROUTES.orders, icon: <ShoppingCartOutlined />, label: '订单' },
+      { key: ERP_PATHS.dashboard, icon: <HomeOutlined />, label: '工作台' },
+      { key: ERP_PATHS.products, icon: <AppstoreOutlined />, label: '商品' },
+      { key: ERP_PATHS.warehouses, icon: <ShopOutlined />, label: '仓库' },
+      { key: ERP_PATHS.inventory, icon: <DatabaseOutlined />, label: '库存' },
+      { key: ERP_PATHS.orders, icon: <ShoppingCartOutlined />, label: '订单' },
     ],
     [],
   );

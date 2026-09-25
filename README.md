@@ -92,9 +92,9 @@ pnpm install
 pnpm dev
 ```
 
-- 主应用：http://localhost:8015
-- ERP 子应用独立运行：http://localhost:8016/erp/dashboard
-- 主应用接入 ERP：http://localhost:8015/erp/dashboard
+- 主应用：http://localhost:8015 （工作台，不含 ERP 业务页）
+- ERP 子应用独立运行：http://localhost:8016
+- 主应用接入 ERP：http://localhost:8015/erp
 
 分别启动：
 
