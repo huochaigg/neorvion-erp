@@ -15,10 +15,16 @@ export const SHELL_EVENTS = {
   navigate: 'shell:navigate',
 } as const;
 
+export interface TenantChangedPayload {
+  previousTenantId: number | null;
+  currentTenantId: number | null;
+}
+
 /** 主子应用路由同步。payload.name 区分 ERP / 未来的 SCM、CRM。 */
 export const MICRO_EVENTS = {
   childLocation: 'micro:child-location',
   hostNavigate: 'micro:host-navigate',
+  tenantInaccessible: 'micro:tenant-inaccessible',
 } as const;
 
 export type MicroHistoryAction = 'push' | 'replace';

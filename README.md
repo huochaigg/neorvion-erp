@@ -2,7 +2,7 @@
 
 多租户跨境电商 ERP。当前仓库按里程碑持续迭代，**不要为每个版本重建项目**。
 
-当前里程碑：**V2.2.1**。
+当前里程碑：**V2.2.4**。
 
 ## 技术栈
 
@@ -114,7 +114,16 @@ uv run ruff check app tests
 ```bash
 pnpm --filter @neorvion/shell build
 pnpm --filter @neorvion/erp build
+pnpm test
 ```
+
+## V2.2.4
+
+- Shell 接入 V2.2.1 租户接口：创建企业、选择工作空间、切换企业
+- 当前租户只保存在 Shell `tenant-store`；ERP 通过 Wujie props 与 `shell:tenant-changed` 同步
+- Axios 按精确跳过名单自动附加 `X-Tenant-ID`；React Query 用 `['tenant', tenantId, ...]` 隔离缓存
+- 租户切换不 `destroyApp`、不重新登录、不 Refresh；离开 ERP 再进入仍保活
+- 上次选择按用户写入 `localStorage`（`neorvion:last-tenant-id:{userId}`），只作偏好，仍以后端成员关系为准
 
 ## V2.2.1
 
@@ -151,6 +160,6 @@ pnpm --filter @neorvion/erp build
 
 ## 尚未开始
 
-完整 RBAC、商品库存、采购、销售订单。前端租户切换在 V2.2.2 对接本阶段接口。
+完整 RBAC、商品库存、采购、销售订单。
 
 更细的说明见 `docs/development.md`、`docs/architecture.md`、`docs/auth.md`、`docs/multi-tenancy.md`、`docs/routing.md`、`docs/micro-frontend-integration.md` 与 `docs/micro-frontend-interview.md`。

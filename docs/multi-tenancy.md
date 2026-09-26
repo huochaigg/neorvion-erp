@@ -1,4 +1,4 @@
-# 多租户说明（V2.2.1）
+# 多租户说明（V2.2.1 后端 + V2.2.4 前端）
 
 本阶段只做 **共享 MySQL + 共享业务表 + tenant_id**。不做每租户独立库、独立 Schema、微服务或完整 RBAC。
 
@@ -102,6 +102,30 @@ UNIQUE (tenant_id, warehouse_id, sku_id)
 租户缓存：`erp:tenant:{tenant_id}:product:{id}`
 
 认证会话仍用全局键：`auth:refresh:{jti}`、`auth:challenge:{id}`。Refresh Token 属于用户，不属于当前企业。
+
+## 前端如何接到这套模型（V2.2.4）
+
+Shell 是登录身份和当前租户的唯一来源。ERP 不自己维护一套 `currentTenantId`。
+
+| 职责 | 存放位置 |
+| --- | --- |
+| 登录用户、Access Token | Shell `auth-store`（内存） |
+| 当前 `tenant_id`、切换中 | Shell `tenant-store` |
+| 我的租户列表、成员、健康检查 | React Query |
+| ERP 运行时租户 | `useErpTenantStore`，由 props 水合 + `shell:tenant-changed` |
+
+`X-Tenant-ID` 由 Axios 请求拦截器在**发起时**绑定。跳过名单是 method + 规范化 pathname 精确匹配，不是字符串包含：
+
+- 不带头：公钥、注册、登录、Refresh、Logout、`GET /auth/me`、`POST /tenants`、`GET /tenants`、健康检查
+- 带头：`GET /tenants/current` 以及后续 ERP 业务接口
+
+服务端仍然用 JWT `user_id` + `tenant_members` 校验。前端选对了租户，不能替代后端验证。
+
+React Query 租户数据的 key 形如 `['tenant', tenantId, 'members']`。切换时只 `cancelQueries` / `removeQueries` 旧 `tenantId`，不清空当前用户。旧请求即使返回，也写不进新租户的缓存。
+
+页面刷新：先恢复登录，再拉我的租户，再校验 `neorvion:last-tenant-id:{userId}`。这个 key 只是 UI 偏好。成员被禁用或移出后不能继续使用上次租户，也不会因此清掉整个登录会话。40310 / 40410 不会触发 Refresh。
+
+微前端：离开 ERP 再进入、租户未变 → 保活恢复。租户 A → B → bus 事件重置业务状态，不 `destroyApp`。
 
 ## 最小权限（V2.3 会被 RBAC 替换）
 

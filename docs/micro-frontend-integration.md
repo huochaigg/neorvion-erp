@@ -201,7 +201,7 @@ Shell 地址栏：http://localhost:8015/erp/orders
 - **启动**：`WujieHost` 在 `useEffect` 里按 `name` 串行 `startApp`。
 - **失活**：`alive: true` 时，React 卸载 Host **不**调用 `destroyApp`。`wujie-app` 的 `disconnectedCallback` 会走到官方 `sandbox.unmount()`，对保活应用只触发 `deactivated`，不拆 React 树。
 - **StrictMode**：第一次 effect 被取消后，已入队的 `startApp` 若尚未开始会跳过；若已完成且 `alive`，不销毁，第二次 `startApp` 走官方 `active()` 再挂回新容器。generation 保证旧 cleanup 不会 `destroyApp` 掉新实例。
-- **真正销毁**：`destroyMicroApp` / `destroyAllMicroApps`（`apps/shell/src/micro/lifecycle.ts`）。退出登录、Refresh 失败、`setCurrentTenantId` 变化时调用。
+- **真正销毁**：`destroyMicroApp` / `destroyAllMicroApps`（`apps/shell/src/micro/lifecycle.ts`）。退出登录、Refresh 失败时调用。租户切换不销毁，改发 `shell:tenant-changed`。
 - **异常**：`startApp` 抛错时调用 `loadError`。
 
 不要在子应用里再包一层 `startApp`。不要靠首页里藏一个隐藏 ERP DOM 假装保活。
@@ -558,13 +558,12 @@ startApp(1) 若已被取消则跳过
 
 ### 7.4 退出登录与租户变化
 
-保活实例里可能还留着上一个用户的 token 和页面数据，必须拆掉：
+保活实例里可能还留着上一个用户的 token 和页面数据。**退出登录 / Refresh 失败**必须拆掉实例：
 
 - 侧栏退出：`destroyAllMicroApps()`（`ShellLayout`）
 - Refresh 失败：`apps/shell/src/api/client.ts` 拦截器
-- `setCurrentTenantId` 值变化：`shell-store`
 
-真正销毁入口是 `destroyMicroApp(name)` / `destroyAllMicroApps()`，同时清掉 `sessionStorage` 里的上次路由。
+**租户切换不调用 `destroyApp`。** Shell 更新 `tenant-store` 后通过 Wujie bus 发送 `shell:tenant-changed`。ERP 的 `TenantChangeBridge` 统一隔离旧租户 Query、提升 `epoch` 重挂页面（清掉未提交表单），必要时把带资源 ID 的路由退回列表页。离开 ERP 再进入、租户未变时，仍走保活恢复。
 
 ---
 

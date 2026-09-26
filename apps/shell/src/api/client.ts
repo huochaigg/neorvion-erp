@@ -1,8 +1,19 @@
 import axios, { isCancel, type AxiosError, type InternalAxiosRequestConfig } from 'axios';
-import { ApiError, type ApiResponse, type TokenPayload } from '@neorvion/shared';
-import { SHELL_ROUTES } from '@neorvion/shared';
-import { useAuthStore } from '@/stores/auth-store';
+import {
+  ApiError,
+  decideTenantHeader,
+  isTenantInaccessibleError,
+  myTenantsQueryKey,
+  SHELL_ROUTES,
+  TENANT_HEADER,
+  type ApiResponse,
+  type TokenPayload,
+} from '@neorvion/shared';
+import { getRegisteredQueryClient } from '@/lib/query-client';
+import { clearTenantSelection } from '@/lib/switch-tenant';
 import { destroyAllMicroApps } from '@/micro/lifecycle';
+import { useAuthStore } from '@/stores/auth-store';
+import { useTenantStore } from '@/stores/tenant-store';
 import { authClient } from './auth-client';
 import { toApiError, unwrapApi } from './http';
 
@@ -22,6 +33,16 @@ function redirectToLogin() {
     return;
   }
   window.location.assign(`${SHELL_ROUTES.login}?from=${encodeURIComponent(from)}`);
+}
+
+function handleTenantInaccessible() {
+  const queryClient = getRegisteredQueryClient();
+  if (queryClient) {
+    clearTenantSelection(queryClient, { persist: true });
+    void queryClient.invalidateQueries({ queryKey: myTenantsQueryKey() });
+    return;
+  }
+  useTenantStore.getState().clearCurrentTenant();
 }
 
 /**
@@ -47,6 +68,25 @@ apiClient.interceptors.request.use((config) => {
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
+
+  const tenantState = useTenantStore.getState();
+  const decision = decideTenantHeader({
+    method: config.method ?? 'get',
+    url: config.url ?? '',
+    baseURL: config.baseURL ?? apiClient.defaults.baseURL,
+    skipTenantHeader: Boolean(config.skipTenantHeader),
+    currentTenantId: tenantState.currentTenantId,
+    isSwitching: tenantState.isSwitching,
+  });
+
+  if (decision.action === 'reject') {
+    return Promise.reject(new ApiError('正在切换企业，请稍候', { code: 40030 }));
+  }
+  if (decision.action === 'attach') {
+    config.headers[TENANT_HEADER] = String(decision.tenantId);
+    config.tenantContextId = decision.tenantId;
+  }
+
   return config;
 });
 
@@ -59,9 +99,15 @@ apiClient.interceptors.response.use(
     const original = error.config as InternalAxiosRequestConfig | undefined;
     const status = error.response?.status;
     const skipRefresh = Boolean(original?.skipAuthRefresh);
+    const apiError = toApiError(error);
+
+    if (apiError instanceof ApiError && isTenantInaccessibleError(apiError.code)) {
+      handleTenantInaccessible();
+      return Promise.reject(apiError);
+    }
 
     if (status !== 401 || !original || original._retried || skipRefresh) {
-      return Promise.reject(toApiError(error));
+      return Promise.reject(apiError);
     }
 
     original._retried = true;
@@ -71,6 +117,7 @@ apiClient.interceptors.response.use(
       return apiClient.request(original);
     } catch {
       useAuthStore.getState().markUnauthenticated();
+      useTenantStore.getState().reset();
       destroyAllMicroApps();
       redirectToLogin();
       return Promise.reject(new ApiError('登录已过期，请重新登录', { status: 401, code: 40104 }));
