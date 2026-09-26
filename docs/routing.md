@@ -4,7 +4,7 @@ ERP 业务路由只放在子应用内部：`apps/erp/src/router/routes.ts`。
 
 `packages/shared` 只保留主应用需要的挂载约定：
 
-- `SHELL_ROUTES`：主应用 `/`、`/login`、`/register`、`/erp`
+- `SHELL_ROUTES`：主应用 `/`、`/login`、`/register`、`/workspaces`、`/workspaces/create`、`/erp`
 - `ERP_BASENAME`：主应用挂载前缀 `/erp`
 - `ERP_DEFAULT_PATH`：打开 ERP 时的默认落地页 `/dashboard`
 

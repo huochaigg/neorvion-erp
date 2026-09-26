@@ -1,6 +1,6 @@
 # 开发说明
 
-当前里程碑：V2.2.1（SaaS 多租户库表与后端接口）。
+当前里程碑：V2.2.4（多租户前端集成与状态隔离）。
 
 ## 前置
 
@@ -68,6 +68,7 @@ uv run pytest
 ```bash
 pnpm lint
 pnpm build
+pnpm test
 ```
 
 ## 验证清单
@@ -82,8 +83,10 @@ pnpm build
 8. 公钥走 `GET /api/crypto/public-key`，不要求登录。
 9. ERP 侧栏由 `apps/erp/src/router/routes.ts` 生成。
 10. 登录成功后 Network 里不应立刻再出现 `/auth/refresh`；刷新页面才应恢复会话。
-12. `POST /api/v1/tenants` 可创建企业；`GET /api/v1/tenants` 只返回自己加入的企业。
-13. 业务接口用请求头 `X-Tenant-ID`，服务端会校验成员关系。创建租户和「我的租户」不需要该头。
+11. 登录后若没有企业，会进入 `/workspaces/create`；只有一家有效企业会自动进入；多家则优先恢复 `localStorage` 中该用户上次选择，失效则进入 `/workspaces`。
+12. `POST /api/v1/tenants` 可创建企业；`GET /api/v1/tenants` 只返回自己加入的企业。创建企业不需要 `X-Tenant-ID`。
+13. 业务接口用请求头 `X-Tenant-ID`，服务端会校验成员关系。切换企业不会调用登录或 Refresh。
+14. 离开 `/erp` 再进入应恢复上次 ERP 页面；在 ERP 内切换企业后，保活探测输入应被清空，且 Network 里后续请求的 `X-Tenant-ID` 变为新企业。
 
 多租户说明见 `docs/multi-tenancy.md`。路由配置说明见 `docs/routing.md`。认证流程见 `docs/auth.md`。
 

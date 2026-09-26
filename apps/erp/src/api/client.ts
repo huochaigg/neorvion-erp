@@ -1,6 +1,14 @@
 import axios, { isAxiosError, isCancel, type AxiosError } from 'axios';
-import { ApiError, type ApiResponse } from '@neorvion/shared';
+import {
+  ApiError,
+  decideTenantHeader,
+  isTenantInaccessibleError,
+  MICRO_EVENTS,
+  TENANT_HEADER,
+  type ApiResponse,
+} from '@neorvion/shared';
 import { getShellProps } from '@/lib/runtime';
+import { useErpTenantStore } from '@/stores/tenant-runtime';
 
 /** ERP 只使用 Shell 传入的 Access Token，不调用 Refresh，避免双边轮换 Cookie。 */
 export const apiClient = axios.create({
@@ -26,6 +34,22 @@ apiClient.interceptors.request.use((config) => {
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
+
+  const tenantState = useErpTenantStore.getState();
+  const decision = decideTenantHeader({
+    method: config.method ?? 'get',
+    url: config.url ?? '',
+    baseURL: config.baseURL ?? apiClient.defaults.baseURL,
+    skipTenantHeader: Boolean(config.skipTenantHeader),
+    currentTenantId: tenantState.currentTenantId,
+    isSwitching: false,
+  });
+
+  if (decision.action === 'attach') {
+    config.headers[TENANT_HEADER] = String(decision.tenantId);
+    config.tenantContextId = decision.tenantId;
+  }
+
   return config;
 });
 
@@ -36,6 +60,9 @@ apiClient.interceptors.response.use(
       return Promise.reject(error);
     }
     const nextError = isAxiosError(error) ? toApiError(error) : error;
+    if (nextError instanceof ApiError && isTenantInaccessibleError(nextError.code)) {
+      window.$wujie?.bus.$emit(MICRO_EVENTS.tenantInaccessible);
+    }
     if (nextError instanceof ApiError && nextError.status >= 500) {
       console.error('[erp-api]', nextError.message);
     }

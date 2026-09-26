@@ -1,6 +1,6 @@
 # 架构说明
 
-当前里程碑：V2.2.1。
+当前里程碑：V2.2.4。
 
 ## 目标
 
@@ -10,15 +10,15 @@
 
 ### 应用边界
 
-- `apps/shell`：统一登录、注册、认证状态、顶部导航、微前端注册。
+- `apps/shell`：统一登录、注册、当前用户、当前租户、工作空间选择/创建、顶部导航、微前端注册。
 - `apps/erp`：业务菜单、业务页面、业务客户端状态。可独立启动，便于调试。
-- `packages/shared`：主应用路由常量、API 响应类型、Wujie 通信类型、Query Key、`ApiError`。ERP 业务菜单不放在这里。
+- `packages/shared`：主应用路由常量、API 响应类型、Wujie 通信类型、Query Key、`ApiError`、租户请求头规则。ERP 业务菜单不放在这里。
 
 主应用不得读取 ERP 内部 store；ERP 只能通过 `window.$wujie.props` 与 `bus` 接收主应用显式传入的状态。
 
 ### 路由
 
-- 主应用：`/` 工作台，`/erp/*` 挂载子应用。主应用根路径不会打开 ERP。
+- 主应用：`/` 工作台，`/workspaces` 选择企业，`/workspaces/create` 创建企业，`/erp/*` 挂载子应用。没有有效租户时不能进入工作台和 ERP。
 - 子应用独立运行在 `http://localhost:8016/`，内部路径由 `apps/erp/src/router/routes.ts` 配置（如 `/dashboard`、`/products/list`），**没有** `/erp` 前缀。
 - 主应用浏览器地址是 `/erp/products/list`，由 Shell pathname 与子应用路由双向同步；刷新后仍由主应用按 `/erp/*` 加载子应用。
 - 侧栏「ERP 业务」进入应用并恢复上次路由；指定页面（如 `/erp/dashboard`）按目标路径打开。ERP 内部菜单不在 Shell 维护。
@@ -26,7 +26,7 @@
 ### 无界
 
 - 宿主封装集中在 `apps/shell/src/micro`。子应用清单见 `apps.ts`，接入步骤见 `docs/micro-frontend-integration.md`，白屏排查与架构复盘见 `docs/micro-frontend-interview.md`。
-- 默认 Shadow DOM（`degrade: false`）。ERP 当前 `alive: true`，离开 `/erp/*` 不销毁沙箱；登出或租户变化时调用 `destroyAllMicroApps()`。
+- 默认 Shadow DOM（`degrade: false`）。ERP 当前 `alive: true`，离开 `/erp/*` 不销毁沙箱；退出登录或 Refresh 失败时调用 `destroyAllMicroApps()`。租户切换不销毁实例，改发 `shell:tenant-changed` 并隔离缓存。
 - 关闭 Wujie 原生 `sync`（`?erp=`），改用 Wujie bus 同步规范 pathname。Vite 子应用关闭 fiber，入口调用 `window.__WUJIE.mount()`。
 - 开发服务器开启 CORS，并用 `server.origin` 输出绝对资源地址。
 - Tailwind v4 的 `:root` → `:host` 只挂在需要它的子应用上，不是全局默认。
@@ -34,9 +34,9 @@
 
 ### 状态
 
-- Zustand：仅客户端 UI 与 Access Token（内存）。用户资料走 React Query。
-- React Query：服务端数据。业务 Query Key 必须包含 `tenantId`；当前用户使用 `current-user`。
-- 租户切换时取消未完成请求并 `queryClient.clear()`。V2.2.2 对接真实租户列表与 `X-Tenant-ID`。
+- Zustand：`auth-store` 保存 Access Token 与登录状态；`tenant-store` 保存 `currentTenantId` / `isSwitching`。用户资料、租户列表走 React Query，不要在 Zustand 再存一份。
+- React Query：服务端数据。租户业务 Query Key 必须是 `['tenant', tenantId, ...]`；当前用户使用 `current-user`，我的租户列表使用 `my-tenants`。
+- 租户切换时取消并移除旧 `tenantId` 的查询，不清空全局 `QueryClient`。Axios 拦截器按 method+pathname 精确名单决定是否附加 `X-Tenant-ID`。切换租户不等于 Refresh Token。
 
 ### 样式
 

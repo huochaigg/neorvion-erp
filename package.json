@@ -9,6 +9,7 @@
     "dev:erp": "pnpm --filter @neorvion/erp dev",
     "build": "pnpm --filter @neorvion/shell --filter @neorvion/erp run build",
     "lint": "pnpm --filter @neorvion/shell --filter @neorvion/erp run lint",
+    "test": "pnpm --filter @neorvion/shell test",
     "format": "prettier --write ."
   },
   "devDependencies": {

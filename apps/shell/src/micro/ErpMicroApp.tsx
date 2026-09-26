@@ -8,11 +8,11 @@ import { buildMicroAppUrl, getMicroApp } from '@/micro/apps';
 import { consumeLegacyWujieSyncQuery, emitHostNavigate, useMicroHostRouteSync } from '@/micro/route-sync';
 import { WujieHost } from '@/micro/wujie-host';
 import { useAuthStore } from '@/stores/auth-store';
-import { useShellStore } from '@/stores/shell-store';
+import { useTenantStore } from '@/stores/tenant-store';
 
 export function ErpMicroApp() {
   const location = useLocation();
-  const tenantId = useShellStore((state) => state.currentTenantId);
+  const tenantId = useTenantStore((state) => state.currentTenantId);
   const accessToken = useAuthStore((state) => state.accessToken);
   const [loadFailed, setLoadFailed] = useState(false);
   const { data: currentUser } = useQuery({

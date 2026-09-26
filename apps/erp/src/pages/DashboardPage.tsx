@@ -5,15 +5,15 @@ import { useState } from 'react';
 import { fetchHealth } from '@/api/health';
 import { PageHeader } from '@/components/PageHeader';
 import { StatusTag } from '@/components/StatusTag';
-import { getShellProps } from '@/lib/runtime';
+import { useErpTenantStore } from '@/stores/tenant-runtime';
 import type { PageProps } from '@/router/types';
 
 export function DashboardPage(props: PageProps) {
-  const shellProps = getShellProps();
+  const tenantId = useErpTenantStore((state) => state.currentTenantId);
   const [aliveProbe, setAliveProbe] = useState('');
   const { data, isLoading, isError, error } = useQuery({
-    queryKey: healthQueryKey(shellProps.tenantId),
-    queryFn: fetchHealth,
+    queryKey: healthQueryKey(tenantId),
+    queryFn: ({ signal }) => fetchHealth(signal),
     retry: false,
   });
 
@@ -21,8 +21,8 @@ export function DashboardPage(props: PageProps) {
     <div>
       <PageHeader
         title={props.title ?? '业务工作台'}
-        description={props.description ?? 'ERP 子应用已接入。商品、库存、订单等业务页面从 M3 开始实现。'}
-        extra={<StatusTag tone="ready">M1 骨架就绪</StatusTag>}
+        description={props.description ?? 'ERP 子应用已接入。商品、库存、订单等业务页面从后续里程碑实现。'}
+        extra={<StatusTag tone="ready">V2.2.4 租户已接入</StatusTag>}
       />
       <Row gutter={[16, 16]}>
         <Col xs={24} md={12}>
@@ -30,14 +30,12 @@ export function DashboardPage(props: PageProps) {
             <p className="mb-2 text-sm text-slate-600">
               嵌入模式：{window.__POWERED_BY_WUJIE__ ? '无界子应用' : '独立启动'}
             </p>
-            <p className="mb-0 text-sm text-slate-600">
-              当前租户：{shellProps.tenantId ?? '尚未接入（M2）'}
-            </p>
+            <p className="mb-0 text-sm text-slate-600">当前租户：{tenantId ?? '未选择'}</p>
             <Input
               className="mt-3"
               value={aliveProbe}
               onChange={(event) => setAliveProbe(event.target.value)}
-              placeholder="保活探测：输入后离开再回来应仍在"
+              placeholder="保活探测：输入后离开再回来应仍在；切租户后应清空"
             />
           </Card>
         </Col>

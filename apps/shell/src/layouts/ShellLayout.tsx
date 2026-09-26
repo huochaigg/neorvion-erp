@@ -8,17 +8,19 @@ import {
 } from '@ant-design/icons';
 import { currentUserQueryKey, ERP_APP_NAME, SHELL_ROUTES } from '@neorvion/shared';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Avatar, Button, Dropdown, Layout, Menu, Space, Tag } from 'antd';
+import { Avatar, Button, Dropdown, Layout, Menu, Space, Spin, Tag } from 'antd';
 import type { ReactNode } from 'react';
 import { useMemo } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { fetchCurrentUser, logoutAccount } from '@/api/auth';
+import { TenantSwitcher } from '@/components/TenantSwitcher';
 import { AppLogo } from '@/components/AppLogo';
 import { getMicroApp, getMicroAppEntryHref } from '@/micro/apps';
 import { getLastMicroHref } from '@/micro/last-location';
 import { destroyAllMicroApps } from '@/micro/lifecycle';
 import { useAuthStore } from '@/stores/auth-store';
 import { useShellStore } from '@/stores/shell-store';
+import { useTenantStore } from '@/stores/tenant-store';
 
 const { Header, Sider, Content } = Layout;
 
@@ -34,6 +36,8 @@ export function ShellLayout({ children }: ShellLayoutProps) {
   const toggleSider = useShellStore((state) => state.toggleSider);
   const accessToken = useAuthStore((state) => state.accessToken);
   const resetAuth = useAuthStore((state) => state.reset);
+  const resetTenant = useTenantStore((state) => state.reset);
+  const isSwitching = useTenantStore((state) => state.isSwitching);
 
   const { data: currentUser } = useQuery({
     queryKey: currentUserQueryKey(),
@@ -43,11 +47,14 @@ export function ShellLayout({ children }: ShellLayoutProps) {
 
   const selectedKey = location.pathname.startsWith(SHELL_ROUTES.erp)
     ? SHELL_ROUTES.erp
-    : SHELL_ROUTES.home;
+    : location.pathname.startsWith(SHELL_ROUTES.workspaces)
+      ? SHELL_ROUTES.workspaces
+      : SHELL_ROUTES.home;
 
   const menuItems = useMemo(
     () => [
       { key: SHELL_ROUTES.home, icon: <AppstoreOutlined />, label: '工作台' },
+      { key: SHELL_ROUTES.workspaces, icon: <TeamOutlined />, label: '工作空间' },
       { key: SHELL_ROUTES.erp, icon: <TeamOutlined />, label: 'ERP 业务' },
     ],
     [],
@@ -57,6 +64,7 @@ export function ShellLayout({ children }: ShellLayoutProps) {
     try {
       await logoutAccount();
     } finally {
+      resetTenant();
       resetAuth();
       queryClient.clear();
       destroyAllMicroApps();
@@ -69,10 +77,10 @@ export function ShellLayout({ children }: ShellLayoutProps) {
       <Header className="flex items-center justify-between px-4">
         <div className="flex items-center gap-4">
           <AppLogo compact={siderCollapsed} />
-          <Tag color="processing">V2.1.2</Tag>
+          <Tag color="processing">V2.2.4</Tag>
         </div>
         <Space size={12}>
-          <span className="text-sm text-white/70">租户：尚未接入（V2.2）</span>
+          <TenantSwitcher />
           <Dropdown
             menu={{
               items: [
@@ -129,7 +137,15 @@ export function ShellLayout({ children }: ShellLayoutProps) {
             </div>
           </div>
         </Sider>
-        <Content className="h-full min-h-0 min-w-0 overflow-auto">{children}</Content>
+        <Content className="relative h-full min-h-0 min-w-0 overflow-auto">
+          {isSwitching ? (
+            <div className="absolute inset-0 z-10 flex items-center justify-center bg-white/70 text-sm text-slate-600">
+              <Spin />
+              <span className="ml-3">正在切换企业…</span>
+            </div>
+          ) : null}
+          {children}
+        </Content>
       </Layout>
     </Layout>
   );

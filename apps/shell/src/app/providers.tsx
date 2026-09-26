@@ -5,6 +5,7 @@ import type { ReactNode } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useState } from 'react';
 import { useTenantQuerySync } from '@/hooks/use-tenant-query-sync';
+import { registerQueryClient } from '@/lib/query-client';
 
 const theme = {
   token: {
@@ -48,22 +49,23 @@ function TenantAwareQueryLayer({
 }
 
 export function AppProviders({ children }: AppProvidersProps) {
-  const [queryClient] = useState(
-    () =>
-      new QueryClient({
-        defaultOptions: {
-          queries: {
-            retry: (failureCount, error) => {
-              if (error instanceof ApiError && (error.status === 401 || error.status === 403)) {
-                return false;
-              }
-              return failureCount < 1;
-            },
-            refetchOnWindowFocus: false,
+  const [queryClient] = useState(() => {
+    const client = new QueryClient({
+      defaultOptions: {
+        queries: {
+          retry: (failureCount, error) => {
+            if (error instanceof ApiError && (error.status === 401 || error.status === 403)) {
+              return false;
+            }
+            return failureCount < 1;
           },
+          refetchOnWindowFocus: false,
         },
-      }),
-  );
+      },
+    });
+    registerQueryClient(client);
+    return client;
+  });
 
   return (
     <QueryClientProvider client={queryClient}>

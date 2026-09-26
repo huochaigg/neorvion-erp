@@ -3,6 +3,8 @@ export const SHELL_ROUTES = {
   home: '/',
   login: '/login',
   register: '/register',
+  workspaces: '/workspaces',
+  workspaceCreate: '/workspaces/create',
   erp: '/erp',
 } as const;
 
