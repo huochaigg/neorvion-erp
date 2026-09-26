@@ -1,6 +1,7 @@
-import { currentUserQueryKey, healthQueryKey } from '@neorvion/shared';
+import { currentUserQueryKey, ERP_BASENAME, ERP_DEFAULT_PATH, healthQueryKey } from '@neorvion/shared';
 import { useQuery } from '@tanstack/react-query';
-import { Alert, Card, Col, Row, Spin, Tag, Typography } from 'antd';
+import { Alert, Button, Card, Col, Row, Space, Spin, Tag, Typography } from 'antd';
+import { Link } from 'react-router-dom';
 import { fetchCurrentUser } from '@/api/auth';
 import { fetchHealth } from '@/api/health';
 import { useAuthStore } from '@/stores/auth-store';
@@ -33,8 +34,16 @@ export function HomePage() {
       </Title>
       <Paragraph className="text-slate-500">
         当前用户：{currentUser?.display_name ?? '加载中'}（{currentUser?.email ?? '-'}）。这是
-        Shell 主应用首页，ERP 业务请从左侧「ERP 业务」进入。
+        Shell 主应用首页，ERP 业务请从左侧「ERP 业务」进入（恢复上次页面）。指定页面可从下方打开。
       </Paragraph>
+      <Space className="mb-4" wrap>
+        <Link to={`${ERP_BASENAME}${ERP_DEFAULT_PATH}`}>
+          <Button type="primary">打开 ERP 工作台</Button>
+        </Link>
+        <Link to={`${ERP_BASENAME}/orders`}>
+          <Button>打开 ERP 订单</Button>
+        </Link>
+      </Space>
 
       <Row gutter={[16, 16]}>
         <Col xs={24} lg={12}>

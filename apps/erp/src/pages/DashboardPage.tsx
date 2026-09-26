@@ -1,6 +1,7 @@
 import { healthQueryKey } from '@neorvion/shared';
 import { useQuery } from '@tanstack/react-query';
-import { Alert, Card, Col, Row, Spin, Tag } from 'antd';
+import { Alert, Card, Col, Input, Row, Spin, Tag } from 'antd';
+import { useState } from 'react';
 import { fetchHealth } from '@/api/health';
 import { PageHeader } from '@/components/PageHeader';
 import { StatusTag } from '@/components/StatusTag';
@@ -9,6 +10,7 @@ import type { PageProps } from '@/router/types';
 
 export function DashboardPage(props: PageProps) {
   const shellProps = getShellProps();
+  const [aliveProbe, setAliveProbe] = useState('');
   const { data, isLoading, isError, error } = useQuery({
     queryKey: healthQueryKey(shellProps.tenantId),
     queryFn: fetchHealth,
@@ -31,6 +33,12 @@ export function DashboardPage(props: PageProps) {
             <p className="mb-0 text-sm text-slate-600">
               当前租户：{shellProps.tenantId ?? '尚未接入（M2）'}
             </p>
+            <Input
+              className="mt-3"
+              value={aliveProbe}
+              onChange={(event) => setAliveProbe(event.target.value)}
+              placeholder="保活探测：输入后离开再回来应仍在"
+            />
           </Card>
         </Col>
         <Col xs={24} md={12}>

@@ -1,5 +1,10 @@
 import { destroyApp, startApp } from 'wujie';
 import { useEffect, useRef, type CSSProperties } from 'react';
+import {
+  claimMicroGeneration,
+  enqueueMicroJob,
+  getMicroGeneration,
+} from '@/micro/lifecycle';
 
 export interface WujieHostProps {
   width?: string;
@@ -13,17 +18,8 @@ export interface WujieHostProps {
   props?: object;
   degrade?: boolean;
   afterMount?: () => void;
+  activated?: () => void;
   loadError?: (url: string, e: Error) => void;
-}
-
-const startQueues = new Map<string, Promise<unknown>>();
-
-function enqueue(name: string, job: () => Promise<unknown>) {
-  const next = (startQueues.get(name) ?? Promise.resolve())
-    .catch(() => undefined)
-    .then(job);
-  startQueues.set(name, next);
-  return next;
 }
 
 function toError(error: unknown): Error {
@@ -34,6 +30,9 @@ function toError(error: unknown): Error {
  * 使用官方 startApp / destroyApp。
  * 不用 wujie-react@1.0.29：它把启动队列写到 this.name（始终 undefined），
  * StrictMode 下会并行 startApp。
+ *
+ * alive=true 时，React 卸载只让 wujie-app 走 disconnectedCallback → unmount/deactivated，
+ * 不调用 destroyApp。真正销毁走 destroyMicroApp。
  */
 export function WujieHost({
   width = '100%',
@@ -47,10 +46,12 @@ export function WujieHost({
   props,
   degrade,
   afterMount,
+  activated,
   loadError,
 }: WujieHostProps) {
   const elRef = useRef<HTMLDivElement>(null);
   const optionsRef = useRef({
+    url,
     sync,
     fiber,
     alive,
@@ -58,9 +59,11 @@ export function WujieHost({
     props,
     degrade,
     afterMount,
+    activated,
     loadError,
   });
   optionsRef.current = {
+    url,
     sync,
     fiber,
     alive,
@@ -68,6 +71,7 @@ export function WujieHost({
     props,
     degrade,
     afterMount,
+    activated,
     loadError,
   };
 
@@ -78,8 +82,9 @@ export function WujieHost({
     }
 
     let active = true;
+    const generation = claimMicroGeneration(name);
 
-    void enqueue(name, async () => {
+    void enqueueMicroJob(name, async () => {
       if (!active) {
         return;
       }
@@ -87,27 +92,44 @@ export function WujieHost({
         await startApp({
           el: elRef.current ?? el,
           name,
-          url,
-          ...optionsRef.current,
+          url: optionsRef.current.url,
+          sync: optionsRef.current.sync,
+          fiber: optionsRef.current.fiber,
+          alive: optionsRef.current.alive,
+          prefix: optionsRef.current.prefix,
+          props: optionsRef.current.props,
+          degrade: optionsRef.current.degrade,
+          afterMount: optionsRef.current.afterMount,
+          activated: optionsRef.current.activated,
+          loadError: optionsRef.current.loadError,
         });
       } catch (error) {
-        if (active) {
-          optionsRef.current.loadError?.(url, toError(error));
+        if (active && getMicroGeneration(name) === generation) {
+          optionsRef.current.loadError?.(optionsRef.current.url, toError(error));
         }
         return;
       }
-      if (!active) {
+      if (getMicroGeneration(name) !== generation) {
+        return;
+      }
+      if (!active && !optionsRef.current.alive) {
         destroyApp(name);
       }
     });
 
     return () => {
       active = false;
-      void enqueue(name, async () => {
+      if (optionsRef.current.alive) {
+        return;
+      }
+      void enqueueMicroJob(name, async () => {
+        if (getMicroGeneration(name) !== generation) {
+          return;
+        }
         destroyApp(name);
       });
     };
-  }, [name, url]);
+  }, [name, props]);
 
   const style: CSSProperties = { width, height };
   return <div ref={elRef} style={style} />;
