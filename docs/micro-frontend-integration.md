@@ -9,14 +9,17 @@
 | 路径 | 职责 |
 | --- | --- |
 | `apps/shell/src/micro/apps.ts` | 子应用注册表 |
-| `apps/shell/src/micro/setup.ts` | 启动前调用官方 `setupApp`，不预加载 |
-| `apps/shell/src/micro/wujie-host.tsx` | 调用官方 `startApp` / `destroyApp` |
+| `apps/shell/src/micro/setup.ts` | 启动前调用官方 `setupApp`，`sync: false`，不预加载 |
+| `apps/shell/src/micro/wujie-host.tsx` | 调用官方 `startApp` / `destroyApp`；alive 时卸载不销毁 |
+| `apps/shell/src/micro/lifecycle.ts` | 串行队列、generation、真正销毁入口 |
+| `apps/shell/src/micro/route-sync.ts` | Shell 侧 pathname 双向同步 |
 | `apps/shell/src/micro/css-plugins.ts` | 按需 CSS 插件 |
 | `apps/shell/src/micro/ErpMicroApp.tsx` | ERP 薄包装：拼 URL、传 props、错误回退 |
+| `apps/erp/src/micro/WujieRouteBridge.tsx` | ERP 侧路由桥 |
 | `apps/shell/src/app/router.tsx` | 主应用挂载 `/erp/*` |
 | `apps/shell/src/main.tsx` | 渲染前 `setupMicroApps()` |
 | `apps/erp/src/main.tsx` | 子应用生命周期 |
-| `packages/shared/src/types/bridge.ts` | Shell → ERP 的 props 类型 |
+| `packages/shared/src/types/bridge.ts` | props 与 `MICRO_EVENTS` |
 | `docs/micro-frontend-interview.md` | 白屏排查与架构复盘（面试向） |
 
 默认模式是 **Shadow DOM**（`degrade: false`）。不要为了排障把降级 iframe 当成正式方案。
@@ -86,7 +89,7 @@ export const MICRO_APPS: MicroAppDefinition[] = [
     getEntry: () => (import.meta.env.VITE_ERP_ENTRY || 'http://localhost:8016').replace(/\/$/, ''),
     fiber: false,
     degrade: false,
-    alive: false,
+    alive: true,
     plugins: [tailwindV4ShadowCssPlugin()],
   },
 ];
@@ -100,11 +103,11 @@ export const MICRO_APPS: MicroAppDefinition[] = [
 setupApp({
   name: app.name,
   exec: false,                 // 不预执行、不预加载
-  sync: true,                  // 把子应用路径写到 ?erp=
+  sync: false,                 // 不用 ?erp=，改由 Shell pathname 双向同步
   alive: app.alive ?? false,
   fiber: app.fiber ?? false,
   degrade: app.degrade ?? false,
-  prefix: { [app.name]: app.basename },  // { erp: '/erp' }
+  prefix: { [app.name]: app.basename },  // 保留给 Wujie，但原生 sync 已关闭
   plugins: app.plugins,
 });
 ```
@@ -115,34 +118,34 @@ setupApp({
 
 | 字段 | 当前 ERP 取值 | 含义 |
 | --- | --- | --- |
-| `name` | `'erp'` | Wujie 实例 id，也是同步查询参数名 `?erp=` |
+| `name` | `'erp'` | Wujie 实例 id，也是 bus 事件里的应用名 |
 | `basename` | `'/erp'` | 主应用挂载前缀；`buildMicroAppUrl` 用它从 pathname 剥前缀 |
-| `defaultPath` | `'/dashboard'` | 打开 `/erp` 时落到子应用的哪条路径 |
+| `defaultPath` | `'/dashboard'` | 首次进入或没有上次路由时的落地页 |
 | `getEntry()` | `VITE_ERP_ENTRY` 或 `http://localhost:8016` | 子应用 origin，**不含**业务 path |
-| `url`（startApp 时） | 如 `http://localhost:8016/dashboard` | 由 `buildMicroAppUrl` 现场拼出，不是写死在清单里 |
-| `prefix` | `{ erp: '/erp' }` | Wujie 短路径替换；查询参数里若出现 `{erp}` 会展开成 `/erp` |
-| `sync` | `true` | 子应用路由变化时更新主应用 `?erp=` |
-| `alive` | `false` | 离开时销毁沙箱，不保活 |
+| `url`（startApp 时） | 如 `http://localhost:8016/dashboard` | 由 `buildMicroAppUrl` 现场拼出；保活后再进入不靠改 url 切路由 |
+| `prefix` | `{ erp: '/erp' }` | Wujie 短路径替换；当前关闭原生 sync，不参与地址栏 |
+| `sync` | `false` | 关闭 `?erp=` 查询串同步，避免和 React Router 抢 `history.state` |
+| `alive` | `true` | 离开 `/erp/*` 时不 `destroyApp`，再次进入恢复实例 |
 | `fiber` | `false` | Vite ESM 脚本是异步的，关掉 fiber，避免执行时机飘 |
 | `degrade` | `false` | 使用 Shadow DOM，不用降级可见 iframe |
 | `exec` | `false` | 不预加载 |
 | `plugins` | Tailwind v4 CSS 插件 | **按应用**挂，不是全局默认 |
 
-`WujieHost` 上还可以传 `sync` / `alive` / `fiber` / `prefix`。`ErpMicroApp` 当前只传 `name`、`url`、`props`、`loadError`，其余走 `setupApp` 缓存，由 Wujie 的 `mergeOptions` 合并。
+`ErpMicroApp` 会显式传入 `sync={false}`、`alive`、`fiber`、`degrade`。`WujieHost` 的 effect 只依赖 `name` 与 `props`，pathname 变化不会重启沙箱。
 
 ### 2.3 Shell Router 如何挂载（已有代码）
 
 `apps/shell/src/app/router.tsx`：
 
 ```tsx
-<Route path={ERP_BASENAME} element={<Navigate to={`${ERP_BASENAME}${ERP_DEFAULT_PATH}`} replace />} />
-<Route path={`${ERP_BASENAME}/`} element={<Navigate to={`${ERP_BASENAME}${ERP_DEFAULT_PATH}`} replace />} />
+<Route path={ERP_BASENAME} element={<ErpIndexRedirect />} />
+<Route path={`${ERP_BASENAME}/`} element={<ErpIndexRedirect />} />
 <Route path={`${ERP_BASENAME}/*`} element={<ErpMicroApp />} />
 ```
 
-即：`/erp` → `/erp/dashboard`；`/erp/*` 才真正挂 `WujieHost`。该路由在 `RequireAuth` 内，未登录会先去登录页。
+即：打开 `/erp` 视为「进入 ERP 应用」，重定向到上次路由或 `/erp/dashboard`；`/erp/dashboard`、`/erp/orders` 等是指定页面。该路由在 `RequireAuth` 内，未登录会先去登录页。
 
-侧栏入口在 `apps/shell/src/layouts/ShellLayout.tsx`：点击「ERP 业务」执行 `navigate('/erp/dashboard')`。
+侧栏「ERP 业务」走入口恢复：`getMicroAppEntryHref(app, getLastMicroHref(app.name))`。首页上的「打开 ERP 工作台」则是指定 `/erp/dashboard`。
 
 ### 2.4 开发 / 生产入口
 
@@ -177,28 +180,31 @@ ERP 侧用 `apps/erp/src/lib/runtime.ts` 的 `getShellProps()` 读取。ERP **�
 
 `buildMicroAppUrl`（`apps.ts`）：
 
-- 主应用 pathname `/erp` 或 `/erp/` → `http://localhost:8016/dashboard`
+- 主应用 pathname `/erp` 或 `/erp/` → `http://localhost:8016/dashboard`（仅用于尚未记住上次路由时的默认入口）
 - 主应用 pathname `/erp/dashboard` → `http://localhost:8016/dashboard`（剥掉 `/erp` 前缀）
 - 主应用 pathname `/erp/orders` → `http://localhost:8016/orders`
 
 子应用自己的 React Router **没有** `basename="/erp"`（见 `apps/erp/src/app/router.tsx` 的 `BrowserRouter`）。如果再给 ERP 加 `/erp` basename，嵌入后就会变成 `/erp/erp/...`。
 
-Wujie `sync` 另外把子应用路径写到查询串：
+规范地址栏是 **pathname**，不再长期使用 `?erp=`：
 
 ```text
-Shell 地址栏：http://localhost:8015/erp/dashboard?erp=%2Fdashboard
-                     └── React Router 挂载前缀
-                                         └── 子应用路径 /dashboard（encodeURIComponent）
+Shell 地址栏：http://localhost:8015/erp/orders
+                     └── React Router 挂载前缀 /erp
+                                     └── 子应用路径 /orders
 ```
 
-### 2.7 启动、卸载、错误回退
+旧书签 `/erp/dashboard?erp=%2Forders` 会在 `ErpMicroApp` 里被 `consumeLegacyWujieSyncQuery` 一次性改写成 `/erp/orders`。
 
-- **启动**：`WujieHost` 在 `useEffect` 里按 `name` 串行 `startApp({ el, name, url, ... })`。
-- **卸载**：effect cleanup 里同样入队 `destroyApp(name)`。离开 `/erp/*` 会拆掉沙箱。
-- **StrictMode**：第一次 effect 被取消后，已入队的 `startApp` 会看到 `active === false` 而跳过或立刻 `destroyApp`，避免和第二次启动打架。
-- **异常**：`startApp` 抛错时调用 `loadError`。`ErpMicroApp` 会改成 Alert，并提供「独立打开 ERP」链接。HTML/脚本拉取失败也会走到 Wujie 的 `loadError`（经 `mergeOptions` 合并）。
+### 2.7 启动、卸载、错误回退与真正销毁
 
-不要在子应用里再包一层 `startApp`。
+- **启动**：`WujieHost` 在 `useEffect` 里按 `name` 串行 `startApp`。
+- **失活**：`alive: true` 时，React 卸载 Host **不**调用 `destroyApp`。`wujie-app` 的 `disconnectedCallback` 会走到官方 `sandbox.unmount()`，对保活应用只触发 `deactivated`，不拆 React 树。
+- **StrictMode**：第一次 effect 被取消后，已入队的 `startApp` 若尚未开始会跳过；若已完成且 `alive`，不销毁，第二次 `startApp` 走官方 `active()` 再挂回新容器。generation 保证旧 cleanup 不会 `destroyApp` 掉新实例。
+- **真正销毁**：`destroyMicroApp` / `destroyAllMicroApps`（`apps/shell/src/micro/lifecycle.ts`）。退出登录、Refresh 失败、`setCurrentTenantId` 变化时调用。
+- **异常**：`startApp` 抛错时调用 `loadError`。
+
+不要在子应用里再包一层 `startApp`。不要靠首页里藏一个隐藏 ERP DOM 假装保活。
 
 ### 2.8 新增 SCM（示意，本仓库没有这份代码）
 
@@ -215,15 +221,16 @@ Shell 地址栏：http://localhost:8015/erp/dashboard?erp=%2Fdashboard
   getEntry: () => (import.meta.env.VITE_SCM_ENTRY || 'http://localhost:8017').replace(/\/$/, ''),
   fiber: false,
   degrade: false,
-  alive: false,
+  alive: true,
   // 若 SCM 不是 Tailwind v4，不要挂 tailwindV4ShadowCssPlugin()
 }
 ```
 
 3. `apps/shell/.env.example` 增加 `VITE_SCM_ENTRY=http://localhost:8017`。
-4. `router.tsx` 增加 `/scm` 的 `Navigate` 和 `/scm/*` 包装组件（照抄 `ErpMicroApp` 的 props / `loadError` 结构即可）。
-5. 侧栏增加菜单项，`navigate('/scm/dashboard')`。
-6. SCM 子应用按第 3 或第 4 节接生命周期。它仍然 **不要** 依赖 `wujie`。
+4. `router.tsx` 增加 `/scm` 的入口 Redirect（恢复上次路由）和 `/scm/*` 包装组件。
+5. 侧栏「进入 SCM」走 `getMicroAppEntryHref`；若有「打开某页」则 `navigate('/scm/...')`。
+6. 子应用实现与 ERP 相同的 `MICRO_EVENTS` 路由桥（React 用 `navigate`，Vue 用 `router.push`）。它仍然 **不要** 依赖 `wujie`。
+7. 包装组件复用 `useMicroHostRouteSync`，不要再打开 Wujie `sync: true`。
 
 ---
 
@@ -465,37 +472,55 @@ ERP 在 `AppProviders` 里传入 `getPopupContainer`（`apps/erp/src/lib/runtime
 
 ## 6. 路由同步
 
-### 6.1 真实路径
+### 6.1 为什么关掉 Wujie 原生 `sync`
+
+`wujie@1.0.29` 的 `syncUrlToWindow`（`esm/sync.js`）只会改主应用查询串 `?{name}=`，并 `window.history.replaceState(null, "", href)`。这会：
+
+- 把地址栏停在进入时的 pathname（例如一直是 `/erp/dashboard`）；
+- 把 React Router 的 `history.state` 写成 `null`；
+- 子应用内部 `pushState` 不会在主应用产生新的 history 条目，浏览器后退无法在 ERP 页面之间移动。
+
+因此当前 `setupApp({ sync: false })`，由 Shell 维护规范 pathname。两套机制不能同时写 History。
+
+### 6.2 真实路径
 
 | 角色 | 路径 |
 | --- | --- |
-| Shell React Router | `/erp/dashboard` |
-| `buildMicroAppUrl` 得到的子应用入口 | `http://localhost:8016/dashboard` |
-| ERP `BrowserRouter` | `/dashboard` |
-| 地址栏同步参数 | `?erp=%2Fdashboard` 即 `/dashboard` |
+| Shell React Router | `/erp/orders` |
+| `buildMicroAppUrl` 得到的首次入口 | `http://localhost:8016/orders` |
+| ERP `BrowserRouter` | `/orders` |
+| 地址栏 | `http://localhost:8015/erp/orders`（无 `?erp=`） |
 
-再如内部跳到订单（已验证）：
+### 6.3 双向同步
 
-- iframe `pathname`：`/orders`
-- 地址栏：`http://localhost:8015/erp/dashboard?erp=%2Forders`  
-  此时 Shell 的 **pathname 仍可能是** `/erp/dashboard`（侧栏当时是从 dashboard 进去的），真正表示子应用位置的是 `?erp=`。
-- 直接打开 `http://localhost:8015/erp/orders` 时，pathname 和 `?erp=` 都会落到 `/orders`（已验证）。
+事件在 `packages/shared`：`MICRO_EVENTS.childLocation` / `MICRO_EVENTS.hostNavigate`。Wujie `bus.$emit` 会广播到所有 EventBus 实例，主子都能听到。
 
-### 6.2 `sync`、`prefix`、basename
+| 场景 | 谁驱动 | 行为 |
+| --- | --- | --- |
+| 子应用菜单跳转 | ERP `WujieRouteBridge` 发 `childLocation` | Shell `navigate('/erp/orders')`，默认 push，保留 search/hash |
+| Shell 菜单 / 指定链接 / 前进后退 | Shell `useMicroHostRouteSync` 发 `hostNavigate` | 保活实例里 ERP `navigate(..., { replace: true })`，不指望改 `startApp(url)` |
+| 首次创建 | `startApp(url)` | iframe 初始路径等于剥前缀后的子路径 |
+| 刷新 / 深层链接 | 浏览器打开 `/erp/orders` | Shell 命中 `/erp/*`，`buildMicroAppUrl` 得到 `/orders` |
+| 进入应用（侧栏「ERP 业务」或 `/erp`） | `getLastMicroHref` | 恢复上次 pathname；没有则 `/erp/dashboard` |
+| 进入指定页面 | 直接 `navigate('/erp/dashboard')` | 即使上次在订单页，也打开 Dashboard |
+| 旧 `?erp=` 书签 | `consumeLegacyWujieSyncQuery` | replace 成规范 pathname |
 
-- `sync: true`：子应用 `history` 变化 → 写 `?{name}=`。
-- `prefix: { erp: '/erp' }`：短路径 `{erp}` 与 `/erp` 互转。当前 ERP 同步值是完整子路径 `/dashboard`，一般看不到 `{erp}` 这种写法。
-- **剥前缀发生在 Shell 的 `buildMicroAppUrl`**，不是 ERP 的 `basename`。子应用不要设 `basename="/erp"`。
+循环避免：
 
-### 6.3 场景
+- Shell 因子应用事件而 `navigate` 时置 `syncingFromChild`，不再回发 `hostNavigate`。
+- ERP 因 `hostNavigate` 而 `navigate` 时置 `applyingHost`，不再回发 `childLocation`。
+- 目标路径与当前路径相同则直接返回。
+- 使用 React Router `navigate`，不手动 `history.replaceState(null, ...)`。
 
-| 场景 | 行为 |
-| --- | --- |
-| 刷新 `/erp/dashboard?erp=%2Fdashboard` | Shell 命中 `/erp/*`，Wujie 用查询参数恢复子应用路径（已验证） |
-| 浏览器前进后退 | Wujie 监听 iframe `popstate` / `hashchange` 再 `syncUrlToWindow` |
-| 主应用菜单「ERP 业务」 | 固定 `navigate('/erp/dashboard')`；`alive: false` 时按 dashboard 重新打开，不会停在上次的订单页（已验证） |
-| 子应用内部 `navigate('/orders')` | 更新 iframe history，并写 `?erp=%2Forders`（已验证） |
-| 首页 `/` | 不挂 `ErpMicroApp`，不启动 ERP |
+### 6.4 新子应用如何接路由
+
+1. 注册 `basename`，例如 `/scm`。
+2. 子应用内部路由从 `/` 开始，不要带 `/scm`。
+3. 在子应用 Router 内挂与 `WujieRouteBridge` 同类的监听，`payload.name` 填自己的 `name`。
+4. Shell 包装组件调用 `useMicroHostRouteSync(app)`。
+5. 保持 `sync: false`。
+
+Vue 子应用把 `navigate` 换成 `router.push` / `router.replace` 即可，事件名不变。本仓库没有 Vue 子应用，未验证。
 
 ---
 
@@ -503,30 +528,43 @@ ERP 在 `AppProviders` 里传入 `getPopupContainer`（`apps/erp/src/lib/runtime
 
 ### 7.1 `alive=true` 与 `alive=false`
 
-| | `alive=false`（当前） | `alive=true` |
+| | `alive=false` | `alive=true`（当前 ERP） |
 | --- | --- | --- |
-| 离开 `/erp/*` | `destroyApp('erp')`，iframe 拆除 | 实例还在，只是从页面摘掉 |
-| 再次进入 | 按当前 `url` 重新 `startApp` | 恢复上次内存中的路由和状态 |
-| 菜单进 dashboard | 打开 dashboard | 可能仍停在上次的 `/orders`，和菜单意图不一致 |
+| 离开 `/erp/*` | Host cleanup `destroyApp` | 不 `destroyApp`；官方 `disconnectedCallback` → `unmount` → `deactivated` |
+| 再次进入 | 重新拉 JS/CSS、重新 `createRoot` | `startApp` 走 `sandbox.active()`，把已有 `wujie-app` 挂回新容器，触发 `activated` |
+| 页面状态 | 丢失 | React 树、QueryClient、表单还在 |
 
-当前选 `false`，是因为已经用串行队列 + 卸载销毁把白屏修掉，不需要用保活掩盖启动竞争；同时也避免菜单跳 `/erp/dashboard` 却显示订单。
+### 7.2 为什么可以保活又不把路由搅乱
 
-### 7.2 为什么同一个 `name` 必须串行
+以前用 `alive=false`，是因为侧栏无条件 `navigate('/erp/dashboard')`，保活会让菜单和页面不一致。现在入口和指定页分开，保活恢复的是上次路由；指定链接仍发 `hostNavigate` 覆盖子应用路径。
 
-`startApp` / `destroyApp` 都是异步的，却共用一份名为 `erp` 的沙箱（iframe、`Document`、shadow head/body）。并行时会出现：
+### 7.3 同一个 `name` 必须串行
 
-- 一次 `initIframeDom` 还在读 `iframeWindow.Document.prototype`，另一次已经 `destroy` 把 iframe 拆掉；
-- `patchRenderEffect` 对 `render.head` 赋值 `_cacheListeners` 时 head 已是 `null`。
-
-`WujieHost` 用模块级 `Map<name, Promise>` 把同一 name 的启动和销毁排成一条链。React StrictMode 的「挂载 → 清理 → 再挂载」会变成：
+`startApp` / `destroyApp` 共用名为 `erp` 的沙箱。`enqueueMicroJob` 把同一 name 排成一条链。`claimMicroGeneration` 防止：
 
 ```text
-startApp(1)  （若已被取消则跳过或随后 destroy）
-  → destroyApp(1)
-  → startApp(2)
+startApp(1) → startApp(2) → destroy(1) 误杀新实例
 ```
 
-而不是两个 `startApp` 同时跑。原则：对同一个 `name`，任何时刻只允许一个异步生命周期进行到下一步。
+旧 cleanup 发现 generation 已变就跳过 `destroyApp`。
+
+StrictMode（alive）：
+
+```text
+startApp(1) 若已被取消则跳过
+  → 不 destroy
+  → startApp(2) 复用或新建后挂到第二次容器
+```
+
+### 7.4 退出登录与租户变化
+
+保活实例里可能还留着上一个用户的 token 和页面数据，必须拆掉：
+
+- 侧栏退出：`destroyAllMicroApps()`（`ShellLayout`）
+- Refresh 失败：`apps/shell/src/api/client.ts` 拦截器
+- `setCurrentTenantId` 值变化：`shell-store`
+
+真正销毁入口是 `destroyMicroApp(name)` / `destroyAllMicroApps()`，同时清掉 `sessionStorage` 里的上次路由。
 
 ---
 
@@ -582,9 +620,9 @@ startApp(1)  （若已被取消则跳过或随后 destroy）
 
 ### 主子应用路由不同步
 
-- **现象**：点了子应用菜单，地址栏不变，刷新丢页。
-- **排查**：`setupApp` 是否 `sync: true`；`name` 是否和查询参数一致；子应用是否用了错误 basename。
-- **处理**：保持 `name: 'erp'` 与 `?erp=`；子应用路径不要带 `/erp`。
+- **现象**：点了子应用菜单，地址栏 pathname 不变，或出现 `?erp=`。
+- **排查**：`setupApp` 是否误开 `sync: true`；子应用是否挂了路由桥；是否错误设置了 `basename="/erp"`。
+- **处理**：保持 `sync: false`；子应用路径不要带 `/erp`；用 `MICRO_EVENTS` 双向同步。
 
 ### 子应用资源 404
 
@@ -600,9 +638,9 @@ startApp(1)  （若已被取消则跳过或随后 destroy）
 
 ### 退出后状态残留
 
-- **现象**：回首页再进 ERP，还停留在上次的订单页或表单。
-- **排查**：是否误开 `alive: true`。
-- **处理**：当前约定 `alive: false`，离开即 `destroyApp`。若产品明确要保活，再改注册表，并接受菜单与子路由可能不一致。
+- **现象**：回首页再进 ERP，还停留在上次的订单页（若这是入口恢复则是预期）；或登出后再登录仍看到上一个用户的页面。
+- **排查**：入口是否误用指定路径；登出是否调用了 `destroyAllMicroApps`。
+- **处理**：侧栏入口恢复上次路由；指定链接走 `/erp/...`。登出、租户变化必须销毁保活实例并清 `sessionStorage`。
 
 ---
 
@@ -620,37 +658,37 @@ startApp(1)  （若已被取消则跳过或随后 destroy）
 **路由与鉴权**
 
 5. `router.tsx` 增加 `/xxx` 重定向和 `/xxx/*` 包装组件，放在 `RequireAuth` 内（若该系统也需登录）。
-6. 侧栏 `navigate('/xxx' + defaultPath)`。
-7. 包装组件用 `buildMicroAppUrl`，不要手写 `/xxx` + `/xxx`。
+6. 侧栏走入口恢复（`getMicroAppEntryHref`）；指定页面使用完整 `/xxx/path`。
+7. 包装组件用 `buildMicroAppUrl` 与 `useMicroHostRouteSync`，不要手写 `/xxx` + `/xxx`。
 8. `props` 只传 token / tenant / user 等显式字段。
 
 **子应用生命周期**
 
 9. 子应用 **不** 安装 `wujie`。
 10. 实现 `__WUJIE_MOUNT` / `__WUJIE_UNMOUNT`；Vite 下调用 `__WUJIE.mount()`。
-11. React 19：`unmount` 后 `root = null`。Vue 用对应 API。
-12. 内部 Router **无** 主应用 basename。
+11. React 19：`unmount` 后 `root = null`。保活时官方不会二次 `UNMOUNT`。
+12. 内部 Router **无** 主应用 basename；挂路由桥，监听 `MICRO_EVENTS.hostNavigate`。
 13. 独立运行与嵌入都能打开。
 
 **Vite / 部署**
 
 14. `server.origin`、CORS、`Access-Control-Allow-Origin`。
 15. 生产 `VITE_*_ENTRY` 指向真实静态 Origin。
-16. Shell 注册表 `fiber: false`、`degrade: false`、`alive: false`、`exec: false`（除非有明确理由改）。
+16. Shell 注册表 `fiber: false`、`degrade: false`、`alive: true`、`sync: false`、`exec: false`（除非有明确理由改）。
 
 **样式**
 
 17. Tailwind v4 才在该应用的 `plugins` 里加 CSS 插件。
 18. Ant Design 配 `getPopupContainer`；其他组件库用自己的挂载点。
 
-**测试（对照 ERP 已做过的）**
+**测试**
 
 19. 首页 `/` 不加载该子应用。
-20. 菜单进入，非白屏。
-21. 子应用 → 首页 → 子应用。
-22. 子应用内部切一跳路由，检查 `?{name}=`。
-23. 刷新带同步参数的深层链接。
-24. 开发模式 Console 无 `_cacheListeners`、`prototype`、`null.protocol`。
-25. 至少抽测一种弹层（Select 或 Modal）。
-
-当前 ERP 已验证 19–24；25 未做全量弹层。登出再登录未在最近一轮完整回归。
+20. 菜单进入默认页，非白屏。
+21. 子应用内部切路由，地址栏 pathname 变为 `/xxx/orders`。
+22. 子应用 → 首页 → 入口，恢复上次页面且 Network 不再拉整套 JS/CSS。
+23. 首页指定链接能覆盖上次路由。
+24. 刷新深层链接；浏览器前进后退。
+25. 开发模式 Console 无 `_cacheListeners`、`prototype`、`null.protocol`。
+26. 登出后再登录，看不到旧页面状态。
+27. 至少抽测一种弹层（Select 或 Modal）。

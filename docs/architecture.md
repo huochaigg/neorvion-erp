@@ -20,13 +20,14 @@
 
 - 主应用：`/` 工作台，`/erp/*` 挂载子应用。主应用根路径不会打开 ERP。
 - 子应用独立运行在 `http://localhost:8016/`，内部路径由 `apps/erp/src/router/routes.ts` 配置（如 `/dashboard`、`/products/list`），**没有** `/erp` 前缀。
-- 主应用浏览器地址是 `/erp/products/list`；无界会把它映射成子应用的 `/products/list`。刷新后仍由主应用按 `/erp/*` 加载子应用。
-- 主应用侧栏只进入 ERP 入口；ERP 内部菜单不在 Shell 维护。
+- 主应用浏览器地址是 `/erp/products/list`，由 Shell pathname 与子应用路由双向同步；刷新后仍由主应用按 `/erp/*` 加载子应用。
+- 侧栏「ERP 业务」进入应用并恢复上次路由；指定页面（如 `/erp/dashboard`）按目标路径打开。ERP 内部菜单不在 Shell 维护。
 
 ### 无界
 
 - 宿主封装集中在 `apps/shell/src/micro`。子应用清单见 `apps.ts`，接入步骤见 `docs/micro-frontend-integration.md`，白屏排查与架构复盘见 `docs/micro-frontend-interview.md`。
-- 默认 Shadow DOM（`degrade: false`）。Vite 子应用关闭 fiber，入口调用 `window.__WUJIE.mount()`。
+- 默认 Shadow DOM（`degrade: false`）。ERP 当前 `alive: true`，离开 `/erp/*` 不销毁沙箱；登出或租户变化时调用 `destroyAllMicroApps()`。
+- 关闭 Wujie 原生 `sync`（`?erp=`），改用 Wujie bus 同步规范 pathname。Vite 子应用关闭 fiber，入口调用 `window.__WUJIE.mount()`。
 - 开发服务器开启 CORS，并用 `server.origin` 输出绝对资源地址。
 - Tailwind v4 的 `:root` → `:host` 只挂在需要它的子应用上，不是全局默认。
 - Ant Design Portal 由子应用自己的 `ConfigProvider.getPopupContainer` 处理，不是宿主强制方案。

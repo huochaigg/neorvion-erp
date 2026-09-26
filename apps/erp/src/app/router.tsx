@@ -3,6 +3,7 @@ import { Spin } from 'antd';
 import { Suspense } from 'react';
 import { BrowserRouter, Navigate, Outlet, Route, Routes } from 'react-router-dom';
 import { ErpLayout } from '@/layouts/ErpLayout';
+import { WujieRouteBridge } from '@/micro/WujieRouteBridge';
 import { buildRouteElements } from '@/router/build-routes';
 import { PAGE_COMPONENTS } from '@/router/pages';
 
@@ -32,6 +33,7 @@ function NotFoundPage() {
 export function AppRouter() {
   return (
     <BrowserRouter>
+      <WujieRouteBridge />
       <Routes>
         <Route element={<LayoutFrame />}>
           <Route index element={<Navigate to={ERP_DEFAULT_PATH} replace />} />

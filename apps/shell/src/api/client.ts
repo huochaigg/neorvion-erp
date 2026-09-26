@@ -2,6 +2,7 @@ import axios, { isCancel, type AxiosError, type InternalAxiosRequestConfig } fro
 import { ApiError, type ApiResponse, type TokenPayload } from '@neorvion/shared';
 import { SHELL_ROUTES } from '@neorvion/shared';
 import { useAuthStore } from '@/stores/auth-store';
+import { destroyAllMicroApps } from '@/micro/lifecycle';
 import { authClient } from './auth-client';
 import { toApiError, unwrapApi } from './http';
 
@@ -70,6 +71,7 @@ apiClient.interceptors.response.use(
       return apiClient.request(original);
     } catch {
       useAuthStore.getState().markUnauthenticated();
+      destroyAllMicroApps();
       redirectToLogin();
       return Promise.reject(new ApiError('登录已过期，请重新登录', { status: 401, code: 40104 }));
     }

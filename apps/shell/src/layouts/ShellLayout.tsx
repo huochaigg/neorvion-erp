@@ -6,7 +6,7 @@ import {
   TeamOutlined,
   UserOutlined,
 } from '@ant-design/icons';
-import { currentUserQueryKey, ERP_BASENAME, ERP_DEFAULT_PATH, SHELL_ROUTES } from '@neorvion/shared';
+import { currentUserQueryKey, ERP_APP_NAME, SHELL_ROUTES } from '@neorvion/shared';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Avatar, Button, Dropdown, Layout, Menu, Space, Tag } from 'antd';
 import type { ReactNode } from 'react';
@@ -14,6 +14,9 @@ import { useMemo } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { fetchCurrentUser, logoutAccount } from '@/api/auth';
 import { AppLogo } from '@/components/AppLogo';
+import { getMicroApp, getMicroAppEntryHref } from '@/micro/apps';
+import { getLastMicroHref } from '@/micro/last-location';
+import { destroyAllMicroApps } from '@/micro/lifecycle';
 import { useAuthStore } from '@/stores/auth-store';
 import { useShellStore } from '@/stores/shell-store';
 
@@ -56,6 +59,7 @@ export function ShellLayout({ children }: ShellLayoutProps) {
     } finally {
       resetAuth();
       queryClient.clear();
+      destroyAllMicroApps();
       navigate(SHELL_ROUTES.login, { replace: true });
     }
   };
@@ -106,7 +110,8 @@ export function ShellLayout({ children }: ShellLayoutProps) {
               className="flex-1 border-none pt-2"
               onClick={({ key }) => {
                 if (key === SHELL_ROUTES.erp) {
-                  navigate(`${ERP_BASENAME}${ERP_DEFAULT_PATH}`);
+                  const app = getMicroApp(ERP_APP_NAME);
+                  navigate(getMicroAppEntryHref(app, getLastMicroHref(app.name)));
                   return;
                 }
                 navigate(key);

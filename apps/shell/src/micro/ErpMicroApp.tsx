@@ -2,9 +2,10 @@ import { currentUserQueryKey, ERP_APP_NAME, type ShellToErpProps } from '@neorvi
 import { useQuery } from '@tanstack/react-query';
 import { Alert, Button } from 'antd';
 import { useMemo, useState } from 'react';
-import { useLocation } from 'react-router-dom';
+import { Navigate, useLocation } from 'react-router-dom';
 import { fetchCurrentUser } from '@/api/auth';
 import { buildMicroAppUrl, getMicroApp } from '@/micro/apps';
+import { consumeLegacyWujieSyncQuery, emitHostNavigate, useMicroHostRouteSync } from '@/micro/route-sync';
 import { WujieHost } from '@/micro/wujie-host';
 import { useAuthStore } from '@/stores/auth-store';
 import { useShellStore } from '@/stores/shell-store';
@@ -21,7 +22,10 @@ export function ErpMicroApp() {
   });
 
   const app = getMicroApp(ERP_APP_NAME);
-  const url = buildMicroAppUrl(app, location.pathname);
+  const legacyTarget = consumeLegacyWujieSyncQuery(app, location);
+  const url = buildMicroAppUrl(app, location.pathname, location.search, location.hash);
+
+  useMicroHostRouteSync(app);
 
   const props = useMemo<ShellToErpProps>(
     () => ({
@@ -33,6 +37,10 @@ export function ErpMicroApp() {
     }),
     [accessToken, currentUser, tenantId],
   );
+
+  if (legacyTarget) {
+    return <Navigate to={legacyTarget} replace />;
+  }
 
   return (
     <div className="h-full min-h-full overflow-hidden bg-white">
@@ -56,7 +64,25 @@ export function ErpMicroApp() {
           height="100%"
           name={app.name}
           url={url}
+          sync={false}
+          alive={app.alive}
+          fiber={app.fiber}
+          degrade={app.degrade}
           props={props}
+          afterMount={() => {
+            emitHostNavigate(app, {
+              pathname: window.location.pathname,
+              search: window.location.search,
+              hash: window.location.hash,
+            });
+          }}
+          activated={() => {
+            emitHostNavigate(app, {
+              pathname: window.location.pathname,
+              search: window.location.search,
+              hash: window.location.hash,
+            });
+          }}
           loadError={() => {
             setLoadFailed(true);
           }}
