@@ -5,11 +5,14 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.exceptions import AppError
+from app.core.permissions import PermissionCode
 from app.models.tenant import MemberRole, MemberStatus, Tenant, TenantMember, TenantStatus
 from app.models.user import User, UserStatus
 from app.repositories.tenant import TenantMemberRepository, TenantRepository
 from app.repositories.user import UserRepository
 from app.schemas.tenant import MemberOut, TenantOut
+from app.services.authorization import AuthorizationService
+from app.services.rbac import RoleService
 
 _CODE_PATTERN = re.compile(r"^[a-z][a-z0-9-]{1,31}$")
 
@@ -24,8 +27,11 @@ class TenantService:
         self.tenants = TenantRepository(session)
         self.members = TenantMemberRepository(session)
         self.users = UserRepository(session)
+        self.auth = AuthorizationService(session)
+        self.rbac = RoleService(session)
 
     def create_tenant(self, *, user: User, name: str, code: str | None) -> TenantOut:
+        """同一事务：企业 + OWNER 成员 + 默认角色 + 创建者挂上 OWNER 角色。"""
         code = self._resolve_code(code)
         tenant = Tenant(
             name=name,
@@ -43,12 +49,14 @@ class TenantService:
                 role=MemberRole.OWNER.value,
             )
             self.members.add(member)
+            self.session.flush()
+            self.rbac.bootstrap_tenant(tenant_id=tenant.id, owner_member_id=member.id)
             self.session.commit()
         except IntegrityError:
             self.session.rollback()
             raise AppError("租户编码已存在", code=40910, status_code=409) from None
         except Exception:
-            # 成员写入失败时租户必须一起回滚，避免出现无 Owner 的空企业。
+            # 角色引导失败时租户必须一起回滚，避免出现没有默认角色的半成品企业。
             self.session.rollback()
             raise
         return self._tenant_out(tenant, member)
@@ -62,11 +70,13 @@ class TenantService:
         return self._tenant_out(member.tenant, member)
 
     def list_members(self, *, user: User, tenant_id: int) -> list[MemberOut]:
-        self._require_active_access(user_id=user.id, tenant_id=tenant_id)
+        context = self.auth.build_context(user_id=user.id, tenant_id=tenant_id)
+        self.auth.require_all(context, (PermissionCode.TENANT_MEMBER_READ,))
         return [self._member_out(row) for row in self.members.list_for_tenant(tenant_id)]
 
     def add_member(self, *, user: User, tenant_id: int, target_user_id: int) -> MemberOut:
-        self._require_owner(user_id=user.id, tenant_id=tenant_id)
+        context = self.auth.build_context(user_id=user.id, tenant_id=tenant_id)
+        self.auth.require_all(context, (PermissionCode.TENANT_MEMBER_MANAGE,))
         target = self.users.get_by_id(target_user_id)
         if target is None or target.status != UserStatus.ACTIVE.value:
             raise AppError("用户不存在", code=40411, status_code=404)
@@ -80,11 +90,16 @@ class TenantService:
         )
         try:
             self.members.add(member)
+            self.session.flush()
+            self.rbac.grant_default_member_role(tenant_id=tenant_id, member_id=member.id)
             self.session.commit()
             self.session.refresh(member)
         except IntegrityError:
             self.session.rollback()
             raise AppError("该用户已是租户成员", code=40911, status_code=409) from None
+        except Exception:
+            self.session.rollback()
+            raise
         member.user = target
         return self._member_out(member)
 
@@ -96,7 +111,8 @@ class TenantService:
         member_id: int,
         status: str,
     ) -> MemberOut:
-        self._require_owner(user_id=user.id, tenant_id=tenant_id)
+        context = self.auth.build_context(user_id=user.id, tenant_id=tenant_id)
+        self.auth.require_all(context, (PermissionCode.TENANT_MEMBER_MANAGE,))
         if status not in {MemberStatus.ACTIVE.value, MemberStatus.DISABLED.value}:
             raise AppError("成员状态不合法", code=40035, status_code=400)
         member = self.members.get_in_tenant(tenant_id=tenant_id, member_id=member_id)
@@ -121,20 +137,6 @@ class TenantService:
         if tenant is None:
             raise AppError(_UNAVAILABLE, code=40410, status_code=404)
         member.tenant = tenant
-        return member
-
-    def _require_active_access(self, *, user_id: int, tenant_id: int) -> TenantMember:
-        member = self._require_membership(user_id=user_id, tenant_id=tenant_id)
-        if member.status != MemberStatus.ACTIVE.value:
-            raise AppError("无权访问该租户", code=40310, status_code=403)
-        if member.tenant.status != TenantStatus.ACTIVE.value:
-            raise AppError("无权访问该租户", code=40310, status_code=403)
-        return member
-
-    def _require_owner(self, *, user_id: int, tenant_id: int) -> TenantMember:
-        member = self._require_active_access(user_id=user_id, tenant_id=tenant_id)
-        if member.role != MemberRole.OWNER.value:
-            raise AppError("无权管理该租户成员", code=40311, status_code=403)
         return member
 
     def _resolve_code(self, code: str | None) -> str:

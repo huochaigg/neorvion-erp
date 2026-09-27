@@ -1,6 +1,6 @@
-# 多租户说明（V2.2.1 后端 + V2.2.4 前端）
+# 多租户说明（V2.2.1 后端 + V2.2.4 前端 + V2.3.1 RBAC）
 
-本阶段只做 **共享 MySQL + 共享业务表 + tenant_id**。不做每租户独立库、独立 Schema、微服务或完整 RBAC。
+本阶段使用 **共享 MySQL + 共享业务表 + tenant_id**。细粒度权限见 `docs/rbac.md`。不做每租户独立库、独立 Schema 或微服务。
 
 ## users 和 tenant_members 为什么要分开
 
@@ -44,10 +44,11 @@ Service 里顺序是：
 
 1. `session.add(tenant)`
 2. `session.flush()` 拿到 `tenant.id`（还没提交）
-3. `session.add(member)`，role=OWNER
-4. `session.commit()`
+3. `session.add(member)`，`tenant_members.role=OWNER`
+4. 初始化该租户默认角色，并把创建者挂上 `OWNER` 角色
+5. `session.commit()`
 
-任何一步抛错都 `rollback()`。这样不会出现「企业建成了但没有创建者」的半成品。Repository 禁止 `commit`。
+任何一步抛错都 `rollback()`。这样不会出现「企业建成了但没有创建者 / 没有默认角色」的半成品。Repository 禁止 `commit`。
 
 ## TenantContext 如何注入
 
@@ -127,8 +128,9 @@ React Query 租户数据的 key 形如 `['tenant', tenantId, 'members']`。切�
 
 微前端：离开 ERP 再进入、租户未变 → 保活恢复。租户 A → B → bus 事件重置业务状态，不 `destroyApp`。
 
-## 最小权限（V2.3 会被 RBAC 替换）
+## 最小权限（V2.3.1 起由 RBAC 承接）
 
-- 创建者：`tenant_members.role = OWNER`，可添加/禁用本企业成员
-- 普通成员：可看本企业信息和成员列表，不能改别人
-- 完整角色权限表本阶段不建
+- 创建者：`tenant_members.role = OWNER`，并自动获得系统角色 `OWNER`
+- 新加入的普通成员：成员列仍是 `MEMBER`，默认授予 `VIEWER` 角色
+- 成员管理接口按 `tenant:member:manage` 校验；缺少权限返回 `40320`
+- 完整角色与权限说明见 `docs/rbac.md`。本版本不删除 `created_by` / `role` 列

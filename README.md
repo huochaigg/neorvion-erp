@@ -2,7 +2,7 @@
 
 多租户跨境电商 ERP。当前仓库按里程碑持续迭代，**不要为每个版本重建项目**。
 
-当前里程碑：**V2.2.4**。
+当前里程碑：**V2.3.1**。
 
 ## 技术栈
 
@@ -75,6 +75,7 @@ docker compose up -d mysql redis
 cd backend
 uv sync
 uv run alembic upgrade head
+uv run python -m app.scripts.seed_permissions
 uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 8011
 ```
 
@@ -116,6 +117,13 @@ pnpm --filter @neorvion/shell build
 pnpm --filter @neorvion/erp build
 pnpm test
 ```
+
+## V2.3.1
+
+- RBAC：`permissions` / `roles` / `member_roles` / `role_permissions`
+- 权限目录幂等初始化；创建租户时生成 OWNER / ADMIN / OPERATOR / WAREHOUSE / VIEWER
+- `require_permission` / `require_any_permission`；角色管理 API
+- 历史租户 OWNER 成员回填系统角色，保留 `tenant_members.role` 与 `created_by`
 
 ## V2.2.4
 
@@ -160,6 +168,6 @@ pnpm test
 
 ## 尚未开始
 
-完整 RBAC、商品库存、采购、销售订单。
+完整前端权限菜单、OWNER 转移、商品库存、采购、销售订单。
 
-更细的说明见 `docs/development.md`、`docs/architecture.md`、`docs/auth.md`、`docs/multi-tenancy.md`、`docs/routing.md`、`docs/micro-frontend-integration.md` 与 `docs/micro-frontend-interview.md`。
+更细的说明见 `docs/development.md`、`docs/architecture.md`、`docs/auth.md`、`docs/multi-tenancy.md`、`docs/rbac.md`、`docs/routing.md`、`docs/micro-frontend-integration.md` 与 `docs/micro-frontend-interview.md`。

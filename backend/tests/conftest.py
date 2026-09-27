@@ -93,6 +93,9 @@ def clean_state() -> Iterator[None]:
     redis_client.flushdb()
     session = SessionLocal()
     try:
+        session.execute(text("DELETE FROM role_permissions"))
+        session.execute(text("DELETE FROM member_roles"))
+        session.execute(text("DELETE FROM roles"))
         session.execute(text("DELETE FROM tenant_members"))
         session.execute(text("DELETE FROM tenants"))
         session.execute(text("DELETE FROM users"))

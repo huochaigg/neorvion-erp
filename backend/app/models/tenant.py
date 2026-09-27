@@ -2,6 +2,7 @@
 
 from datetime import datetime
 from enum import StrEnum
+from typing import TYPE_CHECKING
 
 from sqlalchemy import BigInteger, DateTime, ForeignKey, String, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -9,6 +10,9 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.db.base import Base
 from app.db.mixins import TimestampMixin
 from app.models.user import User
+
+if TYPE_CHECKING:
+    from app.models.rbac import MemberRoleGrant, Role
 
 
 class TenantStatus(StrEnum):
@@ -22,13 +26,13 @@ class MemberStatus(StrEnum):
 
 
 class MemberRole(StrEnum):
-    """V2.2.1 只区分创建者与普通成员。完整 RBAC 放到 V2.3。"""
+    """成员行上的所有权标记。细粒度权限走 roles / permissions，本列不要删。"""
 
     OWNER = "OWNER"
     MEMBER = "MEMBER"
 
-
 class Tenant(TimestampMixin, Base):
+    """租户（企业）表"""
     __tablename__ = "tenants"
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
@@ -50,14 +54,19 @@ class Tenant(TimestampMixin, Base):
     # relationship：在 Python 里用 tenant.members 访问成员行。
     # back_populates 必须两边字段名互指，否则 SQLAlchemy 会当成两套独立关系。
     members: Mapped[list["TenantMember"]] = relationship(back_populates="tenant")
+    roles: Mapped[list["Role"]] = relationship(back_populates="tenant")
 
 
 class TenantMember(TimestampMixin, Base):
-    """多对多的中间表。UNIQUE(tenant_id, user_id) 禁止同一人重复加入同一企业。"""
+    """
+    用户与租户的多对多关系，中间表。
+    UNIQUE(tenant_id, user_id) 禁止同一人重复加入同一租户。
+    """
 
     __tablename__ = "tenant_members"
     __table_args__ = (
         UniqueConstraint("tenant_id", "user_id", name="uq_tenant_members_tenant_user"),
+        UniqueConstraint("tenant_id", "id", name="uq_tenant_members_tenant_id"),
     )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
@@ -90,3 +99,7 @@ class TenantMember(TimestampMixin, Base):
 
     tenant: Mapped[Tenant] = relationship(back_populates="members")
     user: Mapped[User] = relationship(back_populates="memberships")
+    member_roles: Mapped[list["MemberRoleGrant"]] = relationship(
+        back_populates="member",
+        overlaps="member_roles,role",
+    )

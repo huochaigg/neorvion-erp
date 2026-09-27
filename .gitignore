@@ -29,6 +29,7 @@ backend/.env
 .idea/
 .vscode/*
 !.vscode/extensions.json
+!.vscode/settings.json
 *.swp
 
 # OS

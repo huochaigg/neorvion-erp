@@ -2,15 +2,17 @@
 
 使用 **共享 MySQL + 共享业务表 + tenant_id**，不用每租户独立库。
 
-当前里程碑 V2.2.1 已创建：
+当前里程碑 V2.3.1 已创建：
 
 - `users`：全局用户身份，**没有** `tenant_id`
 - `tenants`：企业；`code` 唯一，不用名称当唯一键
-- `tenant_members`：用户与企业的多对多；`UNIQUE(tenant_id, user_id)`
+- `tenant_members`：用户与企业的多对多；`UNIQUE(tenant_id, user_id)`；另有 `UNIQUE(tenant_id, id)` 供 RBAC 复合外键
+- `permissions`：平台权限目录；`UNIQUE(code)`
+- `roles`：租户角色；`UNIQUE(tenant_id, code)`
+- `member_roles`：成员与角色；复合外键保证同一租户
+- `role_permissions`：角色与权限
 
-V2.3 再创建 `roles`、`permissions` 等 RBAC 表。
-
-M3 起创建商品、仓库、库存等表。所有业务表必须包含 `tenant_id`（`TenantMixin`），唯一约束必须带上租户，例如：
+V2.3.2 再做成员角色分配页面与 OWNER 转移。M3 起创建商品、仓库、库存等表。所有业务表必须包含 `tenant_id`（`TenantMixin`），唯一约束必须带上租户，例如：
 
 ```sql
 UNIQUE (tenant_id, sku_code)

@@ -1,6 +1,6 @@
 # 开发说明
 
-当前里程碑：V2.2.4（多租户前端集成与状态隔离）。
+当前里程碑：V2.3.1（RBAC 数据库、权限目录与角色管理 API）。
 
 ## 前置
 
@@ -38,6 +38,7 @@ uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 8011
 cd backend
 uv run alembic current
 uv run alembic upgrade head
+uv run python -m app.scripts.seed_permissions
 uv run alembic revision --autogenerate -m "your message"
 ```
 
@@ -87,8 +88,10 @@ pnpm test
 12. `POST /api/v1/tenants` 可创建企业；`GET /api/v1/tenants` 只返回自己加入的企业。创建企业不需要 `X-Tenant-ID`。
 13. 业务接口用请求头 `X-Tenant-ID`，服务端会校验成员关系。切换企业不会调用登录或 Refresh。
 14. 离开 `/erp` 再进入应恢复上次 ERP 页面；在 ERP 内切换企业后，保活探测输入应被清空，且 Network 里后续请求的 `X-Tenant-ID` 变为新企业。
+15. 登录后创建企业，`GET /api/v1/roles`（带头 `X-Tenant-ID`）应看到 OWNER / ADMIN / OPERATOR / WAREHOUSE / VIEWER。
+16. 未登录访问 `/api/v1/roles` 返回 401；普通成员 `POST /api/v1/roles` 返回 403。
 
-多租户说明见 `docs/multi-tenancy.md`。路由配置说明见 `docs/routing.md`。认证流程见 `docs/auth.md`。
+多租户说明见 `docs/multi-tenancy.md`。RBAC 见 `docs/rbac.md`。路由配置说明见 `docs/routing.md`。认证流程见 `docs/auth.md`。
 
 ## 浏览器进 debugger
 
