@@ -188,7 +188,7 @@ def test_owner_can_manage_members_regular_member_cannot(client: TestClient) -> N
         headers=auth_header(member_token),
     )
     assert forbidden.status_code == 403
-    assert forbidden.json()["code"] == 40311
+    assert forbidden.json()["code"] == 40320
     other_tenant = _create_tenant(client, outsider_token, "Other", "other-co").json()["data"]["id"]
     cross = client.post(
         f"/api/v1/tenants/{other_tenant}/members",

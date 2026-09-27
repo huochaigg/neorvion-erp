@@ -1,6 +1,6 @@
 # 架构说明
 
-当前里程碑：V2.2.4。
+当前里程碑：V2.3.1。
 
 ## 目标
 
@@ -62,6 +62,7 @@
 - 密码传输使用独立 RSA-OAEP 密钥（`GET /api/crypto/public-key`），与 JWT `SECRET_KEY` 分开；一次性 `challenge_id` 写在 Redis。
 - Shell 独占 Refresh；ERP 只消费 Wujie props 里的 Access Token。
 - 后续业务接口注入 `get_tenant_context()` / `TenantContextDep`。`X-Tenant-ID` 只表示意愿，必须再查 `tenant_members`。不要把租户 ID 塞进 `users` 表或 JWT。
+- 细粒度授权走 `require_permission(...)`，最终权限由当前租户成员的角色并集计算。OWNER 表示所有权，不是跳过未知权限编码的后门。Agent / Celery 复用 `AuthorizationService.require_all_for_user`。详见 `docs/rbac.md`。
 
 AI 与异步：
 

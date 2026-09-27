@@ -1,0 +1,12 @@
+{
+  "executionEnvironments": [
+    {
+      "root": "backend",
+      "pythonVersion": "3.12",
+      "pythonPlatform": "Windows",
+      "extraPaths": ["."],
+      "venvPath": ".",
+      "venv": ".venv"
+    }
+  ]
+}
