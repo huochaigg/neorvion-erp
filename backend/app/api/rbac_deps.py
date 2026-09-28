@@ -42,3 +42,11 @@ RoleManageContext = Annotated[
     TenantContext,
     Depends(require_permission(PermissionCode.TENANT_ROLE_MANAGE)),
 ]
+MemberReadContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.TENANT_MEMBER_READ)),
+]
+MemberManageContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.TENANT_MEMBER_MANAGE)),
+]

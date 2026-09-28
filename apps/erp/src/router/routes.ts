@@ -112,6 +112,43 @@ export const routes: AppRoute[] = [
     sort: 50,
     component: 'Placeholder',
   },
+  {
+    path: '/system',
+    name: 'System',
+    title: '系统管理',
+    icon: 'SettingOutlined',
+    showInMenu: true,
+    sort: 60,
+    redirect: '/system/members',
+    children: [
+      {
+        path: '/system/members',
+        name: 'Members',
+        title: '成员管理',
+        description: '添加已注册用户、分配角色并启停成员。',
+        showInMenu: true,
+        sort: 10,
+        component: 'Members',
+      },
+      {
+        path: '/system/members/:memberId',
+        name: 'MemberDetail',
+        title: '成员详情',
+        showInMenu: false,
+        activeMenu: '/system/members',
+        component: 'Members',
+      },
+      {
+        path: '/system/roles',
+        name: 'Roles',
+        title: '角色管理',
+        description: '查看系统角色，维护自定义角色与权限。',
+        showInMenu: true,
+        sort: 20,
+        component: 'Roles',
+      },
+    ],
+  },
 ];
 
 export const DEFAULT_REDIRECT = '/dashboard';

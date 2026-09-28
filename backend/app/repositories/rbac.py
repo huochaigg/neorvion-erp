@@ -151,3 +151,52 @@ class RoleRepository(BaseRepository):
             )
         )
         return list(self.session.scalars(stmt).all())
+
+    def list_in_tenant_by_ids(self, tenant_id: int, role_ids: list[int]) -> list[Role]:
+        """只返回属于当前租户的角色。调用方用数量比对，发现少了就是跨租户或伪造 ID。"""
+        if not role_ids:
+            return []
+        stmt = select(Role).where(Role.tenant_id == tenant_id, Role.id.in_(role_ids))
+        return list(self.session.scalars(stmt).all())
+
+    def replace_member_roles(
+        self,
+        *,
+        tenant_id: int,
+        member_id: int,
+        role_ids: list[int],
+    ) -> None:
+        """全量替换成员角色。先删后插必须在同一事务里，否则会出现「旧角色没了、新角色没写上」。
+
+        bulk DELETE 默认不会把 Session 里已加载的 MemberRoleGrant 标成 deleted。
+        若不 synchronize_session，commit 时 identity map 里的旧 VIEWER 可能被当成仍存在的行，
+        返回给前端的 member_roles 就会继续显示替换前的角色。
+        """
+        self.session.execute(
+            delete(MemberRoleGrant)
+            .where(
+                MemberRoleGrant.tenant_id == tenant_id,
+                MemberRoleGrant.member_id == member_id,
+            )
+            .execution_options(synchronize_session="fetch")
+        )
+        for role_id in role_ids:
+            self.session.add(
+                MemberRoleGrant(tenant_id=tenant_id, member_id=member_id, role_id=role_id)
+            )
+
+    def list_permissions_for_member(self, *, tenant_id: int, member_id: int) -> list[Permission]:
+        """多角色权限并集。JOIN 三张表只取 Permission 行，不把整棵树载入内存。"""
+        stmt = (
+            select(Permission)
+            .join(RolePermission, RolePermission.permission_id == Permission.id)
+            .join(MemberRoleGrant, MemberRoleGrant.role_id == RolePermission.role_id)
+            .where(
+                MemberRoleGrant.tenant_id == tenant_id,
+                MemberRoleGrant.member_id == member_id,
+                RolePermission.tenant_id == tenant_id,
+            )
+            .order_by(Permission.module.asc(), Permission.code.asc())
+            .distinct()
+        )
+        return list(self.session.scalars(stmt).all())

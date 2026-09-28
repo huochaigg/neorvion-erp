@@ -1,6 +1,6 @@
 # 开发说明
 
-当前里程碑：V2.3.1（RBAC 数据库、权限目录与角色管理 API）。
+当前里程碑：V2.3.2（企业成员与角色授权前后端闭环）。
 
 ## 前置
 
@@ -90,8 +90,11 @@ pnpm test
 14. 离开 `/erp` 再进入应恢复上次 ERP 页面；在 ERP 内切换企业后，保活探测输入应被清空，且 Network 里后续请求的 `X-Tenant-ID` 变为新企业。
 15. 登录后创建企业，`GET /api/v1/roles`（带头 `X-Tenant-ID`）应看到 OWNER / ADMIN / OPERATOR / WAREHOUSE / VIEWER。
 16. 未登录访问 `/api/v1/roles` 返回 401；普通成员 `POST /api/v1/roles` 返回 403。
+17. ERP 侧栏「系统管理」可打开成员列表；OWNER 可用邮箱添加已注册用户并分配角色。
+18. 无 `tenant:member:manage` 的成员看不到添加/改角色/禁用按钮；直接调接口仍 403。
+19. 切换企业后成员/角色列表变为新租户；`/system/members/:id` 会回到成员列表。
 
-多租户说明见 `docs/multi-tenancy.md`。RBAC 见 `docs/rbac.md`。路由配置说明见 `docs/routing.md`。认证流程见 `docs/auth.md`。
+多租户说明见 `docs/multi-tenancy.md`。RBAC 见 `docs/rbac.md`。V2.3.2 见 `docs/versions/v2.3.2.md`。路由配置说明见 `docs/routing.md`。认证流程见 `docs/auth.md`。
 
 ## 浏览器进 debugger
 

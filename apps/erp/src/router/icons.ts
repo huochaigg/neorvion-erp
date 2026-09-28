@@ -2,6 +2,7 @@ import {
   AppstoreOutlined,
   DashboardOutlined,
   DatabaseOutlined,
+  SettingOutlined,
   ShopOutlined,
   ShoppingCartOutlined,
 } from '@ant-design/icons';
@@ -12,6 +13,7 @@ export const ICON_MAP: Record<IconName, ComponentType<{ className?: string }>> =
   DashboardOutlined,
   AppstoreOutlined,
   DatabaseOutlined,
+  SettingOutlined,
   ShopOutlined,
   ShoppingCartOutlined,
 };

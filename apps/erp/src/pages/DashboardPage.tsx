@@ -22,7 +22,7 @@ export function DashboardPage(props: PageProps) {
       <PageHeader
         title={props.title ?? '业务工作台'}
         description={props.description ?? 'ERP 子应用已接入。商品、库存、订单等业务页面从后续里程碑实现。'}
-        extra={<StatusTag tone="ready">V2.2.4 租户已接入</StatusTag>}
+        extra={<StatusTag tone="ready">V2.3.2 成员与角色</StatusTag>}
       />
       <Row gutter={[16, 16]}>
         <Col xs={24} md={12}>

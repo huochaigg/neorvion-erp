@@ -1,6 +1,8 @@
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator, model_validator
+
+from app.schemas.rbac import PermissionOut
 
 
 class TenantCreate(BaseModel):
@@ -47,12 +49,37 @@ class TenantContextOut(BaseModel):
     member_id: int
     is_owner: bool
     role: str
+    permission_codes: list[str] = Field(default_factory=list)
+
+
+class MemberRoleBrief(BaseModel):
+    id: int
+    code: str
+    name: str
+    is_system: bool
 
 
 class MemberCreate(BaseModel):
+    """按邮箱添加已注册用户；user_id 仅兼容旧调用。role_ids 为空时默认 VIEWER。"""
+
     model_config = ConfigDict(extra="forbid")
 
-    user_id: int = Field(gt=0)
+    email: EmailStr | None = None
+    user_id: int | None = Field(default=None, gt=0)
+    role_ids: list[int] = Field(default_factory=list)
+
+    @field_validator("email")
+    @classmethod
+    def normalize_email(cls, value: EmailStr | None) -> str | None:
+        if value is None:
+            return None
+        return str(value).strip().lower()
+
+    @model_validator(mode="after")
+    def require_identity(self) -> "MemberCreate":
+        if self.email is None and self.user_id is None:
+            raise ValueError("请提供邮箱")
+        return self
 
 
 class MemberUpdate(BaseModel):
@@ -66,6 +93,12 @@ class MemberUpdate(BaseModel):
         return value.strip().upper()
 
 
+class MemberRolesUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    role_ids: list[int]
+
+
 class MemberOut(BaseModel):
     id: int
     tenant_id: int
@@ -75,3 +108,17 @@ class MemberOut(BaseModel):
     joined_at: datetime
     display_name: str
     email: str
+    is_owner: bool
+    roles: list[MemberRoleBrief] = Field(default_factory=list)
+
+
+class MemberDetailOut(MemberOut):
+    permission_codes: list[str] = Field(default_factory=list)
+    permissions: list[PermissionOut] = Field(default_factory=list)
+
+
+class MemberListOut(BaseModel):
+    items: list[MemberOut]
+    total: int
+    page: int
+    page_size: int

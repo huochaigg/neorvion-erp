@@ -16,7 +16,7 @@
 
 `GET /api/v1/health`
 
-依赖不可用时 HTTP 仍为 200，字段标记 `unavailable`。当前 `milestone` 为 `V2.3.1`。
+依赖不可用时 HTTP 仍为 200，字段标记 `unavailable`。当前 `milestone` 为 `V2.3.2`。
 
 ## 认证
 
@@ -37,9 +37,14 @@
 - `GET /api/v1/tenants`
 - `GET /api/v1/tenants/current`（需要 `X-Tenant-ID`）
 - `GET /api/v1/tenants/{tenant_id}`
-- `GET /api/v1/tenants/{tenant_id}/members`
-- `POST /api/v1/tenants/{tenant_id}/members`
+- `GET /api/v1/tenants/{tenant_id}/members`（分页：`q` / `status` / `page` / `page_size`）
+- `POST /api/v1/tenants/{tenant_id}/members`（`email` + `role_ids`）
+- `GET /api/v1/tenants/{tenant_id}/members/{member_id}`
+- `GET /api/v1/tenants/{tenant_id}/members/{member_id}/permissions`
+- `PUT /api/v1/tenants/{tenant_id}/members/{member_id}/roles`
 - `PATCH /api/v1/tenants/{tenant_id}/members/{member_id}`
+
+`GET /api/v1/tenants/current` 含 `permission_codes`。
 
 ## 角色与权限（V2.3.1）
 

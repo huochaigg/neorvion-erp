@@ -272,6 +272,57 @@ class RoleService:
             allow_owner_role=False,
         )
 
+    def resolve_assignable_role_ids(
+        self,
+        *,
+        tenant_id: int,
+        role_ids: list[int],
+        default_viewer: bool,
+    ) -> list[int]:
+        """校验角色全部属于当前租户，并禁止 OWNER。
+
+        必须在写入 member_roles 之前一次校验完。否则会出现「前两个角色写进去了，
+        第三个是别的租户角色才失败」的半成品。
+        """
+        unique_ids = list(dict.fromkeys(role_ids))
+        if not unique_ids and default_viewer:
+            viewer = self.roles.get_by_code(tenant_id, SystemRoleCode.VIEWER)
+            if viewer is None:
+                raise AppError("默认角色未初始化", code=50022, status_code=500)
+            return [viewer.id]
+        rows = self.roles.list_in_tenant_by_ids(tenant_id, unique_ids)
+        if len(rows) != len(unique_ids):
+            raise AppError(_UNAVAILABLE, code=40420, status_code=404)
+        if any(row.code == SystemRoleCode.OWNER for row in rows):
+            raise AppError("不能授予所有者角色", code=40321, status_code=403)
+        return unique_ids
+
+    def grant_roles(self, *, tenant_id: int, member_id: int, role_ids: list[int]) -> None:
+        """给新成员挂上已经校验过的角色。不 commit。"""
+        for role_id in role_ids:
+            role = self._require_role(tenant_id, role_id)
+            self._grant_role(
+                tenant_id=tenant_id,
+                member_id=member_id,
+                role=role,
+                allow_owner_role=False,
+            )
+
+    def replace_member_role_grants(
+        self,
+        *,
+        tenant_id: int,
+        member_id: int,
+        role_ids: list[int],
+    ) -> None:
+        """删除旧授权再写入新授权。调用方必须已持有成员行锁并处于同一事务。"""
+        self.roles.replace_member_roles(
+            tenant_id=tenant_id,
+            member_id=member_id,
+            role_ids=role_ids,
+        )
+        self.session.flush()
+
     def _ensure_system_role(
         self,
         *,

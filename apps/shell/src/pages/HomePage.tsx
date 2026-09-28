@@ -4,6 +4,7 @@ import {
   ERP_DEFAULT_PATH,
   healthQueryKey,
   listUsableTenants,
+  memberRoleNames,
   myTenantsQueryKey,
   tenantMembersQueryKey,
 } from '@neorvion/shared';
@@ -96,11 +97,15 @@ export function HomePage() {
               size="small"
               loading={membersLoading}
               pagination={false}
-              dataSource={members}
+              dataSource={members?.items}
               columns={[
                 { title: '姓名', dataIndex: 'display_name' },
                 { title: '邮箱', dataIndex: 'email' },
-                { title: '角色', dataIndex: 'role' },
+                {
+                  title: '角色',
+                  dataIndex: 'roles',
+                  render: memberRoleNames,
+                },
                 { title: '状态', dataIndex: 'status' },
               ]}
             />
