@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.core.exceptions import AppError
 from app.core.permissions import (
+    ADMIN_REQUIRED_PERMISSION_CODES,
     DEFAULT_ROLE_TEMPLATES,
     PERMISSION_CATALOG,
     PermissionCode,
@@ -114,12 +115,20 @@ class RoleService:
     def list_roles(self, context: TenantContext) -> list[RoleOut]:
         """列出当前租户下全部角色（含系统角色）。需 tenant:role:read。"""
         self.auth.require_all(context, (PermissionCode.TENANT_ROLE_READ,))
-        return [self._role_out(item) for item in self.roles.list_in_tenant(context.tenant_id)]
+        counts = self.roles.count_grants_grouped(context.tenant_id)
+        return [
+            self._role_out(item, member_count=counts.get(item.id, 0))
+            for item in self.roles.list_in_tenant(context.tenant_id)
+        ]
 
     def get_role(self, context: TenantContext, role_id: int) -> RoleOut:
         """按 ID 取本租户角色详情。跨租户或不存在统一 404。"""
         self.auth.require_all(context, (PermissionCode.TENANT_ROLE_READ,))
-        return self._role_out(self._require_role(context.tenant_id, role_id))
+        role = self._require_role(context.tenant_id, role_id)
+        return self._role_out(
+            role,
+            member_count=self.roles.count_grants(tenant_id=context.tenant_id, role_id=role.id),
+        )
 
     def create_role(self, context: TenantContext, payload: RoleCreate) -> RoleOut:
         """创建自定义角色并绑定权限。系统角色码冲突走 409；本方法 commit。"""
@@ -175,22 +184,28 @@ class RoleService:
         role_id: int,
         permission_ids: list[int],
     ) -> RoleOut:
-        """全量替换自定义角色的权限集合。系统角色禁止改。
+        """全量替换角色权限。OWNER 核心权限冻结；其他系统角色允许调业务权限。
 
+        先校验全部 permission_id 都存在，再删除旧关联。否则会出现
+        「旧权限已经清空、新权限因无效 ID 失败」的半更新。
         没有 Redis 权限缓存：提交后下一次 require_permission / my-permissions
-        都会重新 JOIN 数据库。前端需要失效对应租户的 Query，不能沿用旧编码。
+        都会重新 JOIN 数据库。
         """
         self.auth.require_all(context, (PermissionCode.TENANT_ROLE_MANAGE,))
         role = self._require_role(context.tenant_id, role_id)
-        if role.is_system:
-            raise AppError("系统角色不允许修改", code=40040, status_code=400)
+        if role.code == SystemRoleCode.OWNER:
+            raise AppError("所有者角色的核心权限不可通过管理接口修改", code=40040, status_code=400)
         ids = self._validate_permission_ids(permission_ids)
+        if role.code == SystemRoleCode.ADMIN:
+            self._assert_admin_keeps_tenant_management(ids)
         try:
             self.roles.replace_permissions(
                 tenant_id=context.tenant_id,
                 role_id=role.id,
                 permission_ids=ids,
             )
+            # bulk DELETE 不会自动过期已加载的 role_permissions。
+            self.session.expire(role, ["role_permissions"])
             self.session.commit()
         except Exception:
             self.session.rollback()
@@ -198,13 +213,21 @@ class RoleService:
         return self.get_role(context, role.id)
 
     def delete_role(self, context: TenantContext, role_id: int) -> None:
-        """删除自定义角色。系统角色、仍有成员占用的角色不可删；顺带清 role_permissions。"""
+        """删除自定义角色。系统角色、仍有成员占用的角色不可删；顺带清 role_permissions。
+
+        有人还在用时禁止静默清 MemberRoleGrant，否则成员会突然失去全部权限。
+        """
         self.auth.require_all(context, (PermissionCode.TENANT_ROLE_MANAGE,))
         role = self._require_role(context.tenant_id, role_id)
         if role.is_system:
             raise AppError("系统角色不允许删除", code=40040, status_code=400)
-        if self.roles.count_grants(tenant_id=context.tenant_id, role_id=role.id) > 0:
-            raise AppError("角色仍被成员使用，不能删除", code=40041, status_code=400)
+        used = self.roles.count_grants(tenant_id=context.tenant_id, role_id=role.id)
+        if used > 0:
+            raise AppError(
+                f"当前角色仍有 {used} 名成员使用，请先调整成员角色。",
+                code=40041,
+                status_code=400,
+            )
         try:
             self.session.execute(
                 delete(RolePermission).where(
@@ -407,6 +430,14 @@ class RoleService:
             raise AppError("权限不存在", code=40042, status_code=400)
         return unique_ids
 
+    def _assert_admin_keeps_tenant_management(self, permission_ids: list[int]) -> None:
+        """ADMIN 可以调整业务权限，但不能拿掉租户管理入口。"""
+        rows = self.permissions.get_by_ids(permission_ids)
+        codes = {item.code for item in rows}
+        missing = ADMIN_REQUIRED_PERMISSION_CODES - codes
+        if missing:
+            raise AppError("管理员角色必须保留租户管理能力", code=40040, status_code=400)
+
     @staticmethod
     def _normalize_code(code: str) -> str:
         """角色 code：去空白、转大写，并校验命名规则。"""
@@ -427,7 +458,7 @@ class RoleService:
         )
 
     @staticmethod
-    def _role_out(role: Role) -> RoleOut:
+    def _role_out(role: Role, *, member_count: int = 0) -> RoleOut:
         """Role ORM → API schema（含按 code 排序的权限列表）。"""
         permissions = [
             RoleService._permission_out(link.permission)
@@ -445,4 +476,5 @@ class RoleService:
             created_at=role.created_at,
             updated_at=role.updated_at,
             permissions=permissions,
+            member_count=member_count,
         )

@@ -1,6 +1,8 @@
 import type {
   ApiResponse,
+  MemberAccountCreatePayload,
   MemberCreatePayload,
+  MemberCreated,
   MemberRolesUpdatePayload,
   TenantContextInfo,
   TenantMember,
@@ -42,6 +44,12 @@ export function addMember(tenantId: number, payload: MemberCreatePayload) {
   );
 }
 
+export function createMemberAccount(tenantId: number, payload: MemberAccountCreatePayload) {
+  return unwrapApi(
+    apiClient.post<ApiResponse<MemberCreated>>(`/api/v1/tenants/${tenantId}/members/accounts`, payload),
+  );
+}
+
 export function updateMemberRoles(
   tenantId: number,
   memberId: number,
@@ -61,6 +69,12 @@ export function updateMemberStatus(tenantId: number, memberId: number, status: s
       `/api/v1/tenants/${tenantId}/members/${memberId}`,
       { status },
     ),
+  );
+}
+
+export function removeMember(tenantId: number, memberId: number) {
+  return unwrapApi(
+    apiClient.delete<ApiResponse<null>>(`/api/v1/tenants/${tenantId}/members/${memberId}`),
   );
 }
 

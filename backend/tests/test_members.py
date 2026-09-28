@@ -5,11 +5,13 @@ from app.core.permissions import PermissionCode
 from app.db.session import SessionLocal
 from app.models.rbac import MemberRoleGrant
 from app.models.tenant import MemberStatus, TenantMember
+from app.models.user import User
 from app.repositories.rbac import RoleRepository
+from app.services.rbac import RoleService
 from fastapi.testclient import TestClient
 from sqlalchemy import delete, select
 
-from tests.helpers.auth_api import auth_header, register_and_login
+from tests.helpers.auth_api import auth_header, encrypted_fields, register_and_login
 
 
 def _create_tenant(client: TestClient, token: str, name: str, code: str) -> int:
@@ -306,3 +308,216 @@ def test_role_change_updates_effective_permissions(client: TestClient) -> None:
         assert row.role != "OWNER"
     finally:
         session.close()
+
+
+def test_create_member_account_temp_password_once_and_must_change(client: TestClient) -> None:
+    owner, _oid = register_and_login(client, "mem-acc-owner@example.com")
+    tenant_id = _create_tenant(client, owner, "AccCo", "mem-acc")
+    roles = _roles(client, owner, tenant_id)
+    created = client.post(
+        f"/api/v1/tenants/{tenant_id}/members/accounts",
+        json={
+            "display_name": "新人",
+            "email": "mem-acc-new@example.com",
+            "role_ids": [roles["OPERATOR"]["id"]],
+        },
+        headers=auth_header(owner, tenant_id),
+    )
+    assert created.status_code == 200, created.text
+    data = created.json()["data"]
+    temp = data["temporary_password"]
+    assert temp
+    assert data["email"] == "mem-acc-new@example.com"
+    assert {item["code"] for item in data["roles"]} == {"OPERATOR"}
+    listed = client.get(
+        f"/api/v1/tenants/{tenant_id}/members",
+        headers=auth_header(owner, tenant_id),
+    )
+    new_row = next(
+        item
+        for item in listed.json()["data"]["items"]
+        if item["email"] == "mem-acc-new@example.com"
+    )
+    assert "temporary_password" not in new_row
+    login = client.post(
+        "/api/v1/auth/login",
+        json={"email": "mem-acc-new@example.com", **encrypted_fields(client, temp)},
+    )
+    assert login.status_code == 200, login.text
+    new_token = login.json()["data"]["access_token"]
+    me = client.get("/api/v1/auth/me", headers=auth_header(new_token))
+    assert me.json()["data"]["must_change_password"] is True
+    blocked = client.get("/api/v1/tenants", headers=auth_header(new_token))
+    assert blocked.status_code == 403
+    assert blocked.json()["code"] == 40350
+    session = SessionLocal()
+    try:
+        user = session.scalars(select(User).where(User.email == "mem-acc-new@example.com")).one()
+        assert user.must_change_password is True
+        assert user.password_hash != temp
+    finally:
+        session.close()
+    old_fields = encrypted_fields(client, temp)
+    new_fields = encrypted_fields(client, "Changed99")
+    changed = client.post(
+        "/api/v1/auth/change-password",
+        json={
+            "encrypted_old_password": old_fields["encrypted_password"],
+            "old_key_id": old_fields["key_id"],
+            "old_challenge_id": old_fields["challenge_id"],
+            "encrypted_new_password": new_fields["encrypted_password"],
+            "new_key_id": new_fields["key_id"],
+            "new_challenge_id": new_fields["challenge_id"],
+        },
+        headers=auth_header(new_token),
+    )
+    assert changed.status_code == 200, changed.text
+    assert changed.json()["data"]["must_change_password"] is False
+    allowed = client.get("/api/v1/tenants", headers=auth_header(new_token))
+    assert allowed.status_code == 200
+
+
+def test_create_member_account_duplicate_email_fails(client: TestClient) -> None:
+    owner, _oid = register_and_login(client, "mem-acc-dup-owner@example.com")
+    register_and_login(client, "mem-acc-dup-user@example.com")
+    tenant_id = _create_tenant(client, owner, "AccDup", "mem-accdup")
+    created = client.post(
+        f"/api/v1/tenants/{tenant_id}/members/accounts",
+        json={"display_name": "冲突", "email": "mem-acc-dup-user@example.com"},
+        headers=auth_header(owner, tenant_id),
+    )
+    assert created.status_code == 409
+    assert created.json()["code"] == 40011
+
+
+def test_create_member_account_rolls_back_when_grant_fails(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    owner, _oid = register_and_login(client, "mem-acc-tx-owner@example.com")
+    tenant_id = _create_tenant(client, owner, "AccTx", "mem-acctx")
+
+    def boom(self, *, tenant_id: int, member_id: int, role_ids: list[int]) -> None:  # noqa: ANN001
+        raise RuntimeError("grant fail")
+
+    monkeypatch.setattr(RoleService, "grant_roles", boom)
+    with pytest.raises(RuntimeError, match="grant fail"):
+        client.post(
+            f"/api/v1/tenants/{tenant_id}/members/accounts",
+            json={"display_name": "回滚", "email": "mem-acc-tx-user@example.com"},
+            headers=auth_header(owner, tenant_id),
+        )
+    session = SessionLocal()
+    try:
+        user = session.scalars(
+            select(User).where(User.email == "mem-acc-tx-user@example.com")
+        ).first()
+        member = session.scalars(
+            select(TenantMember).where(
+                TenantMember.tenant_id == tenant_id,
+                TenantMember.user_id != _oid,
+            )
+        ).first()
+        assert user is None
+        assert member is None
+    finally:
+        session.close()
+
+
+def test_remove_member_keeps_user_and_cannot_remove_owner(client: TestClient) -> None:
+    owner, owner_id = register_and_login(client, "mem-rm-owner@example.com")
+    member_token, member_user_id = register_and_login(client, "mem-rm-user@example.com")
+    tenant_id = _create_tenant(client, owner, "RmCo", "mem-rm")
+    added = client.post(
+        f"/api/v1/tenants/{tenant_id}/members",
+        json={"email": "mem-rm-user@example.com"},
+        headers=auth_header(owner, tenant_id),
+    )
+    member_id = added.json()["data"]["id"]
+    owner_listed = client.get(
+        f"/api/v1/tenants/{tenant_id}/members",
+        headers=auth_header(owner, tenant_id),
+    )
+    owner_member = next(
+        item for item in owner_listed.json()["data"]["items"] if item["user_id"] == owner_id
+    )
+    blocked = client.delete(
+        f"/api/v1/tenants/{tenant_id}/members/{owner_member['id']}",
+        headers=auth_header(owner, tenant_id),
+    )
+    assert blocked.status_code == 403
+    assert blocked.json()["code"] == 40322
+    removed = client.delete(
+        f"/api/v1/tenants/{tenant_id}/members/{member_id}",
+        headers=auth_header(owner, tenant_id),
+    )
+    assert removed.status_code == 200, removed.text
+    listed = client.get(
+        f"/api/v1/tenants/{tenant_id}/members",
+        headers=auth_header(owner, tenant_id),
+    )
+    emails = {item["email"] for item in listed.json()["data"]["items"]}
+    assert "mem-rm-user@example.com" not in emails
+    session = SessionLocal()
+    try:
+        user = session.get(User, member_user_id)
+        assert user is not None
+        grants = session.scalars(
+            select(MemberRoleGrant).where(MemberRoleGrant.member_id == member_id)
+        ).all()
+        assert grants == []
+        gone = session.get(TenantMember, member_id)
+        assert gone is None
+    finally:
+        session.close()
+    denied = client.get("/api/v1/roles", headers=auth_header(member_token, tenant_id))
+    assert denied.status_code == 404
+
+
+def test_cannot_remove_foreign_tenant_member(client: TestClient) -> None:
+    alice, _a = register_and_login(client, "mem-rmx-alice@example.com")
+    bob, _b = register_and_login(client, "mem-rmx-bob@example.com")
+    register_and_login(client, "mem-rmx-user@example.com")
+    alice_tenant = _create_tenant(client, alice, "RmXa", "mem-rmxa")
+    bob_tenant = _create_tenant(client, bob, "RmXb", "mem-rmxb")
+    added = client.post(
+        f"/api/v1/tenants/{bob_tenant}/members",
+        json={"email": "mem-rmx-user@example.com"},
+        headers=auth_header(bob, bob_tenant),
+    )
+    member_id = added.json()["data"]["id"]
+    stolen = client.delete(
+        f"/api/v1/tenants/{bob_tenant}/members/{member_id}",
+        headers=auth_header(alice, alice_tenant),
+    )
+    assert stolen.status_code == 404
+    still = client.get(
+        f"/api/v1/tenants/{bob_tenant}/members/{member_id}",
+        headers=auth_header(bob, bob_tenant),
+    )
+    assert still.status_code == 200
+
+
+def test_enable_member_after_disable(client: TestClient) -> None:
+    owner, _oid = register_and_login(client, "mem-on-owner@example.com")
+    member_token, _mid = register_and_login(client, "mem-on-user@example.com")
+    tenant_id = _create_tenant(client, owner, "OnMem", "mem-on")
+    created = client.post(
+        f"/api/v1/tenants/{tenant_id}/members",
+        json={"email": "mem-on-user@example.com"},
+        headers=auth_header(owner, tenant_id),
+    )
+    member_id = created.json()["data"]["id"]
+    client.patch(
+        f"/api/v1/tenants/{tenant_id}/members/{member_id}",
+        json={"status": MemberStatus.DISABLED.value},
+        headers=auth_header(owner, tenant_id),
+    )
+    enabled = client.patch(
+        f"/api/v1/tenants/{tenant_id}/members/{member_id}",
+        json={"status": MemberStatus.ACTIVE.value},
+        headers=auth_header(owner, tenant_id),
+    )
+    assert enabled.status_code == 200
+    roles = client.get("/api/v1/roles", headers=auth_header(member_token, tenant_id))
+    assert roles.status_code == 200

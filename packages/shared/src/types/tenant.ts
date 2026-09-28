@@ -47,6 +47,7 @@ export interface RoleInfo {
   created_at: string;
   updated_at: string;
   permissions: PermissionInfo[];
+  member_count: number;
 }
 
 export interface TenantMember {
@@ -84,6 +85,16 @@ export interface MemberCreatePayload {
   role_ids?: number[];
 }
 
+export interface MemberAccountCreatePayload {
+  display_name: string;
+  email: string;
+  role_ids?: number[];
+}
+
+export interface MemberCreated extends TenantMember {
+  temporary_password?: string | null;
+}
+
 export interface MemberRolesUpdatePayload {
   role_ids: number[];
 }
@@ -99,6 +110,14 @@ export interface RoleUpdatePayload {
   name?: string;
   description?: string;
 }
+
+export const PERMISSION_MODULE_LABELS: Record<string, string> = {
+  tenant: '企业管理',
+  product: '商品管理',
+  order: '订单管理',
+  inventory: '库存管理',
+  purchase: '采购管理',
+};
 
 export const TENANT_HEADER = 'X-Tenant-ID';
 

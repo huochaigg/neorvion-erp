@@ -4,13 +4,12 @@ import {
   tenantMyPermissionsQueryKey,
   tenantPermissionsQueryKey,
   tenantRolesQueryKey,
-  type PermissionInfo,
   type RoleInfo,
 } from '@neorvion/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { App, Button, Checkbox, Form, Input, Modal, Space, Table, Tag } from 'antd';
+import { App, Button, Drawer, Form, Input, Modal, Space, Table, Tag } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   createRole,
   deleteRole,
@@ -21,27 +20,22 @@ import {
 } from '@/api/roles';
 import { Can } from '@/components/Can';
 import { PageHeader } from '@/components/PageHeader';
+import { PermissionCheckboxGroups } from '@/components/PermissionCheckboxGroups';
 import { usePermissions } from '@/hooks/usePermissions';
 import type { PageProps } from '@/router/types';
 
-function groupPermissions(items: PermissionInfo[]) {
-  const groups = new Map<string, PermissionInfo[]>();
-  for (const item of items) {
-    const current = groups.get(item.module) ?? [];
-    current.push(item);
-    groups.set(item.module, current);
-  }
-  return [...groups.entries()];
-}
+type EditorState = { type: 'create' } | { type: 'edit'; role: RoleInfo } | { type: 'perms'; role: RoleInfo };
 
 export function RolesPage(props: PageProps) {
   const { message, modal } = App.useApp();
   const queryClient = useQueryClient();
   const { tenantId } = usePermissions();
-  const [editing, setEditing] = useState<RoleInfo | 'create' | null>(null);
+  const [editor, setEditor] = useState<EditorState | null>(null);
+  const [viewing, setViewing] = useState<RoleInfo | null>(null);
 
   useEffect(() => {
-    setEditing(null);
+    setEditor(null);
+    setViewing(null);
   }, [tenantId]);
 
   const rolesQuery = useQuery({
@@ -55,11 +49,6 @@ export function RolesPage(props: PageProps) {
     enabled: tenantId != null,
   });
 
-  const grouped = useMemo(
-    () => groupPermissions(permissionsQuery.data ?? []),
-    [permissionsQuery.data],
-  );
-
   const invalidate = () => {
     void queryClient.invalidateQueries({ queryKey: tenantRolesQueryKey(tenantId) });
     void queryClient.invalidateQueries({ queryKey: ['tenant', tenantId, 'members'] });
@@ -72,7 +61,7 @@ export function RolesPage(props: PageProps) {
     mutationFn: createRole,
     onSuccess: () => {
       message.success('角色已创建');
-      setEditing(null);
+      setEditor(null);
       invalidate();
     },
     onError: (error: unknown) => {
@@ -93,7 +82,20 @@ export function RolesPage(props: PageProps) {
       ]),
     onSuccess: () => {
       message.success('角色已更新');
-      setEditing(null);
+      setEditor(null);
+      invalidate();
+    },
+    onError: (error: unknown) => {
+      message.error(error instanceof ApiError ? error.message : '更新失败');
+    },
+  });
+
+  const permsMutation = useMutation({
+    mutationFn: (values: { roleId: number; permission_ids: number[] }) =>
+      updateRolePermissions(values.roleId, values.permission_ids),
+    onSuccess: () => {
+      message.success('权限已更新');
+      setEditor(null);
       invalidate();
     },
     onError: (error: unknown) => {
@@ -118,17 +120,31 @@ export function RolesPage(props: PageProps) {
     {
       title: '类型',
       dataIndex: 'is_system',
-      render: (value: boolean) => <Tag>{value ? '系统' : '自定义'}</Tag>,
+      render: (value: boolean) => <Tag>{value ? '系统预置角色' : '自定义'}</Tag>,
+    },
+    {
+      title: '成员数',
+      dataIndex: 'member_count',
     },
     { title: '说明', dataIndex: 'description' },
     {
       title: '操作',
       key: 'actions',
       render: (_, record) => (
-        <Space>
+        <Space wrap>
+          <Button type="link" size="small" onClick={() => setViewing(record)}>
+            查看
+          </Button>
+          {record.code === 'OWNER' ? null : (
+            <Can permission={PERMISSION_CODE.tenantRoleManage}>
+              <Button type="link" size="small" onClick={() => setEditor({ type: 'perms', role: record })}>
+                配置权限
+              </Button>
+            </Can>
+          )}
           {record.is_system ? null : (
             <Can permission={PERMISSION_CODE.tenantRoleManage}>
-              <Button type="link" size="small" onClick={() => setEditing(record)}>
+              <Button type="link" size="small" onClick={() => setEditor({ type: 'edit', role: record })}>
                 编辑
               </Button>
             </Can>
@@ -142,7 +158,10 @@ export function RolesPage(props: PageProps) {
                 onClick={() => {
                   modal.confirm({
                     title: `删除角色 ${record.name}？`,
-                    content: '仍被成员使用的角色不能删除。',
+                    content:
+                      record.member_count > 0
+                        ? `当前角色仍有 ${record.member_count} 名成员使用，请先调整成员角色。`
+                        : '删除后不可恢复。',
                     onOk: () => deleteMutation.mutateAsync(record.id),
                   });
                 }}
@@ -156,7 +175,8 @@ export function RolesPage(props: PageProps) {
     },
   ];
 
-  const editingRole = editing && editing !== 'create' ? editing : null;
+  const editingRole = editor?.type === 'edit' ? editor.role : null;
+  const permRole = editor?.type === 'perms' ? editor.role : null;
 
   return (
     <div>
@@ -165,7 +185,7 @@ export function RolesPage(props: PageProps) {
         description={props.description ?? '查看系统角色，维护自定义角色与权限。'}
         extra={
           <Can permission={PERMISSION_CODE.tenantRoleManage}>
-            <Button type="primary" onClick={() => setEditing('create')}>
+            <Button type="primary" onClick={() => setEditor({ type: 'create' })}>
               新建角色
             </Button>
           </Can>
@@ -180,12 +200,12 @@ export function RolesPage(props: PageProps) {
       />
 
       <Modal
-        title={editing === 'create' ? '新建角色' : '编辑角色'}
-        open={editing != null}
-        onCancel={() => setEditing(null)}
+        title={editor?.type === 'create' ? '新建角色' : '编辑角色'}
+        open={editor?.type === 'create' || editor?.type === 'edit'}
+        onCancel={() => setEditor(null)}
         footer={null}
         destroyOnHidden
-        width={640}
+        width={720}
       >
         <Form
           layout="vertical"
@@ -205,7 +225,7 @@ export function RolesPage(props: PageProps) {
             description?: string;
             permission_ids: number[];
           }) => {
-            if (editing === 'create') {
+            if (editor?.type === 'create') {
               createMutation.mutate({
                 name: values.name,
                 code: values.code ?? '',
@@ -227,7 +247,7 @@ export function RolesPage(props: PageProps) {
           <Form.Item name="name" label="名称" rules={[{ required: true, message: '请输入名称' }]}>
             <Input />
           </Form.Item>
-          {editing === 'create' ? (
+          {editor?.type === 'create' ? (
             <Form.Item name="code" label="编码" rules={[{ required: true, message: '请输入编码' }]}>
               <Input placeholder="如 DUTY" />
             </Form.Item>
@@ -236,22 +256,7 @@ export function RolesPage(props: PageProps) {
             <Input.TextArea rows={2} />
           </Form.Item>
           <Form.Item name="permission_ids" label="权限">
-            <Checkbox.Group className="w-full">
-              <div className="flex flex-col gap-3">
-                {grouped.map(([module, items]) => (
-                  <div key={module}>
-                    <p className="mb-1 font-medium">{module}</p>
-                    <div className="flex flex-wrap gap-2">
-                      {items.map((item) => (
-                        <Checkbox key={item.id} value={item.id}>
-                          {item.name}
-                        </Checkbox>
-                      ))}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </Checkbox.Group>
+            <PermissionCheckboxGroups items={permissionsQuery.data ?? []} />
           </Form.Item>
           <Button
             type="primary"
@@ -263,6 +268,58 @@ export function RolesPage(props: PageProps) {
           </Button>
         </Form>
       </Modal>
+
+      <Modal
+        title={permRole ? `配置权限 · ${permRole.name}` : '配置权限'}
+        open={editor?.type === 'perms'}
+        onCancel={() => setEditor(null)}
+        footer={null}
+        destroyOnHidden
+        width={720}
+      >
+        {permRole ? (
+          <Form
+            layout="vertical"
+            initialValues={{ permission_ids: permRole.permissions.map((item) => item.id) }}
+            onFinish={(values: { permission_ids: number[] }) =>
+              permsMutation.mutate({
+                roleId: permRole.id,
+                permission_ids: values.permission_ids ?? [],
+              })
+            }
+          >
+            {permRole.is_system ? (
+              <p className="mb-3 text-sm text-slate-500">系统预置角色。可以调整业务权限，不能删除。</p>
+            ) : null}
+            <Form.Item name="permission_ids" label="权限">
+              <PermissionCheckboxGroups items={permissionsQuery.data ?? []} />
+            </Form.Item>
+            <Button type="primary" htmlType="submit" loading={permsMutation.isPending} block>
+              保存
+            </Button>
+          </Form>
+        ) : null}
+      </Modal>
+
+      <Drawer title={viewing ? `角色详情 · ${viewing.name}` : '角色详情'} open={Boolean(viewing)} onClose={() => setViewing(null)} width={480}>
+        {viewing ? (
+          <div className="space-y-2 text-sm">
+            <p>名称：{viewing.name}</p>
+            <p>编码：{viewing.code}</p>
+            <p>类型：{viewing.is_system ? '系统预置角色' : '自定义'}</p>
+            <p>成员数：{viewing.member_count}</p>
+            <p>说明：{viewing.description || '-'}</p>
+            <p>权限：</p>
+            <ul className="m-0 list-disc pl-5">
+              {viewing.permissions.map((item) => (
+                <li key={item.code}>
+                  {item.name}（{item.code}）
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
+      </Drawer>
     </div>
   );
 }

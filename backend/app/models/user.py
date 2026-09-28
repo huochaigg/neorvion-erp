@@ -2,7 +2,7 @@ from datetime import datetime
 from enum import StrEnum
 from typing import TYPE_CHECKING
 
-from sqlalchemy import BigInteger, DateTime, String
+from sqlalchemy import BigInteger, Boolean, DateTime, String, false
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -32,5 +32,11 @@ class User(TimestampMixin, Base):
         server_default=UserStatus.ACTIVE.value,
     )
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    # 管理员代建账号时为 True。明文临时密码只在创建响应里出现一次，库里只有哈希。
+    must_change_password: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        server_default=false(),
+    )
     # 一个用户可加入多个租户；关系行在 tenant_members，不要在本表写死 tenant_id。
     memberships: Mapped[list["TenantMember"]] = relationship(back_populates="user")

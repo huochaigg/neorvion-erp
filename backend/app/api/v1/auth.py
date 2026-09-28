@@ -3,7 +3,13 @@ from fastapi import APIRouter, Request, Response
 from app.api.deps import CurrentUser, DbSession
 from app.core.config import settings
 from app.core.exceptions import AppError
-from app.schemas.auth import LoginRequest, RegisterRequest, TokenResponse, UserOut
+from app.schemas.auth import (
+    ChangePasswordRequest,
+    LoginRequest,
+    RegisterRequest,
+    TokenResponse,
+    UserOut,
+)
 from app.schemas.common import ApiResponse, ok
 from app.services.auth import AuthService
 
@@ -124,3 +130,26 @@ def logout(request: Request, session: DbSession, response: Response) -> ApiRespo
 def me(user: CurrentUser, session: DbSession) -> ApiResponse[UserOut]:
     """返回当前 Access Token 对应的用户资料。需要登录。"""
     return ok(AuthService(session).get_profile(user))
+
+
+@router.post(
+    "/change-password",
+    response_model=ApiResponse[UserOut],
+    summary="修改密码",
+)
+def change_password(
+    payload: ChangePasswordRequest,
+    user: CurrentUser,
+    session: DbSession,
+) -> ApiResponse[UserOut]:
+    """登录用户修改密码。临时账号必须走本接口后才能访问业务。"""
+    profile = AuthService(session).change_password(
+        user=user,
+        encrypted_old_password=payload.encrypted_old_password,
+        old_key_id=payload.old_key_id,
+        old_challenge_id=payload.old_challenge_id,
+        encrypted_new_password=payload.encrypted_new_password,
+        new_key_id=payload.new_key_id,
+        new_challenge_id=payload.new_challenge_id,
+    )
+    return ok(profile, "密码已更新")

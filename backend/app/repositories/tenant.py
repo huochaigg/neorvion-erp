@@ -150,3 +150,7 @@ class TenantMemberRepository(BaseRepository):
     def add(self, member: TenantMember) -> TenantMember:
         self.session.add(member)
         return member
+
+    def delete(self, member: TenantMember) -> None:
+        """只删当前租户的成员行。不要在这里 session.delete(user)，User 是全局账号。"""
+        self.session.delete(member)

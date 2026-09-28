@@ -3,6 +3,7 @@ export const SHELL_ROUTES = {
   home: '/',
   login: '/login',
   register: '/register',
+  changePassword: '/change-password',
   workspaces: '/workspaces',
   workspaceCreate: '/workspaces/create',
   erp: '/erp',

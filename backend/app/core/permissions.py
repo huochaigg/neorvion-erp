@@ -47,7 +47,7 @@ PERMISSION_CATALOG: tuple[tuple[str, str, str, str], ...] = (
     (PermissionCode.TENANT_READ, "查看企业", "tenant", "查看当前企业基本信息"),
     (PermissionCode.TENANT_UPDATE, "更新企业", "tenant", "修改当前企业名称等信息"),
     (PermissionCode.TENANT_MEMBER_READ, "查看成员", "tenant", "查看当前企业成员列表"),
-    (PermissionCode.TENANT_MEMBER_MANAGE, "管理成员", "tenant", "添加、启用或禁用成员"),
+    (PermissionCode.TENANT_MEMBER_MANAGE, "管理成员", "tenant", "添加、启用、禁用或移除成员"),
     (PermissionCode.TENANT_ROLE_READ, "查看角色", "tenant", "查看角色与权限定义"),
     (PermissionCode.TENANT_ROLE_MANAGE, "管理角色", "tenant", "创建、修改或删除自定义角色"),
     (PermissionCode.PRODUCT_READ, "查看商品", "product", "预留给商品模块"),
@@ -124,6 +124,19 @@ DEFAULT_ROLE_TEMPLATES: tuple[tuple[str, str, str, tuple[str, ...]], ...] = (
         "只能查看，不能改数据或管理成员",
         _READ_CODES,
     ),
+)
+
+
+# ADMIN 允许调整业务权限，但不能拿掉租户管理能力，否则企业会失去后台入口。
+ADMIN_REQUIRED_PERMISSION_CODES: frozenset[str] = frozenset(
+    {
+        PermissionCode.TENANT_READ,
+        PermissionCode.TENANT_UPDATE,
+        PermissionCode.TENANT_MEMBER_READ,
+        PermissionCode.TENANT_MEMBER_MANAGE,
+        PermissionCode.TENANT_ROLE_READ,
+        PermissionCode.TENANT_ROLE_MANAGE,
+    }
 )
 
 

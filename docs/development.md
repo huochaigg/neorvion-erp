@@ -1,6 +1,6 @@
 # 开发说明
 
-当前里程碑：V2.3.3（动态权限菜单、页面守卫与按钮权限）。
+当前里程碑：V2.3.4（RBAC 管理后台完整闭环）。
 
 ## 前置
 
@@ -90,11 +90,13 @@ pnpm test
 14. 离开 `/erp` 再进入应恢复上次 ERP 页面；在 ERP 内切换企业后，保活探测输入应被清空，且 Network 里后续请求的 `X-Tenant-ID` 变为新企业。
 15. 登录后创建企业，`GET /api/v1/roles`（带头 `X-Tenant-ID`）应看到 OWNER / ADMIN / OPERATOR / WAREHOUSE / VIEWER。
 16. 未登录访问 `/api/v1/roles` 返回 401；普通成员 `POST /api/v1/roles` 返回 403。
-17. ERP 侧栏「系统管理」可打开成员列表；OWNER 可用邮箱添加已注册用户并分配角色。
-18. 无 `tenant:member:manage` 的成员看不到添加/改角色/禁用按钮；直接调接口仍 403。
-19. 切换企业后成员/角色列表变为新租户；`/system/members/:id` 会回到成员列表。
+17. ERP 侧栏「系统管理」可打开成员、角色、权限目录；OWNER 可添加已有账号或创建新账号。
+18. 无 `tenant:member:manage` 的成员看不到添加/改角色/禁用/移除按钮；直接调接口仍 403。
+19. 切换企业后成员/角色/权限目录变为新租户；`/system/members/:id` 会回到成员列表。
+20. 代建账号成功后只展示一次临时密码；该账号登录后必须先改密（`40350`）。
+21. 保存角色权限后，当前用户菜单和按钮随 `my-permissions` 立即更新。
 
-多租户说明见 `docs/multi-tenancy.md`。RBAC 见 `docs/rbac.md`。V2.3.3 见 `docs/versions/v2.3.3.md`。路由配置说明见 `docs/routing.md`。认证流程见 `docs/auth.md`。
+多租户说明见 `docs/multi-tenancy.md`。RBAC 见 `docs/rbac.md`。V2.3.4 见 `docs/versions/v2.3.4.md`。路由配置说明见 `docs/routing.md`。认证流程见 `docs/auth.md`。
 
 ## 浏览器进 debugger
 

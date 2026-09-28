@@ -10,6 +10,7 @@ describe('shouldAttachTenantHeader', () => {
     assert.equal(shouldAttachTenantHeader('POST', '/api/v1/auth/refresh'), false);
     assert.equal(shouldAttachTenantHeader('POST', '/api/v1/auth/logout'), false);
     assert.equal(shouldAttachTenantHeader('GET', '/api/v1/auth/me'), false);
+    assert.equal(shouldAttachTenantHeader('POST', '/api/v1/auth/change-password'), false);
     assert.equal(shouldAttachTenantHeader('POST', '/api/v1/tenants'), false);
     assert.equal(shouldAttachTenantHeader('GET', '/api/v1/tenants'), false);
     assert.equal(shouldAttachTenantHeader('GET', '/api/v1/health'), false);

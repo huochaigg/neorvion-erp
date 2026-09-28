@@ -20,6 +20,7 @@ const ownerRole: RoleInfo = {
   created_at: '',
   updated_at: '',
   permissions: [],
+  member_count: 0,
 };
 
 const adminRole: RoleInfo = { ...ownerRole, id: 2, name: '管理员', code: 'ADMIN' };

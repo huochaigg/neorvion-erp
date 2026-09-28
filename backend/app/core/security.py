@@ -1,5 +1,7 @@
 """密码哈希与 JWT 签发/校验。JWT 密钥与 RSA 传输密钥必须分开。"""
 
+import secrets
+import string
 from datetime import UTC, datetime, timedelta
 from typing import Any, Literal
 from uuid import uuid4
@@ -15,6 +17,20 @@ from app.core.exceptions import AppError
 _password_hasher = PasswordHasher()
 
 TokenType = Literal["access", "refresh"]
+
+
+def generate_temporary_password(*, length: int = 12) -> str:
+    """生成一次性临时密码。
+
+    使用 secrets 而不是 random：后者可预测，临时密码一旦泄露就能登录。
+    循环直到同时含字母和数字，满足现有密码规则，避免管理员代建后用户无法登录。
+    返回值只交给调用方放进创建成功响应，禁止写日志、禁止入库明文。
+    """
+    alphabet = string.ascii_letters + string.digits
+    while True:
+        raw = "".join(secrets.choice(alphabet) for _ in range(length))
+        if any(char.isalpha() for char in raw) and any(char.isdigit() for char in raw):
+            return raw
 
 
 def hash_password(plain_password: str) -> str:

@@ -5,6 +5,7 @@ export interface UserProfile {
   status: string;
   created_at: string;
   last_login_at: string | null;
+  must_change_password: boolean;
 }
 
 export interface EncryptedPasswordPayload {
