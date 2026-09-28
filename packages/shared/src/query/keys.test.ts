@@ -17,6 +17,7 @@ describe('query keys', () => {
   it('租户业务 key 以 tenantId 隔离，用户资料不带租户', () => {
     assert.notDeepEqual(healthQueryKey(1), healthQueryKey(2));
     assert.notDeepEqual(productsQueryKey(1), productsQueryKey(2));
+    assert.notDeepEqual(productsQueryKey(1, { q: 'a' }), productsQueryKey(1, { q: 'b' }));
     assert.notDeepEqual(ordersQueryKey(1), ordersQueryKey(2));
     assert.notDeepEqual(tenantMembersQueryKey(1), tenantMembersQueryKey(2));
     assert.notDeepEqual(

@@ -34,8 +34,10 @@ describe('动态权限菜单与页面守卫', () => {
     const paths = menuPaths(filterMenuRoutes(routes, viewer));
     assert.equal(paths.includes('/dashboard'), true);
     assert.equal(paths.includes('/products'), true);
-    assert.equal(paths.includes('/products/archive'), true);
     assert.equal(paths.includes('/products/list'), true);
+    assert.equal(paths.includes('/product-categories'), true);
+    assert.equal(paths.includes('/brands'), true);
+    assert.equal(paths.includes('/products/archive'), false);
     assert.equal(paths.includes('/system'), true);
     assert.equal(paths.includes('/system/members'), true);
     assert.equal(paths.includes('/system/roles'), true);
@@ -93,6 +95,11 @@ describe('动态权限菜单与页面守卫', () => {
     const createMatch = matchRoute(routes, '/products/create');
     assert.equal(pageAllowsAccess(createMatch, [PERMISSION_CODE.productRead]), false);
     assert.equal(pageAllowsAccess(createMatch, [PERMISSION_CODE.productCreate]), true);
+    const categoryMatch = matchRoute(routes, '/product-categories');
+    assert.equal(pageAllowsAccess(categoryMatch, []), false);
+    assert.equal(pageAllowsAccess(categoryMatch, [PERMISSION_CODE.productRead]), true);
+    const brandMatch = matchRoute(routes, '/brands');
+    assert.equal(pageAllowsAccess(brandMatch, [PERMISSION_CODE.productRead]), true);
   });
 
   it('租户 A 与 B 权限独立：仓库身份看不到系统管理', () => {

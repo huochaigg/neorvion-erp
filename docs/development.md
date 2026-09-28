@@ -1,6 +1,6 @@
 # 开发说明
 
-当前里程碑：V2.3.5（RBAC 管理体验完善，V2 权限基础设施收尾）。
+当前里程碑：V3（商品管理：类目 / 品牌 / SPU / SKU）。
 
 ## 前置
 
@@ -96,8 +96,12 @@ pnpm test
 20. 代建账号成功后只展示一次临时密码；该账号登录后必须先改密（`40350`）。
 21. 角色权限树保存后，当前用户菜单和按钮随 `my-permissions` 立即更新。DIRECTORY 节点不会被写成 Permission。
 22. 使用中的自定义角色删除会提示人数（`ROLE_IN_USE`）；系统角色后端拒绝删除。
+23. 登录并选择企业后，可进入「商品管理」创建类目、品牌、带多个 SKU 的商品；列表筛选和详情正常。
+24. 有子类目或已被商品使用的类目不能删除（`CATEGORY_HAS_CHILDREN` / `CATEGORY_IN_USE`）；使用中品牌不能删除（`BRAND_IN_USE`）。
+25. 切换企业后商品/类目/品牌变为新租户数据；无 `product:read` 看不到菜单，直接调接口仍 403。
+26. 无 `product:create` 看不到新建商品；无 `product:update` 看不到编辑；OPERATOR 默认不能删除类目/品牌。
 
-多租户说明见 `docs/multi-tenancy.md`。RBAC 见 `docs/rbac.md`。V2.3.5 见 `docs/versions/v2.3.5.md`。路由配置说明见 `docs/routing.md`。认证流程见 `docs/auth.md`。
+多租户说明见 `docs/multi-tenancy.md`。RBAC 见 `docs/rbac.md`。商品见 `docs/products.md`。V3 见 `docs/versions/v3.md`。路由配置说明见 `docs/routing.md`。认证流程见 `docs/auth.md`。
 
 ## 浏览器进 debugger
 

@@ -88,3 +88,19 @@ MemberRemoveContext = Annotated[
     TenantContext,
     Depends(require_permission(PermissionCode.TENANT_MEMBER_REMOVE)),
 ]
+ProductReadContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.PRODUCT_READ)),
+]
+ProductCreateContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.PRODUCT_CREATE)),
+]
+ProductUpdateContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.PRODUCT_UPDATE)),
+]
+ProductDeleteContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.PRODUCT_DELETE)),
+]
