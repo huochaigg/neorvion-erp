@@ -7,6 +7,8 @@ import {
   myTenantsQueryKey,
   ordersQueryKey,
   productsQueryKey,
+  tenantMembersQueryKey,
+  tenantRolesQueryKey,
   tenantIdFromQueryKey,
 } from './keys';
 
@@ -15,6 +17,12 @@ describe('query keys', () => {
     assert.notDeepEqual(healthQueryKey(1), healthQueryKey(2));
     assert.notDeepEqual(productsQueryKey(1), productsQueryKey(2));
     assert.notDeepEqual(ordersQueryKey(1), ordersQueryKey(2));
+    assert.notDeepEqual(tenantMembersQueryKey(1), tenantMembersQueryKey(2));
+    assert.notDeepEqual(
+      tenantMembersQueryKey(1, { page: 1, pageSize: 20 }),
+      tenantMembersQueryKey(1, { page: 2, pageSize: 20 }),
+    );
+    assert.notDeepEqual(tenantRolesQueryKey(1), tenantRolesQueryKey(2));
     assert.equal(isTenantScopedQueryKey(healthQueryKey(1)), true);
     assert.equal(tenantIdFromQueryKey(healthQueryKey(9)), 9);
     assert.equal(isTenantScopedQueryKey(currentUserQueryKey()), false);

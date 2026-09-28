@@ -11,8 +11,28 @@ export type {
   TenantChangedPayload,
 } from './types/bridge';
 export { SHELL_EVENTS, MICRO_EVENTS } from './types/bridge';
-export type { Tenant, TenantContextInfo, TenantMember, TenantCreatePayload } from './types/tenant';
-export { TENANT_HEADER, TENANT_STATUS, MEMBER_STATUS, TENANT_ERROR_CODE } from './types/tenant';
+export type {
+  Tenant,
+  TenantContextInfo,
+  TenantMember,
+  TenantMemberList,
+  TenantMemberDetail,
+  TenantMemberRole,
+  TenantCreatePayload,
+  MemberCreatePayload,
+  MemberRolesUpdatePayload,
+  RoleInfo,
+  RoleCreatePayload,
+  RoleUpdatePayload,
+  PermissionInfo,
+} from './types/tenant';
+export {
+  TENANT_HEADER,
+  TENANT_STATUS,
+  MEMBER_STATUS,
+  PERMISSION_CODE,
+  TENANT_ERROR_CODE,
+} from './types/tenant';
 export {
   composePath,
   childPathFromHost,
@@ -25,6 +45,9 @@ export {
   healthQueryKey,
   tenantDetailQueryKey,
   tenantMembersQueryKey,
+  tenantMemberQueryKey,
+  tenantRolesQueryKey,
+  tenantPermissionsQueryKey,
   tenantContextQueryKey,
   productsQueryKey,
   ordersQueryKey,
@@ -35,6 +58,13 @@ export {
 export { isUsableTenant, listUsableTenants, pickTenantSelection, lastTenantStorageKey } from './tenant/access';
 export type { TenantPickResult } from './tenant/access';
 export { safePathAfterTenantChange } from './tenant/erp-route';
+export {
+  hasPermission,
+  canManageMembers,
+  canManageRoles,
+  grantableRoles,
+  memberRoleNames,
+} from './tenant/permissions';
 export {
   normalizeRequestPath,
   shouldAttachTenantHeader,

@@ -29,6 +29,7 @@ class AuthorizationService:
         )
 
     def require_all(self, context: TenantContext, codes: Sequence[str]) -> None:
+        """当前成员必须具备传入的全部权限，少一个就 403"""
         owned = self.permission_codes(context)
         self._assert_known(codes)
         missing = [code for code in codes if code not in owned]
@@ -36,6 +37,7 @@ class AuthorizationService:
             raise AppError("缺少权限", code=40320, status_code=403)
 
     def require_any(self, context: TenantContext, codes: Sequence[str]) -> None:
+        """当前成员必须至少具备传入的其中一个权限，一个都没有就 403"""
         owned = self.permission_codes(context)
         self._assert_known(codes)
         if not any(code in owned for code in codes):

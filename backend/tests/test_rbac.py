@@ -30,7 +30,7 @@ def _add_member(client: TestClient, owner_token: str, tenant_id: int, user_id: i
     response = client.post(
         f"/api/v1/tenants/{tenant_id}/members",
         json={"user_id": user_id},
-        headers=auth_header(owner_token),
+        headers=auth_header(owner_token, tenant_id),
     )
     assert response.status_code == 200, response.text
     return int(response.json()["data"]["id"])
@@ -256,7 +256,7 @@ def test_disabled_member_cannot_pass_permission_check(client: TestClient) -> Non
     patched = client.patch(
         f"/api/v1/tenants/{tenant_id}/members/{member_row_id}",
         json={"status": MemberStatus.DISABLED.value},
-        headers=auth_header(owner),
+        headers=auth_header(owner, tenant_id),
     )
     assert patched.status_code == 200
     response = client.get("/api/v1/roles", headers=auth_header(member_token, tenant_id))
@@ -403,7 +403,7 @@ def test_cannot_delete_in_use_role_or_last_owner(client: TestClient) -> None:
     disabled = client.patch(
         f"/api/v1/tenants/{tenant_id}/members/{member_id}",
         json={"status": MemberStatus.DISABLED.value},
-        headers=auth_header(owner),
+        headers=auth_header(owner, tenant_id),
     )
     assert disabled.status_code == 400
     assert disabled.json()["code"] == 40034

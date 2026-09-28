@@ -6,6 +6,14 @@ export const PAGE_COMPONENTS: Record<PageKey, LazyExoticComponent<ComponentType<
     const module = await import('@/pages/DashboardPage');
     return { default: module.DashboardPage };
   }),
+  Members: lazy(async () => {
+    const module = await import('@/pages/system/MembersPage');
+    return { default: module.MembersPage };
+  }),
+  Roles: lazy(async () => {
+    const module = await import('@/pages/system/RolesPage');
+    return { default: module.RolesPage };
+  }),
   Placeholder: lazy(async () => {
     const module = await import('@/pages/PlaceholderPage');
     return { default: module.PlaceholderPage };

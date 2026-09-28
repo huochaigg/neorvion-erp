@@ -18,8 +18,23 @@ export function tenantDetailQueryKey(tenantId: number | null) {
   return ['tenant', tenantId, 'detail'] as const;
 }
 
-export function tenantMembersQueryKey(tenantId: number | null) {
-  return ['tenant', tenantId, 'members'] as const;
+export function tenantMembersQueryKey(
+  tenantId: number | null,
+  filters?: { q?: string; status?: string; page?: number; pageSize?: number },
+) {
+  return ['tenant', tenantId, 'members', filters ?? {}] as const;
+}
+
+export function tenantMemberQueryKey(tenantId: number | null, memberId: number | null) {
+  return ['tenant', tenantId, 'member', memberId] as const;
+}
+
+export function tenantRolesQueryKey(tenantId: number | null) {
+  return ['tenant', tenantId, 'roles'] as const;
+}
+
+export function tenantPermissionsQueryKey(tenantId: number | null) {
+  return ['tenant', tenantId, 'permissions'] as const;
 }
 
 export function tenantContextQueryKey(tenantId: number | null) {

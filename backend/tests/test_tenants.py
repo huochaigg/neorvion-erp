@@ -31,9 +31,12 @@ def test_login_user_can_create_tenant_and_owner_membership(client: TestClient) -
     assert data["code"] == "acme-one"
     assert data["is_owner"] is True
     assert data["my_role"] == "OWNER"
-    members = client.get(f"/api/v1/tenants/{data['id']}/members", headers=auth_header(token))
+    members = client.get(
+        f"/api/v1/tenants/{data['id']}/members",
+        headers=auth_header(token, data["id"]),
+    )
     assert members.status_code == 200
-    rows = members.json()["data"]
+    rows = members.json()["data"]["items"]
     assert len(rows) == 1
     assert rows[0]["user_id"] == user_id
     assert rows[0]["role"] == "OWNER"
@@ -80,13 +83,13 @@ def test_cannot_join_same_tenant_twice(client: TestClient) -> None:
     first = client.post(
         f"/api/v1/tenants/{tenant_id}/members",
         json={"user_id": member_id},
-        headers=auth_header(owner_token),
+        headers=auth_header(owner_token, tenant_id),
     )
     assert first.status_code == 200, first.text
     second = client.post(
         f"/api/v1/tenants/{tenant_id}/members",
         json={"user_id": member_id},
-        headers=auth_header(owner_token),
+        headers=auth_header(owner_token, tenant_id),
     )
     assert second.status_code == 409
     assert second.json()["code"] == 40911
@@ -111,7 +114,10 @@ def test_cannot_read_foreign_tenant_or_members(client: TestClient) -> None:
     detail = client.get(f"/api/v1/tenants/{bob_tenant}", headers=auth_header(alice))
     assert detail.status_code == 404
     assert detail.json()["code"] == 40410
-    members = client.get(f"/api/v1/tenants/{bob_tenant}/members", headers=auth_header(alice))
+    members = client.get(
+        f"/api/v1/tenants/{bob_tenant}/members",
+        headers=auth_header(alice, bob_tenant),
+    )
     assert members.status_code == 404
     assert members.json()["message"] == "租户不存在或不可访问"
 
@@ -129,6 +135,7 @@ def test_invalid_tenant_header_cannot_bypass_membership(client: TestClient) -> N
     assert ok.status_code == 200
     assert ok.json()["data"]["tenant_id"] == tenant_id
     assert ok.json()["data"]["is_owner"] is True
+    assert "tenant:member:manage" in ok.json()["data"]["permission_codes"]
 
 
 def test_disabled_member_cannot_enter_tenant(client: TestClient) -> None:
@@ -138,19 +145,22 @@ def test_disabled_member_cannot_enter_tenant(client: TestClient) -> None:
     added = client.post(
         f"/api/v1/tenants/{tenant_id}/members",
         json={"user_id": member_id},
-        headers=auth_header(owner),
+        headers=auth_header(owner, tenant_id),
     )
     member_row_id = added.json()["data"]["id"]
     patched = client.patch(
         f"/api/v1/tenants/{tenant_id}/members/{member_row_id}",
         json={"status": MemberStatus.DISABLED.value},
-        headers=auth_header(owner),
+        headers=auth_header(owner, tenant_id),
     )
     assert patched.status_code == 200
     context = client.get("/api/v1/tenants/current", headers=auth_header(member_token, tenant_id))
     assert context.status_code == 403
     assert context.json()["code"] == 40310
-    members = client.get(f"/api/v1/tenants/{tenant_id}/members", headers=auth_header(member_token))
+    members = client.get(
+        f"/api/v1/tenants/{tenant_id}/members",
+        headers=auth_header(member_token, tenant_id),
+    )
     assert members.status_code == 403
 
 
@@ -179,13 +189,13 @@ def test_owner_can_manage_members_regular_member_cannot(client: TestClient) -> N
     added = client.post(
         f"/api/v1/tenants/{tenant_id}/members",
         json={"user_id": member_id},
-        headers=auth_header(owner),
+        headers=auth_header(owner, tenant_id),
     )
     assert added.status_code == 200
     forbidden = client.post(
         f"/api/v1/tenants/{tenant_id}/members",
         json={"user_id": outsider_id},
-        headers=auth_header(member_token),
+        headers=auth_header(member_token, tenant_id),
     )
     assert forbidden.status_code == 403
     assert forbidden.json()["code"] == 40320
@@ -193,7 +203,7 @@ def test_owner_can_manage_members_regular_member_cannot(client: TestClient) -> N
     cross = client.post(
         f"/api/v1/tenants/{other_tenant}/members",
         json={"user_id": member_id},
-        headers=auth_header(owner),
+        headers=auth_header(owner, tenant_id),
     )
     assert cross.status_code == 404
 

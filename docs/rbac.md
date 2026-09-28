@@ -1,8 +1,6 @@
-# RBAC 权限模型（V2.3.1）
+# RBAC 权限模型（V2.3.1 + V2.3.2）
 
-本阶段只做 **数据库模型、权限目录、默认角色、FastAPI 权限 Depends 和角色管理 API**。
-
-不做：前端权限菜单、成员角色分配页面、OWNER 转移流程、商品/订单/库存业务。
+V2.3.1 完成后端权限基础设施。V2.3.2 完成企业成员授权与 ERP 管理页面。详见 `docs/versions/v2.3.2.md`。
 
 ## 关系：User、TenantMember、Role、Permission
 
@@ -139,6 +137,21 @@ OWNER 转移是独立业务流程，本版本不做。
 | DELETE | `/api/v1/roles/{role_id}` | `tenant:role:manage` |
 
 系统角色修改/删除 → `40040`。角色仍被成员使用 → `40041`。跨租户 `role_id` → `40420`。
+
+成员管理（路径参数 `tenant_id` 必须等于 `X-Tenant-ID`）：
+
+| 方法 | 路径 | 权限 |
+| --- | --- | --- |
+| GET | `/api/v1/tenants/{tenant_id}/members` | `tenant:member:read` |
+| POST | `/api/v1/tenants/{tenant_id}/members` | `tenant:member:manage` |
+| GET | `/api/v1/tenants/{tenant_id}/members/{member_id}` | `tenant:member:read` |
+| GET | `/api/v1/tenants/{tenant_id}/members/{member_id}/permissions` | `tenant:member:read` |
+| PUT | `/api/v1/tenants/{tenant_id}/members/{member_id}/roles` | `tenant:member:manage` |
+| PATCH | `/api/v1/tenants/{tenant_id}/members/{member_id}` | `tenant:member:manage` |
+
+`GET /api/v1/tenants/current` 现在返回 `permission_codes`，每次查库，角色变更后下一次请求立即生效。
+
+添加成员请传已注册用户的 `email` 和可选 `role_ids`。不能授予 OWNER。默认角色为 VIEWER。
 
 幂等灌入权限目录（不删已有行）：
 

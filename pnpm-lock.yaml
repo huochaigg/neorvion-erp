@@ -188,6 +188,9 @@ importers:
       vite:
         specifier: ^8.3.0
         version: 8.3.0(@types/node@24.13.6)(jiti@2.7.0)(sass@1.105.0)
+      vitest:
+        specifier: ^5.0.2
+        version: 5.0.2(@types/node@24.13.6)(vite@8.3.0(@types/node@24.13.6)(jiti@2.7.0)(sass@1.105.0))
 
   apps/shell:
     dependencies:

@@ -12,7 +12,7 @@
 - `member_roles`：成员与角色；复合外键保证同一租户
 - `role_permissions`：角色与权限
 
-V2.3.2 再做成员角色分配页面与 OWNER 转移。M3 起创建商品、仓库、库存等表。所有业务表必须包含 `tenant_id`（`TenantMixin`），唯一约束必须带上租户，例如：
+V2.3.2 完成成员角色分配页面，不新增表。OWNER 转移留到后续独立流程。M3 起创建商品、仓库、库存等表。所有业务表必须包含 `tenant_id`（`TenantMixin`），唯一约束必须带上租户，例如：
 
 ```sql
 UNIQUE (tenant_id, sku_code)

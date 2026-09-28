@@ -19,6 +19,34 @@ export interface TenantContextInfo {
   member_id: number;
   is_owner: boolean;
   role: string;
+  permission_codes: string[];
+}
+
+export interface TenantMemberRole {
+  id: number;
+  code: string;
+  name: string;
+  is_system: boolean;
+}
+
+export interface PermissionInfo {
+  id: number;
+  code: string;
+  name: string;
+  module: string;
+  description: string;
+}
+
+export interface RoleInfo {
+  id: number;
+  tenant_id: number;
+  name: string;
+  code: string;
+  description: string;
+  is_system: boolean;
+  created_at: string;
+  updated_at: string;
+  permissions: PermissionInfo[];
 }
 
 export interface TenantMember {
@@ -30,11 +58,46 @@ export interface TenantMember {
   joined_at: string;
   display_name: string;
   email: string;
+  is_owner: boolean;
+  roles: TenantMemberRole[];
+}
+
+export interface TenantMemberList {
+  items: TenantMember[];
+  total: number;
+  page: number;
+  page_size: number;
+}
+
+export interface TenantMemberDetail extends TenantMember {
+  permission_codes: string[];
+  permissions: PermissionInfo[];
 }
 
 export interface TenantCreatePayload {
   name: string;
   code?: string | null;
+}
+
+export interface MemberCreatePayload {
+  email: string;
+  role_ids?: number[];
+}
+
+export interface MemberRolesUpdatePayload {
+  role_ids: number[];
+}
+
+export interface RoleCreatePayload {
+  name: string;
+  code: string;
+  description?: string;
+  permission_ids?: number[];
+}
+
+export interface RoleUpdatePayload {
+  name?: string;
+  description?: string;
 }
 
 export const TENANT_HEADER = 'X-Tenant-ID';
@@ -47,6 +110,13 @@ export const TENANT_STATUS = {
 export const MEMBER_STATUS = {
   active: 'ACTIVE',
   disabled: 'DISABLED',
+} as const;
+
+export const PERMISSION_CODE = {
+  tenantMemberRead: 'tenant:member:read',
+  tenantMemberManage: 'tenant:member:manage',
+  tenantRoleRead: 'tenant:role:read',
+  tenantRoleManage: 'tenant:role:manage',
 } as const;
 
 export const TENANT_ERROR_CODE = {

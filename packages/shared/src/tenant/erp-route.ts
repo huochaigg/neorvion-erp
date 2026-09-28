@@ -3,6 +3,7 @@ const RESOURCE_FALLBACKS: ReadonlyArray<{ pattern: RegExp; fallback: string }> =
   { pattern: /^\/products\/\d+(\/edit)?\/?$/, fallback: '/products/list' },
   { pattern: /^\/orders\/\d+(\/.*)?$/, fallback: '/orders' },
   { pattern: /^\/inventory\/\d+(\/.*)?$/, fallback: '/inventory/list' },
+  { pattern: /^\/system\/members\/\d+\/?$/, fallback: '/system/members' },
 ];
 
 export function safePathAfterTenantChange(pathname: string): string | null {

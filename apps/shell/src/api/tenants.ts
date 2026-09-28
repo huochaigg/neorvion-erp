@@ -1,4 +1,10 @@
-import type { ApiResponse, Tenant, TenantContextInfo, TenantCreatePayload, TenantMember } from '@neorvion/shared';
+import type {
+  ApiResponse,
+  Tenant,
+  TenantContextInfo,
+  TenantCreatePayload,
+  TenantMemberList,
+} from '@neorvion/shared';
 import { apiClient, unwrapApi } from './client';
 
 export function fetchMyTenants(signal?: AbortSignal) {
@@ -15,7 +21,7 @@ export function fetchTenant(tenantId: number, signal?: AbortSignal) {
 
 export function fetchTenantMembers(tenantId: number, signal?: AbortSignal) {
   return unwrapApi(
-    apiClient.get<ApiResponse<TenantMember[]>>(`/api/v1/tenants/${tenantId}/members`, { signal }),
+    apiClient.get<ApiResponse<TenantMemberList>>(`/api/v1/tenants/${tenantId}/members`, { signal }),
   );
 }
 

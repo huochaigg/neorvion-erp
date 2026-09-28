@@ -3,9 +3,10 @@ export type IconName =
   | 'AppstoreOutlined'
   | 'DatabaseOutlined'
   | 'ShopOutlined'
-  | 'ShoppingCartOutlined';
+  | 'ShoppingCartOutlined'
+  | 'SettingOutlined';
 
-export type PageKey = 'Dashboard' | 'Placeholder';
+export type PageKey = 'Dashboard' | 'Placeholder' | 'Members' | 'Roles';
 
 export interface AppRoute {
   path: string;

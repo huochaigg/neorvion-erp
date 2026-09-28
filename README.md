@@ -2,7 +2,7 @@
 
 多租户跨境电商 ERP。当前仓库按里程碑持续迭代，**不要为每个版本重建项目**。
 
-当前里程碑：**V2.3.1**。
+当前里程碑：**V2.3.2**。
 
 ## 技术栈
 
@@ -118,6 +118,13 @@ pnpm --filter @neorvion/erp build
 pnpm test
 ```
 
+## V2.3.2
+
+- 企业成员管理闭环：按邮箱添加已注册用户、分配多个角色、启停成员
+- ERP「系统管理」：成员管理、角色管理页面；按钮按权限编码控制
+- 成员角色替换使用行锁；OWNER 保护仍在后端强制执行
+- 版本文档：`docs/versions/v2.3.2.md`
+
 ## V2.3.1
 
 - RBAC：`permissions` / `roles` / `member_roles` / `role_permissions`
@@ -168,6 +175,6 @@ pnpm test
 
 ## 尚未开始
 
-完整前端权限菜单、OWNER 转移、商品库存、采购、销售订单。
+完整菜单权限组件、OWNER 转移、商品库存、采购、销售订单。
 
-更细的说明见 `docs/development.md`、`docs/architecture.md`、`docs/auth.md`、`docs/multi-tenancy.md`、`docs/rbac.md`、`docs/routing.md`、`docs/micro-frontend-integration.md` 与 `docs/micro-frontend-interview.md`。
+更细的说明见 `docs/development.md`、`docs/architecture.md`、`docs/auth.md`、`docs/multi-tenancy.md`、`docs/rbac.md`、`docs/versions/v2.3.2.md`、`docs/routing.md`、`docs/micro-frontend-integration.md` 与 `docs/micro-frontend-interview.md`。

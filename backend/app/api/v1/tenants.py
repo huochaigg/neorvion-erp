@@ -1,15 +1,20 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Query
 
 from app.api.deps import CurrentUser, DbSession, TenantContextDep
+from app.api.rbac_deps import MemberManageContext, MemberReadContext
 from app.schemas.common import ApiResponse, ok
 from app.schemas.tenant import (
     MemberCreate,
+    MemberDetailOut,
+    MemberListOut,
     MemberOut,
+    MemberRolesUpdate,
     MemberUpdate,
     TenantContextOut,
     TenantCreate,
     TenantOut,
 )
+from app.services.authorization import AuthorizationService
 from app.services.tenant import TenantService
 
 router = APIRouter(prefix="/tenants", tags=["tenants"])
@@ -37,8 +42,12 @@ def list_tenants(user: CurrentUser, session: DbSession) -> ApiResponse[list[Tena
 
 
 @router.get("/current", response_model=ApiResponse[TenantContextOut], summary="当前租户上下文")
-def current_tenant_context(context: TenantContextDep) -> ApiResponse[TenantContextOut]:
-    """需要 X-Tenant-ID，并校验成员关系。后续 ERP 业务接口同样注入该依赖。"""
+def current_tenant_context(
+    context: TenantContextDep,
+    session: DbSession,
+) -> ApiResponse[TenantContextOut]:
+    """需要 X-Tenant-ID。permission_codes 每次查库，角色变更后下一次请求立即生效。"""
+    codes = sorted(AuthorizationService(session).permission_codes(context))
     return ok(
         TenantContextOut(
             user_id=context.user_id,
@@ -46,6 +55,7 @@ def current_tenant_context(context: TenantContextDep) -> ApiResponse[TenantConte
             member_id=context.member_id,
             is_owner=context.is_owner,
             role=context.role,
+            permission_codes=codes,
         )
     )
 
@@ -61,15 +71,28 @@ def get_tenant(
 
 @router.get(
     "/{tenant_id}/members",
-    response_model=ApiResponse[list[MemberOut]],
+    response_model=ApiResponse[MemberListOut],
     summary="租户成员",
 )
 def list_members(
     tenant_id: int,
-    user: CurrentUser,
+    context: MemberReadContext,
     session: DbSession,
-) -> ApiResponse[list[MemberOut]]:
-    return ok(TenantService(session).list_members(user=user, tenant_id=tenant_id))
+    q: str | None = Query(default=None, max_length=64),
+    status: str | None = Query(default=None, max_length=16),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=100),
+) -> ApiResponse[MemberListOut]:
+    return ok(
+        TenantService(session).list_members(
+            context=context,
+            tenant_id=tenant_id,
+            q=q,
+            status=status,
+            page=page,
+            page_size=page_size,
+        )
+    )
 
 
 @router.post(
@@ -80,15 +103,78 @@ def list_members(
 def add_member(
     tenant_id: int,
     payload: MemberCreate,
-    user: CurrentUser,
+    context: MemberManageContext,
     session: DbSession,
 ) -> ApiResponse[MemberOut]:
     member = TenantService(session).add_member(
-        user=user,
+        context=context,
         tenant_id=tenant_id,
+        email=payload.email,
         target_user_id=payload.user_id,
+        role_ids=payload.role_ids,
     )
     return ok(member, "已加入")
+
+
+@router.get(
+    "/{tenant_id}/members/{member_id}",
+    response_model=ApiResponse[MemberDetailOut],
+    summary="成员详情",
+)
+def get_member(
+    tenant_id: int,
+    member_id: int,
+    context: MemberReadContext,
+    session: DbSession,
+) -> ApiResponse[MemberDetailOut]:
+    return ok(
+        TenantService(session).get_member(
+            context=context,
+            tenant_id=tenant_id,
+            member_id=member_id,
+        )
+    )
+
+
+@router.get(
+    "/{tenant_id}/members/{member_id}/permissions",
+    response_model=ApiResponse[MemberDetailOut],
+    summary="成员有效权限",
+)
+def get_member_permissions(
+    tenant_id: int,
+    member_id: int,
+    context: MemberReadContext,
+    session: DbSession,
+) -> ApiResponse[MemberDetailOut]:
+    return ok(
+        TenantService(session).get_member(
+            context=context,
+            tenant_id=tenant_id,
+            member_id=member_id,
+        )
+    )
+
+
+@router.put(
+    "/{tenant_id}/members/{member_id}/roles",
+    response_model=ApiResponse[MemberOut],
+    summary="修改成员角色",
+)
+def replace_member_roles(
+    tenant_id: int,
+    member_id: int,
+    payload: MemberRolesUpdate,
+    context: MemberManageContext,
+    session: DbSession,
+) -> ApiResponse[MemberOut]:
+    member = TenantService(session).replace_member_roles(
+        context=context,
+        tenant_id=tenant_id,
+        member_id=member_id,
+        role_ids=payload.role_ids,
+    )
+    return ok(member)
 
 
 @router.patch(
@@ -100,11 +186,11 @@ def update_member(
     tenant_id: int,
     member_id: int,
     payload: MemberUpdate,
-    user: CurrentUser,
+    context: MemberManageContext,
     session: DbSession,
 ) -> ApiResponse[MemberOut]:
     member = TenantService(session).update_member(
-        user=user,
+        context=context,
         tenant_id=tenant_id,
         member_id=member_id,
         status=payload.status,
