@@ -5,6 +5,7 @@ import {
   grantableRoles,
   tenantMemberQueryKey,
   tenantMembersQueryKey,
+  tenantMyPermissionsQueryKey,
   type RoleInfo,
 } from '@neorvion/shared';
 import { describe, it } from 'vitest';
@@ -44,6 +45,7 @@ describe('成员与角色页 UI 规则', () => {
   it('成员 Query Key 按租户和筛选隔离，避免切租户后看到旧名单', () => {
     assert.notDeepEqual(tenantMembersQueryKey(1), tenantMembersQueryKey(2));
     assert.notDeepEqual(tenantMemberQueryKey(1, 9), tenantMemberQueryKey(2, 9));
+    assert.notDeepEqual(tenantMyPermissionsQueryKey(1), tenantMyPermissionsQueryKey(2));
     assert.notDeepEqual(
       tenantMembersQueryKey(1, { q: 'a', page: 1, pageSize: 20 }),
       tenantMembersQueryKey(1, { q: 'b', page: 1, pageSize: 20 }),

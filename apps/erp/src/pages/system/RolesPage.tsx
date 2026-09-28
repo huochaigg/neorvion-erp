@@ -1,6 +1,7 @@
 import {
   ApiError,
-  canManageRoles,
+  PERMISSION_CODE,
+  tenantMyPermissionsQueryKey,
   tenantPermissionsQueryKey,
   tenantRolesQueryKey,
   type PermissionInfo,
@@ -18,8 +19,9 @@ import {
   updateRole,
   updateRolePermissions,
 } from '@/api/roles';
+import { Can } from '@/components/Can';
 import { PageHeader } from '@/components/PageHeader';
-import { useCurrentPermissions } from '@/hooks/useCurrentPermissions';
+import { usePermissions } from '@/hooks/usePermissions';
 import type { PageProps } from '@/router/types';
 
 function groupPermissions(items: PermissionInfo[]) {
@@ -35,8 +37,7 @@ function groupPermissions(items: PermissionInfo[]) {
 export function RolesPage(props: PageProps) {
   const { message, modal } = App.useApp();
   const queryClient = useQueryClient();
-  const { tenantId, permissionCodes } = useCurrentPermissions();
-  const manage = canManageRoles(permissionCodes);
+  const { tenantId } = usePermissions();
   const [editing, setEditing] = useState<RoleInfo | 'create' | null>(null);
 
   useEffect(() => {
@@ -64,6 +65,7 @@ export function RolesPage(props: PageProps) {
     void queryClient.invalidateQueries({ queryKey: ['tenant', tenantId, 'members'] });
     void queryClient.invalidateQueries({ queryKey: ['tenant', tenantId, 'member'] });
     void queryClient.invalidateQueries({ queryKey: ['tenant', tenantId, 'context'] });
+    void queryClient.invalidateQueries({ queryKey: tenantMyPermissionsQueryKey(tenantId) });
   };
 
   const createMutation = useMutation({
@@ -124,27 +126,31 @@ export function RolesPage(props: PageProps) {
       key: 'actions',
       render: (_, record) => (
         <Space>
-          {manage && !record.is_system ? (
-            <Button type="link" size="small" onClick={() => setEditing(record)}>
-              编辑
-            </Button>
-          ) : null}
-          {manage && !record.is_system ? (
-            <Button
-              type="link"
-              size="small"
-              danger
-              onClick={() => {
-                modal.confirm({
-                  title: `删除角色 ${record.name}？`,
-                  content: '仍被成员使用的角色不能删除。',
-                  onOk: () => deleteMutation.mutateAsync(record.id),
-                });
-              }}
-            >
-              删除
-            </Button>
-          ) : null}
+          {record.is_system ? null : (
+            <Can permission={PERMISSION_CODE.tenantRoleManage}>
+              <Button type="link" size="small" onClick={() => setEditing(record)}>
+                编辑
+              </Button>
+            </Can>
+          )}
+          {record.is_system ? null : (
+            <Can permission={PERMISSION_CODE.tenantRoleManage}>
+              <Button
+                type="link"
+                size="small"
+                danger
+                onClick={() => {
+                  modal.confirm({
+                    title: `删除角色 ${record.name}？`,
+                    content: '仍被成员使用的角色不能删除。',
+                    onOk: () => deleteMutation.mutateAsync(record.id),
+                  });
+                }}
+              >
+                删除
+              </Button>
+            </Can>
+          )}
         </Space>
       ),
     },
@@ -158,11 +164,11 @@ export function RolesPage(props: PageProps) {
         title={props.title ?? '角色管理'}
         description={props.description ?? '查看系统角色，维护自定义角色与权限。'}
         extra={
-          manage ? (
+          <Can permission={PERMISSION_CODE.tenantRoleManage}>
             <Button type="primary" onClick={() => setEditing('create')}>
               新建角色
             </Button>
-          ) : null
+          </Can>
         }
       />
       <Table

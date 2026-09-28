@@ -52,6 +52,13 @@ class TenantContextOut(BaseModel):
     permission_codes: list[str] = Field(default_factory=list)
 
 
+class MyPermissionsOut(BaseModel):
+    """当前租户成员的有效角色与权限快照。编码来自服务端聚合，不接受前端提交。"""
+
+    roles: list[str] = Field(default_factory=list)
+    permissions: list[str] = Field(default_factory=list)
+
+
 class MemberRoleBrief(BaseModel):
     id: int
     code: str

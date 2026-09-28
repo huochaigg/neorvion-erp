@@ -1,12 +1,13 @@
 import {
   ApiError,
-  canManageMembers,
   DEFAULT_PAGE_SIZE,
   grantableRoles,
   MEMBER_STATUS,
   memberRoleNames,
+  PERMISSION_CODE,
   tenantMemberQueryKey,
   tenantMembersQueryKey,
+  tenantMyPermissionsQueryKey,
   tenantRolesQueryKey,
   type TenantMember,
 } from '@neorvion/shared';
@@ -23,8 +24,9 @@ import {
   updateMemberStatus,
 } from '@/api/members';
 import { fetchRoles } from '@/api/roles';
+import { Can } from '@/components/Can';
 import { PageHeader } from '@/components/PageHeader';
-import { useCurrentPermissions } from '@/hooks/useCurrentPermissions';
+import { usePermissions } from '@/hooks/usePermissions';
 import type { PageProps } from '@/router/types';
 
 export function MembersPage(props: PageProps) {
@@ -33,8 +35,7 @@ export function MembersPage(props: PageProps) {
   const navigate = useNavigate();
   const params = useParams();
   const routeMemberId = params.memberId ? Number(params.memberId) : null;
-  const { tenantId, permissionCodes } = useCurrentPermissions();
-  const manage = canManageMembers(permissionCodes);
+  const { tenantId } = usePermissions();
   const [q, setQ] = useState('');
   const [keyword, setKeyword] = useState('');
   const [status, setStatus] = useState<string | undefined>();
@@ -83,6 +84,7 @@ export function MembersPage(props: PageProps) {
     void queryClient.invalidateQueries({ queryKey: ['tenant', tenantId, 'members'] });
     void queryClient.invalidateQueries({ queryKey: ['tenant', tenantId, 'member'] });
     void queryClient.invalidateQueries({ queryKey: ['tenant', tenantId, 'context'] });
+    void queryClient.invalidateQueries({ queryKey: tenantMyPermissionsQueryKey(tenantId) });
   };
 
   const addMutation = useMutation({
@@ -156,31 +158,35 @@ export function MembersPage(props: PageProps) {
           >
             详情
           </Button>
-          {manage && !record.is_owner ? (
-            <Button type="link" size="small" onClick={() => setEditing(record)}>
-              修改角色
-            </Button>
-          ) : null}
-          {manage && !record.is_owner ? (
-            <Button
-              type="link"
-              size="small"
-              danger={record.status === MEMBER_STATUS.active}
-              onClick={() => {
-                const next =
-                  record.status === MEMBER_STATUS.active
-                    ? MEMBER_STATUS.disabled
-                    : MEMBER_STATUS.active;
-                modal.confirm({
-                  title: next === MEMBER_STATUS.disabled ? '禁用该成员？' : '启用该成员？',
-                  content: '禁用后该成员立即无法访问本企业业务接口。',
-                  onOk: () => statusMutation.mutateAsync({ memberId: record.id, status: next }),
-                });
-              }}
-            >
-              {record.status === MEMBER_STATUS.active ? '禁用' : '启用'}
-            </Button>
-          ) : null}
+          {record.is_owner ? null : (
+            <Can permission={PERMISSION_CODE.tenantMemberManage}>
+              <Button type="link" size="small" onClick={() => setEditing(record)}>
+                修改角色
+              </Button>
+            </Can>
+          )}
+          {record.is_owner ? null : (
+            <Can permission={PERMISSION_CODE.tenantMemberManage}>
+              <Button
+                type="link"
+                size="small"
+                danger={record.status === MEMBER_STATUS.active}
+                onClick={() => {
+                  const next =
+                    record.status === MEMBER_STATUS.active
+                      ? MEMBER_STATUS.disabled
+                      : MEMBER_STATUS.active;
+                  modal.confirm({
+                    title: next === MEMBER_STATUS.disabled ? '禁用该成员？' : '启用该成员？',
+                    content: '禁用后该成员立即无法访问本企业业务接口。',
+                    onOk: () => statusMutation.mutateAsync({ memberId: record.id, status: next }),
+                  });
+                }}
+              >
+                {record.status === MEMBER_STATUS.active ? '禁用' : '启用'}
+              </Button>
+            </Can>
+          )}
         </Space>
       ),
     },
@@ -192,11 +198,11 @@ export function MembersPage(props: PageProps) {
         title={props.title ?? '成员管理'}
         description={props.description ?? '添加已注册用户、分配角色并启停成员。'}
         extra={
-          manage ? (
+          <Can permission={PERMISSION_CODE.tenantMemberManage}>
             <Button type="primary" onClick={() => setAddOpen(true)}>
               添加成员
             </Button>
-          ) : null
+          </Can>
         }
       />
       <Space className="mb-4" wrap>

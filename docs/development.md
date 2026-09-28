@@ -1,6 +1,6 @@
 # 开发说明
 
-当前里程碑：V2.3.2（企业成员与角色授权前后端闭环）。
+当前里程碑：V2.3.3（动态权限菜单、页面守卫与按钮权限）。
 
 ## 前置
 
@@ -94,7 +94,7 @@ pnpm test
 18. 无 `tenant:member:manage` 的成员看不到添加/改角色/禁用按钮；直接调接口仍 403。
 19. 切换企业后成员/角色列表变为新租户；`/system/members/:id` 会回到成员列表。
 
-多租户说明见 `docs/multi-tenancy.md`。RBAC 见 `docs/rbac.md`。V2.3.2 见 `docs/versions/v2.3.2.md`。路由配置说明见 `docs/routing.md`。认证流程见 `docs/auth.md`。
+多租户说明见 `docs/multi-tenancy.md`。RBAC 见 `docs/rbac.md`。V2.3.3 见 `docs/versions/v2.3.3.md`。路由配置说明见 `docs/routing.md`。认证流程见 `docs/auth.md`。
 
 ## 浏览器进 debugger
 

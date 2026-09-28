@@ -175,7 +175,11 @@ class RoleService:
         role_id: int,
         permission_ids: list[int],
     ) -> RoleOut:
-        """全量替换自定义角色的权限集合。系统角色禁止改。"""
+        """全量替换自定义角色的权限集合。系统角色禁止改。
+
+        没有 Redis 权限缓存：提交后下一次 require_permission / my-permissions
+        都会重新 JOIN 数据库。前端需要失效对应租户的 Query，不能沿用旧编码。
+        """
         self.auth.require_all(context, (PermissionCode.TENANT_ROLE_MANAGE,))
         role = self._require_role(context.tenant_id, role_id)
         if role.is_system:

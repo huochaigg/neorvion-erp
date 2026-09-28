@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import { useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { AppBreadcrumb } from '@/components/AppBreadcrumb';
+import { usePermissions } from '@/hooks/usePermissions';
 import { isEmbeddedInWujie } from '@/lib/runtime';
 import { buildMenuItems } from '@/router/menu';
 import { getOpenKeysForPath, getSelectedMenuKey, matchRoute, resolveNavigatePath } from '@/router/match';
@@ -18,10 +19,14 @@ interface ErpLayoutProps {
 export function ErpLayout({ children }: ErpLayoutProps) {
   const navigate = useNavigate();
   const location = useLocation();
+  const { permissions, isLoading } = usePermissions();
   const siderCollapsed = useErpStore((state) => state.siderCollapsed);
   const setSiderCollapsed = useErpStore((state) => state.setSiderCollapsed);
   const embedded = isEmbeddedInWujie();
-  const menuItems = useMemo(() => buildMenuItems(routes), []);
+  const menuItems = useMemo(
+    () => buildMenuItems(routes, isLoading ? [] : permissions),
+    [isLoading, permissions],
+  );
   const match = useMemo(() => matchRoute(routes, location.pathname), [location.pathname]);
   const selectedKey = getSelectedMenuKey(match);
   const computedOpenKeys = useMemo(

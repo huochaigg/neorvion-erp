@@ -3,9 +3,12 @@ import { describe, it } from 'vitest';
 import type { RoleInfo } from '../types/tenant';
 import { PERMISSION_CODE } from '../types/tenant';
 import {
+  canAccess,
   canManageMembers,
   canManageRoles,
   grantableRoles,
+  hasAllPermissions,
+  hasAnyPermission,
   hasPermission,
   memberRoleNames,
 } from './permissions';
@@ -31,6 +34,9 @@ describe('permission UI helpers', () => {
     assert.equal(canManageMembers(['tenant:member:manage']), true);
     assert.equal(canManageRoles(['tenant:role:read']), false);
     assert.equal(canManageRoles(['tenant:role:manage']), true);
+    assert.equal(hasAnyPermission(['product:read'], ['tenant:member:manage', 'product:read']), true);
+    assert.equal(hasAllPermissions(['product:read'], ['product:read', 'order:read']), false);
+    assert.equal(canAccess(['product:read', 'order:read'], ['product:read', 'order:read'], 'all'), true);
   });
 
   it('授权选项隐藏 OWNER', () => {

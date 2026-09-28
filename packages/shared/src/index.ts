@@ -21,10 +21,12 @@ export type {
   TenantCreatePayload,
   MemberCreatePayload,
   MemberRolesUpdatePayload,
+  MyPermissions,
   RoleInfo,
   RoleCreatePayload,
   RoleUpdatePayload,
   PermissionInfo,
+  PermissionMode,
 } from './types/tenant';
 export {
   TENANT_HEADER,
@@ -49,6 +51,7 @@ export {
   tenantRolesQueryKey,
   tenantPermissionsQueryKey,
   tenantContextQueryKey,
+  tenantMyPermissionsQueryKey,
   productsQueryKey,
   ordersQueryKey,
   inventoryQueryKey,
@@ -60,6 +63,9 @@ export type { TenantPickResult } from './tenant/access';
 export { safePathAfterTenantChange } from './tenant/erp-route';
 export {
   hasPermission,
+  hasAnyPermission,
+  hasAllPermissions,
+  canAccess,
   canManageMembers,
   canManageRoles,
   grantableRoles,

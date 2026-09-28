@@ -8,6 +8,8 @@ export type IconName =
 
 export type PageKey = 'Dashboard' | 'Placeholder' | 'Members' | 'Roles';
 
+export type PermissionMode = 'any' | 'all';
+
 export interface AppRoute {
   path: string;
   name: string;
@@ -18,7 +20,10 @@ export interface AppRoute {
   redirect?: string;
   /** 隐藏页高亮的菜单 path，例如详情页指向列表 */
   activeMenu?: string;
+  /** 单个权限；与 permissions 同时出现时以 permissions 为准 */
   permission?: string;
+  permissions?: string[];
+  permissionMode?: PermissionMode;
   sort?: number;
   component?: PageKey;
   children?: AppRoute[];

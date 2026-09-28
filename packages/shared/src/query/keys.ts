@@ -41,6 +41,10 @@ export function tenantContextQueryKey(tenantId: number | null) {
   return ['tenant', tenantId, 'context'] as const;
 }
 
+export function tenantMyPermissionsQueryKey(tenantId: number | null) {
+  return ['tenant', tenantId, 'my-permissions'] as const;
+}
+
 export function productsQueryKey(tenantId: number | null) {
   return ['tenant', tenantId, 'products'] as const;
 }

@@ -113,11 +113,24 @@ export const MEMBER_STATUS = {
 } as const;
 
 export const PERMISSION_CODE = {
+  tenantRead: 'tenant:read',
   tenantMemberRead: 'tenant:member:read',
   tenantMemberManage: 'tenant:member:manage',
   tenantRoleRead: 'tenant:role:read',
   tenantRoleManage: 'tenant:role:manage',
+  productRead: 'product:read',
+  productCreate: 'product:create',
+  productUpdate: 'product:update',
+  orderRead: 'order:read',
+  inventoryRead: 'inventory:read',
 } as const;
+
+export type PermissionMode = 'any' | 'all';
+
+export interface MyPermissions {
+  roles: string[];
+  permissions: string[];
+}
 
 export const TENANT_ERROR_CODE = {
   missingContext: 40030,
