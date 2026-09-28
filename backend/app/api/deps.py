@@ -5,6 +5,7 @@ from typing import Annotated
 from fastapi import Depends, Request
 from sqlalchemy.orm import Session
 
+from app.core.auth_public import normalize_path
 from app.core.context import set_tenant_context
 from app.core.exceptions import AppError
 from app.core.security import decode_token
@@ -16,6 +17,14 @@ from app.repositories.tenant import TenantMemberRepository
 from app.repositories.user import UserRepository
 
 DbSession = Annotated[Session, Depends(get_db)]
+
+# 临时账号必须先改密。这两条接口需要读/me 和提交新密码，不能被 40350 挡住。
+_PASSWORD_CHANGE_ALLOWED: frozenset[tuple[str, str]] = frozenset(
+    {
+        ("GET", "/api/v1/auth/me"),
+        ("POST", "/api/v1/auth/change-password"),
+    }
+)
 
 
 def _extract_bearer_token(request: Request) -> str:
@@ -42,6 +51,11 @@ def get_current_user(request: Request, session: DbSession) -> User:
         raise AppError("未登录", code=40100, status_code=401)
     if user.status != UserStatus.ACTIVE.value:
         raise AppError("账号已被禁用", code=40300, status_code=403)
+    if user.must_change_password:
+        method = request.method.upper()
+        path = normalize_path(request.url.path)
+        if (method, path) not in _PASSWORD_CHANGE_ALLOWED:
+            raise AppError("请先修改临时密码", code=40350, status_code=403)
     set_tenant_context(tenant_id=None, user_id=user.id)
     return user
 

@@ -38,6 +38,7 @@ describe('动态权限菜单与页面守卫', () => {
     assert.equal(paths.includes('/system'), true);
     assert.equal(paths.includes('/system/members'), true);
     assert.equal(paths.includes('/system/roles'), true);
+    assert.equal(paths.includes('/system/permissions'), true);
     assert.equal(paths.includes('/inventory'), false);
     assert.equal(paths.includes('/products/create'), false);
   });

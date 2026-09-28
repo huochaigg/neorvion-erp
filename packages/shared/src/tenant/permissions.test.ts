@@ -7,10 +7,13 @@ import {
   canManageMembers,
   canManageRoles,
   grantableRoles,
+  groupPermissionsByModule,
   hasAllPermissions,
   hasAnyPermission,
   hasPermission,
   memberRoleNames,
+  permissionModuleLabel,
+  toggleModulePermissionIds,
 } from './permissions';
 
 const admin: RoleInfo = {
@@ -23,6 +26,7 @@ const admin: RoleInfo = {
   created_at: '',
   updated_at: '',
   permissions: [],
+  member_count: 0,
 };
 
 const owner: RoleInfo = { ...admin, id: 1, name: '所有者', code: 'OWNER' };
@@ -45,5 +49,19 @@ describe('permission UI helpers', () => {
       ['ADMIN'],
     );
     assert.equal(memberRoleNames([{ name: '运营' }, { name: '仓库' }]), '运营、仓库');
+  });
+
+  it('权限按模块分组，模块全选与取消只影响该组', () => {
+    const items = [
+      { id: 1, module: 'tenant', code: 'tenant:read' },
+      { id: 2, module: 'tenant', code: 'tenant:update' },
+      { id: 3, module: 'product', code: 'product:read' },
+    ];
+    const grouped = groupPermissionsByModule(items);
+    assert.equal(grouped[0]?.[0], 'tenant');
+    assert.equal(grouped[0]?.[1].length, 2);
+    assert.deepEqual(toggleModulePermissionIds([], [1, 2], true), [1, 2]);
+    assert.deepEqual(toggleModulePermissionIds([1, 2, 3], [1, 2], false), [3]);
+    assert.equal(permissionModuleLabel('tenant'), '企业管理');
   });
 });

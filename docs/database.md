@@ -12,6 +12,10 @@
 - `member_roles`：成员与角色；复合外键保证同一租户
 - `role_permissions`：角色与权限
 
+当前里程碑 V2.3.4 增加：
+
+- `users.must_change_password`：管理员代建账号后必须改密
+
 V2.3.3 完成动态权限菜单，不新增表。OWNER 转移留到后续独立流程。M3 起创建商品、仓库、库存等表。所有业务表必须包含 `tenant_id`（`TenantMixin`），唯一约束必须带上租户，例如：
 
 ```sql

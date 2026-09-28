@@ -152,7 +152,7 @@ Refresh Token 不能当作 Access Token 访问 `/me`。
 | POST | /api/v1/auth/refresh | **只校验 Refresh Cookie** |
 | POST | /api/v1/auth/logout | Refresh Cookie，可空 |
 
-`GET /api/v1/auth/me` 必须带有效 Access Token。
+`GET /api/v1/auth/me` 必须带有效 Access Token。`UserOut` 含 `must_change_password`。管理员代建账号后该字段为 true：除 `/me` 与 `/auth/change-password` 外，受保护接口返回 **40350**，前端跳到 `/change-password`。
 
 ### Access Token 与 Refresh Token 的生命周期
 
@@ -191,6 +191,7 @@ ERP **不调用 Refresh**，只用 Shell 通过 Wujie props 传入的 token，�
 | POST | /api/v1/auth/refresh | 刷新 Access Token | Refresh Cookie |
 | POST | /api/v1/auth/logout | 撤销 Refresh 并清 Cookie | Refresh Cookie（可空） |
 | GET | /api/v1/auth/me | 当前用户 | Access Token |
+| POST | /api/v1/auth/change-password | 修改密码（含临时账号强制改密） | Access Token |
 
 公钥返回 `key_id`、`public_key`、`algorithm`、`challenge_id`、`expires_in`。未知 `key_id` 返回 404。私钥永不返回。
 

@@ -16,7 +16,7 @@
 
 `GET /api/v1/health`
 
-依赖不可用时 HTTP 仍为 200，字段标记 `unavailable`。当前 `milestone` 为 `V2.3.3`。
+依赖不可用时 HTTP 仍为 200，字段标记 `unavailable`。当前 `milestone` 为 `V2.3.4`。
 
 ## 认证
 
@@ -28,6 +28,7 @@
 - `POST /api/v1/auth/refresh`
 - `POST /api/v1/auth/logout`
 - `GET /api/v1/auth/me`
+- `POST /api/v1/auth/change-password`
 
 ## 租户
 
@@ -39,11 +40,13 @@
 - `GET /api/v1/tenants/current/my-permissions`（当前成员 `roles` + `permissions`）
 - `GET /api/v1/tenants/{tenant_id}`
 - `GET /api/v1/tenants/{tenant_id}/members`（分页：`q` / `status` / `page` / `page_size`）
-- `POST /api/v1/tenants/{tenant_id}/members`（`email` + `role_ids`）
+- `POST /api/v1/tenants/{tenant_id}/members`（`email` + `role_ids`，已有账号）
+- `POST /api/v1/tenants/{tenant_id}/members/accounts`（代建账号，响应含一次性 `temporary_password`）
 - `GET /api/v1/tenants/{tenant_id}/members/{member_id}`
 - `GET /api/v1/tenants/{tenant_id}/members/{member_id}/permissions`
 - `PUT /api/v1/tenants/{tenant_id}/members/{member_id}/roles`
-- `PATCH /api/v1/tenants/{tenant_id}/members/{member_id}`
+- `PATCH /api/v1/tenants/{tenant_id}/members/{member_id}`（启用/禁用）
+- `DELETE /api/v1/tenants/{tenant_id}/members/{member_id}`（移出企业，不删 User）
 
 `GET /api/v1/tenants/current` 含 `permission_codes`。`GET /api/v1/tenants/current/my-permissions` 是前端菜单的数据源。
 

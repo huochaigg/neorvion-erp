@@ -117,7 +117,7 @@ Shell 是登录身份和当前租户的唯一来源。ERP 不自己维护一套 
 
 `X-Tenant-ID` 由 Axios 请求拦截器在**发起时**绑定。跳过名单是 method + 规范化 pathname 精确匹配，不是字符串包含：
 
-- 不带头：公钥、注册、登录、Refresh、Logout、`GET /auth/me`、`POST /tenants`、`GET /tenants`、健康检查
+- 不带头：公钥、注册、登录、Refresh、Logout、`GET /auth/me`、`POST /auth/change-password`、`POST /tenants`、`GET /tenants`、健康检查
 - 带头：`GET /tenants/current` 以及后续 ERP 业务接口
 
 服务端仍然用 JWT `user_id` + `tenant_members` 校验。前端选对了租户，不能替代后端验证。

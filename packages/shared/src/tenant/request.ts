@@ -9,6 +9,7 @@ const SKIP_TENANT_HEADER: ReadonlyArray<{ method: string; path: string }> = [
   { method: 'POST', path: '/api/v1/auth/refresh' },
   { method: 'POST', path: '/api/v1/auth/logout' },
   { method: 'GET', path: '/api/v1/auth/me' },
+  { method: 'POST', path: '/api/v1/auth/change-password' },
   { method: 'POST', path: '/api/v1/tenants' },
   { method: 'GET', path: '/api/v1/tenants' },
   { method: 'GET', path: '/api/v1/health' },

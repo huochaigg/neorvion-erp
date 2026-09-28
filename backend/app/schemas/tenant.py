@@ -106,6 +106,29 @@ class MemberRolesUpdate(BaseModel):
     role_ids: list[int]
 
 
+class MemberAccountCreate(BaseModel):
+    """企业管理员代建全局 User，并加入当前租户。不接收管理员设定的长期密码。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    display_name: str = Field(min_length=1, max_length=64)
+    email: EmailStr
+    role_ids: list[int] = Field(default_factory=list)
+
+    @field_validator("email")
+    @classmethod
+    def normalize_email(cls, value: EmailStr) -> str:
+        return str(value).strip().lower()
+
+    @field_validator("display_name")
+    @classmethod
+    def strip_name(cls, value: str) -> str:
+        name = value.strip()
+        if not name:
+            raise ValueError("显示名称不能为空")
+        return name
+
+
 class MemberOut(BaseModel):
     id: int
     tenant_id: int
@@ -122,6 +145,12 @@ class MemberOut(BaseModel):
 class MemberDetailOut(MemberOut):
     permission_codes: list[str] = Field(default_factory=list)
     permissions: list[PermissionOut] = Field(default_factory=list)
+
+
+class MemberCreatedOut(MemberOut):
+    """仅创建新账号接口返回 temporary_password；列表/详情不会带这个字段。"""
+
+    temporary_password: str | None = None
 
 
 class MemberListOut(BaseModel):

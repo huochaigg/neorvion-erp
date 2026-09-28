@@ -74,6 +74,24 @@ class TokenResponse(BaseModel):
     expires_in: int
 
 
+class ChangePasswordRequest(BaseModel):
+    """旧密码和新密码各自使用一次 RSA challenge，避免同一密文被重放。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    encrypted_old_password: EncryptedPassword
+    old_key_id: str = Field(min_length=1, max_length=64)
+    old_challenge_id: str = Field(min_length=8, max_length=64)
+    encrypted_new_password: EncryptedPassword
+    new_key_id: str = Field(min_length=1, max_length=64)
+    new_challenge_id: str = Field(min_length=8, max_length=64)
+
+    @field_validator("old_key_id", "old_challenge_id", "new_key_id", "new_challenge_id")
+    @classmethod
+    def strip_ids(cls, value: str) -> str:
+        return value.strip()
+
+
 class UserOut(BaseModel):
     id: int
     email: str
@@ -81,5 +99,6 @@ class UserOut(BaseModel):
     status: str
     created_at: datetime
     last_login_at: datetime | None = None
+    must_change_password: bool = False
 
     model_config = {"from_attributes": True}

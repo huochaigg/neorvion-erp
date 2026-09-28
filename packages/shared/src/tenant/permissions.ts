@@ -1,4 +1,4 @@
-import { PERMISSION_CODE, type RoleInfo } from '../types/tenant';
+import { PERMISSION_CODE, PERMISSION_MODULE_LABELS, type RoleInfo } from '../types/tenant';
 import type { PermissionMode } from '../types/tenant';
 
 export function hasPermission(codes: readonly string[] | undefined, code: string): boolean {
@@ -51,4 +51,34 @@ export function memberRoleNames(roles: { name: string }[] | undefined): string {
     return '-';
   }
   return roles.map((item) => item.name).join('、');
+}
+
+export function permissionModuleLabel(module: string): string {
+  return PERMISSION_MODULE_LABELS[module] ?? module;
+}
+
+export function groupPermissionsByModule<T extends { module: string }>(items: readonly T[]): [string, T[]][] {
+  const groups = new Map<string, T[]>();
+  for (const item of items) {
+    const current = groups.get(item.module) ?? [];
+    current.push(item);
+    groups.set(item.module, current);
+  }
+  return [...groups.entries()];
+}
+
+export function toggleModulePermissionIds(
+  selected: readonly number[],
+  moduleIds: readonly number[],
+  checked: boolean,
+): number[] {
+  const next = new Set(selected);
+  for (const id of moduleIds) {
+    if (checked) {
+      next.add(id);
+    } else {
+      next.delete(id);
+    }
+  }
+  return [...next];
 }

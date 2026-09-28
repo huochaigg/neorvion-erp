@@ -1,7 +1,8 @@
-import { SHELL_ROUTES } from '@neorvion/shared';
+import { currentUserQueryKey, SHELL_ROUTES, type UserProfile } from '@neorvion/shared';
 import { App, Button, Card, Form, Input, Typography } from 'antd';
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
-import { loginAccount } from '@/api/auth';
+import { useQueryClient } from '@tanstack/react-query';
+import { fetchCurrentUser, loginAccount } from '@/api/auth';
 import { AuthLayout } from '@/layouts/AuthLayout';
 import { useAuthStore } from '@/stores/auth-store';
 
@@ -15,6 +16,7 @@ export function LoginPage() {
   const location = useLocation();
   const [params] = useSearchParams();
   const { message } = App.useApp();
+  const queryClient = useQueryClient();
   const markAuthenticated = useAuthStore((state) => state.markAuthenticated);
   const fromState = (location.state as { from?: { pathname: string; search: string } } | null)?.from;
   const fromQuery = params.get('from');
@@ -27,6 +29,12 @@ export function LoginPage() {
         password: values.password,
       });
       markAuthenticated(tokens.access_token);
+      const profile = await fetchCurrentUser();
+      queryClient.setQueryData<UserProfile>(currentUserQueryKey(), profile);
+      if (profile.must_change_password) {
+        navigate(SHELL_ROUTES.changePassword, { replace: true });
+        return;
+      }
       navigate(redirectTo, { replace: true });
     } catch (error) {
       message.error(error instanceof Error ? error.message : '登录失败');

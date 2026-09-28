@@ -1,4 +1,4 @@
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.core.permissions import SystemRoleCode
@@ -70,6 +70,29 @@ class RoleRepository(BaseRepository):
             MemberRoleGrant.role_id == role_id,
         )
         return len(list(self.session.scalars(stmt).all()))
+
+    def count_grants_grouped(self, tenant_id: int) -> dict[int, int]:
+        """一次查出本租户每个角色被多少成员使用，避免角色列表 N+1。"""
+        stmt = (
+            select(MemberRoleGrant.role_id, func.count())
+            .where(MemberRoleGrant.tenant_id == tenant_id)
+            .group_by(MemberRoleGrant.role_id)
+        )
+        return {int(role_id): int(total) for role_id, total in self.session.execute(stmt).all()}
+
+    def delete_grants_for_member(self, *, tenant_id: int, member_id: int) -> None:
+        """移除成员前先删授权。member_roles 外键指向 tenant_members，不先删会 IntegrityError。
+
+        User 行不在这里动：企业只能解除成员关系，不能删除全局登录账号。
+        """
+        self.session.execute(
+            delete(MemberRoleGrant)
+            .where(
+                MemberRoleGrant.tenant_id == tenant_id,
+                MemberRoleGrant.member_id == member_id,
+            )
+            .execution_options(synchronize_session="fetch")
+        )
 
     def count_active_owner_grants(self, tenant_id: int) -> int:
         """有效 OWNER 角色授权人数。用来挡住「卸掉最后一个所有者」。"""

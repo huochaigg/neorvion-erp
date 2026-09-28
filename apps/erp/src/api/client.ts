@@ -4,6 +4,7 @@ import {
   decideTenantHeader,
   isTenantInaccessibleError,
   MICRO_EVENTS,
+  SHELL_ROUTES,
   TENANT_HEADER,
   type ApiResponse,
 } from '@neorvion/shared';
@@ -60,6 +61,9 @@ apiClient.interceptors.response.use(
       return Promise.reject(error);
     }
     const nextError = isAxiosError(error) ? toApiError(error) : error;
+    if (nextError instanceof ApiError && nextError.code === 40350) {
+      window.location.assign(SHELL_ROUTES.changePassword);
+    }
     if (nextError instanceof ApiError && isTenantInaccessibleError(nextError.code)) {
       window.$wujie?.bus.$emit(MICRO_EVENTS.tenantInaccessible);
     }

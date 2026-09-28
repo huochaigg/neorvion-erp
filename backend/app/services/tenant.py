@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.core.exceptions import AppError
 from app.core.permissions import PermissionCode, SystemRoleCode, known_permission_codes
+from app.core.security import generate_temporary_password, hash_password
 from app.core.tenant import TenantContext
 from app.models.tenant import MemberRole, MemberStatus, Tenant, TenantMember, TenantStatus
 from app.models.user import User, UserStatus
@@ -14,6 +15,7 @@ from app.repositories.tenant import TenantMemberRepository, TenantRepository
 from app.repositories.user import UserRepository
 from app.schemas.rbac import PermissionOut
 from app.schemas.tenant import (
+    MemberCreatedOut,
     MemberDetailOut,
     MemberListOut,
     MemberOut,
@@ -184,6 +186,72 @@ class TenantService:
         reloaded = self.members.get_in_tenant(tenant_id=context.tenant_id, member_id=member.id)
         return self._member_out(reloaded or member)
 
+    def create_member_account(
+        self,
+        *,
+        context: TenantContext,
+        tenant_id: int,
+        display_name: str,
+        email: str,
+        role_ids: list[int] | None = None,
+    ) -> MemberCreatedOut:
+        """代建全局 User，并在同一事务加入当前企业、写入角色。
+
+        管理员不能设长期密码：后端用 secrets 生成一次性明文，只放进本次响应。
+        数据库只存 Argon2id。must_change_password=True，首次业务请求会被 40350 拦住。
+
+        先校验角色再创建 User。否则邮箱唯一键已经占用，角色非法时虽然能 rollback，
+        但调用方会先看到含糊的 IntegrityError，而不是 40420 / 40321。
+        """
+        self._assert_same_tenant(context, tenant_id)
+        self.auth.require_all(context, (PermissionCode.TENANT_MEMBER_MANAGE,))
+        assigned_ids = self.rbac.resolve_assignable_role_ids(
+            tenant_id=context.tenant_id,
+            role_ids=role_ids or [],
+            default_viewer=True,
+        )
+        if self.users.get_by_email(email) is not None:
+            raise AppError("该邮箱已被注册", code=40011, status_code=409)
+        temporary_password = generate_temporary_password()
+        user = User(
+            email=email,
+            password_hash=hash_password(temporary_password),
+            display_name=display_name,
+            status=UserStatus.ACTIVE.value,
+            must_change_password=True,
+        )
+        try:
+            self.users.add(user)
+            # flush 后才有 user.id，才能写 tenant_members.user_id。
+            self.session.flush()
+            member = TenantMember(
+                tenant_id=context.tenant_id,
+                user_id=user.id,
+                status=MemberStatus.ACTIVE.value,
+                role=MemberRole.MEMBER.value,
+            )
+            self.members.add(member)
+            self.session.flush()
+            self.rbac.grant_roles(
+                tenant_id=context.tenant_id,
+                member_id=member.id,
+                role_ids=assigned_ids,
+            )
+            self.session.commit()
+            self.session.refresh(member)
+        except IntegrityError:
+            # 并发注册同一邮箱，或同一用户被并发加入本企业。回滚后按库状态区分文案。
+            self.session.rollback()
+            if self.users.get_by_email(email) is not None:
+                raise AppError("该邮箱已被注册", code=40011, status_code=409) from None
+            raise AppError("该用户已是租户成员", code=40911, status_code=409) from None
+        except Exception:
+            self.session.rollback()
+            raise
+        reloaded = self.members.get_in_tenant(tenant_id=context.tenant_id, member_id=member.id)
+        base = self._member_out(reloaded or member)
+        return MemberCreatedOut(**base.model_dump(), temporary_password=temporary_password)
+
     def replace_member_roles(
         self,
         *,
@@ -264,6 +332,42 @@ class TenantService:
             raise
         reloaded = self.members.get_in_tenant(tenant_id=context.tenant_id, member_id=member_id)
         return self._member_out(reloaded or member)
+
+    def remove_member(
+        self,
+        *,
+        context: TenantContext,
+        tenant_id: int,
+        member_id: int,
+    ) -> None:
+        """解除当前企业的成员关系，不删除全局 User。
+
+        禁用只改 status，成员行还在；移除会删 TenantMember 和 MemberRoleGrant。
+        OWNER 不能走本接口：所有权转移是独立流程。即便还有其他 OWNER，也禁止用删除绕过。
+        """
+        self._assert_same_tenant(context, tenant_id)
+        self.auth.require_all(context, (PermissionCode.TENANT_MEMBER_MANAGE,))
+        try:
+            member = self.members.lock_in_tenant(
+                tenant_id=context.tenant_id,
+                member_id=member_id,
+            )
+            if member is None:
+                raise AppError("成员不存在", code=40412, status_code=404)
+            if self._is_owner_member(member):
+                raise AppError("不能移除所有者", code=40322, status_code=403)
+            self.rbac.roles.delete_grants_for_member(
+                tenant_id=context.tenant_id,
+                member_id=member.id,
+            )
+            self.members.delete(member)
+            self.session.commit()
+        except AppError:
+            self.session.rollback()
+            raise
+        except Exception:
+            self.session.rollback()
+            raise
 
     def _resolve_target_user(self, *, email: str | None, user_id: int | None) -> User:
         if email:

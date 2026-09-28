@@ -3,11 +3,13 @@ import { BrowserRouter, Outlet, Route, Routes } from 'react-router-dom';
 import { AuthBootstrap } from '@/components/AuthBootstrap';
 import { GuestOnly } from '@/components/GuestOnly';
 import { RequireAuth } from '@/components/RequireAuth';
+import { RequirePasswordChange } from '@/components/RequirePasswordChange';
 import { RequireTenant } from '@/components/RequireTenant';
 import { TenantBootstrap } from '@/components/TenantBootstrap';
 import { ShellLayout } from '@/layouts/ShellLayout';
 import { ErpMicroApp } from '@/micro/ErpMicroApp';
 import { ErpIndexRedirect } from '@/micro/MicroAppIndexRedirect';
+import { ChangePasswordPage } from '@/pages/ChangePasswordPage';
 import { CreateWorkspacePage } from '@/pages/CreateWorkspacePage';
 import { HomePage } from '@/pages/HomePage';
 import { LoginPage } from '@/pages/LoginPage';
@@ -47,26 +49,33 @@ export function AppRouter() {
           <Route
             element={
               <RequireAuth>
-                <TenantBootstrap>
-                  <AppShell />
-                </TenantBootstrap>
+                <RequirePasswordChange />
               </RequireAuth>
             }
           >
-            <Route path={SHELL_ROUTES.workspaces} element={<WorkspacesPage />} />
-            <Route path={SHELL_ROUTES.workspaceCreate} element={<CreateWorkspacePage />} />
+            <Route path={SHELL_ROUTES.changePassword} element={<ChangePasswordPage />} />
             <Route
               element={
-                <RequireTenant>
-                  <Outlet />
-                </RequireTenant>
+                <TenantBootstrap>
+                  <AppShell />
+                </TenantBootstrap>
               }
             >
-              <Route path={SHELL_ROUTES.home} element={<HomePage />} />
-              <Route path={ERP_BASENAME} element={<ErpIndexRedirect />} />
-              <Route path={`${ERP_BASENAME}/`} element={<ErpIndexRedirect />} />
-              <Route path={`${ERP_BASENAME}/*`} element={<ErpMicroApp />} />
-              <Route path="*" element={<NotFoundPage />} />
+              <Route path={SHELL_ROUTES.workspaces} element={<WorkspacesPage />} />
+              <Route path={SHELL_ROUTES.workspaceCreate} element={<CreateWorkspacePage />} />
+              <Route
+                element={
+                  <RequireTenant>
+                    <Outlet />
+                  </RequireTenant>
+                }
+              >
+                <Route path={SHELL_ROUTES.home} element={<HomePage />} />
+                <Route path={ERP_BASENAME} element={<ErpIndexRedirect />} />
+                <Route path={`${ERP_BASENAME}/`} element={<ErpIndexRedirect />} />
+                <Route path={`${ERP_BASENAME}/*`} element={<ErpMicroApp />} />
+                <Route path="*" element={<NotFoundPage />} />
+              </Route>
             </Route>
           </Route>
         </Routes>

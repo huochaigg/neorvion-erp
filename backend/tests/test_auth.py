@@ -247,6 +247,7 @@ def test_access_token_can_read_me(client: TestClient) -> None:
     response = client.get("/api/v1/auth/me", headers=_auth_header(access_token))
     assert response.status_code == 200
     assert response.json()["data"]["email"] == REGISTER_EMAIL
+    assert response.json()["data"]["must_change_password"] is False
 
 
 def test_expired_access_token_rejected(client: TestClient) -> None:
@@ -406,3 +407,34 @@ def test_rotated_refresh_cookie_cannot_be_reused(client: TestClient) -> None:
     reused = client.post("/api/v1/auth/refresh")
     assert reused.status_code == 401
     assert reused.json()["code"] == 40104
+
+
+def test_change_password_and_must_change_gate(client: TestClient) -> None:
+    _register(client)
+    access_token = _login(client).json()["data"]["access_token"]
+    old_fields = _encrypted_fields(client, PLAIN_PASSWORD)
+    new_fields = _encrypted_fields(client, "NewPass99")
+    changed = client.post(
+        "/api/v1/auth/change-password",
+        json={
+            "encrypted_old_password": old_fields["encrypted_password"],
+            "old_key_id": old_fields["key_id"],
+            "old_challenge_id": old_fields["challenge_id"],
+            "encrypted_new_password": new_fields["encrypted_password"],
+            "new_key_id": new_fields["key_id"],
+            "new_challenge_id": new_fields["challenge_id"],
+        },
+        headers=_auth_header(access_token),
+    )
+    assert changed.status_code == 200, changed.text
+    assert changed.json()["data"]["must_change_password"] is False
+    login_old = client.post(
+        "/api/v1/auth/login",
+        json={"email": REGISTER_EMAIL, **_encrypted_fields(client, PLAIN_PASSWORD)},
+    )
+    assert login_old.status_code == 401
+    login_new = client.post(
+        "/api/v1/auth/login",
+        json={"email": REGISTER_EMAIL, **_encrypted_fields(client, "NewPass99")},
+    )
+    assert login_new.status_code == 200

@@ -1,6 +1,6 @@
-# RBAC 权限模型（V2.3.1 + V2.3.2 + V2.3.3）
+# RBAC 权限模型（V2.3.1 + V2.3.2 + V2.3.3 + V2.3.4）
 
-V2.3.1 完成后端权限基础设施。V2.3.2 完成企业成员授权与 ERP 管理页面。V2.3.3 完成动态权限菜单、页面守卫与按钮权限。详见 `docs/versions/v2.3.3.md`。
+V2.3.1 完成后端权限基础设施。V2.3.2 完成企业成员授权与 ERP 管理页面。V2.3.3 完成动态权限菜单、页面守卫与按钮权限。V2.3.4 补全成员/角色 CRUD、代建账号、角色权限配置与权限目录。详见 `docs/versions/v2.3.4.md`。
 
 ## 关系：User、TenantMember、Role、Permission
 
@@ -90,7 +90,7 @@ HTTP 层 Depends 挡不住后续 Agent / Celery 直接调 Service。敏感操作
 | --- | --- | --- |
 | 来源 | `tenant_members.role = OWNER`，并挂上系统角色 `OWNER` | 只通过 `member_roles` |
 | 语义 | 企业所有权 | 可配置的岗位权限 |
-| 系统角色 | `is_system=True`，角色 API 不能改权限、不能删除 | 自定义角色可以改、可以删（仍被使用则禁止删） |
+| 系统角色 | `is_system=True`。OWNER 权限冻结；ADMIN 等可调业务权限但不能删除 | 自定义角色可以改、可以删（仍被使用则禁止删） |
 | 最后一个 | 不能禁用 / 不能卸掉最后一个有效 OWNER | 不涉及所有权 |
 | 授予 | 创建租户和历史回填自动授予；普通分配接口不能授予 | 后续成员分配页处理 |
 
@@ -100,7 +100,7 @@ OWNER 转移是独立业务流程，本版本不做。
 
 ## 角色权限变更为什么需要事务
 
-替换权限的步骤是：校验 permission_id 都存在 → 校验角色属于当前租户 → 系统角色拒绝修改 → 删除旧关联 → 插入新关联。
+替换权限的步骤是：校验 permission_id 都存在 → 校验角色属于当前租户 → OWNER 拒绝修改；ADMIN 必须保留租户管理编码 → 删除旧关联 → 插入新关联。
 
 任一步失败必须 `rollback`，否则会出现「旧权限删了、新权限只写了一半」。Repository 禁止 `commit`，由 Service 提交。
 
@@ -136,25 +136,29 @@ OWNER 转移是独立业务流程，本版本不做。
 | PUT | `/api/v1/roles/{role_id}/permissions` | `tenant:role:manage` |
 | DELETE | `/api/v1/roles/{role_id}` | `tenant:role:manage` |
 
-系统角色修改/删除 → `40040`。角色仍被成员使用 → `40041`。跨租户 `role_id` → `40420`。
+系统角色删除 → `40040`。OWNER 改权限 → `40040`。ADMIN 拿掉租户管理能力 → `40040`。角色仍被成员使用 → `40041`（文案含人数）。跨租户 `role_id` → `40420`。
 
 成员管理（路径参数 `tenant_id` 必须等于 `X-Tenant-ID`）：
 
 | 方法 | 路径 | 权限 |
 | --- | --- | --- |
 | GET | `/api/v1/tenants/{tenant_id}/members` | `tenant:member:read` |
-| POST | `/api/v1/tenants/{tenant_id}/members` | `tenant:member:manage` |
+| POST | `/api/v1/tenants/{tenant_id}/members` | `tenant:member:manage`（已有账号） |
+| POST | `/api/v1/tenants/{tenant_id}/members/accounts` | `tenant:member:manage`（代建账号） |
 | GET | `/api/v1/tenants/{tenant_id}/members/{member_id}` | `tenant:member:read` |
 | GET | `/api/v1/tenants/{tenant_id}/members/{member_id}/permissions` | `tenant:member:read` |
 | PUT | `/api/v1/tenants/{tenant_id}/members/{member_id}/roles` | `tenant:member:manage` |
-| PATCH | `/api/v1/tenants/{tenant_id}/members/{member_id}` | `tenant:member:manage` |
+| PATCH | `/api/v1/tenants/{tenant_id}/members/{member_id}` | `tenant:member:manage`（启用/禁用） |
+| DELETE | `/api/v1/tenants/{tenant_id}/members/{member_id}` | `tenant:member:manage`（移出企业，不删 User） |
 
 `GET /api/v1/tenants/current` 返回 `permission_codes`。  
 `GET /api/v1/tenants/current/my-permissions` 返回当前成员 `roles` 与 `permissions` 编码数组。两者都每次查库，不信任前端提交的权限列表。
 
 前端菜单、页面守卫和按钮只读取 React Query 中的当前租户权限。隐藏按钮不能代替上表的服务端校验。
 
-添加成员请传已注册用户的 `email` 和可选 `role_ids`。不能授予 OWNER。默认角色为 VIEWER。
+添加已有账号请传已注册用户的 `email` 和可选 `role_ids`。代建账号请传 `display_name`、`email`、可选 `role_ids`，响应中的 `temporary_password` 只出现一次。不能授予 OWNER。默认角色为 VIEWER。禁用保留成员行；移除删除 TenantMember 与 MemberRoleGrant，不删 User。
+
+ERP 系统管理页：成员管理、角色管理、权限目录（只读）。权限勾选来自 `GET /api/v1/permissions`，按 module 分组，支持模块全选。
 
 幂等灌入权限目录（不删已有行）：
 
@@ -163,4 +167,4 @@ cd backend
 uv run python -m app.scripts.seed_permissions
 ```
 
-不要在应用启动时建表。建表只走 Alembic：`20260926_0004`。
+不要在应用启动时建表。建表只走 Alembic：`20260926_0004`（RBAC 表）与 `20260928_0005`（`users.must_change_password`）。

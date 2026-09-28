@@ -2,7 +2,12 @@ from __future__ import annotations
 
 import pytest
 from app.core.exceptions import AppError
-from app.core.permissions import PERMISSION_CATALOG, PermissionCode, SystemRoleCode
+from app.core.permissions import (
+    ADMIN_REQUIRED_PERMISSION_CODES,
+    PERMISSION_CATALOG,
+    PermissionCode,
+    SystemRoleCode,
+)
 from app.db.session import SessionLocal
 from app.models.rbac import MemberRoleGrant, RolePermission
 from app.models.tenant import MemberRole, MemberStatus, TenantMember, TenantStatus
@@ -343,6 +348,13 @@ def test_system_roles_cannot_be_mutated_via_api(client: TestClient) -> None:
     deleted = client.delete(f"/api/v1/roles/{owner_id}", headers=auth_header(token, tenant_id))
     assert deleted.status_code == 400
     assert deleted.json()["code"] == 40040
+    admin_id = _role_map(client, token, tenant_id)["ADMIN"]["id"]
+    admin_deleted = client.delete(
+        f"/api/v1/roles/{admin_id}",
+        headers=auth_header(token, tenant_id),
+    )
+    assert admin_deleted.status_code == 400
+    assert admin_deleted.json()["code"] == 40040
 
 
 def test_cannot_delete_in_use_role_or_last_owner(client: TestClient) -> None:
@@ -376,6 +388,7 @@ def test_cannot_delete_in_use_role_or_last_owner(client: TestClient) -> None:
         in_use = client.delete(f"/api/v1/roles/{duty_id}", headers=auth_header(owner, tenant_id))
         assert in_use.status_code == 400
         assert in_use.json()["code"] == 40041
+        assert "1 名成员" in in_use.json()["message"]
         with pytest.raises(AppError) as exc:
             RoleService(session).revoke_member_role(
                 tenant_id=tenant_id,
@@ -542,3 +555,95 @@ def test_create_tenant_rolls_back_when_role_bootstrap_fails(
         assert roles == 0
     finally:
         session.close()
+
+
+def test_admin_permissions_can_change_but_must_keep_tenant_management(client: TestClient) -> None:
+    token, _user_id = register_and_login(client, "rbac-admin-perm@example.com")
+    tenant_id = _create_tenant(client, token, "AdmPerm", "rbac-admperm")
+    roles = _role_map(client, token, tenant_id)
+    catalog = client.get(
+        "/api/v1/permissions",
+        headers=auth_header(token, tenant_id),
+    ).json()["data"]
+    by_code = {item["code"]: item["id"] for item in catalog}
+    keep = [by_code[code] for code in ADMIN_REQUIRED_PERMISSION_CODES]
+    keep.append(by_code[PermissionCode.PRODUCT_READ])
+    updated = client.put(
+        f"/api/v1/roles/{roles['ADMIN']['id']}/permissions",
+        json={"permission_ids": keep},
+        headers=auth_header(token, tenant_id),
+    )
+    assert updated.status_code == 200, updated.text
+    codes = {item["code"] for item in updated.json()["data"]["permissions"]}
+    assert PermissionCode.PRODUCT_READ in codes
+    assert PermissionCode.TENANT_ROLE_MANAGE in codes
+    stripped = client.put(
+        f"/api/v1/roles/{roles['ADMIN']['id']}/permissions",
+        json={"permission_ids": [by_code[PermissionCode.PRODUCT_READ]]},
+        headers=auth_header(token, tenant_id),
+    )
+    assert stripped.status_code == 400
+    assert stripped.json()["code"] == 40040
+    operator = client.put(
+        f"/api/v1/roles/{roles['OPERATOR']['id']}/permissions",
+        json={"permission_ids": [by_code[PermissionCode.INVENTORY_READ]]},
+        headers=auth_header(token, tenant_id),
+    )
+    assert operator.status_code == 200, operator.text
+    assert {item["code"] for item in operator.json()["data"]["permissions"]} == {
+        PermissionCode.INVENTORY_READ
+    }
+
+
+def test_permission_change_takes_effect_on_next_request(client: TestClient) -> None:
+    owner, _oid = register_and_login(client, "rbac-live-owner@example.com")
+    member_token, _mid = register_and_login(client, "rbac-live-admin@example.com")
+    tenant_id = _create_tenant(client, owner, "LiveCo", "rbac-live")
+    roles = _role_map(client, owner, tenant_id)
+    added = client.post(
+        f"/api/v1/tenants/{tenant_id}/members",
+        json={"email": "rbac-live-admin@example.com", "role_ids": [roles["ADMIN"]["id"]]},
+        headers=auth_header(owner, tenant_id),
+    )
+    assert added.status_code == 200, added.text
+    before = client.get(
+        "/api/v1/tenants/current/my-permissions",
+        headers=auth_header(member_token, tenant_id),
+    )
+    assert PermissionCode.TENANT_ROLE_MANAGE in before.json()["data"]["permissions"]
+    catalog = client.get(
+        "/api/v1/permissions",
+        headers=auth_header(owner, tenant_id),
+    ).json()["data"]
+    by_code = {item["code"]: item["id"] for item in catalog}
+    keep = [
+        by_code[code]
+        for code in ADMIN_REQUIRED_PERMISSION_CODES
+        if code != PermissionCode.TENANT_ROLE_MANAGE
+    ]
+    keep.append(by_code[PermissionCode.TENANT_ROLE_READ])
+    denied = client.put(
+        f"/api/v1/roles/{roles['ADMIN']['id']}/permissions",
+        json={"permission_ids": keep},
+        headers=auth_header(owner, tenant_id),
+    )
+    assert denied.status_code == 400
+    keep_all = [by_code[code] for code in ADMIN_REQUIRED_PERMISSION_CODES]
+    updated = client.put(
+        f"/api/v1/roles/{roles['ADMIN']['id']}/permissions",
+        json={"permission_ids": keep_all},
+        headers=auth_header(owner, tenant_id),
+    )
+    assert updated.status_code == 200, updated.text
+    after = client.get(
+        "/api/v1/tenants/current/my-permissions",
+        headers=auth_header(member_token, tenant_id),
+    )
+    assert PermissionCode.PRODUCT_CREATE not in after.json()["data"]["permissions"]
+    assert PermissionCode.TENANT_ROLE_MANAGE in after.json()["data"]["permissions"]
+    create_role = client.post(
+        "/api/v1/roles",
+        json={"name": "临时", "code": "TEMPLIVE", "permission_ids": []},
+        headers=auth_header(member_token, tenant_id),
+    )
+    assert create_role.status_code == 200

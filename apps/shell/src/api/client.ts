@@ -101,6 +101,13 @@ apiClient.interceptors.response.use(
     const skipRefresh = Boolean(original?.skipAuthRefresh);
     const apiError = toApiError(error);
 
+    if (apiError instanceof ApiError && apiError.code === 40350) {
+      if (window.location.pathname !== SHELL_ROUTES.changePassword) {
+        window.location.assign(SHELL_ROUTES.changePassword);
+      }
+      return Promise.reject(apiError);
+    }
+
     if (apiError instanceof ApiError && isTenantInaccessibleError(apiError.code)) {
       handleTenantInaccessible();
       return Promise.reject(apiError);

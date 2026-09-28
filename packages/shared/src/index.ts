@@ -20,6 +20,8 @@ export type {
   TenantMemberRole,
   TenantCreatePayload,
   MemberCreatePayload,
+  MemberAccountCreatePayload,
+  MemberCreated,
   MemberRolesUpdatePayload,
   MyPermissions,
   RoleInfo,
@@ -33,6 +35,7 @@ export {
   TENANT_STATUS,
   MEMBER_STATUS,
   PERMISSION_CODE,
+  PERMISSION_MODULE_LABELS,
   TENANT_ERROR_CODE,
 } from './types/tenant';
 export {
@@ -70,6 +73,9 @@ export {
   canManageRoles,
   grantableRoles,
   memberRoleNames,
+  permissionModuleLabel,
+  groupPermissionsByModule,
+  toggleModulePermissionIds,
 } from './tenant/permissions';
 export {
   normalizeRequestPath,

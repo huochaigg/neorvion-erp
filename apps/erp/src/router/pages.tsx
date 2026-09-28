@@ -14,6 +14,10 @@ export const PAGE_COMPONENTS: Record<PageKey, LazyExoticComponent<ComponentType<
     const module = await import('@/pages/system/RolesPage');
     return { default: module.RolesPage };
   }),
+  Permissions: lazy(async () => {
+    const module = await import('@/pages/system/PermissionsPage');
+    return { default: module.PermissionsPage };
+  }),
   Placeholder: lazy(async () => {
     const module = await import('@/pages/PlaceholderPage');
     return { default: module.PlaceholderPage };

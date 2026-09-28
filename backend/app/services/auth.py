@@ -56,6 +56,7 @@ class AuthService:
             password_hash=hash_password(plain_password),
             display_name=display_name,
             status=UserStatus.ACTIVE.value,
+            must_change_password=False,
         )
         self.users.add(user)
         self.session.commit()
@@ -105,6 +106,46 @@ class AuthService:
         except AppError:
             return
         token_store.revoke_refresh_session(str(payload["jti"]))
+
+    def change_password(
+        self,
+        *,
+        user: User,
+        encrypted_old_password: str,
+        old_key_id: str,
+        old_challenge_id: str,
+        encrypted_new_password: str,
+        new_key_id: str,
+        new_challenge_id: str,
+    ) -> UserOut:
+        """校验旧密码后写入新哈希，并清除必须改密标记。
+
+        旧密码和新密码各消耗一次 challenge，避免同一段 RSA 密文被重放两次。
+        明文只在本方法栈内使用，不写日志、不进响应。
+        """
+        old_password = self._unlock_password(
+            encrypted_password=encrypted_old_password,
+            key_id=old_key_id,
+            challenge_id=old_challenge_id,
+        )
+        if not verify_password(old_password, user.password_hash):
+            raise AppError("原密码错误", code=40010, status_code=400)
+        new_password = self._unlock_password(
+            encrypted_password=encrypted_new_password,
+            key_id=new_key_id,
+            challenge_id=new_challenge_id,
+        )
+        if new_password == old_password:
+            raise AppError("新密码不能与原密码相同", code=40023, status_code=400)
+        user.password_hash = hash_password(new_password)
+        user.must_change_password = False
+        try:
+            self.session.commit()
+            self.session.refresh(user)
+        except Exception:
+            self.session.rollback()
+            raise
+        return UserOut.model_validate(user)
 
     def get_profile(self, user: User) -> UserOut:
         return UserOut.model_validate(user)
