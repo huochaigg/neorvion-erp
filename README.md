@@ -2,7 +2,7 @@
 
 多租户跨境电商 ERP。当前仓库按里程碑持续迭代，**不要为每个版本重建项目**。
 
-当前里程碑：**V2.3.4**。
+当前里程碑：**V2.3.5**。
 
 ## 技术栈
 
@@ -118,6 +118,14 @@ pnpm --filter @neorvion/erp build
 pnpm test
 ```
 
+## V2.3.5
+
+- 企业内 `TenantMember.display_name`，回退 `User.display_name`；改一家企业不影响全局账号
+- 成员/角色细粒度权限；旧 `*:manage` 迁移保留兼容
+- 角色授权改为菜单 + 按钮权限树；权限目录只读
+- 自定义角色编辑/删除（使用中返回 `ROLE_IN_USE`）；系统角色后端保护
+- 版本文档：`docs/versions/v2.3.5.md`
+
 ## V2.3.4
 
 - 成员：添加已有账号、代建新账号（一次性临时密码）、查看、改角色、启用/禁用、移出企业
@@ -191,6 +199,6 @@ pnpm test
 
 ## 尚未开始
 
-完整菜单权限组件已在 V2.3.3/V2.3.4 落地。尚未开始：OWNER 转移、操作日志、商品库存、采购、销售订单。
+完整菜单权限组件已在 V2.3.5 收尾。尚未开始：OWNER 转移、操作日志、商品库存、采购、销售订单。
 
-更细的说明见 `docs/development.md`、`docs/architecture.md`、`docs/auth.md`、`docs/multi-tenancy.md`、`docs/rbac.md`、`docs/versions/v2.3.4.md`、`docs/routing.md`、`docs/micro-frontend-integration.md` 与 `docs/micro-frontend-interview.md`。
+更细的说明见 `docs/development.md`、`docs/architecture.md`、`docs/auth.md`、`docs/multi-tenancy.md`、`docs/rbac.md`、`docs/versions/v2.3.5.md`、`docs/routing.md`、`docs/micro-frontend-integration.md` 与 `docs/micro-frontend-interview.md`。

@@ -12,16 +12,20 @@ from app.core.exceptions import AppError
 from app.core.permissions import (
     ADMIN_REQUIRED_PERMISSION_CODES,
     DEFAULT_ROLE_TEMPLATES,
+    LEGACY_MANAGE_EXPANSION,
     PERMISSION_CATALOG,
+    PERMISSION_TREE,
     PermissionCode,
+    PermissionTreeDef,
     SystemRoleCode,
+    is_deprecated_permission,
 )
 from app.core.tenant import TenantContext
 from app.models.rbac import MemberRoleGrant, Permission, Role, RolePermission
 from app.models.tenant import MemberRole, Tenant
 from app.repositories.rbac import PermissionRepository, RoleRepository
 from app.repositories.tenant import TenantMemberRepository
-from app.schemas.rbac import PermissionOut, RoleCreate, RoleOut, RoleUpdate
+from app.schemas.rbac import PermissionOut, PermissionTreeNodeOut, RoleCreate, RoleOut, RoleUpdate
 from app.services.authorization import AuthorizationService
 
 _ROLE_CODE = re.compile(r"^[A-Z][A-Z0-9_-]{0,31}$")
@@ -54,6 +58,46 @@ class RoleService:
                 row.description = description
         self.session.flush()
         return created
+
+    def expand_legacy_manage_permissions(self) -> int:
+        """把旧 tenant:*:manage 展开成细粒度权限。
+
+        功能：历史角色只挂了 manage 时，补上 create/update 等新 code。
+        参数：无。扫描全部 role_permissions。
+        返回：新插入的关联行数。
+        异常：新 code 未 seed 时 50021。
+        核心流程：先建 code→Permission 映射，再按角色已有 permission_id 判断是否缺行。
+        不删除旧 manage：立刻删会导致尚未升级的校验或展示对不上。
+        """
+        self.seed_permission_catalog()
+        by_code = {item.code: item for item in self.permissions.list_all()}
+        permission_id_to_code = {item.id: item.code for item in by_code.values()}
+        links = list(self.session.scalars(select(RolePermission)).all())
+        owned: dict[int, set[int]] = {}
+        for link in links:
+            owned.setdefault(link.role_id, set()).add(link.permission_id)
+        added = 0
+        for link in links:
+            extras = LEGACY_MANAGE_EXPANSION.get(permission_id_to_code.get(link.permission_id, ""))
+            if not extras:
+                continue
+            for extra_code in extras:
+                permission = by_code.get(extra_code)
+                if permission is None:
+                    raise AppError("权限编码未定义", code=50021, status_code=500)
+                if permission.id in owned.get(link.role_id, set()):
+                    continue
+                self.roles.add_permission_link(
+                    RolePermission(
+                        tenant_id=link.tenant_id,
+                        role_id=link.role_id,
+                        permission_id=permission.id,
+                    )
+                )
+                owned.setdefault(link.role_id, set()).add(permission.id)
+                added += 1
+        self.session.flush()
+        return added
 
     def bootstrap_tenant(self, *, tenant_id: int, owner_member_id: int | None) -> None:
         """为租户创建默认系统角色；OWNER 成员挂 OWNER，其余成员挂 VIEWER。调用方负责事务。"""
@@ -108,9 +152,41 @@ class RoleService:
         return len(tenants)
 
     def list_permissions(self, context: TenantContext) -> list[PermissionOut]:
-        """列出全局权限目录。需 tenant:role:read。"""
-        self.auth.require_all(context, (PermissionCode.TENANT_ROLE_READ,))
+        """列出全局权限目录。目录只读，租户不能 CRUD Permission。"""
+        self.auth.require_any(
+            context,
+            (
+                PermissionCode.TENANT_PERMISSION_READ,
+                PermissionCode.TENANT_ROLE_READ,
+            ),
+        )
         return [self._permission_out(item) for item in self.permissions.list_all()]
+
+    def list_permission_tree(self, context: TenantContext) -> list[PermissionTreeNodeOut]:
+        """把程序定义的资源树转成带 permission_id 的配置树。
+
+        功能：给角色授权 UI 展示 目录 → 菜单 → 按钮。
+        参数：已校验的 TenantContext。
+        返回：DIRECTORY/MENU 可以没有 permission_id；ACTION 才对应真实权限。
+        异常：缺少查看/配置相关权限时 403。
+        核心流程：只查全局 permissions 表补 id，不写租户菜单表。
+        """
+        self.auth.require_any(
+            context,
+            (
+                PermissionCode.TENANT_PERMISSION_READ,
+                PermissionCode.TENANT_ROLE_READ,
+                PermissionCode.TENANT_ROLE_CREATE,
+                PermissionCode.TENANT_ROLE_PERMISSION_UPDATE,
+            ),
+        )
+        by_code = {item.code: item for item in self.permissions.list_all()}
+        nodes: list[PermissionTreeNodeOut] = []
+        for item in PERMISSION_TREE:
+            mapped = self._tree_node_out(item, by_code)
+            if mapped is not None:
+                nodes.append(mapped)
+        return nodes
 
     def list_roles(self, context: TenantContext) -> list[RoleOut]:
         """列出当前租户下全部角色（含系统角色）。需 tenant:role:read。"""
@@ -132,7 +208,7 @@ class RoleService:
 
     def create_role(self, context: TenantContext, payload: RoleCreate) -> RoleOut:
         """创建自定义角色并绑定权限。系统角色码冲突走 409；本方法 commit。"""
-        self.auth.require_all(context, (PermissionCode.TENANT_ROLE_MANAGE,))
+        self.auth.require_all(context, (PermissionCode.TENANT_ROLE_CREATE,))
         code = self._normalize_code(payload.code)
         if self.roles.get_by_code(context.tenant_id, code) is not None:
             raise AppError("角色编码已存在", code=40920, status_code=409)
@@ -162,8 +238,8 @@ class RoleService:
         return self.get_role(context, role.id)
 
     def update_role(self, context: TenantContext, role_id: int, payload: RoleUpdate) -> RoleOut:
-        """更新自定义角色名称/描述。系统角色禁止改；不改权限列表。"""
-        self.auth.require_all(context, (PermissionCode.TENANT_ROLE_MANAGE,))
+        """更新自定义角色名称/描述。系统角色禁止改；不改权限列表。code 创建后只读。"""
+        self.auth.require_all(context, (PermissionCode.TENANT_ROLE_UPDATE,))
         role = self._require_role(context.tenant_id, role_id)
         if role.is_system:
             raise AppError("系统角色不允许修改", code=40040, status_code=400)
@@ -191,7 +267,7 @@ class RoleService:
         没有 Redis 权限缓存：提交后下一次 require_permission / my-permissions
         都会重新 JOIN 数据库。
         """
-        self.auth.require_all(context, (PermissionCode.TENANT_ROLE_MANAGE,))
+        self.auth.require_all(context, (PermissionCode.TENANT_ROLE_PERMISSION_UPDATE,))
         role = self._require_role(context.tenant_id, role_id)
         if role.code == SystemRoleCode.OWNER:
             raise AppError("所有者角色的核心权限不可通过管理接口修改", code=40040, status_code=400)
@@ -217,16 +293,21 @@ class RoleService:
 
         有人还在用时禁止静默清 MemberRoleGrant，否则成员会突然失去全部权限。
         """
-        self.auth.require_all(context, (PermissionCode.TENANT_ROLE_MANAGE,))
+        self.auth.require_all(context, (PermissionCode.TENANT_ROLE_DELETE,))
         role = self._require_role(context.tenant_id, role_id)
+        # 不能只靠前端藏按钮：系统角色必须由 is_system 在服务端拒绝。
         if role.is_system:
             raise AppError("系统角色不允许删除", code=40040, status_code=400)
+        # 先查询该角色是否仍被 MemberRoleGrant 引用，
+        # 如果直接删除角色并级联删除关联，会导致成员权限被静默改变。
+        # 因此这里明确拒绝删除，并要求管理员先调整成员角色。
         used = self.roles.count_grants(tenant_id=context.tenant_id, role_id=role.id)
         if used > 0:
             raise AppError(
-                f"当前角色仍有 {used} 名成员使用，请先调整成员角色。",
+                f"当前角色仍有 {used} 名成员使用，请先调整这些成员的角色。",
                 code=40041,
                 status_code=400,
+                data={"error": "ROLE_IN_USE", "member_count": used},
             )
         try:
             self.session.execute(
@@ -250,9 +331,9 @@ class RoleService:
         actor: TenantContext | None = None,
         commit: bool = True,
     ) -> None:
-        """给成员加角色。传 actor 时需 member:manage，且不能授 OWNER；bootstrap 不传 actor。"""
+        """给成员加角色。传 actor 时需 member:role:update，且不能授 OWNER；bootstrap 不传 actor。"""
         if actor is not None:
-            self.auth.require_all(actor, (PermissionCode.TENANT_MEMBER_MANAGE,))
+            self.auth.require_all(actor, (PermissionCode.TENANT_MEMBER_ROLE_UPDATE,))
         role = self._require_role(tenant_id, role_id)
         member = self.members.get_in_tenant(tenant_id=tenant_id, member_id=member_id)
         if member is None:
@@ -447,6 +528,33 @@ class RoleService:
         return normalized
 
     @staticmethod
+    def _tree_node_out(
+        node: PermissionTreeDef,
+        by_code: dict[str, Permission],
+    ) -> PermissionTreeNodeOut | None:
+        """递归映射权限树。废弃 code 不出现在树上，避免再授权旧 manage。"""
+        if node.permission_code and is_deprecated_permission(node.permission_code):
+            return None
+        permission = by_code.get(node.permission_code) if node.permission_code else None
+        if node.permission_code and permission is None:
+            return None
+        children = [
+            child
+            for child in (RoleService._tree_node_out(item, by_code) for item in node.children)
+            if child is not None
+        ]
+        if permission is None and not children:
+            return None
+        return PermissionTreeNodeOut(
+            key=node.key,
+            title=node.title,
+            type=node.type,
+            permission_id=permission.id if permission is not None else None,
+            permission_code=permission.code if permission is not None else None,
+            children=children,
+        )
+
+    @staticmethod
     def _permission_out(item: Permission) -> PermissionOut:
         """Permission ORM → API schema。"""
         return PermissionOut(
@@ -455,6 +563,7 @@ class RoleService:
             name=item.name,
             module=item.module,
             description=item.description,
+            deprecated=is_deprecated_permission(item.code),
         )
 
     @staticmethod

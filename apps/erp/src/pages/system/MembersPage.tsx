@@ -22,6 +22,7 @@ import {
   fetchMember,
   fetchMembers,
   removeMember,
+  updateMember,
   updateMemberRoles,
   updateMemberStatus,
 } from '@/api/members';
@@ -39,7 +40,7 @@ export function MembersPage(props: PageProps) {
   const navigate = useNavigate();
   const params = useParams();
   const routeMemberId = params.memberId ? Number(params.memberId) : null;
-  const { tenantId } = usePermissions();
+  const { tenantId, hasPermission } = usePermissions();
   const [q, setQ] = useState('');
   const [keyword, setKeyword] = useState('');
   const [status, setStatus] = useState<string | undefined>();
@@ -122,11 +123,27 @@ export function MembersPage(props: PageProps) {
     },
   });
 
-  const rolesMutation = useMutation({
-    mutationFn: (values: { memberId: number; role_ids: number[] }) =>
-      updateMemberRoles(tenantId as number, values.memberId, { role_ids: values.role_ids }),
+  const profileMutation = useMutation({
+    mutationFn: (values: {
+      memberId: number;
+      display_name?: string;
+      role_ids?: number[];
+    }) => {
+      const tasks: Promise<unknown>[] = [];
+      if (values.display_name != null) {
+        tasks.push(
+          updateMember(tenantId as number, values.memberId, { display_name: values.display_name }),
+        );
+      }
+      if (values.role_ids) {
+        tasks.push(
+          updateMemberRoles(tenantId as number, values.memberId, { role_ids: values.role_ids }),
+        );
+      }
+      return Promise.all(tasks);
+    },
     onSuccess: () => {
-      message.success('角色已更新');
+      message.success('成员已更新');
       setEditing(null);
       invalidateMembers();
     },
@@ -171,7 +188,7 @@ export function MembersPage(props: PageProps) {
   };
 
   const columns: ColumnsType<TenantMember> = [
-    { title: '成员', dataIndex: 'display_name' },
+    { title: '企业内名称', dataIndex: 'display_name' },
     { title: '邮箱', dataIndex: 'email' },
     {
       title: '角色',
@@ -203,15 +220,19 @@ export function MembersPage(props: PageProps) {
           >
             查看
           </Button>
+          <Can
+            permissions={[
+              PERMISSION_CODE.tenantMemberUpdate,
+              PERMISSION_CODE.tenantMemberRoleUpdate,
+            ]}
+            mode="any"
+          >
+            <Button type="link" size="small" onClick={() => setEditing(record)}>
+              编辑
+            </Button>
+          </Can>
           {record.is_owner ? null : (
-            <Can permission={PERMISSION_CODE.tenantMemberManage}>
-              <Button type="link" size="small" onClick={() => setEditing(record)}>
-                编辑角色
-              </Button>
-            </Can>
-          )}
-          {record.is_owner ? null : (
-            <Can permission={PERMISSION_CODE.tenantMemberManage}>
+            <Can permission={PERMISSION_CODE.tenantMemberDisable}>
               <Button
                 type="link"
                 size="small"
@@ -236,7 +257,7 @@ export function MembersPage(props: PageProps) {
             </Can>
           )}
           {record.is_owner ? null : (
-            <Can permission={PERMISSION_CODE.tenantMemberManage}>
+            <Can permission={PERMISSION_CODE.tenantMemberRemove}>
               <Button
                 type="link"
                 size="small"
@@ -264,7 +285,7 @@ export function MembersPage(props: PageProps) {
         title={props.title ?? '成员管理'}
         description={props.description ?? '添加已有账号或创建新账号，分配角色并启停、移除成员。'}
         extra={
-          <Can permission={PERMISSION_CODE.tenantMemberManage}>
+          <Can permission={PERMISSION_CODE.tenantMemberCreate}>
             <Button type="primary" onClick={() => setAddOpen(true)}>
               添加成员
             </Button>
@@ -432,7 +453,7 @@ export function MembersPage(props: PageProps) {
       </Modal>
 
       <Modal
-        title="修改角色"
+        title="编辑成员"
         open={Boolean(editing)}
         onCancel={() => setEditing(null)}
         footer={null}
@@ -441,21 +462,49 @@ export function MembersPage(props: PageProps) {
         {editing ? (
           <Form
             layout="vertical"
-            initialValues={{ role_ids: editing.roles.map((item) => item.id) }}
-            onFinish={(values: { role_ids: number[] }) =>
-              rolesMutation.mutate({ memberId: editing.id, role_ids: values.role_ids ?? [] })
+            initialValues={{
+              display_name: editing.member_display_name || editing.display_name,
+              email: editing.email,
+              role_ids: editing.roles.map((item) => item.id),
+            }}
+            onFinish={(values: { display_name: string; role_ids?: number[] }) =>
+              profileMutation.mutate({
+                memberId: editing.id,
+                display_name: hasPermission(PERMISSION_CODE.tenantMemberUpdate)
+                  ? values.display_name
+                  : undefined,
+                role_ids:
+                  !editing.is_owner && hasPermission(PERMISSION_CODE.tenantMemberRoleUpdate)
+                    ? (values.role_ids ?? [])
+                    : undefined,
+              })
             }
           >
-            <Form.Item name="role_ids" label="角色">
-              <Select
-                mode="multiple"
-                options={assignableRoles.map((role) => ({
-                  value: role.id,
-                  label: `${role.name}（${role.code}）`,
-                }))}
-              />
+            <Form.Item name="email" label="邮箱">
+              <Input readOnly />
             </Form.Item>
-            <Button type="primary" htmlType="submit" loading={rolesMutation.isPending} block>
+            {hasPermission(PERMISSION_CODE.tenantMemberUpdate) ? (
+            <Form.Item
+              name="display_name"
+              label="成员名称"
+              extra="名称仅影响当前企业内展示，不修改用户全局账号名称。"
+              rules={[{ required: true, message: '请输入企业内显示名称' }]}
+            >
+              <Input placeholder="企业内显示名称" />
+            </Form.Item>
+            ) : null}
+            {!editing.is_owner && hasPermission(PERMISSION_CODE.tenantMemberRoleUpdate) ? (
+              <Form.Item name="role_ids" label="角色">
+                <Select
+                  mode="multiple"
+                  options={assignableRoles.map((role) => ({
+                    value: role.id,
+                    label: `${role.name}（${role.code}）`,
+                  }))}
+                />
+              </Form.Item>
+            ) : null}
+            <Button type="primary" htmlType="submit" loading={profileMutation.isPending} block>
               保存
             </Button>
           </Form>

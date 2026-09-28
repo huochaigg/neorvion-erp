@@ -13,13 +13,14 @@ def main() -> None:
     session = SessionLocal()
     try:
         created = RoleService(session).seed_permission_catalog()
+        expanded = RoleService(session).expand_legacy_manage_permissions()
         session.commit()
     except Exception:
         session.rollback()
         raise
     finally:
         session.close()
-    print(f"permissions seeded, newly created={created}")
+    print(f"permissions seeded, newly created={created}, legacy expanded={expanded}")
 
 
 if __name__ == "__main__":

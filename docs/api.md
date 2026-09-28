@@ -16,7 +16,7 @@
 
 `GET /api/v1/health`
 
-依赖不可用时 HTTP 仍为 200，字段标记 `unavailable`。当前 `milestone` 为 `V2.3.4`。
+依赖不可用时 HTTP 仍为 200，字段标记 `unavailable`。当前 `milestone` 为 `V2.3.5`。
 
 ## 认证
 
@@ -45,7 +45,7 @@
 - `GET /api/v1/tenants/{tenant_id}/members/{member_id}`
 - `GET /api/v1/tenants/{tenant_id}/members/{member_id}/permissions`
 - `PUT /api/v1/tenants/{tenant_id}/members/{member_id}/roles`
-- `PATCH /api/v1/tenants/{tenant_id}/members/{member_id}`（启用/禁用）
+- `PATCH /api/v1/tenants/{tenant_id}/members/{member_id}`（企业内名称和/或启用禁用）
 - `DELETE /api/v1/tenants/{tenant_id}/members/{member_id}`（移出企业，不删 User）
 
 `GET /api/v1/tenants/current` 含 `permission_codes`。`GET /api/v1/tenants/current/my-permissions` 是前端菜单的数据源。
@@ -55,6 +55,7 @@
 详见 `docs/rbac.md`。需要登录和 `X-Tenant-ID`。
 
 - `GET /api/v1/permissions`
+- `GET /api/v1/permissions/tree`
 - `GET /api/v1/roles`
 - `POST /api/v1/roles`
 - `GET /api/v1/roles/{role_id}`

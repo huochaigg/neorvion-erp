@@ -576,7 +576,7 @@ def test_admin_permissions_can_change_but_must_keep_tenant_management(client: Te
     assert updated.status_code == 200, updated.text
     codes = {item["code"] for item in updated.json()["data"]["permissions"]}
     assert PermissionCode.PRODUCT_READ in codes
-    assert PermissionCode.TENANT_ROLE_MANAGE in codes
+    assert PermissionCode.TENANT_ROLE_DELETE in codes
     stripped = client.put(
         f"/api/v1/roles/{roles['ADMIN']['id']}/permissions",
         json={"permission_ids": [by_code[PermissionCode.PRODUCT_READ]]},
@@ -619,7 +619,7 @@ def test_permission_change_takes_effect_on_next_request(client: TestClient) -> N
     keep = [
         by_code[code]
         for code in ADMIN_REQUIRED_PERMISSION_CODES
-        if code != PermissionCode.TENANT_ROLE_MANAGE
+        if code != PermissionCode.TENANT_ROLE_DELETE
     ]
     keep.append(by_code[PermissionCode.TENANT_ROLE_READ])
     denied = client.put(
@@ -640,7 +640,7 @@ def test_permission_change_takes_effect_on_next_request(client: TestClient) -> N
         headers=auth_header(member_token, tenant_id),
     )
     assert PermissionCode.PRODUCT_CREATE not in after.json()["data"]["permissions"]
-    assert PermissionCode.TENANT_ROLE_MANAGE in after.json()["data"]["permissions"]
+    assert PermissionCode.TENANT_ROLE_CREATE in after.json()["data"]["permissions"]
     create_role = client.post(
         "/api/v1/roles",
         json={"name": "临时", "code": "TEMPLIVE", "permission_ids": []},

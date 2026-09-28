@@ -90,14 +90,33 @@ class MemberCreate(BaseModel):
 
 
 class MemberUpdate(BaseModel):
+    """PATCH 可改企业内名称和/或状态。至少提供一个字段。"""
+
     model_config = ConfigDict(extra="forbid")
 
-    status: str = Field(min_length=1, max_length=16)
+    status: str | None = Field(default=None, max_length=16)
+    display_name: str | None = Field(default=None, max_length=64)
 
     @field_validator("status")
     @classmethod
-    def normalize_status(cls, value: str) -> str:
+    def normalize_status(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
         return value.strip().upper()
+
+    @field_validator("display_name")
+    @classmethod
+    def strip_display_name(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        name = value.strip()
+        return name or None
+
+    @model_validator(mode="after")
+    def require_patch_field(self) -> "MemberUpdate":
+        if self.status is None and "display_name" not in self.model_fields_set:
+            raise ValueError("请提供要修改的字段")
+        return self
 
 
 class MemberRolesUpdate(BaseModel):
@@ -137,6 +156,8 @@ class MemberOut(BaseModel):
     status: str
     joined_at: datetime
     display_name: str
+    member_display_name: str | None = None
+    user_display_name: str = ""
     email: str
     is_owner: bool
     roles: list[MemberRoleBrief] = Field(default_factory=list)

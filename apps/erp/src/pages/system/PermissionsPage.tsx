@@ -28,6 +28,12 @@ export function PermissionsPage(props: PageProps) {
       render: (value: string) => <Tag>{permissionModuleLabel(value)}</Tag>,
     },
     { title: '说明', dataIndex: 'description' },
+    {
+      title: '状态',
+      dataIndex: 'deprecated',
+      render: (value: boolean | undefined) =>
+        value ? <Tag color="warning">已废弃</Tag> : <Tag>有效</Tag>,
+    },
   ];
 
   return (

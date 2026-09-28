@@ -1,7 +1,12 @@
 from fastapi import APIRouter, Query
 
 from app.api.deps import CurrentUser, DbSession, TenantContextDep
-from app.api.rbac_deps import MemberManageContext, MemberReadContext
+from app.api.rbac_deps import (
+    MemberCreateContext,
+    MemberReadContext,
+    MemberRemoveContext,
+    MemberRoleUpdateContext,
+)
 from app.schemas.common import ApiResponse, ok
 from app.schemas.tenant import (
     MemberAccountCreate,
@@ -122,7 +127,7 @@ def list_members(
 def add_member(
     tenant_id: int,
     payload: MemberCreate,
-    context: MemberManageContext,
+    context: MemberCreateContext,
     session: DbSession,
 ) -> ApiResponse[MemberOut]:
     member = TenantService(session).add_member(
@@ -143,7 +148,7 @@ def add_member(
 def create_member_account(
     tenant_id: int,
     payload: MemberAccountCreate,
-    context: MemberManageContext,
+    context: MemberCreateContext,
     session: DbSession,
 ) -> ApiResponse[MemberCreatedOut]:
     """代建全局登录账号并加入当前企业。temporary_password 只在本响应出现一次。"""
@@ -206,7 +211,7 @@ def replace_member_roles(
     tenant_id: int,
     member_id: int,
     payload: MemberRolesUpdate,
-    context: MemberManageContext,
+    context: MemberRoleUpdateContext,
     session: DbSession,
 ) -> ApiResponse[MemberOut]:
     member = TenantService(session).replace_member_roles(
@@ -221,20 +226,23 @@ def replace_member_roles(
 @router.patch(
     "/{tenant_id}/members/{member_id}",
     response_model=ApiResponse[MemberOut],
-    summary="更新成员状态",
+    summary="更新成员",
 )
 def update_member(
     tenant_id: int,
     member_id: int,
     payload: MemberUpdate,
-    context: MemberManageContext,
+    context: TenantContextDep,
     session: DbSession,
 ) -> ApiResponse[MemberOut]:
+    """可改企业内 display_name 和/或状态。权限按提交字段分别校验。"""
     member = TenantService(session).update_member(
         context=context,
         tenant_id=tenant_id,
         member_id=member_id,
         status=payload.status,
+        display_name=payload.display_name,
+        fields=payload.model_fields_set,
     )
     return ok(member)
 
@@ -247,7 +255,7 @@ def update_member(
 def remove_member(
     tenant_id: int,
     member_id: int,
-    context: MemberManageContext,
+    context: MemberRemoveContext,
     session: DbSession,
 ) -> ApiResponse[None]:
     TenantService(session).remove_member(

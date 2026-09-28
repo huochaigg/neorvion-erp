@@ -5,7 +5,7 @@ from collections.abc import Sequence
 from sqlalchemy.orm import Session
 
 from app.core.exceptions import AppError
-from app.core.permissions import SystemRoleCode, known_permission_codes
+from app.core.permissions import LEGACY_MANAGE_EXPANSION, SystemRoleCode, known_permission_codes
 from app.core.tenant import TenantContext
 from app.models.tenant import MemberRole, MemberStatus, TenantStatus
 from app.repositories.rbac import RoleRepository
@@ -24,10 +24,18 @@ class AuthorizationService:
         # 目录里已经登记的权限，所有者全部拥有，避免每次加新 code 都漏给历史 OWNER。
         if context.is_owner:
             return set(known_permission_codes())
-        return self.roles.list_permission_codes_for_member(
-            tenant_id=context.tenant_id,
-            member_id=context.member_id,
+        owned = set(
+            self.roles.list_permission_codes_for_member(
+                tenant_id=context.tenant_id,
+                member_id=context.member_id,
+            )
         )
+        # 历史角色可能只有 tenant:*:manage。接口已改成细粒度校验，
+        # 这里把旧 manage 视作拥有对应细粒度，避免升级窗口内突然 403。
+        for legacy, extras in LEGACY_MANAGE_EXPANSION.items():
+            if legacy in owned:
+                owned.update(extras)
+        return owned
 
     def current_member_access(self, context: TenantContext) -> MyPermissionsOut:
         """当前租户成员的角色编码与权限编码快照。

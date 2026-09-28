@@ -172,7 +172,7 @@ export const routes: AppRoute[] = [
         description: '只读查看系统当前支持的权限编码，不能由企业自行增删。',
         showInMenu: true,
         sort: 30,
-        permission: PERMISSION_CODE.tenantRoleRead,
+        permission: PERMISSION_CODE.tenantPermissionRead,
         component: 'Permissions',
       },
     ],
