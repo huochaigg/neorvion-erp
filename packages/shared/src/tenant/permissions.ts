@@ -34,11 +34,24 @@ export function canAccess(
 }
 
 export function canManageMembers(codes: readonly string[] | undefined): boolean {
-  return hasPermission(codes, PERMISSION_CODE.tenantMemberManage);
+  return hasAnyPermission(codes, [
+    PERMISSION_CODE.tenantMemberCreate,
+    PERMISSION_CODE.tenantMemberUpdate,
+    PERMISSION_CODE.tenantMemberRoleUpdate,
+    PERMISSION_CODE.tenantMemberDisable,
+    PERMISSION_CODE.tenantMemberRemove,
+    PERMISSION_CODE.tenantMemberManage,
+  ]);
 }
 
 export function canManageRoles(codes: readonly string[] | undefined): boolean {
-  return hasPermission(codes, PERMISSION_CODE.tenantRoleManage);
+  return hasAnyPermission(codes, [
+    PERMISSION_CODE.tenantRoleCreate,
+    PERMISSION_CODE.tenantRoleUpdate,
+    PERMISSION_CODE.tenantRoleDelete,
+    PERMISSION_CODE.tenantRolePermissionUpdate,
+    PERMISSION_CODE.tenantRoleManage,
+  ]);
 }
 
 /** 前端不展示 OWNER；后端仍会拒绝非法授予。 */

@@ -9,11 +9,19 @@ from pydantic import BaseModel
 class AppError(Exception):
     """业务异常。API 层统一转换为标准 JSON。"""
 
-    def __init__(self, message: str, *, code: int = 40001, status_code: int = 400) -> None:
+    def __init__(
+        self,
+        message: str,
+        *,
+        code: int = 40001,
+        status_code: int = 400,
+        data: Any = None,
+    ) -> None:
         super().__init__(message)
         self.message = message
         self.code = code
         self.status_code = status_code
+        self.data = data
 
 
 class ErrorBody(BaseModel):
@@ -27,7 +35,7 @@ def register_exception_handlers(app: FastAPI) -> None:
     async def handle_app_error(_request: Request, exc: AppError) -> JSONResponse:
         return JSONResponse(
             status_code=exc.status_code,
-            content=ErrorBody(code=exc.code, message=exc.message).model_dump(),
+            content=ErrorBody(code=exc.code, message=exc.message, data=exc.data).model_dump(),
         )
 
     @app.exception_handler(RequestValidationError)

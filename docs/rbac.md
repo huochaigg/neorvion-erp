@@ -1,6 +1,6 @@
-# RBAC 权限模型（V2.3.1 + V2.3.2 + V2.3.3 + V2.3.4）
+# RBAC 权限模型（V2.3.1 ~ V2.3.5）
 
-V2.3.1 完成后端权限基础设施。V2.3.2 完成企业成员授权与 ERP 管理页面。V2.3.3 完成动态权限菜单、页面守卫与按钮权限。V2.3.4 补全成员/角色 CRUD、代建账号、角色权限配置与权限目录。详见 `docs/versions/v2.3.4.md`。
+V2.3.1 完成后端权限基础设施。V2.3.2 完成企业成员授权与 ERP 管理页面。V2.3.3 完成动态权限菜单、页面守卫与按钮权限。V2.3.4 补全成员/角色 CRUD、代建账号、角色权限配置与权限目录。V2.3.5 补齐企业内成员名称、细粒度系统管理权限、菜单按钮权限树，并结束 V2 RBAC 基础设施。详见 `docs/versions/v2.3.5.md`。
 
 ## 关系：User、TenantMember、Role、Permission
 
@@ -13,10 +13,15 @@ User（全局人）
                           └── Permission（平台统一权限目录）
 ```
 
-- **User**：邮箱和密码。没有 `tenant_id`，一个人可以加入多家企业。
-- **TenantMember**：某用户在某企业里是否有效。`tenant_members.role` 仍表示所有权（OWNER / MEMBER），**不是**细粒度权限。
+- **User**：邮箱和密码、全局 `display_name`。没有 `tenant_id`，一个人可以加入多家企业。
+- **TenantMember**：某用户在某企业里是否有效。可选 `display_name` 只影响当前企业展示，空则回退 `User.display_name`。`tenant_members.role` 仍表示所有权（OWNER / MEMBER），**不是**细粒度权限。
 - **Role**：属于具体租户。Acme 的 `ADMIN` 和 Beta 的 `ADMIN` 是两行。
-- **Permission**：平台统一定义的操作编码，例如 `tenant:member:manage`。
+- **Permission**：平台统一定义的操作编码，例如 `tenant:member:create`。`PermissionCode` 表示代码真实支持的能力，不是某个角色的固定清单。
+- **RolePermission**：某个租户角色实际拥有哪些目录项。
+
+最终权限 = 当前租户下该成员所有有效角色权限的 **并集**。OWNER 列另外表示所有权：目录里已登记的权限，所有者全部拥有。
+
+不要把角色写进 `users` 表。不要用全局用户角色代替租户角色。企业管理员不能通过成员接口改邮箱、密码或 User 全局名称。
 
 最终权限 = 当前租户下该成员所有有效角色权限的 **并集**。OWNER 列另外表示所有权：目录里已登记的权限，所有者全部拥有。
 
@@ -32,9 +37,11 @@ User（全局人）
 
 ## 为什么 Permission 可以统一定义
 
-`tenant:member:manage` 对所有企业含义相同：管理本企业成员。没有必要每家企业复制一份权限表。
+`tenant:member:create` 对所有企业含义相同：在本企业添加成员。没有必要每家企业复制一份权限表。
 
-V2.3 不开放租户自建任意权限编码。未知 code 是服务端配置错误（`50021`），不能悄悄放行。
+租户不能 CRUD 权限目录。用户自行创建的 code 若从未被 `require_permission` 使用，则没有任何实际意义。未知 code 是服务端配置错误（`50021`），不能悄悄放行。
+
+角色授权界面是程序定义的 DIRECTORY → MENU → ACTION 树（`GET /api/v1/permissions/tree`）。树只是 UI；真正授权仍写入 `role_permissions`。React 路由由 `routes.ts` 驱动，不能由租户在数据库里随便新增前端页面。
 
 ## 多对多关联表
 
@@ -68,7 +75,7 @@ V2.3 不开放租户自建任意权限编码。未知 code 是服务端配置错
 @router.post("/roles")
 def create_role(
     payload: RoleCreate,
-    context: Annotated[TenantContext, Depends(require_permission(PermissionCode.TENANT_ROLE_MANAGE))],
+    context: Annotated[TenantContext, Depends(require_permission(PermissionCode.TENANT_ROLE_CREATE))],
     session: DbSession,
 ):
     ...
@@ -128,28 +135,29 @@ OWNER 转移是独立业务流程，本版本不做。
 
 | 方法 | 路径 | 权限 |
 | --- | --- | --- |
-| GET | `/api/v1/permissions` | `tenant:role:read` |
+| GET | `/api/v1/permissions` | `tenant:permission:read` 或 `tenant:role:read` |
+| GET | `/api/v1/permissions/tree` | 同上 |
 | GET | `/api/v1/roles` | `tenant:role:read` |
-| POST | `/api/v1/roles` | `tenant:role:manage` |
+| POST | `/api/v1/roles` | `tenant:role:create` |
 | GET | `/api/v1/roles/{role_id}` | `tenant:role:read` |
-| PATCH | `/api/v1/roles/{role_id}` | `tenant:role:manage` |
-| PUT | `/api/v1/roles/{role_id}/permissions` | `tenant:role:manage` |
-| DELETE | `/api/v1/roles/{role_id}` | `tenant:role:manage` |
+| PATCH | `/api/v1/roles/{role_id}` | `tenant:role:update`（仅自定义角色的 name/description；code 只读） |
+| PUT | `/api/v1/roles/{role_id}/permissions` | `tenant:role:permission:update` |
+| DELETE | `/api/v1/roles/{role_id}` | `tenant:role:delete` |
 
-系统角色删除 → `40040`。OWNER 改权限 → `40040`。ADMIN 拿掉租户管理能力 → `40040`。角色仍被成员使用 → `40041`（文案含人数）。跨租户 `role_id` → `40420`。
+系统角色删除 → `40040`。OWNER 改权限 → `40040`。ADMIN 拿掉租户管理能力 → `40040`。角色仍被成员使用 → `40041`，`data.error = ROLE_IN_USE`，含 `member_count`。跨租户 `role_id` → `40420`。旧 `tenant:role:manage` / `tenant:member:manage` 保留兼容，新接口按细粒度校验。
 
 成员管理（路径参数 `tenant_id` 必须等于 `X-Tenant-ID`）：
 
 | 方法 | 路径 | 权限 |
 | --- | --- | --- |
 | GET | `/api/v1/tenants/{tenant_id}/members` | `tenant:member:read` |
-| POST | `/api/v1/tenants/{tenant_id}/members` | `tenant:member:manage`（已有账号） |
-| POST | `/api/v1/tenants/{tenant_id}/members/accounts` | `tenant:member:manage`（代建账号） |
+| POST | `/api/v1/tenants/{tenant_id}/members` | `tenant:member:create`（已有账号） |
+| POST | `/api/v1/tenants/{tenant_id}/members/accounts` | `tenant:member:create`（代建账号） |
 | GET | `/api/v1/tenants/{tenant_id}/members/{member_id}` | `tenant:member:read` |
 | GET | `/api/v1/tenants/{tenant_id}/members/{member_id}/permissions` | `tenant:member:read` |
-| PUT | `/api/v1/tenants/{tenant_id}/members/{member_id}/roles` | `tenant:member:manage` |
-| PATCH | `/api/v1/tenants/{tenant_id}/members/{member_id}` | `tenant:member:manage`（启用/禁用） |
-| DELETE | `/api/v1/tenants/{tenant_id}/members/{member_id}` | `tenant:member:manage`（移出企业，不删 User） |
+| PUT | `/api/v1/tenants/{tenant_id}/members/{member_id}/roles` | `tenant:member:role:update` |
+| PATCH | `/api/v1/tenants/{tenant_id}/members/{member_id}` | `tenant:member:update`（企业内名称）和/或 `tenant:member:disable`（启用/禁用） |
+| DELETE | `/api/v1/tenants/{tenant_id}/members/{member_id}` | `tenant:member:remove`（移出企业，不删 User） |
 
 `GET /api/v1/tenants/current` 返回 `permission_codes`。  
 `GET /api/v1/tenants/current/my-permissions` 返回当前成员 `roles` 与 `permissions` 编码数组。两者都每次查库，不信任前端提交的权限列表。
@@ -158,13 +166,13 @@ OWNER 转移是独立业务流程，本版本不做。
 
 添加已有账号请传已注册用户的 `email` 和可选 `role_ids`。代建账号请传 `display_name`、`email`、可选 `role_ids`，响应中的 `temporary_password` 只出现一次。不能授予 OWNER。默认角色为 VIEWER。禁用保留成员行；移除删除 TenantMember 与 MemberRoleGrant，不删 User。
 
-ERP 系统管理页：成员管理、角色管理、权限目录（只读）。权限勾选来自 `GET /api/v1/permissions`，按 module 分组，支持模块全选。
+ERP 系统管理页：成员管理、角色管理、权限目录（只读）。角色权限用 Ant Design Tree 勾选菜单与按钮，提交 `permission_ids`。
 
-幂等灌入权限目录（不删已有行）：
+幂等灌入权限目录（不删已有行，并展开旧 manage）：
 
 ```bash
 cd backend
 uv run python -m app.scripts.seed_permissions
 ```
 
-不要在应用启动时建表。建表只走 Alembic：`20260926_0004`（RBAC 表）与 `20260928_0005`（`users.must_change_password`）。
+不要在应用启动时建表。建表只走 Alembic：`20260926_0004`（RBAC 表）、`20260928_0005`（`users.must_change_password`）、`20260928_0006`（`tenant_members.display_name` 与细粒度权限 seed）。

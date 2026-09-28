@@ -35,8 +35,10 @@ describe('permission UI helpers', () => {
   it('按权限编码而不是角色名判断管理按钮', () => {
     assert.equal(hasPermission(['tenant:member:manage'], PERMISSION_CODE.tenantMemberManage), true);
     assert.equal(canManageMembers(['tenant:member:read']), false);
+    assert.equal(canManageMembers(['tenant:member:create']), true);
     assert.equal(canManageMembers(['tenant:member:manage']), true);
     assert.equal(canManageRoles(['tenant:role:read']), false);
+    assert.equal(canManageRoles(['tenant:role:permission:update']), true);
     assert.equal(canManageRoles(['tenant:role:manage']), true);
     assert.equal(hasAnyPermission(['product:read'], ['tenant:member:manage', 'product:read']), true);
     assert.equal(hasAllPermissions(['product:read'], ['product:read', 'order:read']), false);

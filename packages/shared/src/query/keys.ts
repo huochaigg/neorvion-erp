@@ -37,6 +37,10 @@ export function tenantPermissionsQueryKey(tenantId: number | null) {
   return ['tenant', tenantId, 'permissions'] as const;
 }
 
+export function tenantPermissionTreeQueryKey(tenantId: number | null) {
+  return ['tenant', tenantId, 'permission-tree'] as const;
+}
+
 export function tenantContextQueryKey(tenantId: number | null) {
   return ['tenant', tenantId, 'context'] as const;
 }

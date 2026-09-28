@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -9,8 +11,18 @@ class PermissionOut(BaseModel):
     name: str
     module: str
     description: str
+    deprecated: bool = False
 
     model_config = {"from_attributes": True}
+
+
+class PermissionTreeNodeOut(BaseModel):
+    key: str
+    title: str
+    type: str
+    permission_id: int | None = None
+    permission_code: str | None = None
+    children: list[PermissionTreeNodeOut] = Field(default_factory=list)
 
 
 class RoleOut(BaseModel):

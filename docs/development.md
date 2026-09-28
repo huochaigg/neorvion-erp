@@ -1,6 +1,6 @@
 # 开发说明
 
-当前里程碑：V2.3.4（RBAC 管理后台完整闭环）。
+当前里程碑：V2.3.5（RBAC 管理体验完善，V2 权限基础设施收尾）。
 
 ## 前置
 
@@ -91,12 +91,13 @@ pnpm test
 15. 登录后创建企业，`GET /api/v1/roles`（带头 `X-Tenant-ID`）应看到 OWNER / ADMIN / OPERATOR / WAREHOUSE / VIEWER。
 16. 未登录访问 `/api/v1/roles` 返回 401；普通成员 `POST /api/v1/roles` 返回 403。
 17. ERP 侧栏「系统管理」可打开成员、角色、权限目录；OWNER 可添加已有账号或创建新账号。
-18. 无 `tenant:member:manage` 的成员看不到添加/改角色/禁用/移除按钮；直接调接口仍 403。
+18. 成员按钮按细粒度权限显示：无 `tenant:member:create` 看不到添加；无 `tenant:member:update` 不能改企业内名称。直接调接口仍 403。
 19. 切换企业后成员/角色/权限目录变为新租户；`/system/members/:id` 会回到成员列表。
 20. 代建账号成功后只展示一次临时密码；该账号登录后必须先改密（`40350`）。
-21. 保存角色权限后，当前用户菜单和按钮随 `my-permissions` 立即更新。
+21. 角色权限树保存后，当前用户菜单和按钮随 `my-permissions` 立即更新。DIRECTORY 节点不会被写成 Permission。
+22. 使用中的自定义角色删除会提示人数（`ROLE_IN_USE`）；系统角色后端拒绝删除。
 
-多租户说明见 `docs/multi-tenancy.md`。RBAC 见 `docs/rbac.md`。V2.3.4 见 `docs/versions/v2.3.4.md`。路由配置说明见 `docs/routing.md`。认证流程见 `docs/auth.md`。
+多租户说明见 `docs/multi-tenancy.md`。RBAC 见 `docs/rbac.md`。V2.3.5 见 `docs/versions/v2.3.5.md`。路由配置说明见 `docs/routing.md`。认证流程见 `docs/auth.md`。
 
 ## 浏览器进 debugger
 

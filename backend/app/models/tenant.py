@@ -91,6 +91,8 @@ class TenantMember(TimestampMixin, Base):
         nullable=False,
         server_default=MemberRole.MEMBER.value,
     )
+    # 企业内展示名。为空时 API 回退 User.display_name，避免改一家企业的称呼影响全局账号。
+    display_name: Mapped[str | None] = mapped_column(String(64), nullable=True)
     joined_at: Mapped[datetime] = mapped_column(
         DateTime,
         nullable=False,

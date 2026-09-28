@@ -35,6 +35,18 @@ export interface PermissionInfo {
   name: string;
   module: string;
   description: string;
+  deprecated?: boolean;
+}
+
+export type PermissionResourceType = 'DIRECTORY' | 'MENU' | 'ACTION';
+
+export interface PermissionTreeNode {
+  key: string;
+  title: string;
+  type: PermissionResourceType;
+  permission_id: number | null;
+  permission_code: string | null;
+  children: PermissionTreeNode[];
 }
 
 export interface RoleInfo {
@@ -56,8 +68,9 @@ export interface TenantMember {
   user_id: number;
   role: string;
   status: string;
-  joined_at: string;
   display_name: string;
+  member_display_name?: string | null;
+  user_display_name?: string;
   email: string;
   is_owner: boolean;
   roles: TenantMemberRole[];
@@ -99,6 +112,11 @@ export interface MemberRolesUpdatePayload {
   role_ids: number[];
 }
 
+export interface MemberUpdatePayload {
+  display_name?: string | null;
+  status?: string;
+}
+
 export interface RoleCreatePayload {
   name: string;
   code: string;
@@ -133,13 +151,25 @@ export const MEMBER_STATUS = {
 
 export const PERMISSION_CODE = {
   tenantRead: 'tenant:read',
+  tenantUpdate: 'tenant:update',
   tenantMemberRead: 'tenant:member:read',
+  tenantMemberCreate: 'tenant:member:create',
+  tenantMemberUpdate: 'tenant:member:update',
+  tenantMemberRoleUpdate: 'tenant:member:role:update',
+  tenantMemberDisable: 'tenant:member:disable',
+  tenantMemberRemove: 'tenant:member:remove',
   tenantMemberManage: 'tenant:member:manage',
   tenantRoleRead: 'tenant:role:read',
+  tenantRoleCreate: 'tenant:role:create',
+  tenantRoleUpdate: 'tenant:role:update',
+  tenantRoleDelete: 'tenant:role:delete',
+  tenantRolePermissionUpdate: 'tenant:role:permission:update',
   tenantRoleManage: 'tenant:role:manage',
+  tenantPermissionRead: 'tenant:permission:read',
   productRead: 'product:read',
   productCreate: 'product:create',
   productUpdate: 'product:update',
+  productDelete: 'product:delete',
   orderRead: 'order:read',
   inventoryRead: 'inventory:read',
 } as const;

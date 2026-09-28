@@ -93,7 +93,11 @@ class TenantMemberRepository(BaseRepository):
         )
         if q:
             pattern = f"%{q}%"
-            search = or_(User.display_name.like(pattern), User.email.like(pattern))
+            search = or_(
+                TenantMember.display_name.like(pattern),
+                User.display_name.like(pattern),
+                User.email.like(pattern),
+            )
             count_stmt = count_stmt.join(User, User.id == TenantMember.user_id).where(search)
             list_stmt = list_stmt.join(User, User.id == TenantMember.user_id).where(search)
 

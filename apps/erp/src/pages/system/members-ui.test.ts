@@ -26,13 +26,15 @@ const ownerRole: RoleInfo = {
 const adminRole: RoleInfo = { ...ownerRole, id: 2, name: '管理员', code: 'ADMIN' };
 
 describe('成员与角色页 UI 规则', () => {
-  it('无 tenant:member:manage 时隐藏新增/改角色/启停', () => {
+  it('无细粒度成员写权限时隐藏管理操作，有 create 则视为可管理', () => {
     assert.equal(canManageMembers(['tenant:member:read']), false);
+    assert.equal(canManageMembers(['tenant:member:create']), true);
     assert.equal(canManageMembers(['tenant:member:manage']), true);
   });
 
-  it('无 tenant:role:manage 时隐藏角色管理操作', () => {
+  it('无细粒度角色写权限时隐藏角色管理操作', () => {
     assert.equal(canManageRoles(['tenant:role:read']), false);
+    assert.equal(canManageRoles(['tenant:role:delete']), true);
     assert.equal(canManageRoles(['tenant:role:manage']), true);
   });
 

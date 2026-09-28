@@ -5,7 +5,12 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.exceptions import AppError
-from app.core.permissions import PermissionCode, SystemRoleCode, known_permission_codes
+from app.core.permissions import (
+    PermissionCode,
+    SystemRoleCode,
+    is_deprecated_permission,
+    known_permission_codes,
+)
 from app.core.security import generate_temporary_password, hash_password
 from app.core.tenant import TenantContext
 from app.models.tenant import MemberRole, MemberStatus, Tenant, TenantMember, TenantStatus
@@ -149,7 +154,7 @@ class TenantService:
         关键流程：先校验全部角色，再 insert。并发重复加入靠 UNIQUE(tenant_id, user_id) 转 409。
         """
         self._assert_same_tenant(context, tenant_id)
-        self.auth.require_all(context, (PermissionCode.TENANT_MEMBER_MANAGE,))
+        self.auth.require_all(context, (PermissionCode.TENANT_MEMBER_CREATE,))
         target = self._resolve_target_user(email=email, user_id=target_user_id)
         if self.members.get_by_tenant_user(context.tenant_id, target.id) is not None:
             raise AppError("该用户已是租户成员", code=40911, status_code=409)
@@ -204,7 +209,7 @@ class TenantService:
         但调用方会先看到含糊的 IntegrityError，而不是 40420 / 40321。
         """
         self._assert_same_tenant(context, tenant_id)
-        self.auth.require_all(context, (PermissionCode.TENANT_MEMBER_MANAGE,))
+        self.auth.require_all(context, (PermissionCode.TENANT_MEMBER_CREATE,))
         assigned_ids = self.rbac.resolve_assignable_role_ids(
             tenant_id=context.tenant_id,
             role_ids=role_ids or [],
@@ -262,7 +267,7 @@ class TenantService:
     ) -> MemberOut:
         """全量替换成员角色。OWNER 成员不能走这个接口改角色（转移是独立流程）。"""
         self._assert_same_tenant(context, tenant_id)
-        self.auth.require_all(context, (PermissionCode.TENANT_MEMBER_MANAGE,))
+        self.auth.require_all(context, (PermissionCode.TENANT_MEMBER_ROLE_UPDATE,))
         try:
             member = self.members.lock_in_tenant(
                 tenant_id=context.tenant_id,
@@ -303,27 +308,52 @@ class TenantService:
         context: TenantContext,
         tenant_id: int,
         member_id: int,
-        status: str,
+        status: str | None = None,
+        display_name: str | None = None,
+        fields: set[str] | frozenset[str] | None = None,
     ) -> MemberOut:
-        """启用或禁用成员。
+        """更新企业内显示名称和/或启用禁用。
 
-        禁用后下一次请求走 get_tenant_context 立刻 40310，
-        不看 Access Token 是否仍在有效期内。
+        功能：PATCH 同一接口，按提交字段分流权限。
+        参数：fields 来自 Pydantic model_fields_set。
+        用来区分「没传 display_name」和「传了 null 清空」。
+        返回：更新后的成员。
+        异常：跨租户 404；OWNER 禁用唯一所有者 40034。
+        核心流程：同时用 tenant_id + member_id 加行锁，避免改到别的企业。
+        不改 User.email / User.password / User.display_name。
         """
         self._assert_same_tenant(context, tenant_id)
-        self.auth.require_all(context, (PermissionCode.TENANT_MEMBER_MANAGE,))
-        if status not in {MemberStatus.ACTIVE.value, MemberStatus.DISABLED.value}:
+        submitted = fields or set()
+        update_status = "status" in submitted and status is not None
+        update_name = "display_name" in submitted
+        if not update_status and not update_name:
+            raise AppError("请提供要修改的字段", code=40035, status_code=400)
+        if update_status:
+            self.auth.require_all(context, (PermissionCode.TENANT_MEMBER_DISABLE,))
+        if update_name:
+            self.auth.require_all(context, (PermissionCode.TENANT_MEMBER_UPDATE,))
+        if update_status and status not in {
+            MemberStatus.ACTIVE.value,
+            MemberStatus.DISABLED.value,
+        }:
             raise AppError("成员状态不合法", code=40035, status_code=400)
         member = self.members.lock_in_tenant(tenant_id=context.tenant_id, member_id=member_id)
         if member is None:
             raise AppError("成员不存在", code=40412, status_code=404)
         if (
-            self._is_owner_member(member)
+            update_status
+            and self._is_owner_member(member)
             and status == MemberStatus.DISABLED.value
             and self.members.count_active_owners(context.tenant_id) <= 1
         ):
             raise AppError("不能禁用唯一所有者", code=40034, status_code=400)
-        member.status = status
+        if update_name:
+            member.display_name = display_name
+        if update_status:
+            # update_status 已要求 status is not None；再判一次供类型收窄。
+            if status is None:
+                raise AppError("请提供要修改的字段", code=40035, status_code=400)
+            member.status = status
         try:
             self.session.commit()
             self.session.refresh(member)
@@ -346,7 +376,7 @@ class TenantService:
         OWNER 不能走本接口：所有权转移是独立流程。即便还有其他 OWNER，也禁止用删除绕过。
         """
         self._assert_same_tenant(context, tenant_id)
-        self.auth.require_all(context, (PermissionCode.TENANT_MEMBER_MANAGE,))
+        self.auth.require_all(context, (PermissionCode.TENANT_MEMBER_REMOVE,))
         try:
             member = self.members.lock_in_tenant(
                 tenant_id=context.tenant_id,
@@ -432,6 +462,10 @@ class TenantService:
 
     def _member_out(self, member: TenantMember) -> MemberOut:
         user = member.user
+        user_display_name = user.display_name if user is not None else ""
+        member_display_name = member.display_name
+        # 企业内名称优先；未单独设置时回退全局 User.display_name。
+        display_name = member_display_name or user_display_name
         roles = [
             MemberRoleBrief(
                 id=grant.role.id,
@@ -450,7 +484,9 @@ class TenantService:
             role=member.role,
             status=member.status,
             joined_at=member.joined_at,
-            display_name=user.display_name if user is not None else "",
+            display_name=display_name,
+            member_display_name=member_display_name,
+            user_display_name=user_display_name,
             email=user.email if user is not None else "",
             is_owner=self._is_owner_member(member),
             roles=roles,
@@ -482,6 +518,7 @@ class TenantService:
                 name=item.name,
                 module=item.module,
                 description=item.description,
+                deprecated=is_deprecated_permission(item.code),
             )
             for item in rows
             if item.code in catalog

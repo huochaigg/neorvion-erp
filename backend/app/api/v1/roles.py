@@ -1,7 +1,13 @@
 from fastapi import APIRouter
 
 from app.api.deps import DbSession
-from app.api.rbac_deps import RoleManageContext, RoleReadContext
+from app.api.rbac_deps import (
+    RoleCreateContext,
+    RoleDeleteContext,
+    RolePermissionUpdateContext,
+    RoleReadContext,
+    RoleUpdateContext,
+)
 from app.schemas.common import ApiResponse, ok
 from app.schemas.rbac import RoleCreate, RoleOut, RolePermissionUpdate, RoleUpdate
 from app.services.rbac import RoleService
@@ -17,7 +23,7 @@ def list_roles(context: RoleReadContext, session: DbSession) -> ApiResponse[list
 @router.post("", response_model=ApiResponse[RoleOut], summary="创建自定义角色")
 def create_role(
     payload: RoleCreate,
-    context: RoleManageContext,
+    context: RoleCreateContext,
     session: DbSession,
 ) -> ApiResponse[RoleOut]:
     return ok(RoleService(session).create_role(context, payload), "创建成功")
@@ -36,7 +42,7 @@ def get_role(
 def update_role(
     role_id: int,
     payload: RoleUpdate,
-    context: RoleManageContext,
+    context: RoleUpdateContext,
     session: DbSession,
 ) -> ApiResponse[RoleOut]:
     return ok(RoleService(session).update_role(context, role_id, payload))
@@ -46,7 +52,7 @@ def update_role(
 def replace_role_permissions(
     role_id: int,
     payload: RolePermissionUpdate,
-    context: RoleManageContext,
+    context: RolePermissionUpdateContext,
     session: DbSession,
 ) -> ApiResponse[RoleOut]:
     return ok(
@@ -61,7 +67,7 @@ def replace_role_permissions(
 @router.delete("/{role_id}", response_model=ApiResponse[None], summary="删除自定义角色")
 def delete_role(
     role_id: int,
-    context: RoleManageContext,
+    context: RoleDeleteContext,
     session: DbSession,
 ) -> ApiResponse[None]:
     RoleService(session).delete_role(context, role_id)

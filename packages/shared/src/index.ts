@@ -23,11 +23,14 @@ export type {
   MemberAccountCreatePayload,
   MemberCreated,
   MemberRolesUpdatePayload,
+  MemberUpdatePayload,
   MyPermissions,
   RoleInfo,
   RoleCreatePayload,
   RoleUpdatePayload,
   PermissionInfo,
+  PermissionTreeNode,
+  PermissionResourceType,
   PermissionMode,
 } from './types/tenant';
 export {
@@ -53,6 +56,7 @@ export {
   tenantMemberQueryKey,
   tenantRolesQueryKey,
   tenantPermissionsQueryKey,
+  tenantPermissionTreeQueryKey,
   tenantContextQueryKey,
   tenantMyPermissionsQueryKey,
   productsQueryKey,
@@ -77,6 +81,11 @@ export {
   groupPermissionsByModule,
   toggleModulePermissionIds,
 } from './tenant/permissions';
+export {
+  permissionIdsFromCheckedKeys,
+  checkedKeysFromPermissionIds,
+  collectTreePermissionIds,
+} from './tenant/permission-tree';
 export {
   normalizeRequestPath,
   shouldAttachTenantHeader,

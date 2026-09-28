@@ -38,15 +38,53 @@ RoleReadContext = Annotated[
     TenantContext,
     Depends(require_permission(PermissionCode.TENANT_ROLE_READ)),
 ]
-RoleManageContext = Annotated[
+RoleCreateContext = Annotated[
     TenantContext,
-    Depends(require_permission(PermissionCode.TENANT_ROLE_MANAGE)),
+    Depends(require_permission(PermissionCode.TENANT_ROLE_CREATE)),
+]
+RoleUpdateContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.TENANT_ROLE_UPDATE)),
+]
+RoleDeleteContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.TENANT_ROLE_DELETE)),
+]
+RolePermissionUpdateContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.TENANT_ROLE_PERMISSION_UPDATE)),
+]
+PermissionCatalogContext = Annotated[
+    TenantContext,
+    Depends(
+        require_any_permission(
+            PermissionCode.TENANT_PERMISSION_READ,
+            PermissionCode.TENANT_ROLE_READ,
+            PermissionCode.TENANT_ROLE_PERMISSION_UPDATE,
+        )
+    ),
 ]
 MemberReadContext = Annotated[
     TenantContext,
     Depends(require_permission(PermissionCode.TENANT_MEMBER_READ)),
 ]
-MemberManageContext = Annotated[
+MemberCreateContext = Annotated[
     TenantContext,
-    Depends(require_permission(PermissionCode.TENANT_MEMBER_MANAGE)),
+    Depends(require_permission(PermissionCode.TENANT_MEMBER_CREATE)),
+]
+MemberUpdateContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.TENANT_MEMBER_UPDATE)),
+]
+MemberRoleUpdateContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.TENANT_MEMBER_ROLE_UPDATE)),
+]
+MemberDisableContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.TENANT_MEMBER_DISABLE)),
+]
+MemberRemoveContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.TENANT_MEMBER_REMOVE)),
 ]

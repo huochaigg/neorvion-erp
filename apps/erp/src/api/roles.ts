@@ -1,6 +1,7 @@
 import type {
   ApiResponse,
   PermissionInfo,
+  PermissionTreeNode,
   RoleCreatePayload,
   RoleInfo,
   RoleUpdatePayload,
@@ -13,6 +14,12 @@ export function fetchRoles(signal?: AbortSignal) {
 
 export function fetchPermissions(signal?: AbortSignal) {
   return unwrapApi(apiClient.get<ApiResponse<PermissionInfo[]>>('/api/v1/permissions', { signal }));
+}
+
+export function fetchPermissionTree(signal?: AbortSignal) {
+  return unwrapApi(
+    apiClient.get<ApiResponse<PermissionTreeNode[]>>('/api/v1/permissions/tree', { signal }),
+  );
 }
 
 export function createRole(payload: RoleCreatePayload) {

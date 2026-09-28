@@ -63,13 +63,21 @@ export function updateMemberRoles(
   );
 }
 
-export function updateMemberStatus(tenantId: number, memberId: number, status: string) {
+export function updateMember(
+  tenantId: number,
+  memberId: number,
+  payload: { status?: string; display_name?: string | null },
+) {
   return unwrapApi(
     apiClient.patch<ApiResponse<TenantMember>>(
       `/api/v1/tenants/${tenantId}/members/${memberId}`,
-      { status },
+      payload,
     ),
   );
+}
+
+export function updateMemberStatus(tenantId: number, memberId: number, status: string) {
+  return updateMember(tenantId, memberId, { status });
 }
 
 export function removeMember(tenantId: number, memberId: number) {

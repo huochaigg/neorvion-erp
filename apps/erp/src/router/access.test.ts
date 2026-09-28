@@ -29,6 +29,7 @@ describe('动态权限菜单与页面守卫', () => {
       PERMISSION_CODE.productRead,
       PERMISSION_CODE.tenantMemberRead,
       PERMISSION_CODE.tenantRoleRead,
+      PERMISSION_CODE.tenantPermissionRead,
     ];
     const paths = menuPaths(filterMenuRoutes(routes, viewer));
     assert.equal(paths.includes('/dashboard'), true);
@@ -103,6 +104,7 @@ describe('动态权限菜单与页面守卫', () => {
     const admin = [
       PERMISSION_CODE.tenantMemberRead,
       PERMISSION_CODE.tenantRoleRead,
+      PERMISSION_CODE.tenantPermissionRead,
       PERMISSION_CODE.productRead,
     ];
     const warehouseMenu = menuPaths(filterMenuRoutes(routes, warehouse));
