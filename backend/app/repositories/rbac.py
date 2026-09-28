@@ -113,7 +113,13 @@ class RoleRepository(BaseRepository):
         return link
 
     def list_permission_codes_for_member(self, *, tenant_id: int, member_id: int) -> set[str]:
-        """当前成员所有有效角色的权限并集。JOIN 出 code，不做 joinedload。"""
+        """当前租户成员全部角色的权限并集。
+
+        必须同时限定 tenant_id 和 member_id：只按 member_id JOIN 会串到别的企业授权。
+        多角色取并集而不是交集，是因为一个人可以同时是运营和仓库，
+        菜单应同时出现两边的入口，而不是两边权限互相卡住。
+        用 JOIN 只取 Permission.code，避免 selectinload 整棵角色树。
+        """
         stmt = (
             select(Permission.code)
             .join(RolePermission, RolePermission.permission_id == Permission.id)

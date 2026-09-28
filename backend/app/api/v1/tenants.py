@@ -10,6 +10,7 @@ from app.schemas.tenant import (
     MemberOut,
     MemberRolesUpdate,
     MemberUpdate,
+    MyPermissionsOut,
     TenantContextOut,
     TenantCreate,
     TenantOut,
@@ -58,6 +59,22 @@ def current_tenant_context(
             permission_codes=codes,
         )
     )
+
+
+@router.get(
+    "/current/my-permissions",
+    response_model=ApiResponse[MyPermissionsOut],
+    summary="当前成员有效权限",
+)
+def current_member_permissions(
+    context: TenantContextDep,
+    session: DbSession,
+) -> ApiResponse[MyPermissionsOut]:
+    """复用 TenantContext 与 AuthorizationService，不另建一套授权。
+
+    必须声明在 /{tenant_id} 之前，否则 current 会被当成整数路径参数。
+    """
+    return ok(AuthorizationService(session).current_member_access(context))
 
 
 @router.get("/{tenant_id}", response_model=ApiResponse[TenantOut], summary="租户详情")

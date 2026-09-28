@@ -1,19 +1,12 @@
-import { tenantContextQueryKey } from '@neorvion/shared';
-import { useQuery } from '@tanstack/react-query';
-import { fetchTenantContext } from '@/api/members';
-import { useErpTenantStore } from '@/stores/tenant-runtime';
+import { usePermissions } from './usePermissions';
 
+/** 兼容 V2.3.2 页面；权限数据仍来自当前租户的 React Query。 */
 export function useCurrentPermissions() {
-  const tenantId = useErpTenantStore((state) => state.currentTenantId);
-  const query = useQuery({
-    queryKey: tenantContextQueryKey(tenantId),
-    queryFn: ({ signal }) => fetchTenantContext(signal),
-    enabled: tenantId != null,
-  });
+  const { tenantId, permissions, isLoading } = usePermissions();
   return {
     tenantId,
-    permissionCodes: query.data?.permission_codes ?? [],
-    isOwner: query.data?.is_owner ?? false,
-    isLoading: query.isLoading,
+    permissionCodes: permissions,
+    isOwner: false,
+    isLoading,
   };
 }

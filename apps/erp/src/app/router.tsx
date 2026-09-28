@@ -2,6 +2,7 @@ import { ERP_DEFAULT_PATH } from '@neorvion/shared';
 import { Spin } from 'antd';
 import { Suspense } from 'react';
 import { BrowserRouter, Navigate, Outlet, Route, Routes } from 'react-router-dom';
+import { PermissionGuard } from '@/components/PermissionGuard';
 import { ErpLayout } from '@/layouts/ErpLayout';
 import { TenantChangeBridge } from '@/micro/TenantChangeBridge';
 import { WujieRouteBridge } from '@/micro/WujieRouteBridge';
@@ -14,7 +15,9 @@ function LayoutFrame() {
   return (
     <ErpLayout>
       <div key={epoch}>
-        <Outlet />
+        <PermissionGuard>
+          <Outlet />
+        </PermissionGuard>
       </div>
     </ErpLayout>
   );

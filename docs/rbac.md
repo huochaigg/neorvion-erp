@@ -1,6 +1,6 @@
-# RBAC 权限模型（V2.3.1 + V2.3.2）
+# RBAC 权限模型（V2.3.1 + V2.3.2 + V2.3.3）
 
-V2.3.1 完成后端权限基础设施。V2.3.2 完成企业成员授权与 ERP 管理页面。详见 `docs/versions/v2.3.2.md`。
+V2.3.1 完成后端权限基础设施。V2.3.2 完成企业成员授权与 ERP 管理页面。V2.3.3 完成动态权限菜单、页面守卫与按钮权限。详见 `docs/versions/v2.3.3.md`。
 
 ## 关系：User、TenantMember、Role、Permission
 
@@ -149,7 +149,10 @@ OWNER 转移是独立业务流程，本版本不做。
 | PUT | `/api/v1/tenants/{tenant_id}/members/{member_id}/roles` | `tenant:member:manage` |
 | PATCH | `/api/v1/tenants/{tenant_id}/members/{member_id}` | `tenant:member:manage` |
 
-`GET /api/v1/tenants/current` 现在返回 `permission_codes`，每次查库，角色变更后下一次请求立即生效。
+`GET /api/v1/tenants/current` 返回 `permission_codes`。  
+`GET /api/v1/tenants/current/my-permissions` 返回当前成员 `roles` 与 `permissions` 编码数组。两者都每次查库，不信任前端提交的权限列表。
+
+前端菜单、页面守卫和按钮只读取 React Query 中的当前租户权限。隐藏按钮不能代替上表的服务端校验。
 
 添加成员请传已注册用户的 `email` 和可选 `role_ids`。不能授予 OWNER。默认角色为 VIEWER。
 

@@ -1,8 +1,13 @@
+import { PERMISSION_CODE } from '@neorvion/shared';
 import type { AppRoute } from './types';
 
 /**
  * ERP 业务路由与菜单的唯一配置来源。
  * 主应用只挂载 /erp，不维护这些路径。
+ *
+ * 未声明 permission / permissions 的路由：对当前有效成员开放。
+ * 仅工作台使用该默认规则。业务占位页必须显式声明 read 权限。
+ * showInMenu:false 仍参与页面守卫，不因隐藏菜单而放行。
  */
 export const routes: AppRoute[] = [
   {
@@ -23,6 +28,7 @@ export const routes: AppRoute[] = [
     showInMenu: true,
     sort: 20,
     redirect: '/products/list',
+    permission: PERMISSION_CODE.productRead,
     children: [
       {
         path: '/products/archive',
@@ -31,6 +37,7 @@ export const routes: AppRoute[] = [
         showInMenu: true,
         sort: 10,
         redirect: '/products/list',
+        permission: PERMISSION_CODE.productRead,
         children: [
           {
             path: '/products/list',
@@ -39,6 +46,7 @@ export const routes: AppRoute[] = [
             description: 'M3 将实现 SPU / SKU、编码与状态筛选。',
             showInMenu: true,
             sort: 10,
+            permission: PERMISSION_CODE.productRead,
             component: 'Placeholder',
           },
         ],
@@ -50,6 +58,7 @@ export const routes: AppRoute[] = [
         description: '占位页，不在菜单中展示。',
         showInMenu: false,
         activeMenu: '/products/list',
+        permission: PERMISSION_CODE.productCreate,
         component: 'Placeholder',
       },
       {
@@ -59,6 +68,7 @@ export const routes: AppRoute[] = [
         description: '占位页，访问时菜单保持商品列表选中。',
         showInMenu: false,
         activeMenu: '/products/list',
+        permission: PERMISSION_CODE.productUpdate,
         component: 'Placeholder',
       },
       {
@@ -68,6 +78,7 @@ export const routes: AppRoute[] = [
         description: '占位页，访问时菜单保持商品列表选中。',
         showInMenu: false,
         activeMenu: '/products/list',
+        permission: PERMISSION_CODE.productRead,
         component: 'Placeholder',
       },
     ],
@@ -80,6 +91,7 @@ export const routes: AppRoute[] = [
     showInMenu: true,
     sort: 30,
     redirect: '/inventory/list',
+    permission: PERMISSION_CODE.inventoryRead,
     children: [
       {
         path: '/inventory/list',
@@ -88,6 +100,7 @@ export const routes: AppRoute[] = [
         description: 'M3 将实现实际库存、预占库存与库存流水。',
         showInMenu: true,
         sort: 10,
+        permission: PERMISSION_CODE.inventoryRead,
         component: 'Placeholder',
       },
     ],
@@ -100,6 +113,7 @@ export const routes: AppRoute[] = [
     icon: 'ShopOutlined',
     showInMenu: true,
     sort: 40,
+    permission: PERMISSION_CODE.inventoryRead,
     component: 'Placeholder',
   },
   {
@@ -110,6 +124,7 @@ export const routes: AppRoute[] = [
     icon: 'ShoppingCartOutlined',
     showInMenu: true,
     sort: 50,
+    permission: PERMISSION_CODE.orderRead,
     component: 'Placeholder',
   },
   {
@@ -128,6 +143,7 @@ export const routes: AppRoute[] = [
         description: '添加已注册用户、分配角色并启停成员。',
         showInMenu: true,
         sort: 10,
+        permission: PERMISSION_CODE.tenantMemberRead,
         component: 'Members',
       },
       {
@@ -136,6 +152,7 @@ export const routes: AppRoute[] = [
         title: '成员详情',
         showInMenu: false,
         activeMenu: '/system/members',
+        permission: PERMISSION_CODE.tenantMemberRead,
         component: 'Members',
       },
       {
@@ -145,6 +162,7 @@ export const routes: AppRoute[] = [
         description: '查看系统角色，维护自定义角色与权限。',
         showInMenu: true,
         sort: 20,
+        permission: PERMISSION_CODE.tenantRoleRead,
         component: 'Roles',
       },
     ],

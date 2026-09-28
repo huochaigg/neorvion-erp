@@ -5,11 +5,12 @@ from collections.abc import Sequence
 from sqlalchemy.orm import Session
 
 from app.core.exceptions import AppError
-from app.core.permissions import known_permission_codes
+from app.core.permissions import SystemRoleCode, known_permission_codes
 from app.core.tenant import TenantContext
 from app.models.tenant import MemberRole, MemberStatus, TenantStatus
 from app.repositories.rbac import RoleRepository
 from app.repositories.tenant import TenantMemberRepository
+from app.schemas.tenant import MyPermissionsOut
 
 
 class AuthorizationService:
@@ -27,6 +28,28 @@ class AuthorizationService:
             tenant_id=context.tenant_id,
             member_id=context.member_id,
         )
+
+    def current_member_access(self, context: TenantContext) -> MyPermissionsOut:
+        """当前租户成员的角色编码与权限编码快照。
+
+        功能：给前端生成菜单和按钮；真正的接口授权仍走 require_permission。
+        参数：已通过 TenantContextDep 校验的当前租户成员，不读请求体里的 user_id。
+        返回：去重排序后的 roles、permissions。
+        异常：成员无效时由 TenantContextDep 先抛 404/40310，这里不再重复。
+        流程：按 tenant_id + member_id 读 member_roles，再并集权限。
+        同一用户在 A、B 两家企业必须分别查询，Query Key 也必须带 tenant_id。
+        """
+        grants = self.roles.list_grants_for_member(
+            tenant_id=context.tenant_id,
+            member_id=context.member_id,
+        )
+        role_codes = sorted(
+            {grant.role.code for grant in grants if grant.role is not None},
+        )
+        if context.is_owner and SystemRoleCode.OWNER not in role_codes:
+            role_codes = [SystemRoleCode.OWNER, *role_codes]
+        permissions = sorted(self.permission_codes(context))
+        return MyPermissionsOut(roles=role_codes, permissions=permissions)
 
     def require_all(self, context: TenantContext, codes: Sequence[str]) -> None:
         """当前成员必须具备传入的全部权限，少一个就 403"""
