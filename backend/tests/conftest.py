@@ -87,21 +87,36 @@ def setup_test_database() -> Iterator[None]:
     redis_client.flushdb()
 
 
-@pytest.fixture(autouse=True)
-def clean_state() -> Iterator[None]:
-    yield
-    redis_client.flushdb()
+def _wipe_business_tables() -> None:
     session = SessionLocal()
     try:
+        # 类目 parent_id 自关联，关外键后才能整表清空。
+        session.execute(text("SET FOREIGN_KEY_CHECKS=0"))
+        session.execute(text("DELETE FROM product_skus"))
+        session.execute(text("DELETE FROM products"))
+        session.execute(text("DELETE FROM brands"))
+        session.execute(text("DELETE FROM product_categories"))
         session.execute(text("DELETE FROM role_permissions"))
         session.execute(text("DELETE FROM member_roles"))
         session.execute(text("DELETE FROM roles"))
         session.execute(text("DELETE FROM tenant_members"))
         session.execute(text("DELETE FROM tenants"))
         session.execute(text("DELETE FROM users"))
+        session.execute(text("SET FOREIGN_KEY_CHECKS=1"))
         session.commit()
+    except Exception:
+        session.rollback()
+        raise
     finally:
         session.close()
+
+
+@pytest.fixture(autouse=True)
+def clean_state() -> Iterator[None]:
+    _wipe_business_tables()
+    yield
+    redis_client.flushdb()
+    _wipe_business_tables()
 
 
 @pytest.fixture

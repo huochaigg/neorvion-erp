@@ -54,20 +54,25 @@ ERP 业务路由只放在子应用内部：`apps/erp/src/router/routes.ts`。
   redirect: '/products/list',
   children: [
     {
-      path: '/products/archive',
-      name: 'ProductArchive',
-      title: '商品档案',
+      path: '/products/list',
+      name: 'ProductList',
+      title: '商品列表',
       showInMenu: true,
-      redirect: '/products/list',
-      children: [
-        {
-          path: '/products/list',
-          name: 'ProductList',
-          title: '商品列表',
-          showInMenu: true,
-          component: 'Placeholder',
-        },
-      ],
+      component: 'ProductList',
+    },
+    {
+      path: '/product-categories',
+      name: 'ProductCategories',
+      title: '类目管理',
+      showInMenu: true,
+      component: 'ProductCategories',
+    },
+    {
+      path: '/brands',
+      name: 'Brands',
+      title: '品牌管理',
+      showInMenu: true,
+      component: 'Brands',
     },
   ],
 }
@@ -86,7 +91,7 @@ ERP 业务路由只放在子应用内部：`apps/erp/src/router/routes.ts`。
 }
 ```
 
-访问 `/products/42` 时侧栏仍选中「商品列表」，并展开「商品管理 / 商品档案」。
+访问 `/products/42` 时侧栏仍选中「商品列表」，并展开「商品管理」。
 
 新增页 `/products/create`、编辑页 `/products/:id/edit` 同样设置 `activeMenu: '/products/list'`。
 

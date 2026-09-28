@@ -2,7 +2,7 @@
 
 多租户跨境电商 ERP。当前仓库按里程碑持续迭代，**不要为每个版本重建项目**。
 
-当前里程碑：**V2.3.5**。
+当前里程碑：**V3**。
 
 ## 技术栈
 
@@ -118,6 +118,14 @@ pnpm --filter @neorvion/erp build
 pnpm test
 ```
 
+## V3
+
+- 商品档案：类目（最多三级）、品牌、SPU、SKU（`spec_values` JSON）
+- 创建商品时 SPU + SKU 同一事务；列表按租户隔离，SKU 数量用 SQL 聚合
+- ERP 菜单：商品列表 / 类目管理 / 品牌管理；新增和编辑为独立页面
+- 权限沿用 `product:read/create/update/delete`，类目和品牌不另拆编码
+- 版本文档：`docs/versions/v3.md`，业务说明：`docs/products.md`
+
 ## V2.3.5
 
 - 企业内 `TenantMember.display_name`，回退 `User.display_name`；改一家企业不影响全局账号
@@ -199,6 +207,6 @@ pnpm test
 
 ## 尚未开始
 
-完整菜单权限组件已在 V2.3.5 收尾。尚未开始：OWNER 转移、操作日志、商品库存、采购、销售订单。
+完整菜单权限组件已在 V2.3.5 收尾。V3 完成商品档案。尚未开始：OWNER 转移、操作日志、仓库库存、采购、销售订单。
 
-更细的说明见 `docs/development.md`、`docs/architecture.md`、`docs/auth.md`、`docs/multi-tenancy.md`、`docs/rbac.md`、`docs/versions/v2.3.5.md`、`docs/routing.md`、`docs/micro-frontend-integration.md` 与 `docs/micro-frontend-interview.md`。
+更细的说明见 `docs/development.md`、`docs/architecture.md`、`docs/auth.md`、`docs/multi-tenancy.md`、`docs/rbac.md`、`docs/products.md`、`docs/versions/v3.md`、`docs/routing.md`、`docs/micro-frontend-integration.md` 与 `docs/micro-frontend-interview.md`。

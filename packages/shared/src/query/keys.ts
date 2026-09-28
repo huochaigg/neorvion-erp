@@ -49,8 +49,38 @@ export function tenantMyPermissionsQueryKey(tenantId: number | null) {
   return ['tenant', tenantId, 'my-permissions'] as const;
 }
 
-export function productsQueryKey(tenantId: number | null) {
-  return ['tenant', tenantId, 'products'] as const;
+export function productCategoriesQueryKey(tenantId: number | null) {
+  return ['tenant', tenantId, 'product-categories'] as const;
+}
+
+export function brandsQueryKey(
+  tenantId: number | null,
+  filters?: { q?: string; status?: string; page?: number; pageSize?: number },
+) {
+  return ['tenant', tenantId, 'brands', filters ?? {}] as const;
+}
+
+export function brandOptionsQueryKey(tenantId: number | null) {
+  return ['tenant', tenantId, 'brand-options'] as const;
+}
+
+export function productsQueryKey(
+  tenantId: number | null,
+  filters?: {
+    q?: string;
+    skuCode?: string;
+    categoryId?: number;
+    brandId?: number;
+    status?: string;
+    page?: number;
+    pageSize?: number;
+  },
+) {
+  return ['tenant', tenantId, 'products', filters ?? {}] as const;
+}
+
+export function productQueryKey(tenantId: number | null, productId: number | null) {
+  return ['tenant', tenantId, 'product', productId] as const;
 }
 
 export function ordersQueryKey(tenantId: number | null) {

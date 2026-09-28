@@ -21,8 +21,8 @@ export function DashboardPage(props: PageProps) {
     <div>
       <PageHeader
         title={props.title ?? '业务工作台'}
-        description={props.description ?? 'ERP 子应用已接入。商品、库存、订单等业务页面从后续里程碑实现。'}
-        extra={<StatusTag tone="ready">V2.3.5 RBAC 收尾</StatusTag>}
+        description={props.description ?? 'ERP 子应用已接入。商品管理已上线；库存、订单等后续版本实现。'}
+        extra={<StatusTag tone="ready">V3 商品管理</StatusTag>}
       />
       <Row gutter={[16, 16]}>
         <Col xs={24} md={12}>

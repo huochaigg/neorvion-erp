@@ -6,7 +6,17 @@ export type IconName =
   | 'ShoppingCartOutlined'
   | 'SettingOutlined';
 
-export type PageKey = 'Dashboard' | 'Placeholder' | 'Members' | 'Roles' | 'Permissions';
+export type PageKey =
+  | 'Dashboard'
+  | 'Placeholder'
+  | 'Members'
+  | 'Roles'
+  | 'Permissions'
+  | 'ProductList'
+  | 'ProductForm'
+  | 'ProductDetail'
+  | 'ProductCategories'
+  | 'Brands';
 
 export type PermissionMode = 'any' | 'all';
 

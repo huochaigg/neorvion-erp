@@ -21,7 +21,14 @@
 - `tenant_members.display_name`：企业内展示名，可空
 - 细粒度权限 seed 与旧 `*:manage` 展开（不删旧 code）
 
-V2.3.3 完成动态权限菜单，不新增表。OWNER 转移留到后续独立流程。M3 起创建商品、仓库、库存等表。所有业务表必须包含 `tenant_id`（`TenantMixin`），唯一约束必须带上租户，例如：
+当前里程碑 V3 增加：
+
+- `product_categories`：租户类目树；`UNIQUE(tenant_id, id)`；`parent_id` 与 `tenant_id` 复合外键指向本表
+- `brands`：租户品牌；`UNIQUE(tenant_id, code)`
+- `products`：SPU；`UNIQUE(tenant_id, code)`；类目/品牌复合外键保证同租户
+- `product_skus`：SKU；`UNIQUE(tenant_id, sku_code)`；`spec_values` JSON；商品复合外键保证同租户
+
+所有业务表必须包含 `tenant_id`（`TenantMixin`），唯一约束必须带上租户，例如：
 
 ```sql
 UNIQUE (tenant_id, sku_code)

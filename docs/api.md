@@ -16,7 +16,7 @@
 
 `GET /api/v1/health`
 
-依赖不可用时 HTTP 仍为 200，字段标记 `unavailable`。当前 `milestone` 为 `V2.3.5`。
+依赖不可用时 HTTP 仍为 200，字段标记 `unavailable`。当前 `milestone` 为 `V3`。
 
 ## 认证
 
@@ -62,5 +62,28 @@
 - `PATCH /api/v1/roles/{role_id}`
 - `PUT /api/v1/roles/{role_id}/permissions`
 - `DELETE /api/v1/roles/{role_id}`
+
+## 商品（V3）
+
+详见 `docs/products.md`。需要登录和有效 `X-Tenant-ID`。类目/品牌使用商品权限，不另拆编码。
+
+- `GET /api/v1/product-categories`（`product:read`）树
+- `POST /api/v1/product-categories`（`product:update`）
+- `PATCH /api/v1/product-categories/{id}`（`product:update`）
+- `DELETE /api/v1/product-categories/{id}`（`product:delete`）
+- `GET /api/v1/brands`（`product:read`）分页
+- `GET /api/v1/brands/options`（`product:read`）
+- `POST /api/v1/brands`（`product:update`）
+- `PATCH /api/v1/brands/{id}`（`product:update`）
+- `DELETE /api/v1/brands/{id}`（`product:delete`）
+- `GET /api/v1/products`（`product:read`）分页：`q` / `sku_code` / `category_id` / `brand_id` / `status`
+- `POST /api/v1/products`（`product:create`）同一事务写入 SPU + SKU
+- `GET /api/v1/products/{id}`（`product:read`）
+- `PATCH /api/v1/products/{id}`（`product:update`）只改 SPU
+- `POST /api/v1/products/{id}/skus`（`product:update`）
+- `PATCH /api/v1/products/{id}/skus/{sku_id}`（`product:update`）
+- `DELETE /api/v1/products/{id}/skus/{sku_id}`（`product:update`）
+
+有子类目 → `40050` `CATEGORY_HAS_CHILDREN`。类目被商品使用 → `40051` `CATEGORY_IN_USE`。品牌被使用 → `40052` `BRAND_IN_USE`。商品/SKU 编码冲突 → `40930` / `40931`。跨租户资源 → `404`。
 
 Swagger：http://localhost:8011/docs
