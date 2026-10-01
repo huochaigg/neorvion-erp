@@ -27,3 +27,12 @@ export interface TokenPayload {
   token_type: string;
   expires_in: number;
 }
+
+export const AUTH_ERROR_CODE = {
+  unauthenticated: 40100,
+  invalidToken: 40102,
+  expired: 40103,
+  revoked: 40104,
+} as const;
+
+export const SESSION_EXPIRED_MESSAGE = '登录已过期，请重新登录';

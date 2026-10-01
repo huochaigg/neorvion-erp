@@ -3,6 +3,7 @@ export { ERP_BASENAME, ERP_DEFAULT_PATH, SHELL_ROUTES } from './constants/routes
 export type { ApiResponse, HealthCheckData } from './types/api';
 export { ApiError } from './errors/api-error';
 export type { TokenPayload, UserProfile, AuthPublicKey, EncryptedPasswordPayload } from './types/auth';
+export { AUTH_ERROR_CODE, SESSION_EXPIRED_MESSAGE } from './types/auth';
 export type {
   ShellToErpProps,
   ShellUserSnapshot,

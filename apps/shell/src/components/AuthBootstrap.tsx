@@ -1,7 +1,8 @@
-import { currentUserQueryKey } from '@neorvion/shared';
+import { currentUserQueryKey, MICRO_EVENTS } from '@neorvion/shared';
 import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, type ReactNode } from 'react';
-import { restoreSession } from '@/api/client';
+import { bus } from 'wujie';
+import { refreshSessionFromShell, restoreSession } from '@/api/client';
 import { useAuthStore } from '@/stores/auth-store';
 
 interface AuthBootstrapProps {
@@ -13,6 +14,16 @@ export function AuthBootstrap({ children }: AuthBootstrapProps) {
   const markAuthenticated = useAuthStore((state) => state.markAuthenticated);
   const markUnauthenticated = useAuthStore((state) => state.markUnauthenticated);
   const queryClient = useQueryClient();
+
+  useEffect(() => {
+    const onUnauthorized = () => {
+      void refreshSessionFromShell();
+    };
+    bus.$on(MICRO_EVENTS.unauthorized, onUnauthorized);
+    return () => {
+      bus.$off(MICRO_EVENTS.unauthorized, onUnauthorized);
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;

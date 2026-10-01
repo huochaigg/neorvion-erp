@@ -4,5 +4,6 @@ declare module 'axios' {
   interface AxiosRequestConfig {
     skipTenantHeader?: boolean;
     tenantContextId?: number | null;
+    _retried?: boolean;
   }
 }

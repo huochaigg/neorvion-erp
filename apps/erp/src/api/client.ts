@@ -1,9 +1,10 @@
-import axios, { isAxiosError, isCancel, type AxiosError } from 'axios';
+import axios, { isAxiosError, isCancel, type AxiosError, type InternalAxiosRequestConfig } from 'axios';
 import {
   ApiError,
   decideTenantHeader,
   isTenantInaccessibleError,
   MICRO_EVENTS,
+  SESSION_EXPIRED_MESSAGE,
   SHELL_ROUTES,
   TENANT_HEADER,
   type ApiResponse,
@@ -56,17 +57,43 @@ apiClient.interceptors.request.use((config) => {
 
 apiClient.interceptors.response.use(
   (response) => response,
-  (error: unknown) => {
+  async (error: unknown) => {
     if (isCancel(error)) {
       return Promise.reject(error);
     }
-    const nextError = isAxiosError(error) ? toApiError(error) : error;
+    const axiosError = isAxiosError(error) ? error : null;
+    const original = axiosError?.config as InternalAxiosRequestConfig | undefined;
+    const nextError = axiosError ? toApiError(axiosError) : error;
+
     if (nextError instanceof ApiError && nextError.code === 40350) {
       window.location.assign(SHELL_ROUTES.changePassword);
+      return Promise.reject(nextError);
     }
     if (nextError instanceof ApiError && isTenantInaccessibleError(nextError.code)) {
       window.$wujie?.bus.$emit(MICRO_EVENTS.tenantInaccessible);
+      return Promise.reject(nextError);
     }
+
+    const unauthorized = nextError instanceof ApiError && nextError.status === 401;
+    if (unauthorized && original && !original._retried) {
+      original._retried = true;
+      const refreshSession = getShellProps().refreshSession;
+      if (refreshSession) {
+        try {
+          const token = await refreshSession();
+          original.headers.Authorization = `Bearer ${token}`;
+          return apiClient.request(original);
+        } catch {
+          return Promise.reject(
+            nextError instanceof ApiError
+              ? nextError
+              : new ApiError(SESSION_EXPIRED_MESSAGE, { status: 401, code: 40103 }),
+          );
+        }
+      }
+      window.$wujie?.bus.$emit(MICRO_EVENTS.unauthorized);
+    }
+
     if (nextError instanceof ApiError && nextError.status >= 500) {
       console.error('[erp-api]', nextError.message);
     }
