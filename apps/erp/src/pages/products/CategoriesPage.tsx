@@ -175,6 +175,7 @@ export function CategoriesPage(props: PageProps) {
         dataSource={treeQuery.data ?? []}
         loading={treeQuery.isLoading}
         pagination={false}
+        scroll={{ y: 'calc(100vh - 280px)' }}
         childrenColumnName="children"
       />
       <Modal

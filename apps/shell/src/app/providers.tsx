@@ -5,6 +5,7 @@ import type { ReactNode } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useState } from 'react';
 import { useTenantQuerySync } from '@/hooks/use-tenant-query-sync';
+import { AntdMessageBridge } from '@/lib/antd-app';
 import { registerQueryClient } from '@/lib/query-client';
 
 const theme = {
@@ -71,6 +72,7 @@ export function AppProviders({ children }: AppProvidersProps) {
     <QueryClientProvider client={queryClient}>
       <ConfigProvider locale={zhCN} theme={theme} getPopupContainer={getPopupContainer}>
         <AntdApp>
+          <AntdMessageBridge />
           <TenantAwareQueryLayer queryClient={queryClient}>{children}</TenantAwareQueryLayer>
         </AntdApp>
       </ConfigProvider>

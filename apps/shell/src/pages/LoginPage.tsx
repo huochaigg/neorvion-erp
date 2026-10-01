@@ -1,9 +1,11 @@
 import { currentUserQueryKey, SHELL_ROUTES, type UserProfile } from '@neorvion/shared';
 import { App, Button, Card, Form, Input, Typography } from 'antd';
+import { useEffect } from 'react';
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { fetchCurrentUser, loginAccount } from '@/api/auth';
 import { AuthLayout } from '@/layouts/AuthLayout';
+import { consumePendingAuthNotice } from '@/lib/session-notice';
 import { useAuthStore } from '@/stores/auth-store';
 
 interface LoginFormValues {
@@ -21,6 +23,13 @@ export function LoginPage() {
   const fromState = (location.state as { from?: { pathname: string; search: string } } | null)?.from;
   const fromQuery = params.get('from');
   const redirectTo = fromState ? `${fromState.pathname}${fromState.search}` : (fromQuery ?? SHELL_ROUTES.home);
+
+  useEffect(() => {
+    const notice = consumePendingAuthNotice();
+    if (notice) {
+      message.warning({ content: notice, key: 'session-expired' });
+    }
+  }, [message]);
 
   const onFinish = async (values: LoginFormValues) => {
     try {

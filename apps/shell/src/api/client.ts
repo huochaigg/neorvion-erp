@@ -1,17 +1,19 @@
 import axios, { isCancel, type AxiosError, type InternalAxiosRequestConfig } from 'axios';
 import {
   ApiError,
+  AUTH_ERROR_CODE,
   decideTenantHeader,
   isTenantInaccessibleError,
   myTenantsQueryKey,
+  SESSION_EXPIRED_MESSAGE,
   SHELL_ROUTES,
   TENANT_HEADER,
   type ApiResponse,
   type TokenPayload,
 } from '@neorvion/shared';
 import { getRegisteredQueryClient } from '@/lib/query-client';
+import { endSessionDueToExpiry } from '@/lib/session';
 import { clearTenantSelection } from '@/lib/switch-tenant';
-import { destroyAllMicroApps } from '@/micro/lifecycle';
 import { useAuthStore } from '@/stores/auth-store';
 import { useTenantStore } from '@/stores/tenant-store';
 import { authClient } from './auth-client';
@@ -26,14 +28,6 @@ export const apiClient = axios.create({
 const AUTH_REFRESH_URL = '/api/v1/auth/refresh';
 
 let refreshPromise: Promise<string> | null = null;
-
-function redirectToLogin() {
-  const from = `${window.location.pathname}${window.location.search}`;
-  if (window.location.pathname === SHELL_ROUTES.login) {
-    return;
-  }
-  window.location.assign(`${SHELL_ROUTES.login}?from=${encodeURIComponent(from)}`);
-}
 
 function handleTenantInaccessible() {
   const queryClient = getRegisteredQueryClient();
@@ -61,6 +55,16 @@ function refreshAccessToken(): Promise<string> {
       });
   }
   return refreshPromise;
+}
+
+/** ERP 与 Shell 业务 401 共用。失败会清会话并提示重新登录。 */
+export async function refreshSessionFromShell(): Promise<string> {
+  try {
+    return await refreshAccessToken();
+  } catch (error) {
+    endSessionDueToExpiry();
+    throw error;
+  }
 }
 
 apiClient.interceptors.request.use((config) => {
@@ -123,11 +127,10 @@ apiClient.interceptors.response.use(
       original.headers.Authorization = `Bearer ${token}`;
       return apiClient.request(original);
     } catch {
-      useAuthStore.getState().markUnauthenticated();
-      useTenantStore.getState().reset();
-      destroyAllMicroApps();
-      redirectToLogin();
-      return Promise.reject(new ApiError('登录已过期，请重新登录', { status: 401, code: 40104 }));
+      endSessionDueToExpiry();
+      return Promise.reject(
+        new ApiError(SESSION_EXPIRED_MESSAGE, { status: 401, code: AUTH_ERROR_CODE.revoked }),
+      );
     }
   },
 );

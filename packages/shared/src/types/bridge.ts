@@ -3,6 +3,8 @@ export interface ShellToErpProps {
   token: string | null;
   tenantId: number | null;
   user: ShellUserSnapshot | null;
+  /** Shell 单飞 Refresh。ERP 遇到 401 时调用，禁止自己打 /auth/refresh。 */
+  refreshSession?: () => Promise<string>;
 }
 
 export interface ShellUserSnapshot {
@@ -25,6 +27,7 @@ export const MICRO_EVENTS = {
   childLocation: 'micro:child-location',
   hostNavigate: 'micro:host-navigate',
   tenantInaccessible: 'micro:tenant-inaccessible',
+  unauthorized: 'micro:unauthorized',
 } as const;
 
 export type MicroHistoryAction = 'push' | 'replace';
