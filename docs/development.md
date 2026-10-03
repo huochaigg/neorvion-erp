@@ -100,6 +100,8 @@ pnpm test
 24. 有子类目或已被商品使用的类目不能删除（`CATEGORY_HAS_CHILDREN` / `CATEGORY_IN_USE`）；使用中品牌不能删除（`BRAND_IN_USE`）。
 25. 切换企业后商品/类目/品牌变为新租户数据；无 `product:read` 看不到菜单，直接调接口仍 403。
 26. 无 `product:create` 看不到新建商品；无 `product:update` 看不到编辑；OPERATOR 默认不能删除类目/品牌。
+27. 新增商品可不填编码：服务端生成 `PD` + 10 位 id、`SKU` + 10 位 id；条码留空则等于最终 SKU 编码。用户自定义编码在租户内唯一。
+28. 类目最多三级。第三级不显示展开按钮，也不能新增子类目；直接调接口创建第四级返回 `CATEGORY_MAX_DEPTH_EXCEEDED`。
 
 多租户说明见 `docs/multi-tenancy.md`。RBAC 见 `docs/rbac.md`。商品见 `docs/products.md`。V3 见 `docs/versions/v3.md`。路由配置说明见 `docs/routing.md`。认证流程见 `docs/auth.md`。
 

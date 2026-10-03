@@ -63,7 +63,13 @@ class CatalogService:
         return roots
 
     def create_category(self, payload: CategoryCreate) -> CategoryOut:
-        """新增类目。parent_id 必须指向本租户已有节点，且层级不超过 3。"""
+        """新增类目。parent_id 必须指向本租户已有节点，且层级不超过 3。
+
+        level 由父节点推算，不信任客户端传入。
+        一级 parent_id 为空 → level=1；二级/三级 = parent.level + 1。
+        parent.level 已经是 3 时拒绝，错误码 CATEGORY_MAX_DEPTH_EXCEEDED。
+        本版不支持移动整棵子树，因此不必再算「带子节点搬家后是否超三级」。
+        """
         self.auth.require_all(self.context, (PermissionCode.PRODUCT_UPDATE,))
         parent: ProductCategory | None = None
         level = 1
@@ -72,7 +78,13 @@ class CatalogService:
             if parent is None:
                 raise AppError(_UNAVAILABLE, code=40430, status_code=404)
             if parent.level >= _MAX_LEVEL:
-                raise AppError("类目最多三级", code=40053, status_code=400)
+                # 第三级已经是叶子。不能只靠前端藏按钮，直接调接口也必须拒绝。
+                raise AppError(
+                    "类目最多三级",
+                    code=40053,
+                    status_code=400,
+                    data={"error": "CATEGORY_MAX_DEPTH_EXCEEDED"},
+                )
             level = parent.level + 1
         if self.categories.find_sibling_name(parent_id=payload.parent_id, name=payload.name):
             raise AppError("同一父类目下名称不能重复", code=40054, status_code=400)

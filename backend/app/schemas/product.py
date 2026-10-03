@@ -150,11 +150,19 @@ class BrandListOut(BaseModel):
 class SkuInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    sku_code: str = Field(min_length=1, max_length=64)
+    sku_code: str | None = Field(default=None, max_length=64)
     name: str = Field(min_length=1, max_length=128)
     barcode: str | None = Field(default=None, max_length=64)
     spec_values: dict[str, Any] = Field(default_factory=dict)
     status: str | None = Field(default=None, max_length=16)
+
+    @field_validator("sku_code")
+    @classmethod
+    def empty_sku_code_to_none(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        text = value.strip()
+        return text or None
 
     @field_validator("name")
     @classmethod
@@ -181,6 +189,8 @@ class SkuInput(BaseModel):
 
 
 class SkuUpdate(BaseModel):
+    """编辑已有 SKU。没有 sku_code 字段：创建后编码保持稳定。"""
+
     model_config = ConfigDict(extra="forbid")
 
     name: str | None = Field(default=None, min_length=1, max_length=128)
@@ -234,7 +244,7 @@ class ProductCreate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     name: str = Field(min_length=1, max_length=128)
-    code: str = Field(min_length=1, max_length=64)
+    code: str | None = Field(default=None, max_length=64)
     category_id: int = Field(gt=0)
     brand_id: int | None = Field(default=None, gt=0)
     description: str | None = None
@@ -248,6 +258,14 @@ class ProductCreate(BaseModel):
         if not name:
             raise ValueError("商品名称不能为空")
         return name
+
+    @field_validator("code")
+    @classmethod
+    def empty_code_to_none(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        text = value.strip()
+        return text or None
 
     @field_validator("description")
     @classmethod
@@ -266,6 +284,8 @@ class ProductCreate(BaseModel):
 
 
 class ProductUpdate(BaseModel):
+    """编辑已有商品。故意没有 code：没提交就保持原编码，禁止用空值重新生成。"""
+
     model_config = ConfigDict(extra="forbid")
 
     name: str | None = Field(default=None, min_length=1, max_length=128)

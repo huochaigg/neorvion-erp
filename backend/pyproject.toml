@@ -45,5 +45,5 @@ pythonpath = ["."]
 venvPath = "."
 venv = ".venv"
 pythonVersion = "3.12"
-pythonPlatform = "Windows"
+pythonPlatform = "All"
 extraPaths = ["."]

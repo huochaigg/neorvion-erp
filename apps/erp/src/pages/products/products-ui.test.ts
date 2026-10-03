@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import {
   canAccess,
+  categoryRowExpandable,
   flattenProductCategories,
   PERMISSION_CODE,
   productCategoriesQueryKey,
@@ -8,6 +9,7 @@ import {
   productsQueryKey,
   specEntriesFromRecord,
   specRecordFromEntries,
+  toCategoryTableRows,
   type ProductCategory,
 } from '@neorvion/shared';
 import { describe, it } from 'vitest';
@@ -78,5 +80,34 @@ describe('商品页 UI 规则', () => {
       flattenProductCategories(tree).map((item) => item.name),
       ['电子产品', '手机'],
     );
+  });
+
+  it('第三级叶子节点不显示展开按钮', () => {
+    const leaf: ProductCategory = {
+      id: 3,
+      tenant_id: 1,
+      name: '智能手机',
+      parent_id: 2,
+      level: 3,
+      sort: 0,
+      status: 'ACTIVE',
+      created_at: '',
+      updated_at: '',
+      children: [],
+    };
+    const rows = toCategoryTableRows([
+      {
+        ...tree[0],
+        children: [
+          {
+            ...tree[0].children[0],
+            children: [leaf],
+          },
+        ],
+      },
+    ]);
+    assert.equal(categoryRowExpandable(leaf), false);
+    assert.equal(rows[0]?.children?.[0]?.children?.[0]?.children, undefined);
+    assert.equal(categoryRowExpandable({ level: 1, children: [] }), false);
   });
 });

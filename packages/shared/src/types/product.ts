@@ -88,7 +88,7 @@ export interface ProductSku {
 }
 
 export interface ProductSkuInput {
-  sku_code: string;
+  sku_code?: string | null;
   name: string;
   barcode?: string | null;
   spec_values?: Record<string, string>;
@@ -131,7 +131,7 @@ export interface ProductDetail extends ProductListItem {
 
 export interface ProductCreatePayload {
   name: string;
-  code: string;
+  code?: string | null;
   category_id: number;
   brand_id?: number | null;
   description?: string | null;
@@ -184,4 +184,28 @@ export function flattenProductCategories(nodes: readonly ProductCategory[]): Pro
   };
   walk(nodes);
   return result;
+}
+
+/** 第三级是叶子；一/二级没有子节点也不显示展开按钮。 */
+export function categoryRowExpandable(node: {
+  level: number;
+  children?: readonly unknown[] | null;
+}): boolean {
+  return node.level < 3 && (node.children?.length ?? 0) > 0;
+}
+
+export type CategoryTableRow = Omit<ProductCategory, 'children'> & {
+  children?: CategoryTableRow[];
+};
+
+/** 给 Ant Design Table 用：叶子节点去掉 children，避免空数组仍显示 +/-。 */
+export function toCategoryTableRows(nodes: readonly ProductCategory[]): CategoryTableRow[] {
+  return nodes.map((node) => {
+    const children = toCategoryTableRows(node.children ?? []);
+    if (!categoryRowExpandable({ level: node.level, children })) {
+      const { children: _ignored, ...rest } = node;
+      return rest;
+    }
+    return { ...node, children };
+  });
 }
