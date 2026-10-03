@@ -1,13 +1,16 @@
 import {
   ApiError,
   CATALOG_STATUS,
+  categoryRowExpandable,
   PERMISSION_CODE,
   productCategoriesQueryKey,
-  type ProductCategory,
+  toCategoryTableRows,
+  type CategoryTableRow,
 } from '@neorvion/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { App, Button, Form, Input, InputNumber, Modal, Space, Table, Tag } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
+import type { MouseEvent } from 'react';
 import { useEffect, useState } from 'react';
 import {
   createProductCategory,
@@ -21,8 +24,8 @@ import { usePermissions } from '@/hooks/usePermissions';
 import type { PageProps } from '@/router/types';
 
 type EditorState =
-  | { type: 'create'; parent?: ProductCategory }
-  | { type: 'edit'; category: ProductCategory };
+  | { type: 'create'; parent?: CategoryTableRow }
+  | { type: 'edit'; category: CategoryTableRow };
 
 export function CategoriesPage(props: PageProps) {
   const { message, modal } = App.useApp();
@@ -85,7 +88,7 @@ export function CategoriesPage(props: PageProps) {
     },
   });
 
-  const columns: ColumnsType<ProductCategory> = [
+  const columns: ColumnsType<CategoryTableRow> = [
     { title: '名称', dataIndex: 'name', key: 'name' },
     { title: '层级', dataIndex: 'level', key: 'level', width: 80 },
     { title: '排序', dataIndex: 'sort', key: 'sort', width: 80 },
@@ -172,11 +175,32 @@ export function CategoriesPage(props: PageProps) {
       <Table
         rowKey="id"
         columns={columns}
-        dataSource={treeQuery.data ?? []}
+        dataSource={toCategoryTableRows(treeQuery.data ?? [])}
         loading={treeQuery.isLoading}
         pagination={false}
         scroll={{ y: 'calc(100vh - 280px)' }}
-        childrenColumnName="children"
+        expandable={{
+          childrenColumnName: 'children',
+          rowExpandable: (record) => categoryRowExpandable(record),
+          expandIconColumnIndex: 0,
+          expandIcon: ({ expandable, expanded, onExpand, record }) => {
+            if (!expandable) {
+              return null;
+            }
+            return (
+              <button
+                type="button"
+                className={
+                  expanded
+                    ? 'ant-table-row-expand-icon ant-table-row-expand-icon-expanded'
+                    : 'ant-table-row-expand-icon ant-table-row-expand-icon-collapsed'
+                }
+                aria-label={expanded ? '收起' : '展开'}
+                onClick={(event: MouseEvent<HTMLElement>) => onExpand(record, event)}
+              />
+            );
+          },
+        }}
       />
       <Modal
         title={

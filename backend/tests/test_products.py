@@ -95,6 +95,7 @@ def test_category_tree_and_tenant_isolation(client: TestClient) -> None:
     )
     assert fourth.status_code == 400
     assert fourth.json()["code"] == 40053
+    assert fourth.json()["data"]["error"] == "CATEGORY_MAX_DEPTH_EXCEEDED"
 
     tree = client.get("/api/v1/product-categories", headers=auth_header(owner_a, tenant_a))
     assert tree.status_code == 200
@@ -584,4 +585,241 @@ def test_sku_subresource_add_update_delete(client: TestClient) -> None:
     )
     assert last.status_code == 400
     assert last.json()["code"] == 40058
+
+
+def _assert_auto_product_code(code: str, product_id: int) -> None:
+    assert code == f"PD{product_id:010d}"
+    assert code.startswith("PD")
+    assert len(code) == 12
+
+
+def _assert_auto_sku_code(sku_code: str, sku_id: int) -> None:
+    assert sku_code == f"SKU{sku_id:010d}"
+    assert sku_code.startswith("SKU")
+    assert len(sku_code) == 13
+
+
+def test_auto_generate_product_and_sku_codes(client: TestClient) -> None:
+    owner, _ = register_and_login(client, "prod-autocode@example.com")
+    tenant_id = _create_tenant(client, owner, "AutoCo", "prod-autocode")
+    category = _create_category(client, owner, tenant_id, "电子")
+    created = client.post(
+        "/api/v1/products",
+        json={
+            "name": "无编码商品",
+            "category_id": category["id"],
+            "skus": [{"name": "默认 SKU"}],
+        },
+        headers=auth_header(owner, tenant_id),
+    )
+    assert created.status_code == 200, created.text
+    data = created.json()["data"]
+    _assert_auto_product_code(data["code"], data["id"])
+    assert len(data["skus"]) == 1
+    sku = data["skus"][0]
+    _assert_auto_sku_code(sku["sku_code"], sku["id"])
+    assert sku["barcode"] == sku["sku_code"]
+
+    empty_string = client.post(
+        "/api/v1/products",
+        json={
+            "name": "空字符串编码",
+            "code": "   ",
+            "category_id": category["id"],
+            "skus": [{"name": "SKU", "sku_code": "", "barcode": ""}],
+        },
+        headers=auth_header(owner, tenant_id),
+    )
+    assert empty_string.status_code == 200, empty_string.text
+    empty_data = empty_string.json()["data"]
+    _assert_auto_product_code(empty_data["code"], empty_data["id"])
+    empty_sku = empty_data["skus"][0]
+    _assert_auto_sku_code(empty_sku["sku_code"], empty_sku["id"])
+    assert empty_sku["barcode"] == empty_sku["sku_code"]
+
+
+def test_custom_codes_kept_and_unique_per_tenant(client: TestClient) -> None:
+    owner_a, _ = register_and_login(client, "prod-custom-a@example.com")
+    owner_b, _ = register_and_login(client, "prod-custom-b@example.com")
+    tenant_a = _create_tenant(client, owner_a, "CustomA", "prod-custom-a")
+    tenant_b = _create_tenant(client, owner_b, "CustomB", "prod-custom-b")
+    cat_a = _create_category(client, owner_a, tenant_a, "手机")
+    cat_b = _create_category(client, owner_b, tenant_b, "手机")
+    created = client.post(
+        "/api/v1/products",
+        json={
+            "name": "自定义",
+            "code": "  pd-custom-001  ",
+            "category_id": cat_a["id"],
+            "skus": [
+                {
+                    "name": "红 L",
+                    "sku_code": "abc-red-l",
+                    "barcode": "6901234567890",
+                }
+            ],
+        },
+        headers=auth_header(owner_a, tenant_a),
+    )
+    assert created.status_code == 200, created.text
+    data = created.json()["data"]
+    assert data["code"] == "PD-CUSTOM-001"
+    assert data["skus"][0]["sku_code"] == "ABC-RED-L"
+    assert data["skus"][0]["barcode"] == "6901234567890"
+
+    dup = client.post(
+        "/api/v1/products",
+        json={
+            "name": "重复",
+            "code": "PD-CUSTOM-001",
+            "category_id": cat_a["id"],
+            "skus": [{"name": "另一个"}],
+        },
+        headers=auth_header(owner_a, tenant_a),
+    )
+    assert dup.status_code == 409
+
+    other_tenant = client.post(
+        "/api/v1/products",
+        json={
+            "name": "自定义",
+            "code": "PD-CUSTOM-001",
+            "category_id": cat_b["id"],
+            "skus": [{"name": "红 L", "sku_code": "ABC-RED-L"}],
+        },
+        headers=auth_header(owner_b, tenant_b),
+    )
+    assert other_tenant.status_code == 200, other_tenant.text
+    assert other_tenant.json()["data"]["code"] == "PD-CUSTOM-001"
+
+
+def test_edit_does_not_regenerate_codes(client: TestClient) -> None:
+    owner, _ = register_and_login(client, "prod-edit-code@example.com")
+    tenant_id = _create_tenant(client, owner, "EditCo", "prod-edit-code")
+    category = _create_category(client, owner, tenant_id, "鞋")
+    created = client.post(
+        "/api/v1/products",
+        json={
+            "name": "跑鞋",
+            "category_id": category["id"],
+            "skus": [{"name": "42码", "sku_code": "RUN-42"}],
+        },
+        headers=auth_header(owner, tenant_id),
+    )
+    assert created.status_code == 200, created.text
+    product_id = created.json()["data"]["id"]
+    original_code = created.json()["data"]["code"]
+    sku = created.json()["data"]["skus"][0]
+    patched = client.patch(
+        f"/api/v1/products/{product_id}",
+        json={"name": "跑鞋加绒"},
+        headers=auth_header(owner, tenant_id),
+    )
+    assert patched.status_code == 200
+    assert patched.json()["data"]["code"] == original_code
+    sku_patched = client.patch(
+        f"/api/v1/products/{product_id}/skus/{sku['id']}",
+        json={"name": "42码加宽"},
+        headers=auth_header(owner, tenant_id),
+    )
+    assert sku_patched.status_code == 200
+    assert sku_patched.json()["data"]["sku_code"] == "RUN-42"
+    assert sku_patched.json()["data"]["barcode"] == "RUN-42"
+
+
+def test_multi_sku_auto_codes_are_unique(client: TestClient) -> None:
+    owner, _ = register_and_login(client, "prod-multi-auto@example.com")
+    tenant_id = _create_tenant(client, owner, "MultiAuto", "prod-multi-auto")
+    category = _create_category(client, owner, tenant_id, "服装")
+    created = client.post(
+        "/api/v1/products",
+        json={
+            "name": "T 恤",
+            "category_id": category["id"],
+            "skus": [{"name": "红 S"}, {"name": "红 M"}, {"name": "红 L", "sku_code": "TEE-RED-L"}],
+        },
+        headers=auth_header(owner, tenant_id),
+    )
+    assert created.status_code == 200, created.text
+    skus = created.json()["data"]["skus"]
+    assert len(skus) == 3
+    codes = [item["sku_code"] for item in skus]
+    assert len(set(codes)) == 3
+    assert "TEE-RED-L" in codes
+    auto = [item for item in skus if item["sku_code"] != "TEE-RED-L"]
+    assert len(auto) == 2
+    for item in auto:
+        _assert_auto_sku_code(item["sku_code"], item["id"])
+        assert item["barcode"] == item["sku_code"]
+    custom = next(item for item in skus if item["sku_code"] == "TEE-RED-L")
+    assert custom["barcode"] == "TEE-RED-L"
+
+    added = client.post(
+        f"/api/v1/products/{created.json()['data']['id']}/skus",
+        json={"name": "红 XL"},
+        headers=auth_header(owner, tenant_id),
+    )
+    assert added.status_code == 200, added.text
+    _assert_auto_sku_code(added.json()["data"]["sku_code"], added.json()["data"]["id"])
+    assert added.json()["data"]["barcode"] == added.json()["data"]["sku_code"]
+
+
+def test_consecutive_auto_products_have_unique_codes(client: TestClient) -> None:
+    """连续创建近似并发：编号来自自增 id，不依赖 MAX(code)+1。"""
+    owner, _ = register_and_login(client, "prod-seq-auto@example.com")
+    tenant_id = _create_tenant(client, owner, "SeqAuto", "prod-seq-auto")
+    category = _create_category(client, owner, tenant_id, "配件")
+    codes: list[str] = []
+    sku_codes: list[str] = []
+    for index in range(3):
+        response = client.post(
+            "/api/v1/products",
+            json={
+                "name": f"连续商品{index}",
+                "category_id": category["id"],
+                "skus": [{"name": f"SKU{index}"}],
+            },
+            headers=auth_header(owner, tenant_id),
+        )
+        assert response.status_code == 200, response.text
+        data = response.json()["data"]
+        _assert_auto_product_code(data["code"], data["id"])
+        codes.append(data["code"])
+        sku = data["skus"][0]
+        _assert_auto_sku_code(sku["sku_code"], sku["id"])
+        sku_codes.append(sku["sku_code"])
+    assert len(set(codes)) == 3
+    assert len(set(sku_codes)) == 3
+
+
+def test_auto_product_rolls_back_when_sku_fails(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    original_add = ProductSkuRepository.add
+    calls = {"count": 0}
+
+    def flaky(self: ProductSkuRepository, sku: object) -> object:
+        calls["count"] += 1
+        if calls["count"] >= 2:
+            raise IntegrityError("insert sku", {}, Exception("dup"))
+        return original_add(self, sku)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(ProductSkuRepository, "add", flaky)
+    owner, _ = register_and_login(client, "prod-auto-tx@example.com")
+    tenant_id = _create_tenant(client, owner, "AutoTx", "prod-autotx")
+    category = _create_category(client, owner, tenant_id, "电子")
+    failed = client.post(
+        "/api/v1/products",
+        json={
+            "name": "半成品自动编码",
+            "category_id": category["id"],
+            "skus": [{"name": "一"}, {"name": "二"}],
+        },
+        headers=auth_header(owner, tenant_id),
+    )
+    assert failed.status_code == 409
+    listed = client.get("/api/v1/products", headers=auth_header(owner, tenant_id))
+    names = {item["name"] for item in listed.json()["data"]["items"]}
+    assert "半成品自动编码" not in names
 

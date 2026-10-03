@@ -1,12 +1,13 @@
 {
+  "python": "backend/.venv/bin/python",
+  "venvPath": "backend",
+  "venv": ".venv",
   "executionEnvironments": [
     {
       "root": "backend",
       "pythonVersion": "3.12",
-      "pythonPlatform": "Windows",
-      "extraPaths": ["."],
-      "venvPath": ".",
-      "venv": ".venv"
+      "pythonPlatform": "All",
+      "extraPaths": ["."]
     }
   ]
 }

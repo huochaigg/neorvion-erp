@@ -26,17 +26,20 @@ from app.db.mixins import TenantMixin, TimestampMixin
 
 
 class CatalogStatus(StrEnum):
+    # 类目状态：有效、禁用。
     ACTIVE = "ACTIVE"
     DISABLED = "DISABLED"
 
 
 class ProductStatus(StrEnum):
+    # 商品状态：草稿、上架、下架。
     DRAFT = "DRAFT"
     ACTIVE = "ACTIVE"
     INACTIVE = "INACTIVE"
 
 
 class SkuStatus(StrEnum):
+    # SKU 状态：有效、禁用。
     ACTIVE = "ACTIVE"
     INACTIVE = "INACTIVE"
 
@@ -115,7 +118,8 @@ class Product(TimestampMixin, TenantMixin, Base):
     category_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
     brand_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     name: Mapped[str] = mapped_column(String(128), nullable=False)
-    code: Mapped[str] = mapped_column(String(64), nullable=False)
+    # 创建时可空：flush 拿到自增 id 后再写成 PD{id:010d}。提交前 Service 必须填好。
+    code: Mapped[str | None] = mapped_column(String(64), nullable=True)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     status: Mapped[str] = mapped_column(
         String(16),
@@ -157,7 +161,8 @@ class ProductSku(TimestampMixin, TenantMixin, Base):
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     product_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
-    sku_code: Mapped[str] = mapped_column(String(64), nullable=False)
+    # 与商品 code 相同：允许 INSERT 时为空，flush 后写成 SKU{id:010d}。
+    sku_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
     name: Mapped[str] = mapped_column(String(128), nullable=False)
     barcode: Mapped[str | None] = mapped_column(String(64), nullable=True)
     # 简单键值规格，例如 {"color": "黑色"}。V3 不用 EAV；JSON 便于读写，后续订单只认 SKU 行。

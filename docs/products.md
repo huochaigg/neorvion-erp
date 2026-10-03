@@ -13,7 +13,20 @@ V3 完成商品档案闭环。库存、采购、销售订单、出入库、物�
 
 一个 SPU 可以有多个 SKU。库存、采购、订单以后必须关联 SKU，不能直接给 SPU 建库存数量。
 
-商品内部编码 `code` 和 SKU 编码 `sku_code` 都是租户内唯一的业务编号，不要用数据库自增 id 当货号。
+商品编码 `code`、SKU 编码 `sku_code` 在同一企业内唯一，不同企业可以相同。
+
+新增时都可以留空，由后端按数据库自增 id 生成：
+
+- 商品：`PD` + 10 位数字，例如 `PD0000000001`
+- SKU：`SKU` + 10 位数字，例如 `SKU0000000001`
+
+创建流程是：`session.add` → `session.flush` 拿到 id → 写入编码 → 再写 SKU → `commit`。`flush` 只是把 SQL 发给数据库并取回自增主键，事务还没结束；后面 SKU 失败会 `rollback`，已 flush 的商品也不会留下。
+
+不要用 `SELECT MAX(code) + 1`。两个请求同时读到同一个最大值会生成重复编码。自增 id 由数据库分配，并发下也不会重复。
+
+用户填写的编码会去掉首尾空格并转成大写，再按 `^[A-Z0-9][A-Z0-9_-]{0,63}$` 校验。创建后商品编码、SKU 编码默认只读，编辑时 PATCH 没提交该字段则保持原值，不会因为空输入重新生成。
+
+条码 `barcode` 可空。没填时等于最终 `sku_code`；填了则保留用户值。
 
 状态：
 
@@ -29,6 +42,8 @@ V3 完成商品档案闭环。库存、采购、销售订单、出入库、物�
   手机
     智能手机
 ```
+
+第三级是叶子：不能再新增子类目，前端不显示展开按钮。直接调接口创建第四级会返回 `CATEGORY_MAX_DEPTH_EXCEEDED`（40053）。本版不支持移动类目。
 
 类目属于租户。A 企业的类目不能被 B 企业的商品引用。同一父节点下名称不能重复。
 
@@ -59,14 +74,15 @@ V3 不引入 EAV 或规格笛卡尔积。SKU 用 MySQL JSON 保存键值：
 创建商品时，SPU 和本次全部 SKU 必须在同一事务完成：
 
 1. 校验类目、品牌属于当前租户
-2. 校验 `code`、全部 `sku_code`（含本次请求内部重复）
-3. 写入 `products` 后 `flush` 拿到 `product.id`
-4. 写入全部 `product_skus`
-5. `commit`
+2. 用户填写的 `code` / `sku_code` 做规范化与租户内查重；空值跳过
+3. 写入 `products`（编码可空）后 `flush` 拿到 `product.id`
+4. 未填写 `code` 时写成 `PD{id:010d}`
+5. 写入全部 `product_skus` 后再 `flush`，未填写的 `sku_code` 写成 `SKU{id:010d}`；未填写的 `barcode` 等于最终 `sku_code`
+6. `commit`
 
 `flush` 不是提交。如果现在就 `commit`，后面某个 SKU 失败只能补偿删除，容易留下「商品在、SKU 缺一半」。任意一步失败 `rollback`。
 
-编辑 SPU 走 `PATCH /products/{id}`。SKU 作为子资源：
+编辑 SPU 走 `PATCH /products/{id}`，没有 `code` 字段，不会重新生成编码。SKU 作为子资源：
 
 - `POST /products/{id}/skus`
 - `PATCH /products/{id}/skus/{sku_id}`

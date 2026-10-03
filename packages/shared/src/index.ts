@@ -51,6 +51,7 @@ export type {
   ProductCreatePayload,
   ProductUpdatePayload,
   SpecEntry,
+  CategoryTableRow,
 } from './types/product';
 export {
   CATALOG_STATUS,
@@ -59,6 +60,8 @@ export {
   specEntriesFromRecord,
   specRecordFromEntries,
   flattenProductCategories,
+  categoryRowExpandable,
+  toCategoryTableRows,
 } from './types/product';
 export {
   TENANT_HEADER,
