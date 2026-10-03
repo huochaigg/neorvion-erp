@@ -43,6 +43,7 @@ describe('动态权限菜单与页面守卫', () => {
     assert.equal(paths.includes('/system/roles'), true);
     assert.equal(paths.includes('/system/permissions'), true);
     assert.equal(paths.includes('/inventory'), false);
+    assert.equal(paths.includes('/warehouses'), false);
     assert.equal(paths.includes('/products/create'), false);
   });
 
@@ -100,6 +101,9 @@ describe('动态权限菜单与页面守卫', () => {
     assert.equal(pageAllowsAccess(categoryMatch, [PERMISSION_CODE.productRead]), true);
     const brandMatch = matchRoute(routes, '/brands');
     assert.equal(pageAllowsAccess(brandMatch, [PERMISSION_CODE.productRead]), true);
+    const warehouseMatch = matchRoute(routes, '/warehouses');
+    assert.equal(pageAllowsAccess(warehouseMatch, [PERMISSION_CODE.productRead]), false);
+    assert.equal(pageAllowsAccess(warehouseMatch, [PERMISSION_CODE.warehouseRead]), true);
   });
 
   it('租户 A 与 B 权限独立：仓库身份看不到系统管理', () => {
@@ -107,6 +111,7 @@ describe('动态权限菜单与页面守卫', () => {
       PERMISSION_CODE.productRead,
       PERMISSION_CODE.orderRead,
       PERMISSION_CODE.inventoryRead,
+      PERMISSION_CODE.warehouseRead,
     ];
     const admin = [
       PERMISSION_CODE.tenantMemberRead,
@@ -118,6 +123,7 @@ describe('动态权限菜单与页面守卫', () => {
     const adminMenu = menuPaths(filterMenuRoutes(routes, admin));
     assert.equal(warehouseMenu.includes('/system'), false);
     assert.equal(warehouseMenu.includes('/inventory'), true);
+    assert.equal(warehouseMenu.includes('/warehouses'), true);
     assert.equal(adminMenu.includes('/system'), true);
     assert.notDeepEqual(warehouseMenu, adminMenu);
   });

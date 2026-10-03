@@ -16,7 +16,8 @@ export type PageKey =
   | 'ProductForm'
   | 'ProductDetail'
   | 'ProductCategories'
-  | 'Brands';
+  | 'Brands'
+  | 'Warehouses';
 
 export type PermissionMode = 'any' | 'all';
 

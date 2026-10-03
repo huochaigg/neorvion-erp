@@ -104,3 +104,23 @@ ProductDeleteContext = Annotated[
     TenantContext,
     Depends(require_permission(PermissionCode.PRODUCT_DELETE)),
 ]
+WarehouseReadContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.WAREHOUSE_READ)),
+]
+WarehouseCreateContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.WAREHOUSE_CREATE)),
+]
+WarehouseUpdateContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.WAREHOUSE_UPDATE)),
+]
+WarehouseDisableContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.WAREHOUSE_DISABLE)),
+]
+WarehouseDeleteContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.WAREHOUSE_DELETE)),
+]

@@ -12,15 +12,20 @@ from app.services.rbac import RoleService
 def main() -> None:
     session = SessionLocal()
     try:
-        created = RoleService(session).seed_permission_catalog()
-        expanded = RoleService(session).expand_legacy_manage_permissions()
+        service = RoleService(session)
+        created = service.seed_permission_catalog()
+        expanded = service.expand_legacy_manage_permissions()
+        tenants = service.backfill_existing_tenants()
         session.commit()
     except Exception:
         session.rollback()
         raise
     finally:
         session.close()
-    print(f"permissions seeded, newly created={created}, legacy expanded={expanded}")
+    print(
+        "permissions seeded, "
+        f"newly created={created}, legacy expanded={expanded}, tenants backfilled={tenants}"
+    )
 
 
 if __name__ == "__main__":

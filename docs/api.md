@@ -16,7 +16,7 @@
 
 `GET /api/v1/health`
 
-依赖不可用时 HTTP 仍为 200，字段标记 `unavailable`。当前 `milestone` 为 `V3`。
+依赖不可用时 HTTP 仍为 200，字段标记 `unavailable`。当前 `milestone` 为 `V4`。
 
 ## 认证
 
@@ -85,5 +85,19 @@
 - `DELETE /api/v1/products/{id}/skus/{sku_id}`（`product:update`）
 
 有子类目 → `40050` `CATEGORY_HAS_CHILDREN`。类目被商品使用 → `40051` `CATEGORY_IN_USE`。品牌被使用 → `40052` `BRAND_IN_USE`。商品/SKU 编码冲突 → `40930` / `40931`。跨租户资源 → `404`。
+
+## 仓库（V4）
+
+详见 `docs/warehouses.md`。需要登录和有效 `X-Tenant-ID`。
+
+- `GET /api/v1/warehouses`（`warehouse:read`）分页：`q` / `type` / `status`
+- `GET /api/v1/warehouses/{id}`（`warehouse:read`）
+- `POST /api/v1/warehouses`（`warehouse:create`）
+- `PATCH /api/v1/warehouses/{id}`（`warehouse:update`）不改 code / 默认 / 状态
+- `PATCH /api/v1/warehouses/{id}/status`（`warehouse:disable`）
+- `POST /api/v1/warehouses/{id}/set-default`（`warehouse:update`）
+- `DELETE /api/v1/warehouses/{id}`（`warehouse:delete`）
+
+仓库编码冲突 → `40940`。默认仓不能停用 → `40063` `DEFAULT_WAREHOUSE_CANNOT_DISABLE`。默认仓不是最后一个时不能删除 → `40064` `DEFAULT_WAREHOUSE_CANNOT_DELETE`。停用仓不能设默认 → `40065`。跨租户 → `40440`。
 
 Swagger：http://localhost:8011/docs

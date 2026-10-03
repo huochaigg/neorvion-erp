@@ -1,6 +1,6 @@
-# RBAC 权限模型（V2.3.1 ~ V3）
+# RBAC 权限模型（V2.3.1 ~ V4）
 
-V2.3.1 完成后端权限基础设施。V2.3.2 完成企业成员授权与 ERP 管理页面。V2.3.3 完成动态权限菜单、页面守卫与按钮权限。V2.3.4 补全成员/角色 CRUD、代建账号、角色权限配置与权限目录。V2.3.5 补齐企业内成员名称、细粒度系统管理权限、菜单按钮权限树，并结束 V2 RBAC 基础设施。V3 商品模块沿用 `product:read/create/update/delete`，类目和品牌不另拆编码。详见 `docs/versions/v3.md` 与 `docs/products.md`。
+V2.3.1 完成后端权限基础设施。V2.3.2 完成企业成员授权与 ERP 管理页面。V2.3.3 完成动态权限菜单、页面守卫与按钮权限。V2.3.4 补全成员/角色 CRUD、代建账号、角色权限配置与权限目录。V2.3.5 补齐企业内成员名称、细粒度系统管理权限、菜单按钮权限树，并结束 V2 RBAC 基础设施。V3 商品模块沿用 `product:read/create/update/delete`，类目和品牌不另拆编码。V4 新增 `warehouse:read/create/update/disable/delete`，设默认仓归 `warehouse:update`。详见 `docs/versions/v3.md`、`docs/products.md`、`docs/versions/v4.md` 与 `docs/warehouses.md`。
 
 ## 关系：User、TenantMember、Role、Permission
 
@@ -123,8 +123,8 @@ OWNER 转移是独立业务流程，本版本不做。
 | --- | --- | --- |
 | OWNER | 所有者 | 目录中全部权限；另有所有权语义 |
 | ADMIN | 管理员 | 目录中全部权限（不含所有权） |
-| OPERATOR | 运营 | 商品/订单/采购日常操作，不能管成员和角色 |
-| WAREHOUSE | 仓库 | 入出库，只读商品与订单 |
+| OPERATOR | 运营 | 商品/订单/采购日常操作，只读仓库，不能管成员和角色 |
+| WAREHOUSE | 仓库 | 维护仓库档案，入出库，只读商品与订单；默认不能停用或删除仓库 |
 | VIEWER | 只读 | 各模块 read |
 
 新加入的普通成员默认授予 **VIEWER**。

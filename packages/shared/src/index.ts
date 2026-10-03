@@ -63,6 +63,21 @@ export {
   categoryRowExpandable,
   toCategoryTableRows,
 } from './types/product';
+export type {
+  Warehouse,
+  WarehouseList,
+  WarehouseCreatePayload,
+  WarehouseUpdatePayload,
+} from './types/warehouse';
+export {
+  WAREHOUSE_STATUS,
+  WAREHOUSE_TYPE,
+  WAREHOUSE_TYPE_LABEL,
+  WAREHOUSE_TYPE_OPTIONS,
+  warehouseTypeLabel,
+  warehouseLocation,
+  canSetWarehouseDefault,
+} from './types/warehouse';
 export {
   TENANT_HEADER,
   TENANT_STATUS,
@@ -94,6 +109,8 @@ export {
   brandOptionsQueryKey,
   productsQueryKey,
   productQueryKey,
+  warehousesQueryKey,
+  warehouseQueryKey,
   ordersQueryKey,
   inventoryQueryKey,
   isTenantScopedQueryKey,

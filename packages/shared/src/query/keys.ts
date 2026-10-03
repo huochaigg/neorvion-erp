@@ -83,6 +83,23 @@ export function productQueryKey(tenantId: number | null, productId: number | nul
   return ['tenant', tenantId, 'product', productId] as const;
 }
 
+export function warehousesQueryKey(
+  tenantId: number | null,
+  filters?: {
+    q?: string;
+    type?: string;
+    status?: string;
+    page?: number;
+    pageSize?: number;
+  },
+) {
+  return ['tenant', tenantId, 'warehouses', filters ?? {}] as const;
+}
+
+export function warehouseQueryKey(tenantId: number | null, warehouseId: number | null) {
+  return ['tenant', tenantId, 'warehouse', warehouseId] as const;
+}
+
 export function ordersQueryKey(tenantId: number | null) {
   return ['tenant', tenantId, 'orders'] as const;
 }

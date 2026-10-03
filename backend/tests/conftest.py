@@ -96,6 +96,7 @@ def _wipe_business_tables() -> None:
         session.execute(text("DELETE FROM products"))
         session.execute(text("DELETE FROM brands"))
         session.execute(text("DELETE FROM product_categories"))
+        session.execute(text("DELETE FROM warehouses"))
         session.execute(text("DELETE FROM role_permissions"))
         session.execute(text("DELETE FROM member_roles"))
         session.execute(text("DELETE FROM roles"))
