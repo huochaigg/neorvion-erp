@@ -65,5 +65,6 @@ describe('permission UI helpers', () => {
     assert.deepEqual(toggleModulePermissionIds([], [1, 2], true), [1, 2]);
     assert.deepEqual(toggleModulePermissionIds([1, 2, 3], [1, 2], false), [3]);
     assert.equal(permissionModuleLabel('tenant'), '企业管理');
+    assert.equal(permissionModuleLabel('warehouse'), '仓库管理');
   });
 });

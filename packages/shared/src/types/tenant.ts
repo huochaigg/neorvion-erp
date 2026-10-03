@@ -132,6 +132,7 @@ export interface RoleUpdatePayload {
 export const PERMISSION_MODULE_LABELS: Record<string, string> = {
   tenant: '企业管理',
   product: '商品管理',
+  warehouse: '仓库管理',
   order: '订单管理',
   inventory: '库存管理',
   purchase: '采购管理',
@@ -172,6 +173,11 @@ export const PERMISSION_CODE = {
   productDelete: 'product:delete',
   orderRead: 'order:read',
   inventoryRead: 'inventory:read',
+  warehouseRead: 'warehouse:read',
+  warehouseCreate: 'warehouse:create',
+  warehouseUpdate: 'warehouse:update',
+  warehouseDisable: 'warehouse:disable',
+  warehouseDelete: 'warehouse:delete',
 } as const;
 
 export type PermissionMode = 'any' | 'all';

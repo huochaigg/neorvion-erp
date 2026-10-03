@@ -38,6 +38,10 @@ export const PAGE_COMPONENTS: Record<PageKey, LazyExoticComponent<ComponentType<
     const module = await import('@/pages/products/BrandsPage');
     return { default: module.BrandsPage };
   }),
+  Warehouses: lazy(async () => {
+    const module = await import('@/pages/warehouses/WarehousesPage');
+    return { default: module.WarehousesPage };
+  }),
   Placeholder: lazy(async () => {
     const module = await import('@/pages/PlaceholderPage');
     return { default: module.PlaceholderPage };

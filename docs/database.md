@@ -28,6 +28,12 @@
 - `products`：SPU；`UNIQUE(tenant_id, code)`；类目/品牌复合外键保证同租户
 - `product_skus`：SKU；`UNIQUE(tenant_id, sku_code)`；`spec_values` JSON；商品复合外键保证同租户
 
+当前里程碑 V4 增加：
+
+- `warehouses`：租户仓库档案；`UNIQUE(tenant_id, code)`；创建时可空编码，flush 后写入 `WH` + 10 位 id
+- 联合索引 `(tenant_id, status)`、`(tenant_id, type)`
+- 默认仓由 Service 事务 + `SELECT ... FOR UPDATE` 保证每租户最多一个，不在 MySQL 上做部分唯一约束
+
 所有业务表必须包含 `tenant_id`（`TenantMixin`），唯一约束必须带上租户，例如：
 
 ```sql

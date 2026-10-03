@@ -48,6 +48,12 @@ class PermissionCode(StrEnum):
     INVENTORY_INBOUND = "inventory:inbound"
     INVENTORY_OUTBOUND = "inventory:outbound"
 
+    WAREHOUSE_READ = "warehouse:read"
+    WAREHOUSE_CREATE = "warehouse:create"
+    WAREHOUSE_UPDATE = "warehouse:update"
+    WAREHOUSE_DISABLE = "warehouse:disable"
+    WAREHOUSE_DELETE = "warehouse:delete"
+
     PURCHASE_READ = "purchase:read"
     PURCHASE_CREATE = "purchase:create"
     PURCHASE_AUDIT = "purchase:audit"
@@ -134,6 +140,11 @@ PERMISSION_CATALOG: tuple[tuple[str, str, str, str], ...] = (
     (PermissionCode.INVENTORY_READ, "查看库存", "inventory", "预留给库存模块"),
     (PermissionCode.INVENTORY_INBOUND, "入库", "inventory", "预留给库存模块"),
     (PermissionCode.INVENTORY_OUTBOUND, "出库", "inventory", "预留给库存模块"),
+    (PermissionCode.WAREHOUSE_READ, "查看仓库", "warehouse", "查看本企业仓库档案"),
+    (PermissionCode.WAREHOUSE_CREATE, "新增仓库", "warehouse", "创建仓库"),
+    (PermissionCode.WAREHOUSE_UPDATE, "编辑仓库", "warehouse", "编辑仓库档案并设置默认仓库"),
+    (PermissionCode.WAREHOUSE_DISABLE, "启用停用仓库", "warehouse", "启用或禁用仓库"),
+    (PermissionCode.WAREHOUSE_DELETE, "删除仓库", "warehouse", "删除尚未被业务引用的仓库"),
     (PermissionCode.PURCHASE_READ, "查看采购", "purchase", "预留给采购模块"),
     (PermissionCode.PURCHASE_CREATE, "创建采购", "purchase", "预留给采购模块"),
     (PermissionCode.PURCHASE_AUDIT, "审核采购", "purchase", "预留给采购模块"),
@@ -173,6 +184,7 @@ _READ_CODES: tuple[str, ...] = (
     PermissionCode.PRODUCT_READ,
     PermissionCode.ORDER_READ,
     PermissionCode.INVENTORY_READ,
+    PermissionCode.WAREHOUSE_READ,
     PermissionCode.PURCHASE_READ,
 )
 
@@ -199,6 +211,7 @@ DEFAULT_ROLE_TEMPLATES: tuple[tuple[str, str, str, tuple[str, ...]], ...] = (
             PermissionCode.ORDER_READ,
             PermissionCode.ORDER_CREATE,
             PermissionCode.INVENTORY_READ,
+            PermissionCode.WAREHOUSE_READ,
             PermissionCode.PURCHASE_READ,
             PermissionCode.PURCHASE_CREATE,
         ),
@@ -206,7 +219,7 @@ DEFAULT_ROLE_TEMPLATES: tuple[tuple[str, str, str, tuple[str, ...]], ...] = (
     (
         SystemRoleCode.WAREHOUSE,
         "仓库",
-        "处理入库出库，只读商品与订单",
+        "维护仓库档案，处理入库出库，只读商品与订单",
         (
             PermissionCode.TENANT_READ,
             PermissionCode.PRODUCT_READ,
@@ -214,6 +227,9 @@ DEFAULT_ROLE_TEMPLATES: tuple[tuple[str, str, str, tuple[str, ...]], ...] = (
             PermissionCode.INVENTORY_READ,
             PermissionCode.INVENTORY_INBOUND,
             PermissionCode.INVENTORY_OUTBOUND,
+            PermissionCode.WAREHOUSE_READ,
+            PermissionCode.WAREHOUSE_CREATE,
+            PermissionCode.WAREHOUSE_UPDATE,
         ),
     ),
     (
@@ -465,6 +481,50 @@ PERMISSION_TREE: tuple[PermissionTreeDef, ...] = (
                         title="取消",
                         type="ACTION",
                         permission_code=PermissionCode.ORDER_CANCEL,
+                    ),
+                ),
+            ),
+        ),
+    ),
+    PermissionTreeDef(
+        key="dir:warehouse",
+        title="仓库管理",
+        type="DIRECTORY",
+        children=(
+            PermissionTreeDef(
+                key="menu:warehouses",
+                title="仓库管理",
+                type="MENU",
+                children=(
+                    PermissionTreeDef(
+                        key="action:warehouse-read",
+                        title="查看仓库",
+                        type="ACTION",
+                        permission_code=PermissionCode.WAREHOUSE_READ,
+                    ),
+                    PermissionTreeDef(
+                        key="action:warehouse-create",
+                        title="新增仓库",
+                        type="ACTION",
+                        permission_code=PermissionCode.WAREHOUSE_CREATE,
+                    ),
+                    PermissionTreeDef(
+                        key="action:warehouse-update",
+                        title="编辑仓库",
+                        type="ACTION",
+                        permission_code=PermissionCode.WAREHOUSE_UPDATE,
+                    ),
+                    PermissionTreeDef(
+                        key="action:warehouse-disable",
+                        title="启用 / 禁用",
+                        type="ACTION",
+                        permission_code=PermissionCode.WAREHOUSE_DISABLE,
+                    ),
+                    PermissionTreeDef(
+                        key="action:warehouse-delete",
+                        title="删除仓库",
+                        type="ACTION",
+                        permission_code=PermissionCode.WAREHOUSE_DELETE,
                     ),
                 ),
             ),

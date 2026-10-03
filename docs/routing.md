@@ -35,10 +35,11 @@ ERP 业务路由只放在子应用内部：`apps/erp/src/router/routes.ts`。
 {
   path: '/warehouses',
   name: 'Warehouses',
-  title: '仓库',
+  title: '仓库管理',
   icon: 'ShopOutlined',
   showInMenu: true,
-  component: 'Placeholder',
+  permission: PERMISSION_CODE.warehouseRead,
+  component: 'Warehouses',
 }
 ```
 

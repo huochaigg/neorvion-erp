@@ -1,6 +1,6 @@
 # 开发说明
 
-当前里程碑：V3（商品管理：类目 / 品牌 / SPU / SKU）。
+当前里程碑：V4（仓库管理：档案 / 默认仓 / 启停）。
 
 ## 前置
 
@@ -101,9 +101,12 @@ pnpm test
 25. 切换企业后商品/类目/品牌变为新租户数据；无 `product:read` 看不到菜单，直接调接口仍 403。
 26. 无 `product:create` 看不到新建商品；无 `product:update` 看不到编辑；OPERATOR 默认不能删除类目/品牌。
 27. 新增商品可不填编码：服务端生成 `PD` + 10 位 id、`SKU` + 10 位 id；条码留空则等于最终 SKU 编码。用户自定义编码在租户内唯一。
-28. 类目最多三级。第三级不显示展开按钮，也不能新增子类目；直接调接口创建第四级返回 `CATEGORY_MAX_DEPTH_EXCEEDED`。
+29. 登录并选择企业后，可进入「仓库管理」创建仓库；第一个仓库自动成为默认仓库。第二个仓库可设为默认，列表只保留一个默认标记。
+30. 未填仓库编码时服务端生成 `WH` + 10 位 id；自定义编码在租户内唯一。切换企业后仓库数据隔离。
+31. 默认仓库不能直接停用或在还有其他仓库时删除；后端返回 `DEFAULT_WAREHOUSE_CANNOT_DISABLE` / `DEFAULT_WAREHOUSE_CANNOT_DELETE`。
+32. 无 `warehouse:read` 看不到仓库菜单；无 create/update/disable/delete 时对应按钮隐藏，直接调接口仍 403。
 
-多租户说明见 `docs/multi-tenancy.md`。RBAC 见 `docs/rbac.md`。商品见 `docs/products.md`。V3 见 `docs/versions/v3.md`。路由配置说明见 `docs/routing.md`。认证流程见 `docs/auth.md`。
+多租户说明见 `docs/multi-tenancy.md`。RBAC 见 `docs/rbac.md`。商品见 `docs/products.md`。仓库见 `docs/warehouses.md`。V3 见 `docs/versions/v3.md`。V4 见 `docs/versions/v4.md`。路由配置说明见 `docs/routing.md`。认证流程见 `docs/auth.md`。
 
 ## 浏览器进 debugger
 

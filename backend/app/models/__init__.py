@@ -5,6 +5,7 @@ from app.models.product import Brand, Product, ProductCategory, ProductSku
 from app.models.rbac import MemberRoleGrant, Permission, Role, RolePermission
 from app.models.tenant import MemberRole, MemberStatus, Tenant, TenantMember, TenantStatus
 from app.models.user import User, UserStatus
+from app.models.warehouse import Warehouse, WarehouseStatus, WarehouseType
 
 __all__ = [
     "Base",
@@ -23,4 +24,7 @@ __all__ = [
     "TenantStatus",
     "User",
     "UserStatus",
+    "Warehouse",
+    "WarehouseStatus",
+    "WarehouseType",
 ]
