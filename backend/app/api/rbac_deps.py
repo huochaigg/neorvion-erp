@@ -124,3 +124,19 @@ WarehouseDeleteContext = Annotated[
     TenantContext,
     Depends(require_permission(PermissionCode.WAREHOUSE_DELETE)),
 ]
+InventoryReadContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.INVENTORY_READ)),
+]
+InventoryInitializeContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.INVENTORY_INITIALIZE)),
+]
+InventoryAdjustContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.INVENTORY_ADJUST)),
+]
+InventoryTransactionReadContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.INVENTORY_TRANSACTION_READ)),
+]

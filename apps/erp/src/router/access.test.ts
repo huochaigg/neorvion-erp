@@ -104,6 +104,15 @@ describe('动态权限菜单与页面守卫', () => {
     const warehouseMatch = matchRoute(routes, '/warehouses');
     assert.equal(pageAllowsAccess(warehouseMatch, [PERMISSION_CODE.productRead]), false);
     assert.equal(pageAllowsAccess(warehouseMatch, [PERMISSION_CODE.warehouseRead]), true);
+    const inventoryList = matchRoute(routes, '/inventory/list');
+    assert.equal(pageAllowsAccess(inventoryList, [PERMISSION_CODE.productRead]), false);
+    assert.equal(pageAllowsAccess(inventoryList, [PERMISSION_CODE.inventoryRead]), true);
+    const inventoryTx = matchRoute(routes, '/inventory/transactions');
+    assert.equal(pageAllowsAccess(inventoryTx, [PERMISSION_CODE.inventoryRead]), false);
+    assert.equal(pageAllowsAccess(inventoryTx, [PERMISSION_CODE.inventoryTransactionRead]), true);
+    const inventoryDetail = matchRoute(routes, '/inventory/88');
+    assert.equal(pageAllowsAccess(inventoryDetail, []), false);
+    assert.equal(pageAllowsAccess(inventoryDetail, [PERMISSION_CODE.inventoryRead]), true);
   });
 
   it('租户 A 与 B 权限独立：仓库身份看不到系统管理', () => {

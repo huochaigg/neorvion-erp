@@ -34,6 +34,12 @@
 - 联合索引 `(tenant_id, status)`、`(tenant_id, type)`
 - 默认仓由 Service 事务 + `SELECT ... FOR UPDATE` 保证每租户最多一个，不在 MySQL 上做部分唯一约束
 
+当前里程碑 V5 增加：
+
+- `inventories`：`UNIQUE(tenant_id, warehouse_id, sku_id)`；CHECK 数量非负且预占不超过实际；可用库存不落库
+- `inventory_transactions`：只追加的库存流水
+- 复合外键保证仓库 / SKU 与库存同租户
+
 所有业务表必须包含 `tenant_id`（`TenantMixin`），唯一约束必须带上租户，例如：
 
 ```sql
@@ -43,4 +49,4 @@ UNIQUE (tenant_id, warehouse_id, sku_id)
 
 正式建表只通过 Alembic，不在运行时 `create_all`。
 
-连接配置见 `.env.example`。SQLAlchemy 2.x 使用同步 `Session`，便于后续 `SELECT ... FOR UPDATE` 库存锁。
+连接配置见 `.env.example`。SQLAlchemy 2.x 使用同步 `Session`。库存调整使用 `SELECT ... FOR UPDATE`；预占用条件 UPDATE。

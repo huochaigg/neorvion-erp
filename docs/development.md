@@ -1,6 +1,6 @@
 # 开发说明
 
-当前里程碑：V4（仓库管理：档案 / 默认仓 / 启停）。
+当前里程碑：V5（库存管理：台账 / 调整 / 流水 / 锁）。
 
 ## 前置
 
@@ -105,8 +105,13 @@ pnpm test
 30. 未填仓库编码时服务端生成 `WH` + 10 位 id；自定义编码在租户内唯一。切换企业后仓库数据隔离。
 31. 默认仓库不能直接停用或在还有其他仓库时删除；后端返回 `DEFAULT_WAREHOUSE_CANNOT_DISABLE` / `DEFAULT_WAREHOUSE_CANNOT_DELETE`。
 32. 无 `warehouse:read` 看不到仓库菜单；无 create/update/disable/delete 时对应按钮隐藏，直接调接口仍 403。
+33. 登录并选择企业后，可进入「库存管理」给仓库 + SKU 初始化库存，列表显示实际 / 预占 / 可用；可用 = 实际 - 预占。
+34. 同一仓库 + SKU 不能重复初始化（`INVENTORY_ALREADY_EXISTS`）；减少超过可用库存失败（`INSUFFICIENT_AVAILABLE_INVENTORY`）。
+35. 调整后可在「库存流水」看到 before/after；纠错靠新调整，不能改历史流水。
+36. 无 `inventory:read` 看不到库存菜单；无 initialize/adjust 时对应按钮隐藏；无 `inventory:transaction:read` 看不到流水菜单。直接调接口仍 403。
+37. 切换企业后库存与流水隔离；`/inventory/:id` 会回到库存列表。
 
-多租户说明见 `docs/multi-tenancy.md`。RBAC 见 `docs/rbac.md`。商品见 `docs/products.md`。仓库见 `docs/warehouses.md`。V3 见 `docs/versions/v3.md`。V4 见 `docs/versions/v4.md`。路由配置说明见 `docs/routing.md`。认证流程见 `docs/auth.md`。
+多租户说明见 `docs/multi-tenancy.md`。RBAC 见 `docs/rbac.md`。商品见 `docs/products.md`。仓库见 `docs/warehouses.md`。库存见 `docs/inventory.md`。V3 见 `docs/versions/v3.md`。V4 见 `docs/versions/v4.md`。V5 见 `docs/versions/v5.md`。路由配置说明见 `docs/routing.md`。认证流程见 `docs/auth.md`。
 
 ## 浏览器进 debugger
 

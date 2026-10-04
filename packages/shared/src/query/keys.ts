@@ -104,8 +104,48 @@ export function ordersQueryKey(tenantId: number | null) {
   return ['tenant', tenantId, 'orders'] as const;
 }
 
-export function inventoryQueryKey(tenantId: number | null) {
-  return ['tenant', tenantId, 'inventory'] as const;
+export function inventoryQueryKey(
+  tenantId: number | null,
+  filters?: {
+    q?: string;
+    skuCode?: string;
+    warehouseId?: number;
+    categoryId?: number;
+    brandId?: number;
+    stockStatus?: string;
+    threshold?: number;
+    page?: number;
+    pageSize?: number;
+  },
+) {
+  return ['tenant', tenantId, 'inventory', filters ?? {}] as const;
+}
+
+export function inventoryDetailQueryKey(tenantId: number | null, inventoryId: number | null) {
+  return ['tenant', tenantId, 'inventory', inventoryId] as const;
+}
+
+export function inventoryTransactionsQueryKey(
+  tenantId: number | null,
+  filters?: {
+    warehouseId?: number;
+    skuId?: number;
+    inventoryId?: number;
+    type?: string;
+    createdFrom?: string;
+    createdTo?: string;
+    page?: number;
+    pageSize?: number;
+  },
+) {
+  return ['tenant', tenantId, 'inventory-transactions', filters ?? {}] as const;
+}
+
+export function productSkuOptionsQueryKey(
+  tenantId: number | null,
+  filters?: { q?: string; page?: number; pageSize?: number },
+) {
+  return ['tenant', tenantId, 'product-skus', filters ?? {}] as const;
 }
 
 export function isTenantScopedQueryKey(queryKey: readonly unknown[]): boolean {

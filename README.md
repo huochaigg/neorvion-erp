@@ -2,7 +2,7 @@
 
 多租户跨境电商 ERP。当前仓库按里程碑持续迭代，**不要为每个版本重建项目**。
 
-当前里程碑：**V4**。
+当前里程碑：**V5**。
 
 ## 技术栈
 
@@ -118,6 +118,14 @@ pnpm --filter @neorvion/erp build
 pnpm test
 ```
 
+## V5
+
+- 库存台账：`Tenant + Warehouse + SKU`，实际 / 预占 / 可用（计算）
+- 初始化、调整增减、不可变流水；预占/释放/出库扣减为底层能力
+- 调整用 `SELECT FOR UPDATE`；预占用条件 UPDATE；`version` 乐观锁仅演示
+- ERP 菜单「库存管理」：列表、流水、隐藏详情；权限 `inventory:read/initialize/adjust/transaction:read`
+- 版本文档：`docs/versions/v5.md`，业务说明：`docs/inventory.md`
+
 ## V4
 
 - 仓库档案：名称、编码、类型、地址、联系人、启停、默认仓库
@@ -215,6 +223,6 @@ pnpm test
 
 ## 尚未开始
 
-完整菜单权限组件已在 V2.3.5 收尾。V3 完成商品档案。V4 完成仓库档案。尚未开始：OWNER 转移、操作日志、库存数量、采购、销售订单。
+完整菜单权限组件已在 V2.3.5 收尾。V3 完成商品档案。V4 完成仓库档案。V5 完成库存台账。尚未开始：OWNER 转移、操作日志、采购、销售订单。
 
 更细的说明见 `docs/development.md`、`docs/architecture.md`、`docs/auth.md`、`docs/multi-tenancy.md`、`docs/rbac.md`、`docs/products.md`、`docs/versions/v3.md`、`docs/routing.md`、`docs/micro-frontend-integration.md` 与 `docs/micro-frontend-interview.md`。

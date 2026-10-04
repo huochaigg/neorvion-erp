@@ -45,6 +45,9 @@ class PermissionCode(StrEnum):
     ORDER_CANCEL = "order:cancel"
 
     INVENTORY_READ = "inventory:read"
+    INVENTORY_INITIALIZE = "inventory:initialize"
+    INVENTORY_ADJUST = "inventory:adjust"
+    INVENTORY_TRANSACTION_READ = "inventory:transaction:read"
     INVENTORY_INBOUND = "inventory:inbound"
     INVENTORY_OUTBOUND = "inventory:outbound"
 
@@ -137,9 +140,17 @@ PERMISSION_CATALOG: tuple[tuple[str, str, str, str], ...] = (
     (PermissionCode.ORDER_CREATE, "创建订单", "order", "预留给订单模块"),
     (PermissionCode.ORDER_AUDIT, "审核订单", "order", "预留给订单模块"),
     (PermissionCode.ORDER_CANCEL, "取消订单", "order", "预留给订单模块"),
-    (PermissionCode.INVENTORY_READ, "查看库存", "inventory", "预留给库存模块"),
-    (PermissionCode.INVENTORY_INBOUND, "入库", "inventory", "预留给库存模块"),
-    (PermissionCode.INVENTORY_OUTBOUND, "出库", "inventory", "预留给库存模块"),
+    (PermissionCode.INVENTORY_READ, "查看库存", "inventory", "查看库存台账"),
+    (PermissionCode.INVENTORY_INITIALIZE, "初始化库存", "inventory", "给仓库 + SKU 写入首次库存"),
+    (PermissionCode.INVENTORY_ADJUST, "调整库存", "inventory", "盘点增加或减少实际库存"),
+    (
+        PermissionCode.INVENTORY_TRANSACTION_READ,
+        "查看库存流水",
+        "inventory",
+        "查看库存变化历史",
+    ),
+    (PermissionCode.INVENTORY_INBOUND, "入库", "inventory", "预留给收货入库"),
+    (PermissionCode.INVENTORY_OUTBOUND, "出库", "inventory", "预留给销售出库"),
     (PermissionCode.WAREHOUSE_READ, "查看仓库", "warehouse", "查看本企业仓库档案"),
     (PermissionCode.WAREHOUSE_CREATE, "新增仓库", "warehouse", "创建仓库"),
     (PermissionCode.WAREHOUSE_UPDATE, "编辑仓库", "warehouse", "编辑仓库档案并设置默认仓库"),
@@ -184,6 +195,7 @@ _READ_CODES: tuple[str, ...] = (
     PermissionCode.PRODUCT_READ,
     PermissionCode.ORDER_READ,
     PermissionCode.INVENTORY_READ,
+    PermissionCode.INVENTORY_TRANSACTION_READ,
     PermissionCode.WAREHOUSE_READ,
     PermissionCode.PURCHASE_READ,
 )
@@ -211,6 +223,7 @@ DEFAULT_ROLE_TEMPLATES: tuple[tuple[str, str, str, tuple[str, ...]], ...] = (
             PermissionCode.ORDER_READ,
             PermissionCode.ORDER_CREATE,
             PermissionCode.INVENTORY_READ,
+            PermissionCode.INVENTORY_TRANSACTION_READ,
             PermissionCode.WAREHOUSE_READ,
             PermissionCode.PURCHASE_READ,
             PermissionCode.PURCHASE_CREATE,
@@ -225,6 +238,9 @@ DEFAULT_ROLE_TEMPLATES: tuple[tuple[str, str, str, tuple[str, ...]], ...] = (
             PermissionCode.PRODUCT_READ,
             PermissionCode.ORDER_READ,
             PermissionCode.INVENTORY_READ,
+            PermissionCode.INVENTORY_INITIALIZE,
+            PermissionCode.INVENTORY_ADJUST,
+            PermissionCode.INVENTORY_TRANSACTION_READ,
             PermissionCode.INVENTORY_INBOUND,
             PermissionCode.INVENTORY_OUTBOUND,
             PermissionCode.WAREHOUSE_READ,
@@ -542,21 +558,34 @@ PERMISSION_TREE: tuple[PermissionTreeDef, ...] = (
                 children=(
                     PermissionTreeDef(
                         key="action:inventory-read",
-                        title="查看",
+                        title="查看库存",
                         type="ACTION",
                         permission_code=PermissionCode.INVENTORY_READ,
                     ),
                     PermissionTreeDef(
-                        key="action:inventory-inbound",
-                        title="入库",
+                        key="action:inventory-initialize",
+                        title="初始化库存",
                         type="ACTION",
-                        permission_code=PermissionCode.INVENTORY_INBOUND,
+                        permission_code=PermissionCode.INVENTORY_INITIALIZE,
                     ),
                     PermissionTreeDef(
-                        key="action:inventory-outbound",
-                        title="出库",
+                        key="action:inventory-adjust",
+                        title="调整库存",
                         type="ACTION",
-                        permission_code=PermissionCode.INVENTORY_OUTBOUND,
+                        permission_code=PermissionCode.INVENTORY_ADJUST,
+                    ),
+                ),
+            ),
+            PermissionTreeDef(
+                key="menu:inventory-transactions",
+                title="库存流水",
+                type="MENU",
+                children=(
+                    PermissionTreeDef(
+                        key="action:inventory-transaction-read",
+                        title="查看库存流水",
+                        type="ACTION",
+                        permission_code=PermissionCode.INVENTORY_TRANSACTION_READ,
                     ),
                 ),
             ),

@@ -8,6 +8,9 @@ import {
   ordersQueryKey,
   productsQueryKey,
   warehousesQueryKey,
+  inventoryQueryKey,
+  inventoryDetailQueryKey,
+  inventoryTransactionsQueryKey,
   tenantMembersQueryKey,
   tenantMyPermissionsQueryKey,
   tenantRolesQueryKey,
@@ -25,6 +28,16 @@ describe('query keys', () => {
     );
     assert.notDeepEqual(productsQueryKey(1, { q: 'a' }), productsQueryKey(1, { q: 'b' }));
     assert.notDeepEqual(ordersQueryKey(1), ordersQueryKey(2));
+    assert.notDeepEqual(inventoryQueryKey(1), inventoryQueryKey(2));
+    assert.notDeepEqual(
+      inventoryQueryKey(1, { q: 'sku', page: 1, pageSize: 20 }),
+      inventoryQueryKey(1, { q: 'phone', page: 1, pageSize: 20 }),
+    );
+    assert.notDeepEqual(inventoryDetailQueryKey(1, 9), inventoryDetailQueryKey(2, 9));
+    assert.notDeepEqual(
+      inventoryTransactionsQueryKey(1, { type: 'INITIALIZE' }),
+      inventoryTransactionsQueryKey(1, { type: 'ADJUST_IN' }),
+    );
     assert.notDeepEqual(tenantMembersQueryKey(1), tenantMembersQueryKey(2));
     assert.notDeepEqual(
       tenantMembersQueryKey(1, { page: 1, pageSize: 20 }),
