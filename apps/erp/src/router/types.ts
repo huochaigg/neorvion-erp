@@ -17,7 +17,10 @@ export type PageKey =
   | 'ProductDetail'
   | 'ProductCategories'
   | 'Brands'
-  | 'Warehouses';
+  | 'Warehouses'
+  | 'InventoryList'
+  | 'InventoryDetail'
+  | 'InventoryTransactions';
 
 export type PermissionMode = 'any' | 'all';
 

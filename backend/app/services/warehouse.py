@@ -237,9 +237,8 @@ class WarehouseService:
     def delete_warehouse(self, warehouse_id: int) -> None:
         """删除尚未被业务引用的仓库。
 
-        V4 还没有 inventory / 采购 / 订单表，因此未引用即可物理删除。
         默认仓不是该租户最后一个仓库时禁止删除，必须先切换默认。
-        后续库存或单据引用仓库后，_assert_not_referenced() 将拒绝物理删除，只允许停用。
+        已被库存引用的仓库禁止物理删除，只允许停用。
         """
         self.auth.require_all(self.context, (PermissionCode.WAREHOUSE_DELETE,))
         try:
@@ -278,10 +277,20 @@ class WarehouseService:
             raise AppError(_UNAVAILABLE, code=40440, status_code=404)
         return warehouse
 
-    @staticmethod
-    def _assert_not_referenced(_warehouse: Warehouse) -> None:
-        """预留给 V5+。库存、采购入库、销售出库引用仓库后，这里应查引用并拒绝删除。"""
-        return
+    def _assert_not_referenced(self, warehouse: Warehouse) -> None:
+        """有库存台账就不能删仓库，否则流水会失去仓库维度。采购/订单引用留给后续版本。"""
+        from app.repositories.inventory import InventoryRepository
+
+        used = InventoryRepository(self.session, self.context.tenant_id).count_by_warehouse(
+            warehouse.id,
+        )
+        if used > 0:
+            raise AppError(
+                "仓库已被库存引用，不能删除。",
+                code=40066,
+                status_code=400,
+                data={"error": "WAREHOUSE_IN_USE"},
+            )
 
     @staticmethod
     def _auto_code(warehouse_id: int) -> str:

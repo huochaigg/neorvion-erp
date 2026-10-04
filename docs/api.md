@@ -16,7 +16,7 @@
 
 `GET /api/v1/health`
 
-依赖不可用时 HTTP 仍为 200，字段标记 `unavailable`。当前 `milestone` 为 `V4`。
+依赖不可用时 HTTP 仍为 200，字段标记 `unavailable`。当前 `milestone` 为 `V5`。
 
 ## 认证
 
@@ -98,6 +98,21 @@
 - `POST /api/v1/warehouses/{id}/set-default`（`warehouse:update`）
 - `DELETE /api/v1/warehouses/{id}`（`warehouse:delete`）
 
-仓库编码冲突 → `40940`。默认仓不能停用 → `40063` `DEFAULT_WAREHOUSE_CANNOT_DISABLE`。默认仓不是最后一个时不能删除 → `40064` `DEFAULT_WAREHOUSE_CANNOT_DELETE`。停用仓不能设默认 → `40065`。跨租户 → `40440`。
+仓库编码冲突 → `40940`。默认仓不能停用 → `40063` `DEFAULT_WAREHOUSE_CANNOT_DISABLE`。默认仓不是最后一个时不能删除 → `40064` `DEFAULT_WAREHOUSE_CANNOT_DELETE`。停用仓不能设默认 → `40065`。已被库存引用 → `40066` `WAREHOUSE_IN_USE`。跨租户 → `40440`。
+
+## 库存（V5）
+
+详见 `docs/inventory.md`。需要登录和有效 `X-Tenant-ID`。
+
+- `GET /api/v1/inventory`（`inventory:read`）分页：`q` / `sku_code` / `warehouse_id` / `category_id` / `brand_id` / `stock_status` / `threshold`
+- `GET /api/v1/inventory/{id}`（`inventory:read`）
+- `POST /api/v1/inventory/initialize`（`inventory:initialize`）
+- `POST /api/v1/inventory/{id}/adjust`（`inventory:adjust`）
+- `GET /api/v1/inventory/transactions`（`inventory:transaction:read`）
+- `GET /api/v1/inventory/{id}/transactions`（`inventory:transaction:read`）
+- `GET /api/v1/product-skus`（`product:read`）初始化下拉远程搜索
+- 内部：`POST /inventory/{id}/reserve|release|deduct-reserved|optimistic-adjust`（`inventory:adjust`，不进业务菜单）
+
+已存在 → `40950` `INVENTORY_ALREADY_EXISTS`。可用不足 → `40070`。预占不足 → `40071`。乐观锁冲突 → `40072`。跨租户库存 → `40450`。
 
 Swagger：http://localhost:8011/docs

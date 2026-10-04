@@ -42,6 +42,18 @@ export const PAGE_COMPONENTS: Record<PageKey, LazyExoticComponent<ComponentType<
     const module = await import('@/pages/warehouses/WarehousesPage');
     return { default: module.WarehousesPage };
   }),
+  InventoryList: lazy(async () => {
+    const module = await import('@/pages/inventory/InventoryListPage');
+    return { default: module.InventoryListPage };
+  }),
+  InventoryDetail: lazy(async () => {
+    const module = await import('@/pages/inventory/InventoryDetailPage');
+    return { default: module.InventoryDetailPage };
+  }),
+  InventoryTransactions: lazy(async () => {
+    const module = await import('@/pages/inventory/InventoryTransactionsPage');
+    return { default: module.InventoryTransactionsPage };
+  }),
   Placeholder: lazy(async () => {
     const module = await import('@/pages/PlaceholderPage');
     return { default: module.PlaceholderPage };

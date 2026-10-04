@@ -8,11 +8,13 @@ describe('safePathAfterTenantChange', () => {
     assert.equal(safePathAfterTenantChange('/products/list'), null);
     assert.equal(safePathAfterTenantChange('/orders'), null);
     assert.equal(safePathAfterTenantChange('/inventory/list'), null);
+    assert.equal(safePathAfterTenantChange('/inventory/transactions'), null);
   });
 
   it('带旧租户资源 ID 的路径回到列表', () => {
     assert.equal(safePathAfterTenantChange('/products/123'), '/products/list');
     assert.equal(safePathAfterTenantChange('/products/123/edit'), '/products/list');
+    assert.equal(safePathAfterTenantChange('/inventory/88'), '/inventory/list');
     assert.equal(safePathAfterTenantChange('/system/members/88'), '/system/members');
     assert.equal(safePathAfterTenantChange('/system/members'), null);
   });

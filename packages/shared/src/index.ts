@@ -64,6 +64,27 @@ export {
   toCategoryTableRows,
 } from './types/product';
 export type {
+  InventoryItem,
+  InventoryList,
+  InventoryDetail,
+  InventoryTransaction,
+  InventoryTransactionList,
+  InventoryInitializePayload,
+  InventoryAdjustPayload,
+  SkuOption,
+  SkuOptionList,
+} from './types/inventory';
+export {
+  INVENTORY_STOCK_STATUS,
+  INVENTORY_TRANSACTION_TYPE,
+  INVENTORY_TRANSACTION_TYPE_LABEL,
+  INVENTORY_TRANSACTION_TYPE_OPTIONS,
+  inventoryTransactionTypeLabel,
+  specValuesLabel,
+  inventoryStockStatus,
+  canAdjustOut,
+} from './types/inventory';
+export type {
   Warehouse,
   WarehouseList,
   WarehouseCreatePayload,
@@ -113,6 +134,9 @@ export {
   warehouseQueryKey,
   ordersQueryKey,
   inventoryQueryKey,
+  inventoryDetailQueryKey,
+  inventoryTransactionsQueryKey,
+  productSkuOptionsQueryKey,
   isTenantScopedQueryKey,
   tenantIdFromQueryKey,
 } from './query/keys';

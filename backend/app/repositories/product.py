@@ -239,6 +239,15 @@ class ProductSkuRepository(BaseRepository):
     def __init__(self, session: Session, tenant_id: int) -> None:
         super().__init__(session, tenant_id)
 
+    def get_by_id_in_tenant(self, sku_id: int) -> ProductSku | None:
+        tenant_id = self.ensure_tenant()
+        stmt = (
+            select(ProductSku)
+            .options(selectinload(ProductSku.product))
+            .where(ProductSku.tenant_id == tenant_id, ProductSku.id == sku_id)
+        )
+        return self.session.scalars(stmt).first()
+
     def get_in_tenant(self, *, product_id: int, sku_id: int) -> ProductSku | None:
         tenant_id = self.ensure_tenant()
         stmt = select(ProductSku).where(
