@@ -81,6 +81,8 @@ ERP 业务路由只放在子应用内部：`apps/erp/src/router/routes.ts`。
 
 库存分组同样：`/inventory` redirect 到 `/inventory/list`，流水页 `/inventory/transactions`，详情 `/inventory/:id` 设 `showInMenu: false`。
 
+采购分组：`/purchases` redirect 到 `/purchases/list`，供应商 `/suppliers`，创建 / 详情 / 编辑不进菜单。
+
 ## 不显示在菜单中的详情页
 
 ```ts

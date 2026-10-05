@@ -11,6 +11,9 @@ import {
   inventoryQueryKey,
   inventoryDetailQueryKey,
   inventoryTransactionsQueryKey,
+  purchaseOrdersQueryKey,
+  purchaseOrderQueryKey,
+  suppliersQueryKey,
   tenantMembersQueryKey,
   tenantMyPermissionsQueryKey,
   tenantRolesQueryKey,
@@ -38,6 +41,17 @@ describe('query keys', () => {
       inventoryTransactionsQueryKey(1, { type: 'INITIALIZE' }),
       inventoryTransactionsQueryKey(1, { type: 'ADJUST_IN' }),
     );
+    assert.notDeepEqual(suppliersQueryKey(1), suppliersQueryKey(2));
+    assert.notDeepEqual(
+      suppliersQueryKey(1, { q: '深圳', page: 1, pageSize: 20 }),
+      suppliersQueryKey(1, { q: '广州', page: 1, pageSize: 20 }),
+    );
+    assert.notDeepEqual(purchaseOrdersQueryKey(1), purchaseOrdersQueryKey(2));
+    assert.notDeepEqual(
+      purchaseOrdersQueryKey(1, { status: 'DRAFT', page: 1, pageSize: 20 }),
+      purchaseOrdersQueryKey(1, { status: 'REJECTED', page: 1, pageSize: 20 }),
+    );
+    assert.notDeepEqual(purchaseOrderQueryKey(1, 9), purchaseOrderQueryKey(2, 9));
     assert.notDeepEqual(tenantMembersQueryKey(1), tenantMembersQueryKey(2));
     assert.notDeepEqual(
       tenantMembersQueryKey(1, { page: 1, pageSize: 20 }),

@@ -125,7 +125,7 @@ export function InventoryTransactionsPage(props: PageProps) {
       />
       <div className="mb-4 flex flex-wrap gap-2">
         <Select
-          className="w-44"
+          className="w-44!"
           allowClear
           placeholder="仓库"
           value={warehouseId}

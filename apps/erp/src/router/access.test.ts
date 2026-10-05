@@ -44,6 +44,8 @@ describe('动态权限菜单与页面守卫', () => {
     assert.equal(paths.includes('/system/permissions'), true);
     assert.equal(paths.includes('/inventory'), false);
     assert.equal(paths.includes('/warehouses'), false);
+    assert.equal(paths.includes('/purchases'), false);
+    assert.equal(paths.includes('/suppliers'), false);
     assert.equal(paths.includes('/products/create'), false);
   });
 
@@ -113,6 +115,21 @@ describe('动态权限菜单与页面守卫', () => {
     const inventoryDetail = matchRoute(routes, '/inventory/88');
     assert.equal(pageAllowsAccess(inventoryDetail, []), false);
     assert.equal(pageAllowsAccess(inventoryDetail, [PERMISSION_CODE.inventoryRead]), true);
+    const purchaseList = matchRoute(routes, '/purchases/list');
+    assert.equal(pageAllowsAccess(purchaseList, [PERMISSION_CODE.productRead]), false);
+    assert.equal(pageAllowsAccess(purchaseList, [PERMISSION_CODE.purchaseRead]), true);
+    const purchaseCreate = matchRoute(routes, '/purchases/create');
+    assert.equal(pageAllowsAccess(purchaseCreate, [PERMISSION_CODE.purchaseRead]), false);
+    assert.equal(pageAllowsAccess(purchaseCreate, [PERMISSION_CODE.purchaseCreate]), true);
+    const purchaseEdit = matchRoute(routes, '/purchases/9/edit');
+    assert.equal(pageAllowsAccess(purchaseEdit, [PERMISSION_CODE.purchaseRead]), false);
+    assert.equal(pageAllowsAccess(purchaseEdit, [PERMISSION_CODE.purchaseUpdate]), true);
+    const purchaseDetail = matchRoute(routes, '/purchases/9');
+    assert.equal(pageAllowsAccess(purchaseDetail, []), false);
+    assert.equal(pageAllowsAccess(purchaseDetail, [PERMISSION_CODE.purchaseRead]), true);
+    const suppliers = matchRoute(routes, '/suppliers');
+    assert.equal(pageAllowsAccess(suppliers, [PERMISSION_CODE.purchaseRead]), false);
+    assert.equal(pageAllowsAccess(suppliers, [PERMISSION_CODE.supplierRead]), true);
   });
 
   it('租户 A 与 B 权限独立：仓库身份看不到系统管理', () => {

@@ -40,6 +40,13 @@
 - `inventory_transactions`：只追加的库存流水
 - 复合外键保证仓库 / SKU 与库存同租户
 
+当前里程碑 V6 增加：
+
+- `suppliers`：租户供应商；`UNIQUE(tenant_id, code)`；未填编码时 flush 后写 `SUP` + 10 位 id
+- `purchase_orders`：采购单；`UNIQUE(tenant_id, order_no)`；供应商 / 仓库复合外键
+- `purchase_order_items`：采购明细；`UNIQUE(tenant_id, purchase_order_id, sku_id)`；`received_quantity` 预留给收货版本
+- 状态流转用条件 UPDATE；草稿编辑用 `SELECT ... FOR UPDATE`
+
 所有业务表必须包含 `tenant_id`（`TenantMixin`），唯一约束必须带上租户，例如：
 
 ```sql

@@ -198,7 +198,7 @@ export function ProductListPage(props: PageProps) {
       />
       <div className="mb-4 flex flex-wrap gap-2">
         <Input
-          className="w-48"
+          className="w-48!"
           placeholder="名称 / 商品编码"
           value={q}
           onChange={(event) => setQ(event.target.value)}
@@ -209,7 +209,7 @@ export function ProductListPage(props: PageProps) {
           allowClear
         />
         <Input
-          className="w-44"
+          className="w-44!"
           placeholder="SKU 编码"
           value={skuCode}
           onChange={(event) => setSkuCode(event.target.value)}

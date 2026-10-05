@@ -260,7 +260,7 @@ export function InventoryListPage(props: PageProps) {
       />
       <div className="mb-4 flex flex-wrap gap-2">
         <Input
-          className="w-48"
+          className="w-48!"
           placeholder="商品 / SKU 名称"
           value={q}
           onChange={(event) => setQ(event.target.value)}
@@ -271,7 +271,7 @@ export function InventoryListPage(props: PageProps) {
           allowClear
         />
         <Input
-          className="w-40"
+          className="w-40!"
           placeholder="SKU 编码"
           value={skuCode}
           onChange={(event) => setSkuCode(event.target.value)}
@@ -282,7 +282,7 @@ export function InventoryListPage(props: PageProps) {
           allowClear
         />
         <Select
-          className="w-44"
+          className="w-44!"
           allowClear
           placeholder="仓库"
           value={warehouseId}
@@ -293,7 +293,7 @@ export function InventoryListPage(props: PageProps) {
           options={warehouseOptions}
         />
         <TreeSelect
-          className="w-44"
+          className="w-44!"
           allowClear
           placeholder="类目"
           value={categoryId}

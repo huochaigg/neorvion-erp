@@ -2,7 +2,7 @@
 
 多租户跨境电商 ERP。当前仓库按里程碑持续迭代，**不要为每个版本重建项目**。
 
-当前里程碑：**V5**。
+当前里程碑：**V6**。
 
 ## 技术栈
 
@@ -37,7 +37,7 @@ neorvion-erp/
 └── .env.example
 ```
 
-没有单独的 `modules/` 目录，避免与 `services/`、`repositories/` 职责重叠。后续业务按领域文件扩展，例如 `services/inventory.py`、`repositories/inventory.py`。
+没有单独的 `modules/` 目录，避免与 `services/`、`repositories/` 职责重叠。后续业务按领域文件扩展，例如 `services/inventory.py`、`services/purchase.py`。
 
 ## 本地运行
 
@@ -117,6 +117,15 @@ pnpm --filter @neorvion/shell build
 pnpm --filter @neorvion/erp build
 pnpm test
 ```
+
+## V6
+
+- 供应商档案：未填编码时生成 `SUP` + 10 位 id；停用后不能新建采购单
+- 采购单 + 明细同一事务；单号 `PO` + 年 + 6 位 id
+- 状态机：草稿 → 待审核 → 待收货，另有驳回 / 取消；审核不改库存
+- 条件 UPDATE 防止并发审核覆盖；草稿编辑整体替换明细
+- ERP 菜单「采购管理」：采购单、供应商；权限 `purchase:*` 与 `supplier:*`
+- 版本文档：`docs/versions/v6.md`，业务说明：`docs/purchases.md`
 
 ## V5
 
@@ -223,6 +232,6 @@ pnpm test
 
 ## 尚未开始
 
-完整菜单权限组件已在 V2.3.5 收尾。V3 完成商品档案。V4 完成仓库档案。V5 完成库存台账。尚未开始：OWNER 转移、操作日志、采购、销售订单。
+完整菜单权限组件已在 V2.3.5 收尾。V3 完成商品档案。V4 完成仓库档案。V5 完成库存台账。V6 完成采购单与供应商。尚未开始：采购收货入库、销售订单、OWNER 转移、操作日志。
 
-更细的说明见 `docs/development.md`、`docs/architecture.md`、`docs/auth.md`、`docs/multi-tenancy.md`、`docs/rbac.md`、`docs/products.md`、`docs/versions/v3.md`、`docs/routing.md`、`docs/micro-frontend-integration.md` 与 `docs/micro-frontend-interview.md`。
+更细的说明见 `docs/development.md`、`docs/architecture.md`、`docs/auth.md`、`docs/multi-tenancy.md`、`docs/rbac.md`、`docs/products.md`、`docs/warehouses.md`、`docs/inventory.md`、`docs/purchases.md`、`docs/versions/v3.md`、`docs/versions/v6.md`、`docs/routing.md`、`docs/micro-frontend-integration.md` 与 `docs/micro-frontend-interview.md`。

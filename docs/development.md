@@ -1,6 +1,6 @@
 # 开发说明
 
-当前里程碑：V5（库存管理：台账 / 调整 / 流水 / 锁）。
+当前里程碑：V6（采购管理：供应商 / 采购单 / 审核状态机）。
 
 ## 前置
 
@@ -110,8 +110,12 @@ pnpm test
 35. 调整后可在「库存流水」看到 before/after；纠错靠新调整，不能改历史流水。
 36. 无 `inventory:read` 看不到库存菜单；无 initialize/adjust 时对应按钮隐藏；无 `inventory:transaction:read` 看不到流水菜单。直接调接口仍 403。
 37. 切换企业后库存与流水隔离；`/inventory/:id` 会回到库存列表。
+38. 登录并选择企业后，可进入「供应商管理」创建供应商；未填编码时生成 `SUP` + 10 位 id。停用后不能新建采购单；已被采购单引用不能删除。
+39. 可进入「采购单」选择供应商、仓库、多个 SKU 保存草稿；提交审核后核心字段锁定。管理员可审核通过（进入待收货）或驳回。
+40. 创建或审核采购单后库存数量不变。无 `purchase:read` 看不到采购菜单；无 `purchase:audit` 看不到审核按钮。直接调接口仍 403。
+41. 切换企业后采购单与供应商隔离；`/purchases/:id` 会回到采购列表。
 
-多租户说明见 `docs/multi-tenancy.md`。RBAC 见 `docs/rbac.md`。商品见 `docs/products.md`。仓库见 `docs/warehouses.md`。库存见 `docs/inventory.md`。V3 见 `docs/versions/v3.md`。V4 见 `docs/versions/v4.md`。V5 见 `docs/versions/v5.md`。路由配置说明见 `docs/routing.md`。认证流程见 `docs/auth.md`。
+多租户说明见 `docs/multi-tenancy.md`。RBAC 见 `docs/rbac.md`。商品见 `docs/products.md`。仓库见 `docs/warehouses.md`。库存见 `docs/inventory.md`。采购见 `docs/purchases.md`。V3 见 `docs/versions/v3.md`。V4 见 `docs/versions/v4.md`。V5 见 `docs/versions/v5.md`。V6 见 `docs/versions/v6.md`。路由配置说明见 `docs/routing.md`。认证流程见 `docs/auth.md`。
 
 ## 浏览器进 debugger
 

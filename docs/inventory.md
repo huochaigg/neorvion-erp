@@ -8,7 +8,7 @@ Tenant + Warehouse + SKU → Inventory
 
 同一 SKU 在深圳仓、广州仓、美国仓可以有完全不同的数量。唯一约束是 `UNIQUE(tenant_id, warehouse_id, sku_id)`。
 
-本版完成：库存台账、初始化、调整、流水、预占/释放/出库扣减底层能力、并发安全、RBAC、React 页面。
+本版完成：库存台账、初始化、调整、流水、预占/释放/出库扣减底层能力、并发安全、RBAC、React 页面。采购单见 V6 `docs/purchases.md`。
 
 **不**开发：采购单、销售订单、正式采购入库/销售出库页面、物流、发货、平台订单。那些是后续版本。`INBOUND` / `OUTBOUND` 枚举已预留；`reserve` / `release` / `deduct-reserved` 只作为内部 Service（测试 API 有，ERP 菜单没有「手动预占」按钮）。
 
