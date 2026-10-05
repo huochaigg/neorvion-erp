@@ -15,22 +15,27 @@ import {
   type SkuOption,
 } from '@neorvion/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { App, Button, Card, Form, Input, InputNumber, Select, Space, Table } from 'antd';
+import { App, Button, Card, Form, Input, InputNumber, Select, Space } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
+import type { Dayjs } from 'dayjs';
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { fetchSkuOptions } from '@/api/inventory';
 import { createPurchaseOrder, fetchPurchaseOrder, updatePurchaseOrder } from '@/api/purchase-orders';
 import { fetchSuppliers } from '@/api/suppliers';
 import { fetchWarehouses } from '@/api/warehouses';
+import { AppDatePicker } from '@/components/AppDatePicker';
+import { ActionCell, AppTable, CodeCell, EllipsisCell } from '@/components/AppTable';
+import { FormPageContainer } from '@/components/PageContainer';
 import { PageHeader } from '@/components/PageHeader';
 import { usePermissions } from '@/hooks/usePermissions';
+import { fromDateParam, toDateParam } from '@/lib/datetime';
 import type { PageProps } from '@/router/types';
 
 interface HeaderForm {
   supplier_id: number;
   warehouse_id: number;
-  expected_arrival_date?: string | null;
+  expected_arrival_date?: Dayjs | null;
   remark?: string;
 }
 
@@ -87,7 +92,7 @@ export function PurchaseFormPage(props: PageProps) {
     form.setFieldsValue({
       supplier_id: detail.supplier_id,
       warehouse_id: detail.warehouse_id,
-      expected_arrival_date: detail.expected_arrival_date,
+      expected_arrival_date: fromDateParam(detail.expected_arrival_date),
       remark: detail.remark ?? '',
     });
     setItems(
@@ -129,7 +134,7 @@ export function PurchaseFormPage(props: PageProps) {
       const payload = {
         supplier_id: values.supplier_id,
         warehouse_id: values.warehouse_id,
-        expected_arrival_date: values.expected_arrival_date || null,
+        expected_arrival_date: toDateParam(values.expected_arrival_date),
         remark: values.remark?.trim() || null,
         items: toPayloadItems(items),
       };
@@ -166,13 +171,25 @@ export function PurchaseFormPage(props: PageProps) {
   };
 
   const columns: ColumnsType<PurchaseSkuDraft> = [
-    { title: 'SKU', dataIndex: 'sku_code', key: 'sku_code', width: 140 },
-    { title: '商品', dataIndex: 'product_name', key: 'product_name' },
+    {
+      title: 'SKU',
+      dataIndex: 'sku_code',
+      key: 'sku_code',
+      width: 160,
+      render: (value: string) => <CodeCell value={value} />,
+    },
+    {
+      title: '商品',
+      dataIndex: 'product_name',
+      key: 'product_name',
+      width: 200,
+      render: (value: string) => <EllipsisCell value={value} />,
+    },
     {
       title: '规格',
       key: 'spec',
       width: 160,
-      render: (_, record) => specValuesLabel(record.spec_values),
+      render: (_, record) => <EllipsisCell value={specValuesLabel(record.spec_values)} />,
     },
     {
       title: '数量',
@@ -223,14 +240,16 @@ export function PurchaseFormPage(props: PageProps) {
       key: 'actions',
       width: 80,
       render: (_, record) => (
-        <Button
-          type="link"
-          size="small"
-          danger
-          onClick={() => setItems((prev) => prev.filter((item) => item.sku_id !== record.sku_id))}
-        >
-          删除
-        </Button>
+        <ActionCell>
+          <Button
+            type="link"
+            size="small"
+            danger
+            onClick={() => setItems((prev) => prev.filter((item) => item.sku_id !== record.sku_id))}
+          >
+            删除
+          </Button>
+        </ActionCell>
       ),
     },
   ];
@@ -259,7 +278,7 @@ export function PurchaseFormPage(props: PageProps) {
     : hasPermission(PERMISSION_CODE.purchaseCreate);
 
   return (
-    <div>
+    <FormPageContainer>
       <PageHeader
         title={props.title ?? (isEdit ? '编辑采购单' : '新建采购单')}
         description={props.description ?? '同一采购单中同一个 SKU 只保留一行。审核通过后不会增加库存。'}
@@ -293,7 +312,7 @@ export function PurchaseFormPage(props: PageProps) {
               <Select showSearch optionFilterProp="label" options={warehouseOptions} />
             </Form.Item>
             <Form.Item name="expected_arrival_date" label="预计到货日期">
-              <Input type="date" />
+              <AppDatePicker className="w-full" placeholder="请选择预计到货日期" />
             </Form.Item>
             <Form.Item name="remark" label="备注">
               <Input.TextArea rows={1} maxLength={255} />
@@ -315,7 +334,14 @@ export function PurchaseFormPage(props: PageProps) {
               }}
             />
           </Form.Item>
-          <Table rowKey="sku_id" size="small" columns={columns} dataSource={items} pagination={false} />
+          <AppTable
+            rowKey="sku_id"
+            size="small"
+            columns={columns}
+            dataSource={items}
+            pagination={false}
+            fillHeight={false}
+          />
           {canSave ? (
             <Button className="mt-4" type="primary" htmlType="submit" loading={saveMutation.isPending}>
               保存草稿
@@ -323,6 +349,6 @@ export function PurchaseFormPage(props: PageProps) {
           ) : null}
         </Form>
       </Card>
-    </div>
+    </FormPageContainer>
   );
 }

@@ -7,13 +7,16 @@ import {
   type InventoryTransaction,
 } from '@neorvion/shared';
 import { useQuery } from '@tanstack/react-query';
-import { Button, Card, Descriptions, Space, Table, Tag } from 'antd';
+import { Button, Card, Descriptions, Space, Tag } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { useNavigate, useParams } from 'react-router-dom';
 import { fetchInventoryDetail } from '@/api/inventory';
+import { AppTable, EllipsisCell } from '@/components/AppTable';
 import { Can } from '@/components/Can';
+import { FormPageContainer } from '@/components/PageContainer';
 import { PageHeader } from '@/components/PageHeader';
 import { usePermissions } from '@/hooks/usePermissions';
+import { formatDateTime } from '@/lib/datetime';
 import type { PageProps } from '@/router/types';
 
 export function InventoryDetailPage(props: PageProps) {
@@ -31,7 +34,13 @@ export function InventoryDetailPage(props: PageProps) {
 
   const item = detailQuery.data;
   const columns: ColumnsType<InventoryTransaction> = [
-    { title: '时间', dataIndex: 'created_at', key: 'created_at', width: 180 },
+    {
+      title: '时间',
+      dataIndex: 'created_at',
+      key: 'created_at',
+      width: 180,
+      render: (value: string) => formatDateTime(value),
+    },
     {
       title: '类型',
       dataIndex: 'type',
@@ -52,12 +61,24 @@ export function InventoryDetailPage(props: PageProps) {
       width: 140,
       render: (_, record) => `${record.before_reserved_quantity} → ${record.after_reserved_quantity}`,
     },
-    { title: '操作人', dataIndex: 'operator_name', key: 'operator_name', width: 120, render: (value: string | null) => value || '-' },
-    { title: '备注', dataIndex: 'remark', key: 'remark', render: (value: string | null) => value || '-' },
+    {
+      title: '操作人',
+      dataIndex: 'operator_name',
+      key: 'operator_name',
+      width: 120,
+      render: (value: string | null) => <EllipsisCell value={value || '-'} />,
+    },
+    {
+      title: '备注',
+      dataIndex: 'remark',
+      key: 'remark',
+      width: 200,
+      render: (value: string | null) => <EllipsisCell value={value || '-'} />,
+    },
   ];
 
   return (
-    <div>
+    <FormPageContainer>
       <PageHeader
         title={props.title ?? '库存详情'}
         description={props.description ?? '查看仓库 + SKU 的当前账面与最近流水。version 仅用于开发排查乐观锁。'}
@@ -94,20 +115,21 @@ export function InventoryDetailPage(props: PageProps) {
               <Descriptions.Item label="version">
                 <Tag>{item.version}</Tag>
               </Descriptions.Item>
-              <Descriptions.Item label="更新时间">{item.updated_at}</Descriptions.Item>
+              <Descriptions.Item label="更新时间">{formatDateTime(item.updated_at)}</Descriptions.Item>
             </Descriptions>
           </Card>
           <Card title="最近流水">
-            <Table
+            <AppTable
               rowKey="id"
               size="small"
               columns={columns}
               dataSource={item.recent_transactions}
               pagination={false}
+              fillHeight={false}
             />
           </Card>
         </>
       ) : null}
-    </div>
+    </FormPageContainer>
   );
 }

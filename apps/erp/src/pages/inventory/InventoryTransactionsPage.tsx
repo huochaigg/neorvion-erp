@@ -8,14 +8,18 @@ import {
   type InventoryTransaction,
 } from '@neorvion/shared';
 import { useQuery } from '@tanstack/react-query';
-import { Button, DatePicker, Input, Select, Table } from 'antd';
+import { Button, Input, Select } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { fetchInventoryTransactions } from '@/api/inventory';
 import { fetchWarehouses } from '@/api/warehouses';
+import { AppRangePicker } from '@/components/AppDatePicker';
+import { AppTable, CodeCell, EllipsisCell } from '@/components/AppTable';
+import { ListPageContainer, ListTableArea, ListToolbar } from '@/components/PageContainer';
 import { PageHeader } from '@/components/PageHeader';
 import { usePermissions } from '@/hooks/usePermissions';
+import { formatDateTime, rangeToDateTimes } from '@/lib/datetime';
 import type { PageProps } from '@/router/types';
 
 export function InventoryTransactionsPage(props: PageProps) {
@@ -70,11 +74,41 @@ export function InventoryTransactionsPage(props: PageProps) {
   );
 
   const columns: ColumnsType<InventoryTransaction> = [
-    { title: '时间', dataIndex: 'created_at', key: 'created_at', width: 180 },
-    { title: '仓库', dataIndex: 'warehouse_name', key: 'warehouse_name', width: 120 },
-    { title: '商品', dataIndex: 'product_name', key: 'product_name' },
-    { title: 'SKU', dataIndex: 'sku_code', key: 'sku_code', width: 130 },
-    { title: 'SKU 名称', dataIndex: 'sku_name', key: 'sku_name', width: 140 },
+    {
+      title: '时间',
+      dataIndex: 'created_at',
+      key: 'created_at',
+      width: 180,
+      render: (value: string) => formatDateTime(value),
+    },
+    {
+      title: '仓库',
+      dataIndex: 'warehouse_name',
+      key: 'warehouse_name',
+      width: 160,
+      render: (value: string) => <EllipsisCell value={value} />,
+    },
+    {
+      title: '商品',
+      dataIndex: 'product_name',
+      key: 'product_name',
+      width: 200,
+      render: (value: string) => <EllipsisCell value={value} />,
+    },
+    {
+      title: 'SKU',
+      dataIndex: 'sku_code',
+      key: 'sku_code',
+      width: 180,
+      render: (value: string) => <CodeCell value={value} />,
+    },
+    {
+      title: 'SKU 名称',
+      dataIndex: 'sku_name',
+      key: 'sku_name',
+      width: 140,
+      render: (value: string) => <EllipsisCell value={value} />,
+    },
     {
       title: '类型',
       dataIndex: 'type',
@@ -100,22 +134,33 @@ export function InventoryTransactionsPage(props: PageProps) {
       dataIndex: 'operator_name',
       key: 'operator_name',
       width: 110,
-      render: (value: string | null) => value || '-',
+      render: (value: string | null) => <EllipsisCell value={value || '-'} />,
     },
-    { title: '备注', dataIndex: 'remark', key: 'remark', render: (value: string | null) => value || '-' },
+    {
+      title: '备注',
+      dataIndex: 'remark',
+      key: 'remark',
+      width: 200,
+      render: (value: string | null) => <EllipsisCell value={value || '-'} />,
+    },
     {
       title: '关联单据',
       key: 'ref',
-      width: 140,
-      render: (_, record) =>
-        record.reference_type || record.reference_id
-          ? `${record.reference_type ?? '-'} #${record.reference_id ?? '-'}`
-          : '-',
+      width: 160,
+      render: (_, record) => (
+        <CodeCell
+          value={
+            record.reference_type || record.reference_id
+              ? `${record.reference_type ?? '-'} #${record.reference_id ?? '-'}`
+              : '-'
+          }
+        />
+      ),
     },
   ];
 
   return (
-    <div>
+    <ListPageContainer>
       <PageHeader
         title={props.title ?? '库存流水'}
         description={
@@ -123,7 +168,8 @@ export function InventoryTransactionsPage(props: PageProps) {
           '流水只追加、不修改。纠错请做新的库存调整。V5 尚无采购/订单单据，关联单号通常为空。'
         }
       />
-      <div className="mb-4 flex flex-wrap gap-2">
+      <ListToolbar>
+        <div className="flex flex-wrap gap-2">
         <Select
           className="w-44!"
           allowClear
@@ -136,7 +182,7 @@ export function InventoryTransactionsPage(props: PageProps) {
           options={warehouseOptions}
         />
         <Input
-          className="w-40"
+          className="w-40!"
           placeholder="SKU ID（精确）"
           value={skuKeyword}
           onChange={(event) => setSkuKeyword(event.target.value)}
@@ -158,13 +204,10 @@ export function InventoryTransactionsPage(props: PageProps) {
           }}
           options={INVENTORY_TRANSACTION_TYPE_OPTIONS}
         />
-        <DatePicker.RangePicker
-          onChange={(_value, dateStrings) => {
-            if (dateStrings[0] && dateStrings[1]) {
-              setRange([`${dateStrings[0]}T00:00:00`, `${dateStrings[1]}T23:59:59`]);
-            } else {
-              setRange(null);
-            }
+        <AppRangePicker
+          onChange={(dates) => {
+            const { from, to } = rangeToDateTimes(dates);
+            setRange(from && to ? [from, to] : null);
             setPage(1);
           }}
         />
@@ -177,23 +220,25 @@ export function InventoryTransactionsPage(props: PageProps) {
         >
           查询
         </Button>
-      </div>
-      <Table
-        rowKey="id"
-        columns={columns}
-        dataSource={listQuery.data?.items ?? []}
-        loading={listQuery.isLoading}
-        pagination={{
-          current: page,
-          pageSize,
-          total: listQuery.data?.total ?? 0,
-          showSizeChanger: true,
-          onChange: (nextPage, nextSize) => {
-            setPage(nextPage);
-            setPageSize(nextSize);
-          },
-        }}
-      />
-    </div>
+        </div>
+      </ListToolbar>
+      <ListTableArea>
+        <AppTable
+          rowKey="id"
+          columns={columns}
+          dataSource={listQuery.data?.items ?? []}
+          loading={listQuery.isLoading}
+          pagination={{
+            current: page,
+            pageSize,
+            total: listQuery.data?.total ?? 0,
+            onChange: (nextPage, nextSize) => {
+              setPage(nextPage);
+              setPageSize(nextSize);
+            },
+          }}
+        />
+      </ListTableArea>
+    </ListPageContainer>
   );
 }

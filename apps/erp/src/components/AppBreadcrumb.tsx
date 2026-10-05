@@ -14,7 +14,7 @@ export function AppBreadcrumb({ pathname }: AppBreadcrumbProps) {
   }
   return (
     <Breadcrumb
-      className="mb-4"
+      className="mb-3"
       items={items.map((item, index) => {
         const isLast = index === items.length - 1;
         const href = item.redirect ?? (item.component ? item.path : undefined);

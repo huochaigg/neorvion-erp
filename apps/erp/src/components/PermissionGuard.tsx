@@ -8,7 +8,7 @@ import { routes } from '@/router/routes';
 
 function PageLoading() {
   return (
-    <div className="flex min-h-[240px] items-center justify-center">
+    <div className="flex h-full min-h-0 items-center justify-center">
       <Spin />
     </div>
   );
@@ -16,11 +16,13 @@ function PageLoading() {
 
 export function ForbiddenPage() {
   return (
-    <Result
-      status="403"
-      title="无权限"
-      subTitle="当前企业身份无法访问该页面。这不是登录失效，请联系管理员分配角色。"
-    />
+    <div className="flex h-full min-h-0 items-center justify-center">
+      <Result
+        status="403"
+        title="无权限"
+        subTitle="当前企业身份无法访问该页面。这不是登录失效，请联系管理员分配角色。"
+      />
+    </div>
   );
 }
 

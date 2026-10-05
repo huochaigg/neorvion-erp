@@ -19,7 +19,7 @@ import {
   type PurchaseOrderListItem,
 } from '@neorvion/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { App, Button, DatePicker, Input, Select, Space, Table, Tag } from 'antd';
+import { App, Button, Input, Select, Tag } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -32,9 +32,13 @@ import {
 } from '@/api/purchase-orders';
 import { fetchSuppliers } from '@/api/suppliers';
 import { fetchWarehouses } from '@/api/warehouses';
+import { AppRangePicker } from '@/components/AppDatePicker';
+import { ActionCell, AppTable, CodeCell, EllipsisCell } from '@/components/AppTable';
 import { Can } from '@/components/Can';
+import { ListPageContainer, ListTableArea, ListToolbar } from '@/components/PageContainer';
 import { PageHeader } from '@/components/PageHeader';
 import { usePermissions } from '@/hooks/usePermissions';
+import { formatDate, formatDateTime, rangeToDates, rangeToDateTimes } from '@/lib/datetime';
 import type { PageProps } from '@/router/types';
 
 function statusTag(status: string) {
@@ -138,16 +142,34 @@ export function PurchaseListPage(props: PageProps) {
   });
 
   const columns: ColumnsType<PurchaseOrderListItem> = [
-    { title: '采购单号', dataIndex: 'order_no', key: 'order_no', width: 150 },
-    { title: '供应商', dataIndex: 'supplier_name', key: 'supplier_name' },
-    { title: '仓库', dataIndex: 'warehouse_name', key: 'warehouse_name', width: 140 },
-    { title: 'SKU 数', dataIndex: 'sku_count', key: 'sku_count', width: 80 },
+    {
+      title: '采购单号',
+      dataIndex: 'order_no',
+      key: 'order_no',
+      width: 160,
+      render: (value: string) => <CodeCell value={value} />,
+    },
+    {
+      title: '供应商',
+      dataIndex: 'supplier_name',
+      key: 'supplier_name',
+      width: 180,
+      render: (value: string) => <EllipsisCell value={value} />,
+    },
+    {
+      title: '仓库',
+      dataIndex: 'warehouse_name',
+      key: 'warehouse_name',
+      width: 160,
+      render: (value: string) => <EllipsisCell value={value} />,
+    },
+    { title: 'SKU 数', dataIndex: 'sku_count', key: 'sku_count', width: 90 },
     { title: '采购数量', dataIndex: 'total_quantity', key: 'total_quantity', width: 100 },
     {
       title: '金额',
       dataIndex: 'total_amount',
       key: 'total_amount',
-      width: 110,
+      width: 120,
       render: (value: number | null) => formatPurchaseAmount(value),
     },
     {
@@ -158,19 +180,26 @@ export function PurchaseListPage(props: PageProps) {
       render: (value: string) => statusTag(value),
     },
     {
-      title: '预计到货',
+      title: '预计到货日期',
       dataIndex: 'expected_arrival_date',
       key: 'expected_arrival_date',
-      width: 120,
-      render: (value: string | null) => value || '-',
+      width: 140,
+      render: (value: string | null) => formatDate(value),
     },
-    { title: '创建时间', dataIndex: 'created_at', key: 'created_at', width: 180 },
+    {
+      title: '创建时间',
+      dataIndex: 'created_at',
+      key: 'created_at',
+      width: 180,
+      render: (value: string) => formatDateTime(value),
+    },
     {
       title: '操作',
       key: 'actions',
       width: 280,
+      fixed: 'right',
       render: (_, record) => (
-        <Space wrap>
+        <ActionCell>
           <Button type="link" size="small" onClick={() => navigate(`/purchases/${record.id}`)}>
             详情
           </Button>
@@ -273,7 +302,7 @@ export function PurchaseListPage(props: PageProps) {
               </Button>
             </Can>
           ) : null}
-        </Space>
+        </ActionCell>
       ),
     },
   ];
@@ -289,7 +318,7 @@ export function PurchaseListPage(props: PageProps) {
   );
 
   return (
-    <div>
+    <ListPageContainer>
       <PageHeader
         title={props.title ?? '采购单'}
         description={props.description ?? '创建草稿、提交审核、审核通过后进入待收货。本版不增加库存。'}
@@ -301,7 +330,8 @@ export function PurchaseListPage(props: PageProps) {
           </Can>
         }
       />
-      <div className="mb-4 flex flex-wrap gap-2">
+      <ListToolbar>
+        <div className="flex flex-wrap gap-2">
         <Input
           className="w-44!"
           placeholder="采购单号"
@@ -350,24 +380,19 @@ export function PurchaseListPage(props: PageProps) {
           }}
           options={PURCHASE_ORDER_STATUS_OPTIONS}
         />
-        <DatePicker.RangePicker
-          onChange={(_value, dateStrings) => {
-            if (dateStrings[0] && dateStrings[1]) {
-              setCreatedRange([`${dateStrings[0]}T00:00:00`, `${dateStrings[1]}T23:59:59`]);
-            } else {
-              setCreatedRange(null);
-            }
+        <AppRangePicker
+          placeholder={['创建日期起', '创建日期止']}
+          onChange={(dates) => {
+            const { from, to } = rangeToDateTimes(dates);
+            setCreatedRange(from && to ? [from, to] : null);
             setPage(1);
           }}
         />
-        <DatePicker.RangePicker
+        <AppRangePicker
           placeholder={['预计到货起', '预计到货止']}
-          onChange={(_value, dateStrings) => {
-            if (dateStrings[0] && dateStrings[1]) {
-              setExpectedRange([dateStrings[0], dateStrings[1]]);
-            } else {
-              setExpectedRange(null);
-            }
+          onChange={(dates) => {
+            const { from, to } = rangeToDates(dates);
+            setExpectedRange(from && to ? [from, to] : null);
             setPage(1);
           }}
         />
@@ -379,23 +404,25 @@ export function PurchaseListPage(props: PageProps) {
         >
           查询
         </Button>
-      </div>
-      <Table
-        rowKey="id"
-        columns={columns}
-        dataSource={listQuery.data?.items ?? []}
-        loading={listQuery.isLoading}
-        pagination={{
-          current: page,
-          pageSize,
-          total: listQuery.data?.total ?? 0,
-          showSizeChanger: true,
-          onChange: (nextPage, nextSize) => {
-            setPage(nextPage);
-            setPageSize(nextSize);
-          },
-        }}
-      />
-    </div>
+        </div>
+      </ListToolbar>
+      <ListTableArea>
+        <AppTable
+          rowKey="id"
+          columns={columns}
+          dataSource={listQuery.data?.items ?? []}
+          loading={listQuery.isLoading}
+          pagination={{
+            current: page,
+            pageSize,
+            total: listQuery.data?.total ?? 0,
+            onChange: (nextPage, nextSize) => {
+              setPage(nextPage);
+              setPageSize(nextSize);
+            },
+          }}
+        />
+      </ListTableArea>
+    </ListPageContainer>
   );
 }

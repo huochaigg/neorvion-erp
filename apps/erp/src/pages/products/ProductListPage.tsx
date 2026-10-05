@@ -10,15 +10,18 @@ import {
   type ProductListItem,
 } from '@neorvion/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { App, Button, Input, Select, Space, Table, Tag, TreeSelect } from 'antd';
+import { App, Button, Input, Select, Tag, TreeSelect } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { fetchBrandOptions, fetchProductCategories } from '@/api/catalog';
 import { fetchProducts, updateProduct } from '@/api/products';
+import { ActionCell, AppTable, CodeCell, EllipsisCell } from '@/components/AppTable';
 import { Can } from '@/components/Can';
+import { ListPageContainer, ListTableArea, ListToolbar } from '@/components/PageContainer';
 import { PageHeader } from '@/components/PageHeader';
 import { usePermissions } from '@/hooks/usePermissions';
+import { formatDateTime } from '@/lib/datetime';
 import type { PageProps } from '@/router/types';
 
 const STATUS_LABEL: Record<string, string> = {
@@ -122,15 +125,33 @@ export function ProductListPage(props: PageProps) {
   });
 
   const columns: ColumnsType<ProductListItem> = [
-    { title: '商品名称', dataIndex: 'name', key: 'name' },
-    { title: '编码', dataIndex: 'code', key: 'code', width: 140 },
-    { title: '类目', dataIndex: 'category_name', key: 'category_name', width: 140 },
+    {
+      title: '商品名称',
+      dataIndex: 'name',
+      key: 'name',
+      width: 220,
+      render: (value: string) => <EllipsisCell value={value} />,
+    },
+    {
+      title: '编码',
+      dataIndex: 'code',
+      key: 'code',
+      width: 160,
+      render: (value: string) => <CodeCell value={value} />,
+    },
+    {
+      title: '类目',
+      dataIndex: 'category_name',
+      key: 'category_name',
+      width: 140,
+      render: (value: string) => <EllipsisCell value={value} />,
+    },
     {
       title: '品牌',
       dataIndex: 'brand_name',
       key: 'brand_name',
-      width: 120,
-      render: (name: string | null) => name || '-',
+      width: 140,
+      render: (name: string | null) => <EllipsisCell value={name || '-'} />,
     },
     { title: 'SKU 数量', dataIndex: 'sku_count', key: 'sku_count', width: 100 },
     {
@@ -145,14 +166,15 @@ export function ProductListPage(props: PageProps) {
       dataIndex: 'created_at',
       key: 'created_at',
       width: 180,
-      render: (value: string) => value.replace('T', ' ').slice(0, 19),
+      render: (value: string) => formatDateTime(value),
     },
     {
       title: '操作',
       key: 'actions',
-      width: 220,
+      width: 200,
+      fixed: 'right',
       render: (_, record) => (
-        <Space wrap>
+        <ActionCell>
           <Can permission={PERMISSION_CODE.productRead}>
             <Button type="link" size="small" onClick={() => navigate(`/products/${record.id}`)}>
               查看
@@ -178,13 +200,13 @@ export function ProductListPage(props: PageProps) {
               {record.status === PRODUCT_STATUS.active ? '停用' : '启用'}
             </Button>
           </Can>
-        </Space>
+        </ActionCell>
       ),
     },
   ];
 
   return (
-    <div>
+    <ListPageContainer>
       <PageHeader
         title={props.title ?? '商品列表'}
         description={props.description ?? 'SPU 档案。库存后续只关联 SKU，不直接挂在商品上。'}
@@ -196,92 +218,95 @@ export function ProductListPage(props: PageProps) {
           </Can>
         }
       />
-      <div className="mb-4 flex flex-wrap gap-2">
-        <Input
-          className="w-48!"
-          placeholder="名称 / 商品编码"
-          value={q}
-          onChange={(event) => setQ(event.target.value)}
-          onPressEnter={() => {
-            setKeyword(q.trim());
-            setPage(1);
+      <ListToolbar>
+        <div className="flex flex-wrap gap-2">
+          <Input
+            className="w-48!"
+            placeholder="名称 / 商品编码"
+            value={q}
+            onChange={(event) => setQ(event.target.value)}
+            onPressEnter={() => {
+              setKeyword(q.trim());
+              setPage(1);
+            }}
+            allowClear
+          />
+          <Input
+            className="w-44!"
+            placeholder="SKU 编码"
+            value={skuCode}
+            onChange={(event) => setSkuCode(event.target.value)}
+            onPressEnter={() => {
+              setSkuKeyword(skuCode.trim());
+              setPage(1);
+            }}
+            allowClear
+          />
+          <TreeSelect
+            className="w-52"
+            allowClear
+            placeholder="类目"
+            value={categoryId}
+            treeData={categoryTree}
+            onChange={(value) => {
+              setCategoryId(value);
+              setPage(1);
+            }}
+          />
+          <Select
+            className="w-40"
+            allowClear
+            placeholder="品牌"
+            value={brandId}
+            onChange={(value) => {
+              setBrandId(value);
+              setPage(1);
+            }}
+            options={(brandsQuery.data ?? []).map((item) => ({ value: item.id, label: item.name }))}
+          />
+          <Select
+            className="w-32"
+            allowClear
+            placeholder="状态"
+            value={status}
+            onChange={(value) => {
+              setStatus(value);
+              setPage(1);
+            }}
+            options={[
+              { value: PRODUCT_STATUS.draft, label: '草稿' },
+              { value: PRODUCT_STATUS.active, label: '启用' },
+              { value: PRODUCT_STATUS.inactive, label: '停用' },
+            ]}
+          />
+          <Button
+            onClick={() => {
+              setKeyword(q.trim());
+              setSkuKeyword(skuCode.trim());
+              setPage(1);
+            }}
+          >
+            查询
+          </Button>
+        </div>
+      </ListToolbar>
+      <ListTableArea>
+        <AppTable
+          rowKey="id"
+          columns={columns}
+          dataSource={productsQuery.data?.items ?? []}
+          loading={productsQuery.isLoading}
+          pagination={{
+            current: page,
+            pageSize,
+            total: productsQuery.data?.total ?? 0,
+            onChange: (nextPage, nextSize) => {
+              setPage(nextPage);
+              setPageSize(nextSize);
+            },
           }}
-          allowClear
         />
-        <Input
-          className="w-44!"
-          placeholder="SKU 编码"
-          value={skuCode}
-          onChange={(event) => setSkuCode(event.target.value)}
-          onPressEnter={() => {
-            setSkuKeyword(skuCode.trim());
-            setPage(1);
-          }}
-          allowClear
-        />
-        <TreeSelect
-          className="w-52"
-          allowClear
-          placeholder="类目"
-          value={categoryId}
-          treeData={categoryTree}
-          onChange={(value) => {
-            setCategoryId(value);
-            setPage(1);
-          }}
-        />
-        <Select
-          className="w-40"
-          allowClear
-          placeholder="品牌"
-          value={brandId}
-          onChange={(value) => {
-            setBrandId(value);
-            setPage(1);
-          }}
-          options={(brandsQuery.data ?? []).map((item) => ({ value: item.id, label: item.name }))}
-        />
-        <Select
-          className="w-32"
-          allowClear
-          placeholder="状态"
-          value={status}
-          onChange={(value) => {
-            setStatus(value);
-            setPage(1);
-          }}
-          options={[
-            { value: PRODUCT_STATUS.draft, label: '草稿' },
-            { value: PRODUCT_STATUS.active, label: '启用' },
-            { value: PRODUCT_STATUS.inactive, label: '停用' },
-          ]}
-        />
-        <Button
-          onClick={() => {
-            setKeyword(q.trim());
-            setSkuKeyword(skuCode.trim());
-            setPage(1);
-          }}
-        >
-          查询
-        </Button>
-      </div>
-      <Table
-        rowKey="id"
-        columns={columns}
-        dataSource={productsQuery.data?.items ?? []}
-        loading={productsQuery.isLoading}
-        pagination={{
-          current: page,
-          pageSize,
-          total: productsQuery.data?.total ?? 0,
-          showSizeChanger: true,
-          onChange: (nextPage, nextSize) => {
-            setPage(nextPage);
-            setPageSize(nextSize);
-          },
-        }}
-      />
-    </div>
+      </ListTableArea>
+    </ListPageContainer>
   );
 }

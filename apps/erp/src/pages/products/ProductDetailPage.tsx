@@ -6,11 +6,13 @@ import {
   type ProductSku,
 } from '@neorvion/shared';
 import { useQuery } from '@tanstack/react-query';
-import { Alert, Button, Card, Descriptions, Space, Spin, Table, Tag } from 'antd';
+import { Alert, Button, Card, Descriptions, Space, Spin, Tag } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { useNavigate, useParams } from 'react-router-dom';
 import { fetchProduct } from '@/api/products';
+import { AppTable, CodeCell, EllipsisCell } from '@/components/AppTable';
 import { Can } from '@/components/Can';
+import { FormPageContainer } from '@/components/PageContainer';
 import { PageHeader } from '@/components/PageHeader';
 import { usePermissions } from '@/hooks/usePermissions';
 import type { PageProps } from '@/router/types';
@@ -41,14 +43,26 @@ export function ProductDetailPage(props: PageProps) {
   });
 
   const skuColumns: ColumnsType<ProductSku> = [
-    { title: 'SKU 编码', dataIndex: 'sku_code', key: 'sku_code', width: 180 },
-    { title: '名称', dataIndex: 'name', key: 'name' },
+    {
+      title: 'SKU 编码',
+      dataIndex: 'sku_code',
+      key: 'sku_code',
+      width: 180,
+      render: (value: string) => <CodeCell value={value} />,
+    },
+    {
+      title: '名称',
+      dataIndex: 'name',
+      key: 'name',
+      width: 180,
+      render: (value: string) => <EllipsisCell value={value} />,
+    },
     {
       title: '条码',
       dataIndex: 'barcode',
       key: 'barcode',
-      width: 140,
-      render: (value: string | null) => value || '-',
+      width: 160,
+      render: (value: string | null) => <CodeCell value={value} />,
     },
     {
       title: '规格',
@@ -70,7 +84,7 @@ export function ProductDetailPage(props: PageProps) {
   ];
 
   return (
-    <div>
+    <FormPageContainer>
       <PageHeader
         title={props.title ?? '商品详情'}
         description={props.description ?? 'SPU 基础信息与全部 SKU。后续库存挂 SKU。'}
@@ -109,15 +123,16 @@ export function ProductDetailPage(props: PageProps) {
             </Descriptions>
           </Card>
           <Card title="SKU">
-            <Table
+            <AppTable
               rowKey="id"
               columns={skuColumns}
               dataSource={query.data.skus}
               pagination={false}
+              fillHeight={false}
             />
           </Card>
         </div>
       ) : null}
-    </div>
+    </FormPageContainer>
   );
 }

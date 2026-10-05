@@ -15,6 +15,9 @@ export default defineConfig({
       '@': path.resolve(rootDir, 'src'),
     },
   },
+  optimizeDeps: {
+    include: ['dayjs', 'dayjs/locale/zh-cn', 'dayjs/plugin/customParseFormat'],
+  },
   css: {
     modules: {
       localsConvention: 'camelCaseOnly',

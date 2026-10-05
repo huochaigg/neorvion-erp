@@ -15,7 +15,7 @@ import {
   type PurchaseOrderItem,
 } from '@neorvion/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { App, Button, Card, Descriptions, Input, Space, Steps, Table, Tag } from 'antd';
+import { App, Button, Card, Descriptions, Input, Space, Steps, Tag } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
@@ -25,9 +25,12 @@ import {
   rejectPurchaseOrder,
   submitPurchaseOrder,
 } from '@/api/purchase-orders';
+import { AppTable, CodeCell, EllipsisCell } from '@/components/AppTable';
 import { Can } from '@/components/Can';
+import { FormPageContainer } from '@/components/PageContainer';
 import { PageHeader } from '@/components/PageHeader';
 import { usePermissions } from '@/hooks/usePermissions';
+import { formatDate, formatDateTime } from '@/lib/datetime';
 import type { PageProps } from '@/router/types';
 
 function statusTag(status: string) {
@@ -104,9 +107,26 @@ export function PurchaseDetailPage(props: PageProps) {
   const steps = order ? stepState(order) : null;
 
   const columns: ColumnsType<PurchaseOrderItem> = [
-    { title: 'SKU', dataIndex: 'sku_code', key: 'sku_code', width: 140 },
-    { title: '商品', dataIndex: 'product_name', key: 'product_name' },
-    { title: '规格', key: 'spec', width: 160, render: (_, record) => specValuesLabel(record.spec_values) },
+    {
+      title: 'SKU',
+      dataIndex: 'sku_code',
+      key: 'sku_code',
+      width: 160,
+      render: (value: string) => <CodeCell value={value} />,
+    },
+    {
+      title: '商品',
+      dataIndex: 'product_name',
+      key: 'product_name',
+      width: 200,
+      render: (value: string) => <EllipsisCell value={value} />,
+    },
+    {
+      title: '规格',
+      key: 'spec',
+      width: 160,
+      render: (_, record) => <EllipsisCell value={specValuesLabel(record.spec_values)} />,
+    },
     { title: '采购数量', dataIndex: 'quantity', key: 'quantity', width: 100 },
     { title: '已收数量', dataIndex: 'received_quantity', key: 'received_quantity', width: 100 },
     {
@@ -126,7 +146,7 @@ export function PurchaseDetailPage(props: PageProps) {
   ];
 
   return (
-    <div>
+    <FormPageContainer>
       <PageHeader
         title={props.title ?? '采购单详情'}
         description={props.description ?? '审核通过只进入待收货，不会增加库存。'}
@@ -253,9 +273,9 @@ export function PurchaseDetailPage(props: PageProps) {
               <Descriptions.Item label="状态">{statusTag(order.status)}</Descriptions.Item>
               <Descriptions.Item label="供应商">{order.supplier_name}</Descriptions.Item>
               <Descriptions.Item label="仓库">{order.warehouse_name}</Descriptions.Item>
-              <Descriptions.Item label="预计到货">{order.expected_arrival_date || '-'}</Descriptions.Item>
+              <Descriptions.Item label="预计到货">{formatDate(order.expected_arrival_date)}</Descriptions.Item>
               <Descriptions.Item label="创建人">{order.created_by_name || '-'}</Descriptions.Item>
-              <Descriptions.Item label="提交时间">{order.submitted_at || '-'}</Descriptions.Item>
+              <Descriptions.Item label="提交时间">{formatDateTime(order.submitted_at)}</Descriptions.Item>
               <Descriptions.Item label="审核人">{order.approved_by_name || '-'}</Descriptions.Item>
               <Descriptions.Item label="驳回原因">{order.reject_reason || '-'}</Descriptions.Item>
               <Descriptions.Item label="取消原因">{order.cancel_reason || '-'}</Descriptions.Item>
@@ -264,10 +284,17 @@ export function PurchaseDetailPage(props: PageProps) {
             </Descriptions>
           </Card>
           <Card title="采购明细" className="mt-4!">
-            <Table rowKey="id" size="small" columns={columns} dataSource={order.items} pagination={false} />
+            <AppTable
+              rowKey="id"
+              size="small"
+              columns={columns}
+              dataSource={order.items}
+              pagination={false}
+              fillHeight={false}
+            />
           </Card>
         </>
       ) : null}
-    </div>
+    </FormPageContainer>
   );
 }

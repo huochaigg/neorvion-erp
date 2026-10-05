@@ -40,14 +40,14 @@ export function ErpLayout({ children }: ErpLayoutProps) {
   }, [computedOpenKeys]);
 
   return (
-    <Layout className="h-full min-h-full">
+    <Layout className="h-full min-h-0 overflow-hidden">
       {embedded ? null : (
-        <Header className="flex items-center justify-between px-4">
+        <Header className="flex shrink-0 items-center justify-between px-4">
           <span className="text-sm font-semibold text-white">Neorvion ERP · 独立运行</span>
           <Tag color="gold">开发调试</Tag>
         </Header>
       )}
-      <Layout className="h-full min-h-0">
+      <Layout className="min-h-0 flex-1 overflow-hidden">
         <Sider
           collapsible
           collapsed={siderCollapsed}
@@ -61,15 +61,17 @@ export function ErpLayout({ children }: ErpLayoutProps) {
             openKeys={siderCollapsed ? [] : openKeys}
             onOpenChange={setOpenKeys}
             items={menuItems}
-            className="border-none pt-3"
+            className="h-full overflow-y-auto border-none pt-3"
             onClick={({ key }) => {
               navigate(resolveNavigatePath(routes, key));
             }}
           />
         </Sider>
-        <Content className="min-w-0 overflow-auto p-5">
-          <AppBreadcrumb pathname={location.pathname} />
-          {children}
+        <Content className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden px-5 pb-4 pt-4">
+          <div className="shrink-0">
+            <AppBreadcrumb pathname={location.pathname} />
+          </div>
+          <div className="min-h-0 flex-1 overflow-hidden">{children}</div>
         </Content>
       </Layout>
     </Layout>

@@ -8,7 +8,7 @@ import {
   type Supplier,
 } from '@neorvion/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { App, Button, Drawer, Form, Input, Popconfirm, Select, Space, Table, Tag } from 'antd';
+import { App, Button, Drawer, Form, Input, Popconfirm, Select, Tag } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { useEffect, useState } from 'react';
 import {
@@ -18,9 +18,12 @@ import {
   fetchSuppliers,
   updateSupplier,
 } from '@/api/suppliers';
+import { ActionCell, AppTable, CodeCell, EllipsisCell } from '@/components/AppTable';
 import { Can } from '@/components/Can';
+import { ListPageContainer, ListTableArea, ListToolbar } from '@/components/PageContainer';
 import { PageHeader } from '@/components/PageHeader';
 import { usePermissions } from '@/hooks/usePermissions';
+import { formatDateTime } from '@/lib/datetime';
 import type { PageProps } from '@/router/types';
 
 type EditorState =
@@ -153,27 +156,39 @@ export function SuppliersPage(props: PageProps) {
   });
 
   const columns: ColumnsType<Supplier> = [
-    { title: '名称', dataIndex: 'name', key: 'name' },
-    { title: '编码', dataIndex: 'code', key: 'code', width: 150 },
+    {
+      title: '名称',
+      dataIndex: 'name',
+      key: 'name',
+      width: 180,
+      render: (value: string) => <EllipsisCell value={value} />,
+    },
+    {
+      title: '编码',
+      dataIndex: 'code',
+      key: 'code',
+      width: 160,
+      render: (value: string) => <CodeCell value={value} />,
+    },
     {
       title: '联系人',
       dataIndex: 'contact_name',
       key: 'contact_name',
       width: 120,
-      render: (value: string | null) => value || '-',
+      render: (value: string | null) => <EllipsisCell value={value || '-'} />,
     },
     {
       title: '电话',
       dataIndex: 'contact_phone',
       key: 'contact_phone',
-      width: 130,
-      render: (value: string | null) => value || '-',
+      width: 140,
+      render: (value: string | null) => <CodeCell value={value || '-'} />,
     },
     {
       title: '国家 / 城市',
       key: 'location',
-      width: 140,
-      render: (_, record) => supplierLocation(record),
+      width: 160,
+      render: (_, record) => <EllipsisCell value={supplierLocation(record)} />,
     },
     {
       title: '状态',
@@ -186,13 +201,20 @@ export function SuppliersPage(props: PageProps) {
         </Tag>
       ),
     },
-    { title: '更新时间', dataIndex: 'updated_at', key: 'updated_at', width: 180 },
+    {
+      title: '更新时间',
+      dataIndex: 'updated_at',
+      key: 'updated_at',
+      width: 180,
+      render: (value: string) => formatDateTime(value),
+    },
     {
       title: '操作',
       key: 'actions',
-      width: 240,
+      width: 200,
+      fixed: 'right',
       render: (_, record) => (
-        <Space wrap>
+        <ActionCell>
           {hasPermission(PERMISSION_CODE.supplierUpdate) ? (
             <Button type="link" size="small" onClick={() => setEditor({ type: 'edit', supplier: record })}>
               编辑
@@ -240,7 +262,7 @@ export function SuppliersPage(props: PageProps) {
               删除
             </Button>
           </Can>
-        </Space>
+        </ActionCell>
       ),
     },
   ];
@@ -250,7 +272,7 @@ export function SuppliersPage(props: PageProps) {
     editor?.type === 'edit' ? '编辑供应商' : editor?.type === 'view' ? '供应商详情' : '新增供应商';
 
   return (
-    <div>
+    <ListPageContainer>
       <PageHeader
         title={props.title ?? '供应商管理'}
         description={props.description ?? '维护本企业供应商。停用后不能新建采购单，历史单据保留。'}
@@ -262,7 +284,8 @@ export function SuppliersPage(props: PageProps) {
           </Can>
         }
       />
-      <div className="mb-4 flex flex-wrap gap-2">
+      <ListToolbar>
+        <div className="flex flex-wrap gap-2">
         <Input
           className="w-56!"
           placeholder="名称 / 编码"
@@ -304,23 +327,25 @@ export function SuppliersPage(props: PageProps) {
         >
           查询
         </Button>
-      </div>
-      <Table
-        rowKey="id"
-        columns={columns}
-        dataSource={listQuery.data?.items ?? []}
-        loading={listQuery.isLoading}
-        pagination={{
-          current: page,
-          pageSize,
-          total: listQuery.data?.total ?? 0,
-          showSizeChanger: true,
-          onChange: (nextPage, nextSize) => {
-            setPage(nextPage);
-            setPageSize(nextSize);
-          },
-        }}
-      />
+        </div>
+      </ListToolbar>
+      <ListTableArea>
+        <AppTable
+          rowKey="id"
+          columns={columns}
+          dataSource={listQuery.data?.items ?? []}
+          loading={listQuery.isLoading}
+          pagination={{
+            current: page,
+            pageSize,
+            total: listQuery.data?.total ?? 0,
+            onChange: (nextPage, nextSize) => {
+              setPage(nextPage);
+              setPageSize(nextSize);
+            },
+          }}
+        />
+      </ListTableArea>
       <Drawer
         title={editorTitle}
         open={editor != null}
@@ -420,6 +445,6 @@ export function SuppliersPage(props: PageProps) {
           </Form>
         ) : null}
       </Drawer>
-    </div>
+    </ListPageContainer>
   );
 }
