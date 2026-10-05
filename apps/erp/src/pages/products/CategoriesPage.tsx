@@ -8,7 +8,7 @@ import {
   type CategoryTableRow,
 } from '@neorvion/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { App, Button, Form, Input, InputNumber, Modal, Space, Table, Tag } from 'antd';
+import { App, Button, Form, Input, InputNumber, Modal, Tag } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import type { MouseEvent } from 'react';
 import { useEffect, useState } from 'react';
@@ -18,7 +18,9 @@ import {
   fetchProductCategories,
   updateProductCategory,
 } from '@/api/catalog';
+import { ActionCell, AppTable, EllipsisCell } from '@/components/AppTable';
 import { Can } from '@/components/Can';
+import { ListPageContainer, ListTableArea } from '@/components/PageContainer';
 import { PageHeader } from '@/components/PageHeader';
 import { usePermissions } from '@/hooks/usePermissions';
 import type { PageProps } from '@/router/types';
@@ -89,14 +91,20 @@ export function CategoriesPage(props: PageProps) {
   });
 
   const columns: ColumnsType<CategoryTableRow> = [
-    { title: '名称', dataIndex: 'name', key: 'name' },
+    {
+      title: '名称',
+      dataIndex: 'name',
+      key: 'name',
+      width: 220,
+      render: (value: string) => <EllipsisCell value={value} />,
+    },
     { title: '层级', dataIndex: 'level', key: 'level', width: 80 },
     { title: '排序', dataIndex: 'sort', key: 'sort', width: 80 },
     {
       title: '状态',
       dataIndex: 'status',
       key: 'status',
-      width: 100,
+      width: 90,
       render: (status: string) => (
         <Tag color={status === CATALOG_STATUS.active ? 'success' : 'default'}>
           {status === CATALOG_STATUS.active ? '启用' : '停用'}
@@ -106,9 +114,10 @@ export function CategoriesPage(props: PageProps) {
     {
       title: '操作',
       key: 'actions',
-      width: 280,
+      width: 260,
+      fixed: 'right',
       render: (_, record) => (
-        <Space wrap>
+        <ActionCell>
           <Can permission={PERMISSION_CODE.productUpdate}>
             {record.level < 3 ? (
               <Button
@@ -154,13 +163,13 @@ export function CategoriesPage(props: PageProps) {
               删除
             </Button>
           </Can>
-        </Space>
+        </ActionCell>
       ),
     },
   ];
 
   return (
-    <div>
+    <ListPageContainer>
       <PageHeader
         title={props.title ?? '类目管理'}
         description={props.description ?? '最多三级。删除前由服务端校验子类目和商品引用。'}
@@ -172,36 +181,37 @@ export function CategoriesPage(props: PageProps) {
           </Can>
         }
       />
-      <Table
-        rowKey="id"
-        columns={columns}
-        dataSource={toCategoryTableRows(treeQuery.data ?? [])}
-        loading={treeQuery.isLoading}
-        pagination={false}
-        scroll={{ y: 'calc(100vh - 280px)' }}
-        expandable={{
-          childrenColumnName: 'children',
-          rowExpandable: (record) => categoryRowExpandable(record),
-          expandIconColumnIndex: 0,
-          expandIcon: ({ expandable, expanded, onExpand, record }) => {
-            if (!expandable) {
-              return null;
-            }
-            return (
-              <button
-                type="button"
-                className={
-                  expanded
-                    ? 'ant-table-row-expand-icon ant-table-row-expand-icon-expanded'
-                    : 'ant-table-row-expand-icon ant-table-row-expand-icon-collapsed'
-                }
-                aria-label={expanded ? '收起' : '展开'}
-                onClick={(event: MouseEvent<HTMLElement>) => onExpand(record, event)}
-              />
-            );
-          },
-        }}
-      />
+      <ListTableArea>
+        <AppTable
+          rowKey="id"
+          columns={columns}
+          dataSource={toCategoryTableRows(treeQuery.data ?? [])}
+          loading={treeQuery.isLoading}
+          pagination={false}
+          expandable={{
+            childrenColumnName: 'children',
+            rowExpandable: (record) => categoryRowExpandable(record),
+            expandIconColumnIndex: 0,
+            expandIcon: ({ expandable, expanded, onExpand, record }) => {
+              if (!expandable) {
+                return null;
+              }
+              return (
+                <button
+                  type="button"
+                  className={
+                    expanded
+                      ? 'ant-table-row-expand-icon ant-table-row-expand-icon-expanded'
+                      : 'ant-table-row-expand-icon ant-table-row-expand-icon-collapsed'
+                  }
+                  aria-label={expanded ? '收起' : '展开'}
+                  onClick={(event: MouseEvent<HTMLElement>) => onExpand(record, event)}
+                />
+              );
+            },
+          }}
+        />
+      </ListTableArea>
       <Modal
         title={
           editor?.type === 'edit'
@@ -256,6 +266,6 @@ export function CategoriesPage(props: PageProps) {
           </Form>
         ) : null}
       </Modal>
-    </div>
+    </ListPageContainer>
   );
 }

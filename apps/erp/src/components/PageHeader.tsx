@@ -9,7 +9,7 @@ interface PageHeaderProps {
 
 export function PageHeader({ title, description, extra }: PageHeaderProps) {
   return (
-    <header className={styles.header}>
+    <header className={`${styles.header} shrink-0`}>
       <div className={styles.titleRow}>
         <h1 className={styles.title}>{title}</h1>
         {extra}

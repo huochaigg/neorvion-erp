@@ -25,8 +25,6 @@ import {
   Input,
   InputNumber,
   Select,
-  Space,
-  Table,
   Tag,
   TreeSelect,
 } from 'antd';
@@ -41,9 +39,12 @@ import {
   initializeInventory,
 } from '@/api/inventory';
 import { fetchWarehouses } from '@/api/warehouses';
+import { ActionCell, AppTable, CodeCell, EllipsisCell } from '@/components/AppTable';
 import { Can } from '@/components/Can';
+import { ListPageContainer, ListTableArea, ListToolbar } from '@/components/PageContainer';
 import { PageHeader } from '@/components/PageHeader';
 import { usePermissions } from '@/hooks/usePermissions';
+import { formatDateTime } from '@/lib/datetime';
 import type { PageProps } from '@/router/types';
 
 type EditorState =
@@ -195,15 +196,33 @@ export function InventoryListPage(props: PageProps) {
   );
 
   const columns: ColumnsType<InventoryItem> = [
-    { title: '商品', dataIndex: 'product_name', key: 'product_name' },
-    { title: 'SKU', dataIndex: 'sku_code', key: 'sku_code', width: 140 },
+    {
+      title: '商品',
+      dataIndex: 'product_name',
+      key: 'product_name',
+      width: 200,
+      render: (value: string) => <EllipsisCell value={value} />,
+    },
+    {
+      title: 'SKU',
+      dataIndex: 'sku_code',
+      key: 'sku_code',
+      width: 180,
+      render: (value: string) => <CodeCell value={value} />,
+    },
     {
       title: '规格',
       key: 'spec',
       width: 160,
-      render: (_, record) => specValuesLabel(record.spec_values),
+      render: (_, record) => <EllipsisCell value={specValuesLabel(record.spec_values)} />,
     },
-    { title: '仓库', dataIndex: 'warehouse_name', key: 'warehouse_name', width: 140 },
+    {
+      title: '仓库',
+      dataIndex: 'warehouse_name',
+      key: 'warehouse_name',
+      width: 160,
+      render: (value: string) => <EllipsisCell value={value} />,
+    },
     { title: '实际库存', dataIndex: 'quantity', key: 'quantity', width: 100 },
     { title: '预占库存', dataIndex: 'reserved_quantity', key: 'reserved_quantity', width: 100 },
     { title: '可用库存', dataIndex: 'available_quantity', key: 'available_quantity', width: 100 },
@@ -213,13 +232,20 @@ export function InventoryListPage(props: PageProps) {
       width: 90,
       render: (_, record) => stockTag(record, threshold),
     },
-    { title: '更新时间', dataIndex: 'updated_at', key: 'updated_at', width: 180 },
+    {
+      title: '更新时间',
+      dataIndex: 'updated_at',
+      key: 'updated_at',
+      width: 180,
+      render: (value: string) => formatDateTime(value),
+    },
     {
       title: '操作',
       key: 'actions',
-      width: 220,
+      width: 200,
+      fixed: 'right',
       render: (_, record) => (
-        <Space wrap>
+        <ActionCell>
           <Button type="link" size="small" onClick={() => navigate(`/inventory/${record.id}`)}>
             详情
           </Button>
@@ -237,13 +263,13 @@ export function InventoryListPage(props: PageProps) {
               流水
             </Button>
           </Can>
-        </Space>
+        </ActionCell>
       ),
     },
   ];
 
   return (
-    <div>
+    <ListPageContainer>
       <PageHeader
         title={props.title ?? '库存列表'}
         description={
@@ -258,7 +284,8 @@ export function InventoryListPage(props: PageProps) {
           </Can>
         }
       />
-      <div className="mb-4 flex flex-wrap gap-2">
+      <ListToolbar>
+        <div className="flex flex-wrap gap-2">
         <Input
           className="w-48!"
           placeholder="商品 / SKU 名称"
@@ -338,23 +365,25 @@ export function InventoryListPage(props: PageProps) {
         >
           查询
         </Button>
-      </div>
-      <Table
-        rowKey="id"
-        columns={columns}
-        dataSource={listQuery.data?.items ?? []}
-        loading={listQuery.isLoading}
-        pagination={{
-          current: page,
-          pageSize,
-          total: listQuery.data?.total ?? 0,
-          showSizeChanger: true,
-          onChange: (nextPage, nextSize) => {
-            setPage(nextPage);
-            setPageSize(nextSize);
-          },
-        }}
-      />
+        </div>
+      </ListToolbar>
+      <ListTableArea>
+        <AppTable
+          rowKey="id"
+          columns={columns}
+          dataSource={listQuery.data?.items ?? []}
+          loading={listQuery.isLoading}
+          pagination={{
+            current: page,
+            pageSize,
+            total: listQuery.data?.total ?? 0,
+            onChange: (nextPage, nextSize) => {
+              setPage(nextPage);
+              setPageSize(nextSize);
+            },
+          }}
+        />
+      </ListTableArea>
       <Drawer
         title={editor?.type === 'adjust' ? '调整库存' : '初始化库存'}
         open={editor != null}
@@ -413,7 +442,7 @@ export function InventoryListPage(props: PageProps) {
           />
         ) : null}
       </Drawer>
-    </div>
+    </ListPageContainer>
   );
 }
 

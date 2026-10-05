@@ -8,7 +8,7 @@ import {
   type RoleInfo,
 } from '@neorvion/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { App, Button, Drawer, Form, Input, Modal, Space, Table, Tag } from 'antd';
+import { App, Button, Drawer, Form, Input, Modal, Tag } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { useEffect, useState } from 'react';
 import {
@@ -19,7 +19,9 @@ import {
   updateRole,
   updateRolePermissions,
 } from '@/api/roles';
+import { ActionCell, AppTable, CodeCell, EllipsisCell } from '@/components/AppTable';
 import { Can } from '@/components/Can';
+import { ListPageContainer, ListTableArea } from '@/components/PageContainer';
 import { PageHeader } from '@/components/PageHeader';
 import { PermissionTree } from '@/components/PermissionTree';
 import { usePermissions } from '@/hooks/usePermissions';
@@ -109,23 +111,42 @@ export function RolesPage(props: PageProps) {
   });
 
   const columns: ColumnsType<RoleInfo> = [
-    { title: '名称', dataIndex: 'name' },
-    { title: '编码', dataIndex: 'code' },
+    {
+      title: '名称',
+      dataIndex: 'name',
+      width: 140,
+      render: (value: string) => <EllipsisCell value={value} />,
+    },
+    {
+      title: '编码',
+      dataIndex: 'code',
+      width: 140,
+      render: (value: string) => <CodeCell value={value} />,
+    },
     {
       title: '类型',
       dataIndex: 'is_system',
+      width: 100,
       render: (value: boolean) => <Tag color={value ? 'blue' : 'default'}>{value ? '系统' : '自定义'}</Tag>,
     },
     {
       title: '成员数',
       dataIndex: 'member_count',
+      width: 90,
     },
-    { title: '说明', dataIndex: 'description' },
+    {
+      title: '说明',
+      dataIndex: 'description',
+      width: 220,
+      render: (value: string | null) => <EllipsisCell value={value} />,
+    },
     {
       title: '操作',
       key: 'actions',
+      width: 260,
+      fixed: 'right',
       render: (_, record) => (
-        <Space wrap>
+        <ActionCell>
           <Button type="link" size="small" onClick={() => setViewing(record)}>
             查看
           </Button>
@@ -168,7 +189,7 @@ export function RolesPage(props: PageProps) {
               </Button>
             </Can>
           )}
-        </Space>
+        </ActionCell>
       ),
     },
   ];
@@ -177,7 +198,7 @@ export function RolesPage(props: PageProps) {
   const permRole = editor?.type === 'perms' ? editor.role : null;
 
   return (
-    <div>
+    <ListPageContainer>
       <PageHeader
         title={props.title ?? '角色管理'}
         description={props.description ?? '查看系统角色，维护自定义角色与菜单按钮权限。'}
@@ -189,13 +210,15 @@ export function RolesPage(props: PageProps) {
           </Can>
         }
       />
-      <Table
-        rowKey="id"
-        loading={rolesQuery.isLoading}
-        columns={columns}
-        dataSource={rolesQuery.data}
-        pagination={false}
-      />
+      <ListTableArea>
+        <AppTable
+          rowKey="id"
+          loading={rolesQuery.isLoading}
+          columns={columns}
+          dataSource={rolesQuery.data}
+          pagination={false}
+        />
+      </ListTableArea>
 
       <Modal
         title={editor?.type === 'create' ? '新建角色' : '编辑角色'}
@@ -333,6 +356,6 @@ export function RolesPage(props: PageProps) {
           </div>
         ) : null}
       </Drawer>
-    </div>
+    </ListPageContainer>
   );
 }

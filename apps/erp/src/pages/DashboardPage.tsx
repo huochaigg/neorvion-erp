@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Alert, Card, Col, Input, Row, Spin, Tag } from 'antd';
 import { useState } from 'react';
 import { fetchHealth } from '@/api/health';
+import { FormPageContainer } from '@/components/PageContainer';
 import { PageHeader } from '@/components/PageHeader';
 import { StatusTag } from '@/components/StatusTag';
 import { useErpTenantStore } from '@/stores/tenant-runtime';
@@ -18,7 +19,7 @@ export function DashboardPage(props: PageProps) {
   });
 
   return (
-    <div>
+    <FormPageContainer>
       <PageHeader
         title={props.title ?? '业务工作台'}
         description={props.description ?? 'ERP 子应用已接入。商品、仓库、库存与采购管理已上线；订单等后续版本实现。'}
@@ -60,6 +61,6 @@ export function DashboardPage(props: PageProps) {
           </Card>
         </Col>
       </Row>
-    </div>
+    </FormPageContainer>
   );
 }

@@ -12,7 +12,7 @@ import {
   type TenantMember,
 } from '@neorvion/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { App, Button, Drawer, Form, Input, Modal, Radio, Select, Space, Table, Tag, Typography } from 'antd';
+import { App, Button, Drawer, Form, Input, Modal, Radio, Select, Space, Tag, Typography } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
@@ -27,9 +27,12 @@ import {
   updateMemberStatus,
 } from '@/api/members';
 import { fetchRoles } from '@/api/roles';
+import { ActionCell, AppTable, CodeCell, EllipsisCell } from '@/components/AppTable';
 import { Can } from '@/components/Can';
+import { ListPageContainer, ListTableArea, ListToolbar } from '@/components/PageContainer';
 import { PageHeader } from '@/components/PageHeader';
 import { usePermissions } from '@/hooks/usePermissions';
+import { formatDateTime } from '@/lib/datetime';
 import type { PageProps } from '@/router/types';
 
 type AddMode = 'existing' | 'create';
@@ -188,28 +191,47 @@ export function MembersPage(props: PageProps) {
   };
 
   const columns: ColumnsType<TenantMember> = [
-    { title: '企业内名称', dataIndex: 'display_name' },
-    { title: '邮箱', dataIndex: 'email' },
+    {
+      title: '企业内名称',
+      dataIndex: 'display_name',
+      width: 140,
+      render: (value: string) => <EllipsisCell value={value} />,
+    },
+    {
+      title: '邮箱',
+      dataIndex: 'email',
+      width: 240,
+      render: (value: string) => <CodeCell value={value} />,
+    },
     {
       title: '角色',
       dataIndex: 'roles',
-      render: memberRoleNames,
+      width: 180,
+      render: (roles: TenantMember['roles']) => <EllipsisCell value={memberRoleNames(roles)} />,
     },
     {
       title: '状态',
       dataIndex: 'status',
+      width: 90,
       render: (value: string) => (
         <Tag color={value === MEMBER_STATUS.active ? 'success' : 'default'}>
           {value === MEMBER_STATUS.active ? '启用' : '禁用'}
         </Tag>
       ),
     },
-    { title: '加入时间', dataIndex: 'joined_at' },
+    {
+      title: '加入时间',
+      dataIndex: 'joined_at',
+      width: 180,
+      render: (value: string) => formatDateTime(value),
+    },
     {
       title: '操作',
       key: 'actions',
+      width: 260,
+      fixed: 'right',
       render: (_, record) => (
-        <Space wrap>
+        <ActionCell>
           <Button
             type="link"
             size="small"
@@ -274,13 +296,13 @@ export function MembersPage(props: PageProps) {
               </Button>
             </Can>
           )}
-        </Space>
+        </ActionCell>
       ),
     },
   ];
 
   return (
-    <div>
+    <ListPageContainer>
       <PageHeader
         title={props.title ?? '成员管理'}
         description={props.description ?? '添加已有账号或创建新账号，分配角色并启停、移除成员。'}
@@ -292,49 +314,52 @@ export function MembersPage(props: PageProps) {
           </Can>
         }
       />
-      <Space className="mb-4" wrap>
-        <Input.Search
-          allowClear
-          placeholder="搜索姓名或邮箱"
-          value={q}
-          onChange={(event) => setQ(event.target.value)}
-          onSearch={(value) => {
-            setKeyword(value.trim());
-            setPage(1);
+      <ListToolbar>
+        <Space wrap>
+          <Input.Search
+            allowClear
+            placeholder="搜索姓名或邮箱"
+            value={q}
+            onChange={(event) => setQ(event.target.value)}
+            onSearch={(value) => {
+              setKeyword(value.trim());
+              setPage(1);
+            }}
+            className="w-60"
+          />
+          <Select
+            allowClear
+            placeholder="状态"
+            className="w-36"
+            value={status}
+            onChange={(value) => {
+              setStatus(value);
+              setPage(1);
+            }}
+            options={[
+              { value: MEMBER_STATUS.active, label: '启用' },
+              { value: MEMBER_STATUS.disabled, label: '禁用' },
+            ]}
+          />
+        </Space>
+      </ListToolbar>
+      <ListTableArea>
+        <AppTable
+          rowKey="id"
+          loading={membersQuery.isLoading}
+          columns={columns}
+          dataSource={membersQuery.data?.items}
+          pagination={{
+            current: page,
+            pageSize,
+            total: membersQuery.data?.total ?? 0,
+            onChange: (nextPage, nextSize) => {
+              setPage(nextPage);
+              setPageSize(nextSize);
+            },
           }}
-          style={{ width: 240 }}
         />
-        <Select
-          allowClear
-          placeholder="状态"
-          style={{ width: 140 }}
-          value={status}
-          onChange={(value) => {
-            setStatus(value);
-            setPage(1);
-          }}
-          options={[
-            { value: MEMBER_STATUS.active, label: '启用' },
-            { value: MEMBER_STATUS.disabled, label: '禁用' },
-          ]}
-        />
-      </Space>
-      <Table
-        rowKey="id"
-        loading={membersQuery.isLoading}
-        columns={columns}
-        dataSource={membersQuery.data?.items}
-        pagination={{
-          current: page,
-          pageSize,
-          total: membersQuery.data?.total ?? 0,
-          showSizeChanger: true,
-          onChange: (nextPage, nextSize) => {
-            setPage(nextPage);
-            setPageSize(nextSize);
-          },
-        }}
-      />
+      </ListTableArea>
 
       <Modal
         title="添加成员"
@@ -542,6 +567,6 @@ export function MembersPage(props: PageProps) {
           </div>
         ) : null}
       </Drawer>
-    </div>
+    </ListPageContainer>
   );
 }

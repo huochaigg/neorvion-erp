@@ -7,11 +7,13 @@ import {
   type Brand,
 } from '@neorvion/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { App, Button, Form, Input, Modal, Select, Space, Table, Tag } from 'antd';
+import { App, Button, Form, Input, Modal, Select, Tag } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { useEffect, useState } from 'react';
 import { createBrand, deleteBrand, fetchBrands, updateBrand } from '@/api/catalog';
+import { ActionCell, AppTable, CodeCell, EllipsisCell } from '@/components/AppTable';
 import { Can } from '@/components/Can';
+import { ListPageContainer, ListTableArea, ListToolbar } from '@/components/PageContainer';
 import { PageHeader } from '@/components/PageHeader';
 import { usePermissions } from '@/hooks/usePermissions';
 import type { PageProps } from '@/router/types';
@@ -97,27 +99,39 @@ export function BrandsPage(props: PageProps) {
   });
 
   const columns: ColumnsType<Brand> = [
-    { title: '名称', dataIndex: 'name', key: 'name' },
-    { title: '编码', dataIndex: 'code', key: 'code', width: 140 },
+    {
+      title: '名称',
+      dataIndex: 'name',
+      key: 'name',
+      width: 160,
+      render: (value: string) => <EllipsisCell value={value} />,
+    },
+    {
+      title: '编码',
+      dataIndex: 'code',
+      key: 'code',
+      width: 160,
+      render: (value: string) => <CodeCell value={value} />,
+    },
     {
       title: 'Logo',
       dataIndex: 'logo_url',
       key: 'logo_url',
-      ellipsis: true,
-      render: (url: string | null) => url || '-',
+      width: 220,
+      render: (url: string | null) => <EllipsisCell value={url || '-'} />,
     },
     {
       title: '说明',
       dataIndex: 'description',
       key: 'description',
-      ellipsis: true,
-      render: (text: string | null) => text || '-',
+      width: 220,
+      render: (text: string | null) => <EllipsisCell value={text || '-'} />,
     },
     {
       title: '状态',
       dataIndex: 'status',
       key: 'status',
-      width: 100,
+      width: 90,
       render: (value: string) => (
         <Tag color={value === CATALOG_STATUS.active ? 'success' : 'default'}>
           {value === CATALOG_STATUS.active ? '启用' : '停用'}
@@ -127,9 +141,10 @@ export function BrandsPage(props: PageProps) {
     {
       title: '操作',
       key: 'actions',
-      width: 220,
+      width: 180,
+      fixed: 'right',
       render: (_, record) => (
-        <Space wrap>
+        <ActionCell>
           <Can permission={PERMISSION_CODE.productUpdate}>
             <Button type="link" size="small" onClick={() => setEditor({ type: 'edit', brand: record })}>
               编辑
@@ -166,13 +181,13 @@ export function BrandsPage(props: PageProps) {
               删除
             </Button>
           </Can>
-        </Space>
+        </ActionCell>
       ),
     },
   ];
 
   return (
-    <div>
+    <ListPageContainer>
       <PageHeader
         title={props.title ?? '品牌管理'}
         description={props.description ?? '每个企业维护自己的品牌。编码在租户内唯一。Logo 先填 URL。'}
@@ -184,57 +199,60 @@ export function BrandsPage(props: PageProps) {
           </Can>
         }
       />
-      <div className="mb-4 flex flex-wrap gap-2">
-        <Input
-          className="w-56!"
-          placeholder="名称 / 编码"
-          value={q}
-          onChange={(event) => setQ(event.target.value)}
-          onPressEnter={() => {
-            setKeyword(q.trim());
-            setPage(1);
+      <ListToolbar>
+        <div className="flex flex-wrap gap-2">
+          <Input
+            className="w-56!"
+            placeholder="名称 / 编码"
+            value={q}
+            onChange={(event) => setQ(event.target.value)}
+            onPressEnter={() => {
+              setKeyword(q.trim());
+              setPage(1);
+            }}
+            allowClear
+          />
+          <Select
+            className="w-36"
+            allowClear
+            placeholder="状态"
+            value={status}
+            onChange={(value) => {
+              setStatus(value);
+              setPage(1);
+            }}
+            options={[
+              { value: CATALOG_STATUS.active, label: '启用' },
+              { value: CATALOG_STATUS.disabled, label: '停用' },
+            ]}
+          />
+          <Button
+            onClick={() => {
+              setKeyword(q.trim());
+              setPage(1);
+            }}
+          >
+            查询
+          </Button>
+        </div>
+      </ListToolbar>
+      <ListTableArea>
+        <AppTable
+          rowKey="id"
+          columns={columns}
+          dataSource={brandsQuery.data?.items ?? []}
+          loading={brandsQuery.isLoading}
+          pagination={{
+            current: page,
+            pageSize,
+            total: brandsQuery.data?.total ?? 0,
+            onChange: (nextPage, nextSize) => {
+              setPage(nextPage);
+              setPageSize(nextSize);
+            },
           }}
-          allowClear
         />
-        <Select
-          className="w-36"
-          allowClear
-          placeholder="状态"
-          value={status}
-          onChange={(value) => {
-            setStatus(value);
-            setPage(1);
-          }}
-          options={[
-            { value: CATALOG_STATUS.active, label: '启用' },
-            { value: CATALOG_STATUS.disabled, label: '停用' },
-          ]}
-        />
-        <Button
-          onClick={() => {
-            setKeyword(q.trim());
-            setPage(1);
-          }}
-        >
-          查询
-        </Button>
-      </div>
-      <Table
-        rowKey="id"
-        columns={columns}
-        dataSource={brandsQuery.data?.items ?? []}
-        loading={brandsQuery.isLoading}
-        pagination={{
-          current: page,
-          pageSize,
-          total: brandsQuery.data?.total ?? 0,
-          showSizeChanger: true,
-          onChange: (nextPage, nextSize) => {
-            setPage(nextPage);
-            setPageSize(nextSize);
-          },
-        }}
-      />
+      </ListTableArea>
       <Modal
         title={editor?.type === 'edit' ? '编辑品牌' : '新增品牌'}
         open={editor != null}
@@ -306,6 +324,6 @@ export function BrandsPage(props: PageProps) {
           </Form>
         ) : null}
       </Modal>
-    </div>
+    </ListPageContainer>
   );
 }

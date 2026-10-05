@@ -24,6 +24,7 @@ import {
   updateProduct,
   updateProductSku,
 } from '@/api/products';
+import { FormPageContainer } from '@/components/PageContainer';
 import { PageHeader } from '@/components/PageHeader';
 import { usePermissions } from '@/hooks/usePermissions';
 import type { PageProps } from '@/router/types';
@@ -204,7 +205,7 @@ export function ProductFormPage(props: PageProps) {
     : hasPermission(PERMISSION_CODE.productCreate);
 
   return (
-    <div>
+    <FormPageContainer>
       <PageHeader
         title={props.title ?? (isEdit ? '编辑商品' : '新增商品')}
         description={
@@ -235,7 +236,7 @@ export function ProductFormPage(props: PageProps) {
           }}
           onFinish={(values) => saveMutation.mutate(values)}
         >
-          <div className="max-h-[calc(100vh-14rem)] space-y-4 overflow-y-auto pr-1">
+          <div className="space-y-4">
             <Card title="基础信息">
               <div className="grid grid-cols-1 gap-x-4 md:grid-cols-2">
                 <Form.Item name="name" label="商品名称" rules={[{ required: true, message: '请输入名称' }]}>
@@ -427,6 +428,6 @@ export function ProductFormPage(props: PageProps) {
           </div>
         </Form>
       )}
-    </div>
+    </FormPageContainer>
   );
 }

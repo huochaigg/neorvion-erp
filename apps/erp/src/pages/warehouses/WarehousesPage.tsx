@@ -20,8 +20,6 @@ import {
   Input,
   Popconfirm,
   Select,
-  Space,
-  Table,
   Tag,
 } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
@@ -34,9 +32,12 @@ import {
   setDefaultWarehouse,
   updateWarehouse,
 } from '@/api/warehouses';
+import { ActionCell, AppTable, CodeCell, EllipsisCell } from '@/components/AppTable';
 import { Can } from '@/components/Can';
+import { ListPageContainer, ListTableArea, ListToolbar } from '@/components/PageContainer';
 import { PageHeader } from '@/components/PageHeader';
 import { usePermissions } from '@/hooks/usePermissions';
+import { formatDateTime } from '@/lib/datetime';
 import type { PageProps } from '@/router/types';
 
 type EditorState =
@@ -171,8 +172,20 @@ export function WarehousesPage(props: PageProps) {
   });
 
   const columns: ColumnsType<Warehouse> = [
-    { title: '仓库名称', dataIndex: 'name', key: 'name' },
-    { title: '仓库编码', dataIndex: 'code', key: 'code', width: 140 },
+    {
+      title: '仓库名称',
+      dataIndex: 'name',
+      key: 'name',
+      width: 180,
+      render: (value: string) => <EllipsisCell value={value} />,
+    },
+    {
+      title: '仓库编码',
+      dataIndex: 'code',
+      key: 'code',
+      width: 160,
+      render: (value: string) => <CodeCell value={value} />,
+    },
     {
       title: '仓库类型',
       dataIndex: 'type',
@@ -183,8 +196,8 @@ export function WarehousesPage(props: PageProps) {
     {
       title: '国家 / 城市',
       key: 'location',
-      width: 140,
-      render: (_, record) => warehouseLocation(record),
+      width: 160,
+      render: (_, record) => <EllipsisCell value={warehouseLocation(record)} />,
     },
     {
       title: '默认仓库',
@@ -209,20 +222,22 @@ export function WarehousesPage(props: PageProps) {
       dataIndex: 'contact_name',
       key: 'contact_name',
       width: 120,
-      render: (value: string | null) => value || '-',
+      render: (value: string | null) => <EllipsisCell value={value || '-'} />,
     },
     {
       title: '更新时间',
       dataIndex: 'updated_at',
       key: 'updated_at',
       width: 180,
+      render: (value: string) => formatDateTime(value),
     },
     {
       title: '操作',
       key: 'actions',
-      width: 280,
+      width: 260,
+      fixed: 'right',
       render: (_, record) => (
-        <Space wrap>
+        <ActionCell>
           {hasPermission(PERMISSION_CODE.warehouseUpdate) ? (
             <Button type="link" size="small" onClick={() => setEditor({ type: 'edit', warehouse: record })}>
               编辑
@@ -282,7 +297,7 @@ export function WarehousesPage(props: PageProps) {
               删除
             </Button>
           </Can>
-        </Space>
+        </ActionCell>
       ),
     },
   ];
@@ -292,7 +307,7 @@ export function WarehousesPage(props: PageProps) {
     editor?.type === 'edit' ? '编辑仓库' : editor?.type === 'view' ? '仓库详情' : '新增仓库';
 
   return (
-    <div>
+    <ListPageContainer>
       <PageHeader
         title={props.title ?? '仓库管理'}
         description={
@@ -307,68 +322,71 @@ export function WarehousesPage(props: PageProps) {
           </Can>
         }
       />
-      <div className="mb-4 flex flex-wrap gap-2">
-        <Input
-          className="w-56!"
-          placeholder="名称 / 编码"
-          value={q}
-          onChange={(event) => setQ(event.target.value)}
-          onPressEnter={() => {
-            setKeyword(q.trim());
-            setPage(1);
+      <ListToolbar>
+        <div className="flex flex-wrap gap-2">
+          <Input
+            className="w-56!"
+            placeholder="名称 / 编码"
+            value={q}
+            onChange={(event) => setQ(event.target.value)}
+            onPressEnter={() => {
+              setKeyword(q.trim());
+              setPage(1);
+            }}
+            allowClear
+          />
+          <Select
+            className="w-36"
+            allowClear
+            placeholder="类型"
+            value={warehouseType}
+            onChange={(value) => {
+              setWarehouseType(value);
+              setPage(1);
+            }}
+            options={WAREHOUSE_TYPE_OPTIONS}
+          />
+          <Select
+            className="w-36"
+            allowClear
+            placeholder="状态"
+            value={status}
+            onChange={(value) => {
+              setStatus(value);
+              setPage(1);
+            }}
+            options={[
+              { value: WAREHOUSE_STATUS.active, label: '启用' },
+              { value: WAREHOUSE_STATUS.disabled, label: '停用' },
+            ]}
+          />
+          <Button
+            onClick={() => {
+              setKeyword(q.trim());
+              setPage(1);
+            }}
+          >
+            查询
+          </Button>
+        </div>
+      </ListToolbar>
+      <ListTableArea>
+        <AppTable
+          rowKey="id"
+          columns={columns}
+          dataSource={listQuery.data?.items ?? []}
+          loading={listQuery.isLoading}
+          pagination={{
+            current: page,
+            pageSize,
+            total: listQuery.data?.total ?? 0,
+            onChange: (nextPage, nextSize) => {
+              setPage(nextPage);
+              setPageSize(nextSize);
+            },
           }}
-          allowClear
         />
-        <Select
-          className="w-36"
-          allowClear
-          placeholder="类型"
-          value={warehouseType}
-          onChange={(value) => {
-            setWarehouseType(value);
-            setPage(1);
-          }}
-          options={WAREHOUSE_TYPE_OPTIONS}
-        />
-        <Select
-          className="w-36"
-          allowClear
-          placeholder="状态"
-          value={status}
-          onChange={(value) => {
-            setStatus(value);
-            setPage(1);
-          }}
-          options={[
-            { value: WAREHOUSE_STATUS.active, label: '启用' },
-            { value: WAREHOUSE_STATUS.disabled, label: '停用' },
-          ]}
-        />
-        <Button
-          onClick={() => {
-            setKeyword(q.trim());
-            setPage(1);
-          }}
-        >
-          查询
-        </Button>
-      </div>
-      <Table
-        rowKey="id"
-        columns={columns}
-        dataSource={listQuery.data?.items ?? []}
-        loading={listQuery.isLoading}
-        pagination={{
-          current: page,
-          pageSize,
-          total: listQuery.data?.total ?? 0,
-          showSizeChanger: true,
-          onChange: (nextPage, nextSize) => {
-            setPage(nextPage);
-            setPageSize(nextSize);
-          },
-        }}
-      />
+      </ListTableArea>
       <Drawer
         title={editorTitle}
         open={editor != null}
@@ -468,6 +486,6 @@ export function WarehousesPage(props: PageProps) {
           </Form>
         ) : null}
       </Drawer>
-    </div>
+    </ListPageContainer>
   );
 }

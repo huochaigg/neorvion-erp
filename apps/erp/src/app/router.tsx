@@ -14,7 +14,7 @@ function LayoutFrame() {
   const epoch = useErpTenantStore((state) => state.epoch);
   return (
     <ErpLayout>
-      <div key={epoch}>
+      <div key={epoch} className="flex h-full min-h-0 flex-col">
         <PermissionGuard>
           <Outlet />
         </PermissionGuard>
