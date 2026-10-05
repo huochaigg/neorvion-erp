@@ -140,3 +140,47 @@ InventoryTransactionReadContext = Annotated[
     TenantContext,
     Depends(require_permission(PermissionCode.INVENTORY_TRANSACTION_READ)),
 ]
+SupplierReadContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.SUPPLIER_READ)),
+]
+SupplierCreateContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.SUPPLIER_CREATE)),
+]
+SupplierUpdateContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.SUPPLIER_UPDATE)),
+]
+SupplierDisableContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.SUPPLIER_DISABLE)),
+]
+SupplierDeleteContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.SUPPLIER_DELETE)),
+]
+PurchaseReadContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.PURCHASE_READ)),
+]
+PurchaseCreateContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.PURCHASE_CREATE)),
+]
+PurchaseUpdateContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.PURCHASE_UPDATE)),
+]
+PurchaseSubmitContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.PURCHASE_SUBMIT)),
+]
+PurchaseAuditContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.PURCHASE_AUDIT)),
+]
+PurchaseCancelContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.PURCHASE_CANCEL)),
+]

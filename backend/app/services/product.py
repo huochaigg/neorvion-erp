@@ -272,7 +272,7 @@ class ProductService:
         return self._sku_out(sku)
 
     def delete_sku(self, product_id: int, sku_id: int) -> None:
-        """已有库存台账的 SKU 禁止物理删除，只允许停用。订单引用留给后续版本。"""
+        """已有库存或采购明细的 SKU 禁止物理删除，只允许停用。"""
         self.auth.require_all(self.context, (PermissionCode.PRODUCT_UPDATE,))
         sku = self.skus.get_in_tenant(product_id=product_id, sku_id=sku_id)
         if sku is None:
@@ -281,10 +281,19 @@ class ProductService:
         if not remaining:
             raise AppError("商品至少保留一个 SKU", code=40058, status_code=400)
         from app.repositories.inventory import InventoryRepository
+        from app.repositories.purchase import PurchaseOrderRepository
 
-        if InventoryRepository(self.session, self.context.tenant_id).count_by_sku(sku.id) > 0:
+        inventory_used = InventoryRepository(
+            self.session,
+            self.context.tenant_id,
+        ).count_by_sku(sku.id)
+        purchase_used = PurchaseOrderRepository(
+            self.session,
+            self.context.tenant_id,
+        ).count_by_sku(sku.id)
+        if inventory_used > 0 or purchase_used > 0:
             raise AppError(
-                "SKU 已被库存使用，不能删除，请停用。",
+                "SKU 已被库存或采购单使用，不能删除，请停用。",
                 code=40059,
                 status_code=400,
                 data={"error": "SKU_IN_USE"},

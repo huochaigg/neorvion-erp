@@ -123,4 +123,4 @@ Product 必须属于当前租户的类目；品牌可选，有值时也必须同
 
 ## 本版不包含
 
-仓库、采购单、销售订单、收货、正式入库出库页面、发货、物流、平台订单同步、AI Agent。库存台账见 `docs/inventory.md`。
+仓库见 `docs/warehouses.md`。采购单见 `docs/purchases.md`。本版不包含销售订单、收货、正式入库出库页面、发货、物流、平台订单同步、AI Agent。库存台账见 `docs/inventory.md`。

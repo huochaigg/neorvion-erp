@@ -4,6 +4,7 @@ export type IconName =
   | 'DatabaseOutlined'
   | 'ShopOutlined'
   | 'ShoppingCartOutlined'
+  | 'AccountBookOutlined'
   | 'SettingOutlined';
 
 export type PageKey =
@@ -20,7 +21,11 @@ export type PageKey =
   | 'Warehouses'
   | 'InventoryList'
   | 'InventoryDetail'
-  | 'InventoryTransactions';
+  | 'InventoryTransactions'
+  | 'PurchaseList'
+  | 'PurchaseForm'
+  | 'PurchaseDetail'
+  | 'Suppliers';
 
 export type PermissionMode = 'any' | 'all';
 

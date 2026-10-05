@@ -148,6 +148,47 @@ export function productSkuOptionsQueryKey(
   return ['tenant', tenantId, 'product-skus', filters ?? {}] as const;
 }
 
+export function suppliersQueryKey(
+  tenantId: number | null,
+  filters?: {
+    q?: string;
+    status?: string;
+    countryCode?: string;
+    page?: number;
+    pageSize?: number;
+  },
+) {
+  return ['tenant', tenantId, 'suppliers', filters ?? {}] as const;
+}
+
+export function supplierQueryKey(tenantId: number | null, supplierId: number | null) {
+  return ['tenant', tenantId, 'supplier', supplierId] as const;
+}
+
+export function purchaseOrdersQueryKey(
+  tenantId: number | null,
+  filters?: {
+    q?: string;
+    supplierId?: number;
+    warehouseId?: number;
+    skuId?: number;
+    status?: string;
+    createdFrom?: string;
+    createdTo?: string;
+    expectedFrom?: string;
+    expectedTo?: string;
+    createdBy?: number;
+    page?: number;
+    pageSize?: number;
+  },
+) {
+  return ['tenant', tenantId, 'purchase-orders', filters ?? {}] as const;
+}
+
+export function purchaseOrderQueryKey(tenantId: number | null, orderId: number | null) {
+  return ['tenant', tenantId, 'purchase-order', orderId] as const;
+}
+
 export function isTenantScopedQueryKey(queryKey: readonly unknown[]): boolean {
   return queryKey[0] === 'tenant';
 }

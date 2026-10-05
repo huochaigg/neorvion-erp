@@ -1,6 +1,6 @@
 # 架构说明
 
-当前里程碑：V5。
+当前里程碑：V6。
 
 ## 目标
 
@@ -19,7 +19,7 @@
 ### 路由
 
 - 主应用：`/` 工作台，`/workspaces` 选择企业，`/workspaces/create` 创建企业，`/erp/*` 挂载子应用。没有有效租户时不能进入工作台和 ERP。
-- 子应用独立运行在 `http://localhost:8016/`，内部路径由 `apps/erp/src/router/routes.ts` 配置（如 `/dashboard`、`/products/list`、`/inventory/list`、`/warehouses`），**没有** `/erp` 前缀。
+- 子应用独立运行在 `http://localhost:8016/`，内部路径由 `apps/erp/src/router/routes.ts` 配置（如 `/dashboard`、`/products/list`、`/inventory/list`、`/purchases/list`、`/warehouses`），**没有** `/erp` 前缀。
 - 主应用浏览器地址是 `/erp/products/list`，由 Shell pathname 与子应用路由双向同步；刷新后仍由主应用按 `/erp/*` 加载子应用。
 - 侧栏「ERP 业务」进入应用并恢复上次路由；指定页面（如 `/erp/dashboard`）按目标路径打开。ERP 内部菜单不在 Shell 维护。
 

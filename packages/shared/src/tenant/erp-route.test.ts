@@ -15,6 +15,10 @@ describe('safePathAfterTenantChange', () => {
     assert.equal(safePathAfterTenantChange('/products/123'), '/products/list');
     assert.equal(safePathAfterTenantChange('/products/123/edit'), '/products/list');
     assert.equal(safePathAfterTenantChange('/inventory/88'), '/inventory/list');
+    assert.equal(safePathAfterTenantChange('/purchases/list'), null);
+    assert.equal(safePathAfterTenantChange('/purchases/88'), '/purchases/list');
+    assert.equal(safePathAfterTenantChange('/purchases/88/edit'), '/purchases/list');
+    assert.equal(safePathAfterTenantChange('/suppliers'), null);
     assert.equal(safePathAfterTenantChange('/system/members/88'), '/system/members');
     assert.equal(safePathAfterTenantChange('/system/members'), null);
   });

@@ -54,6 +54,22 @@ export const PAGE_COMPONENTS: Record<PageKey, LazyExoticComponent<ComponentType<
     const module = await import('@/pages/inventory/InventoryTransactionsPage');
     return { default: module.InventoryTransactionsPage };
   }),
+  PurchaseList: lazy(async () => {
+    const module = await import('@/pages/purchases/PurchaseListPage');
+    return { default: module.PurchaseListPage };
+  }),
+  PurchaseForm: lazy(async () => {
+    const module = await import('@/pages/purchases/PurchaseFormPage');
+    return { default: module.PurchaseFormPage };
+  }),
+  PurchaseDetail: lazy(async () => {
+    const module = await import('@/pages/purchases/PurchaseDetailPage');
+    return { default: module.PurchaseDetailPage };
+  }),
+  Suppliers: lazy(async () => {
+    const module = await import('@/pages/purchases/SuppliersPage');
+    return { default: module.SuppliersPage };
+  }),
   Placeholder: lazy(async () => {
     const module = await import('@/pages/PlaceholderPage');
     return { default: module.PlaceholderPage };

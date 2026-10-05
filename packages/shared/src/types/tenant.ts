@@ -136,6 +136,7 @@ export const PERMISSION_MODULE_LABELS: Record<string, string> = {
   order: '订单管理',
   inventory: '库存管理',
   purchase: '采购管理',
+  supplier: '供应商管理',
 };
 
 export const TENANT_HEADER = 'X-Tenant-ID';
@@ -183,6 +184,17 @@ export const PERMISSION_CODE = {
   warehouseUpdate: 'warehouse:update',
   warehouseDisable: 'warehouse:disable',
   warehouseDelete: 'warehouse:delete',
+  purchaseRead: 'purchase:read',
+  purchaseCreate: 'purchase:create',
+  purchaseUpdate: 'purchase:update',
+  purchaseSubmit: 'purchase:submit',
+  purchaseAudit: 'purchase:audit',
+  purchaseCancel: 'purchase:cancel',
+  supplierRead: 'supplier:read',
+  supplierCreate: 'supplier:create',
+  supplierUpdate: 'supplier:update',
+  supplierDisable: 'supplier:disable',
+  supplierDelete: 'supplier:delete',
 } as const;
 
 export type PermissionMode = 'any' | 'all';

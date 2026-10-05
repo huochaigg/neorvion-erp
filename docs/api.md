@@ -16,7 +16,7 @@
 
 `GET /api/v1/health`
 
-依赖不可用时 HTTP 仍为 200，字段标记 `unavailable`。当前 `milestone` 为 `V5`。
+依赖不可用时 HTTP 仍为 200，字段标记 `unavailable`。当前 `milestone` 为 `V6`。
 
 ## 认证
 
@@ -114,5 +114,23 @@
 - 内部：`POST /inventory/{id}/reserve|release|deduct-reserved|optimistic-adjust`（`inventory:adjust`，不进业务菜单）
 
 已存在 → `40950` `INVENTORY_ALREADY_EXISTS`。可用不足 → `40070`。预占不足 → `40071`。乐观锁冲突 → `40072`。跨租户库存 → `40450`。
+
+## 采购（V6）
+
+详见 `docs/purchases.md`。需要登录和有效 `X-Tenant-ID`。审核通过不改库存。
+
+- `GET /api/v1/suppliers`（`supplier:read`）分页：`q` / `status` / `country_code`
+- `POST /api/v1/suppliers`（`supplier:create`）
+- `GET /api/v1/suppliers/{id}`（`supplier:read`）
+- `PATCH /api/v1/suppliers/{id}`（`supplier:update`）
+- `PATCH /api/v1/suppliers/{id}/status`（`supplier:disable`）
+- `DELETE /api/v1/suppliers/{id}`（`supplier:delete`）
+- `GET /api/v1/purchase-orders`（`purchase:read`）分页：`q` / `supplier_id` / `warehouse_id` / `sku_id` / `status` / 日期
+- `POST /api/v1/purchase-orders`（`purchase:create`）同一事务写入主表 + 明细
+- `GET /api/v1/purchase-orders/{id}`（`purchase:read`）
+- `PATCH /api/v1/purchase-orders/{id}`（`purchase:update`）仅 DRAFT / REJECTED
+- `POST /api/v1/purchase-orders/{id}/submit|approve|reject|cancel`
+
+供应商编码冲突 → `40960`。使用中不能删除 → `40081` `SUPPLIER_IN_USE`。非法状态流转 → `40090`。不可编辑 → `40091`。并发审核冲突 → `40095` `PURCHASE_ORDER_STATE_CONFLICT`。跨租户采购单 → `40470`。
 
 Swagger：http://localhost:8011/docs

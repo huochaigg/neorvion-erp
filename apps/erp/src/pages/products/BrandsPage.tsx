@@ -186,7 +186,7 @@ export function BrandsPage(props: PageProps) {
       />
       <div className="mb-4 flex flex-wrap gap-2">
         <Input
-          className="w-56"
+          className="w-56!"
           placeholder="名称 / 编码"
           value={q}
           onChange={(event) => setQ(event.target.value)}

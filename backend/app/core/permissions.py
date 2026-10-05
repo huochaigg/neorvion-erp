@@ -59,7 +59,16 @@ class PermissionCode(StrEnum):
 
     PURCHASE_READ = "purchase:read"
     PURCHASE_CREATE = "purchase:create"
+    PURCHASE_UPDATE = "purchase:update"
+    PURCHASE_SUBMIT = "purchase:submit"
     PURCHASE_AUDIT = "purchase:audit"
+    PURCHASE_CANCEL = "purchase:cancel"
+
+    SUPPLIER_READ = "supplier:read"
+    SUPPLIER_CREATE = "supplier:create"
+    SUPPLIER_UPDATE = "supplier:update"
+    SUPPLIER_DISABLE = "supplier:disable"
+    SUPPLIER_DELETE = "supplier:delete"
 
 
 class SystemRoleCode(StrEnum):
@@ -156,9 +165,17 @@ PERMISSION_CATALOG: tuple[tuple[str, str, str, str], ...] = (
     (PermissionCode.WAREHOUSE_UPDATE, "编辑仓库", "warehouse", "编辑仓库档案并设置默认仓库"),
     (PermissionCode.WAREHOUSE_DISABLE, "启用停用仓库", "warehouse", "启用或禁用仓库"),
     (PermissionCode.WAREHOUSE_DELETE, "删除仓库", "warehouse", "删除尚未被业务引用的仓库"),
-    (PermissionCode.PURCHASE_READ, "查看采购", "purchase", "预留给采购模块"),
-    (PermissionCode.PURCHASE_CREATE, "创建采购", "purchase", "预留给采购模块"),
-    (PermissionCode.PURCHASE_AUDIT, "审核采购", "purchase", "预留给采购模块"),
+    (PermissionCode.PURCHASE_READ, "查看采购单", "purchase", "查看采购单列表与详情"),
+    (PermissionCode.PURCHASE_CREATE, "新建采购单", "purchase", "创建草稿采购单"),
+    (PermissionCode.PURCHASE_UPDATE, "编辑采购单", "purchase", "编辑草稿或驳回后的采购单"),
+    (PermissionCode.PURCHASE_SUBMIT, "提交采购审核", "purchase", "提交或重新提交采购单审核"),
+    (PermissionCode.PURCHASE_AUDIT, "审核采购单", "purchase", "审核通过或驳回采购单"),
+    (PermissionCode.PURCHASE_CANCEL, "取消采购单", "purchase", "取消草稿、待审核或已驳回的采购单"),
+    (PermissionCode.SUPPLIER_READ, "查看供应商", "supplier", "查看本企业供应商"),
+    (PermissionCode.SUPPLIER_CREATE, "新增供应商", "supplier", "创建供应商"),
+    (PermissionCode.SUPPLIER_UPDATE, "编辑供应商", "supplier", "编辑供应商档案，编码创建后只读"),
+    (PermissionCode.SUPPLIER_DISABLE, "启用停用供应商", "supplier", "启用或禁用供应商"),
+    (PermissionCode.SUPPLIER_DELETE, "删除供应商", "supplier", "删除尚未被采购单引用的供应商"),
 )
 
 DEPRECATED_PERMISSION_CODES: frozenset[str] = frozenset(
@@ -198,6 +215,7 @@ _READ_CODES: tuple[str, ...] = (
     PermissionCode.INVENTORY_TRANSACTION_READ,
     PermissionCode.WAREHOUSE_READ,
     PermissionCode.PURCHASE_READ,
+    PermissionCode.SUPPLIER_READ,
 )
 
 DEFAULT_ROLE_TEMPLATES: tuple[tuple[str, str, str, tuple[str, ...]], ...] = (
@@ -225,8 +243,12 @@ DEFAULT_ROLE_TEMPLATES: tuple[tuple[str, str, str, tuple[str, ...]], ...] = (
             PermissionCode.INVENTORY_READ,
             PermissionCode.INVENTORY_TRANSACTION_READ,
             PermissionCode.WAREHOUSE_READ,
+            PermissionCode.SUPPLIER_READ,
             PermissionCode.PURCHASE_READ,
             PermissionCode.PURCHASE_CREATE,
+            PermissionCode.PURCHASE_UPDATE,
+            PermissionCode.PURCHASE_SUBMIT,
+            PermissionCode.PURCHASE_CANCEL,
         ),
     ),
     (
@@ -246,6 +268,8 @@ DEFAULT_ROLE_TEMPLATES: tuple[tuple[str, str, str, tuple[str, ...]], ...] = (
             PermissionCode.WAREHOUSE_READ,
             PermissionCode.WAREHOUSE_CREATE,
             PermissionCode.WAREHOUSE_UPDATE,
+            PermissionCode.SUPPLIER_READ,
+            PermissionCode.PURCHASE_READ,
         ),
     ),
     (
@@ -598,7 +622,7 @@ PERMISSION_TREE: tuple[PermissionTreeDef, ...] = (
         children=(
             PermissionTreeDef(
                 key="menu:purchase",
-                title="采购列表",
+                title="采购单",
                 type="MENU",
                 children=(
                     PermissionTreeDef(
@@ -609,15 +633,70 @@ PERMISSION_TREE: tuple[PermissionTreeDef, ...] = (
                     ),
                     PermissionTreeDef(
                         key="action:purchase-create",
-                        title="创建",
+                        title="新建",
                         type="ACTION",
                         permission_code=PermissionCode.PURCHASE_CREATE,
+                    ),
+                    PermissionTreeDef(
+                        key="action:purchase-update",
+                        title="编辑",
+                        type="ACTION",
+                        permission_code=PermissionCode.PURCHASE_UPDATE,
+                    ),
+                    PermissionTreeDef(
+                        key="action:purchase-submit",
+                        title="提交审核",
+                        type="ACTION",
+                        permission_code=PermissionCode.PURCHASE_SUBMIT,
                     ),
                     PermissionTreeDef(
                         key="action:purchase-audit",
                         title="审核",
                         type="ACTION",
                         permission_code=PermissionCode.PURCHASE_AUDIT,
+                    ),
+                    PermissionTreeDef(
+                        key="action:purchase-cancel",
+                        title="取消",
+                        type="ACTION",
+                        permission_code=PermissionCode.PURCHASE_CANCEL,
+                    ),
+                ),
+            ),
+            PermissionTreeDef(
+                key="menu:suppliers",
+                title="供应商管理",
+                type="MENU",
+                children=(
+                    PermissionTreeDef(
+                        key="action:supplier-read",
+                        title="查看",
+                        type="ACTION",
+                        permission_code=PermissionCode.SUPPLIER_READ,
+                    ),
+                    PermissionTreeDef(
+                        key="action:supplier-create",
+                        title="新建",
+                        type="ACTION",
+                        permission_code=PermissionCode.SUPPLIER_CREATE,
+                    ),
+                    PermissionTreeDef(
+                        key="action:supplier-update",
+                        title="编辑",
+                        type="ACTION",
+                        permission_code=PermissionCode.SUPPLIER_UPDATE,
+                    ),
+                    PermissionTreeDef(
+                        key="action:supplier-disable",
+                        title="启用 / 禁用",
+                        type="ACTION",
+                        permission_code=PermissionCode.SUPPLIER_DISABLE,
+                    ),
+                    PermissionTreeDef(
+                        key="action:supplier-delete",
+                        title="删除",
+                        type="ACTION",
+                        permission_code=PermissionCode.SUPPLIER_DELETE,
                     ),
                 ),
             ),

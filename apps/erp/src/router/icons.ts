@@ -1,4 +1,5 @@
 import {
+  AccountBookOutlined,
   AppstoreOutlined,
   DashboardOutlined,
   DatabaseOutlined,
@@ -16,4 +17,5 @@ export const ICON_MAP: Record<IconName, ComponentType<{ className?: string }>> =
   SettingOutlined,
   ShopOutlined,
   ShoppingCartOutlined,
+  AccountBookOutlined,
 };
