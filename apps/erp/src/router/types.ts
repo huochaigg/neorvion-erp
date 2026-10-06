@@ -25,7 +25,11 @@ export type PageKey =
   | 'PurchaseList'
   | 'PurchaseForm'
   | 'PurchaseDetail'
-  | 'Suppliers';
+  | 'Suppliers'
+  | 'SalesOrderList'
+  | 'SalesOrderForm'
+  | 'SalesOrderDetail'
+  | 'Customers';
 
 export type PermissionMode = 'any' | 'all';
 

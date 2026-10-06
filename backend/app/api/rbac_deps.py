@@ -184,3 +184,47 @@ PurchaseCancelContext = Annotated[
     TenantContext,
     Depends(require_permission(PermissionCode.PURCHASE_CANCEL)),
 ]
+CustomerReadContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.CUSTOMER_READ)),
+]
+CustomerCreateContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.CUSTOMER_CREATE)),
+]
+CustomerUpdateContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.CUSTOMER_UPDATE)),
+]
+CustomerDisableContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.CUSTOMER_DISABLE)),
+]
+CustomerDeleteContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.CUSTOMER_DELETE)),
+]
+OrderReadContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.ORDER_READ)),
+]
+OrderCreateContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.ORDER_CREATE)),
+]
+OrderUpdateContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.ORDER_UPDATE)),
+]
+OrderSubmitContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.ORDER_SUBMIT)),
+]
+OrderAuditContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.ORDER_AUDIT)),
+]
+OrderCancelContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.ORDER_CANCEL)),
+]

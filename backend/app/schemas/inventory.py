@@ -174,3 +174,16 @@ class SkuOptionListOut(BaseModel):
     total: int
     page: int
     page_size: int
+
+
+class SkuAvailabilityOut(BaseModel):
+    warehouse_id: int
+    sku_id: int
+    quantity: int
+    reserved_quantity: int
+    available_quantity: int
+    initialized: bool
+
+
+class SkuAvailabilityListOut(BaseModel):
+    items: list[SkuAvailabilityOut]

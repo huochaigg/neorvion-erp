@@ -41,8 +41,16 @@ class PermissionCode(StrEnum):
 
     ORDER_READ = "order:read"
     ORDER_CREATE = "order:create"
+    ORDER_UPDATE = "order:update"
+    ORDER_SUBMIT = "order:submit"
     ORDER_AUDIT = "order:audit"
     ORDER_CANCEL = "order:cancel"
+
+    CUSTOMER_READ = "customer:read"
+    CUSTOMER_CREATE = "customer:create"
+    CUSTOMER_UPDATE = "customer:update"
+    CUSTOMER_DISABLE = "customer:disable"
+    CUSTOMER_DELETE = "customer:delete"
 
     INVENTORY_READ = "inventory:read"
     INVENTORY_INITIALIZE = "inventory:initialize"
@@ -145,10 +153,17 @@ PERMISSION_CATALOG: tuple[tuple[str, str, str, str], ...] = (
     (PermissionCode.PRODUCT_CREATE, "创建商品", "product", "创建商品 SPU 及初始 SKU"),
     (PermissionCode.PRODUCT_UPDATE, "更新商品", "product", "编辑商品、SKU、类目与品牌"),
     (PermissionCode.PRODUCT_DELETE, "删除商品", "product", "删除未被引用的类目、品牌；停用商品"),
-    (PermissionCode.ORDER_READ, "查看订单", "order", "预留给订单模块"),
-    (PermissionCode.ORDER_CREATE, "创建订单", "order", "预留给订单模块"),
-    (PermissionCode.ORDER_AUDIT, "审核订单", "order", "预留给订单模块"),
-    (PermissionCode.ORDER_CANCEL, "取消订单", "order", "预留给订单模块"),
+    (PermissionCode.ORDER_READ, "查看订单", "order", "查看销售订单列表与详情"),
+    (PermissionCode.ORDER_CREATE, "创建订单", "order", "创建草稿销售订单"),
+    (PermissionCode.ORDER_UPDATE, "编辑订单", "order", "编辑草稿销售订单"),
+    (PermissionCode.ORDER_SUBMIT, "提交订单", "order", "提交销售订单进入待确认"),
+    (PermissionCode.ORDER_AUDIT, "审核订单", "order", "确认销售订单并预占库存"),
+    (PermissionCode.ORDER_CANCEL, "取消订单", "order", "取消销售订单；待出库时释放预占"),
+    (PermissionCode.CUSTOMER_READ, "查看客户", "customer", "查看本企业客户"),
+    (PermissionCode.CUSTOMER_CREATE, "新增客户", "customer", "创建客户"),
+    (PermissionCode.CUSTOMER_UPDATE, "编辑客户", "customer", "编辑客户档案，编码创建后只读"),
+    (PermissionCode.CUSTOMER_DISABLE, "启用停用客户", "customer", "启用或禁用客户"),
+    (PermissionCode.CUSTOMER_DELETE, "删除客户", "customer", "删除尚未被销售订单引用的客户"),
     (PermissionCode.INVENTORY_READ, "查看库存", "inventory", "查看库存台账"),
     (PermissionCode.INVENTORY_INITIALIZE, "初始化库存", "inventory", "给仓库 + SKU 写入首次库存"),
     (PermissionCode.INVENTORY_ADJUST, "调整库存", "inventory", "盘点增加或减少实际库存"),
@@ -211,6 +226,7 @@ _READ_CODES: tuple[str, ...] = (
     PermissionCode.TENANT_PERMISSION_READ,
     PermissionCode.PRODUCT_READ,
     PermissionCode.ORDER_READ,
+    PermissionCode.CUSTOMER_READ,
     PermissionCode.INVENTORY_READ,
     PermissionCode.INVENTORY_TRANSACTION_READ,
     PermissionCode.WAREHOUSE_READ,
@@ -240,6 +256,10 @@ DEFAULT_ROLE_TEMPLATES: tuple[tuple[str, str, str, tuple[str, ...]], ...] = (
             PermissionCode.PRODUCT_UPDATE,
             PermissionCode.ORDER_READ,
             PermissionCode.ORDER_CREATE,
+            PermissionCode.ORDER_UPDATE,
+            PermissionCode.ORDER_SUBMIT,
+            PermissionCode.ORDER_CANCEL,
+            PermissionCode.CUSTOMER_READ,
             PermissionCode.INVENTORY_READ,
             PermissionCode.INVENTORY_TRANSACTION_READ,
             PermissionCode.WAREHOUSE_READ,
@@ -495,7 +515,7 @@ PERMISSION_TREE: tuple[PermissionTreeDef, ...] = (
         children=(
             PermissionTreeDef(
                 key="menu:orders",
-                title="订单列表",
+                title="销售订单",
                 type="MENU",
                 children=(
                     PermissionTreeDef(
@@ -506,13 +526,25 @@ PERMISSION_TREE: tuple[PermissionTreeDef, ...] = (
                     ),
                     PermissionTreeDef(
                         key="action:order-create",
-                        title="创建",
+                        title="新建",
                         type="ACTION",
                         permission_code=PermissionCode.ORDER_CREATE,
                     ),
                     PermissionTreeDef(
+                        key="action:order-update",
+                        title="编辑",
+                        type="ACTION",
+                        permission_code=PermissionCode.ORDER_UPDATE,
+                    ),
+                    PermissionTreeDef(
+                        key="action:order-submit",
+                        title="提交",
+                        type="ACTION",
+                        permission_code=PermissionCode.ORDER_SUBMIT,
+                    ),
+                    PermissionTreeDef(
                         key="action:order-audit",
-                        title="审核",
+                        title="审核 / 确认",
                         type="ACTION",
                         permission_code=PermissionCode.ORDER_AUDIT,
                     ),
@@ -521,6 +553,43 @@ PERMISSION_TREE: tuple[PermissionTreeDef, ...] = (
                         title="取消",
                         type="ACTION",
                         permission_code=PermissionCode.ORDER_CANCEL,
+                    ),
+                ),
+            ),
+            PermissionTreeDef(
+                key="menu:customers",
+                title="客户管理",
+                type="MENU",
+                children=(
+                    PermissionTreeDef(
+                        key="action:customer-read",
+                        title="查看",
+                        type="ACTION",
+                        permission_code=PermissionCode.CUSTOMER_READ,
+                    ),
+                    PermissionTreeDef(
+                        key="action:customer-create",
+                        title="新建",
+                        type="ACTION",
+                        permission_code=PermissionCode.CUSTOMER_CREATE,
+                    ),
+                    PermissionTreeDef(
+                        key="action:customer-update",
+                        title="编辑",
+                        type="ACTION",
+                        permission_code=PermissionCode.CUSTOMER_UPDATE,
+                    ),
+                    PermissionTreeDef(
+                        key="action:customer-disable",
+                        title="启用 / 禁用",
+                        type="ACTION",
+                        permission_code=PermissionCode.CUSTOMER_DISABLE,
+                    ),
+                    PermissionTreeDef(
+                        key="action:customer-delete",
+                        title="删除",
+                        type="ACTION",
+                        permission_code=PermissionCode.CUSTOMER_DELETE,
                     ),
                 ),
             ),

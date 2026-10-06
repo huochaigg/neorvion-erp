@@ -1,6 +1,6 @@
 # 架构说明
 
-当前里程碑：V6。
+当前里程碑：V7。当前有效范围见 `docs/current-state.md`。
 
 ## 目标
 
@@ -19,7 +19,7 @@
 ### 路由
 
 - 主应用：`/` 工作台，`/workspaces` 选择企业，`/workspaces/create` 创建企业，`/erp/*` 挂载子应用。没有有效租户时不能进入工作台和 ERP。
-- 子应用独立运行在 `http://localhost:8016/`，内部路径由 `apps/erp/src/router/routes.ts` 配置（如 `/dashboard`、`/products/list`、`/inventory/list`、`/purchases/list`、`/warehouses`），**没有** `/erp` 前缀。
+- 子应用独立运行在 `http://localhost:8016/`，内部路径由 `apps/erp/src/router/routes.ts` 配置（如 `/dashboard`、`/products/list`、`/inventory/list`、`/purchases/list`、`/orders/list`、`/customers`、`/warehouses`），**没有** `/erp` 前缀。
 - 主应用浏览器地址是 `/erp/products/list`，由 Shell pathname 与子应用路由双向同步；刷新后仍由主应用按 `/erp/*` 加载子应用。
 - 侧栏「ERP 业务」进入应用并恢复上次路由；指定页面（如 `/erp/dashboard`）按目标路径打开。ERP 内部菜单不在 Shell 维护。
 
@@ -50,7 +50,7 @@
 分层：
 
 1. API Router：HTTP、校验、依赖注入。
-2. Service：业务规则、事务、状态机。库存调整在这里 `SELECT ... FOR UPDATE`，预占用条件 UPDATE，与流水同一事务提交。
+2. Service：业务规则、事务、状态机。库存调整在这里 `SELECT ... FOR UPDATE`，预占用条件 UPDATE，与流水同一事务提交。销售订单确认和取消与库存预占 / 释放共用同一个 Session，库存方法不单独 commit。
 3. Repository：查询与持久化，禁止 commit。
 4. Model / Schema：ORM 与 Pydantic。
 5. Core：配置、安全、异常、日志、租户 ContextVar。

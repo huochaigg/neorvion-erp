@@ -28,7 +28,11 @@ function toApiError(error: AxiosError<ApiResponse<unknown>>): ApiError {
   if (status >= 500) {
     return new ApiError(error.response.data?.message || '服务暂时不可用', { status, code });
   }
-  return new ApiError(error.response.data?.message || error.message, { status, code });
+  return new ApiError(error.response.data?.message || error.message, {
+    status,
+    code,
+    data: error.response.data?.data,
+  });
 }
 
 apiClient.interceptors.request.use((config) => {

@@ -286,46 +286,198 @@ class InventoryService:
             raise AppError(_UNAVAILABLE, code=40450, status_code=404)
         return self._item_out(updated, updated.sku, updated.sku.product, updated.warehouse)
 
+    def lookup_availability(
+        self,
+        *,
+        warehouse_id: int,
+        sku_ids: list[int],
+    ) -> list[dict[str, int | bool]]:
+        """按仓库 + SKU 返回当前可用量，给订单页面提示。确认时仍以后端实时校验为准。"""
+        self.auth.require_all(self.context, (PermissionCode.INVENTORY_READ,))
+        unique_ids = list(dict.fromkeys(sku_ids))
+        found = {
+            row.sku_id: row
+            for row in self.inventories.list_by_warehouse_skus(warehouse_id, unique_ids)
+        }
+        items: list[dict[str, int | bool]] = []
+        for sku_id in unique_ids:
+            row = found.get(sku_id)
+            if row is None:
+                items.append(
+                    {
+                        "warehouse_id": warehouse_id,
+                        "sku_id": sku_id,
+                        "quantity": 0,
+                        "reserved_quantity": 0,
+                        "available_quantity": 0,
+                        "initialized": False,
+                    }
+                )
+                continue
+            items.append(
+                {
+                    "warehouse_id": warehouse_id,
+                    "sku_id": sku_id,
+                    "quantity": row.quantity,
+                    "reserved_quantity": row.reserved_quantity,
+                    "available_quantity": row.quantity - row.reserved_quantity,
+                    "initialized": True,
+                }
+            )
+        return items
+
+    def reserve_within_transaction(
+        self,
+        *,
+        warehouse_id: int,
+        sku_id: int,
+        quantity: int,
+        sku_code: str | None = None,
+        reference_type: str | None = None,
+        reference_id: int | None = None,
+        remark: str | None = None,
+    ) -> Inventory:
+        """在当前 Session 里预占，不 commit、不检查 inventory:adjust。
+
+        功能：复用 V5 条件 UPDATE，只增加 reserved，不减少 quantity，并写 RESERVE 流水。
+        参数：仓库、SKU、数量；销售订单可传入 reference_type=SALES_ORDER 和订单 id。
+        返回：预占之后的库存行。
+        异常：没有库存行，或可用量不够。本方法不 rollback，调用方要回滚整个事务。
+        为什么不在这里 commit：一张订单有多个 SKU。如果每个 SKU 自己提交，
+        后面的 SKU 失败时，前面的预占已经落库，无法撤销。
+        """
+        current = self.inventories.get_by_warehouse_and_sku(warehouse_id, sku_id)
+        if current is None:
+            raise AppError(
+                f"{sku_code or sku_id} 可用库存 0，订单需要 {quantity}。",
+                code=40070,
+                status_code=400,
+                data={
+                    "error": "INSUFFICIENT_AVAILABLE_INVENTORY",
+                    "items": [
+                        {
+                            "sku_id": sku_id,
+                            "sku_code": sku_code or "",
+                            "requested_quantity": quantity,
+                            "available_quantity": 0,
+                        }
+                    ],
+                },
+            )
+        affected = self.inventories.reserve_if_available(
+            warehouse_id=warehouse_id,
+            sku_id=sku_id,
+            quantity=quantity,
+        )
+        if affected != 1:
+            again = self.inventories.get_by_warehouse_and_sku(warehouse_id, sku_id)
+            available = 0 if again is None else again.quantity - again.reserved_quantity
+            raise AppError(
+                f"{sku_code or sku_id} 可用库存 {available}，订单需要 {quantity}。",
+                code=40070,
+                status_code=400,
+                data={
+                    "error": "INSUFFICIENT_AVAILABLE_INVENTORY",
+                    "items": [
+                        {
+                            "sku_id": sku_id,
+                            "sku_code": sku_code or "",
+                            "requested_quantity": quantity,
+                            "available_quantity": available,
+                        }
+                    ],
+                },
+            )
+        updated = self.inventories.get_by_warehouse_and_sku(warehouse_id, sku_id)
+        if updated is None:
+            raise AppError(_UNAVAILABLE, code=40450, status_code=404)
+        self._add_tx(
+            updated,
+            tx_type=InventoryTransactionType.RESERVE.value,
+            change_quantity=0,
+            before_qty=updated.quantity,
+            after_qty=updated.quantity,
+            before_reserved=updated.reserved_quantity - quantity,
+            after_reserved=updated.reserved_quantity,
+            remark=remark,
+            reference_type=reference_type,
+            reference_id=reference_id,
+        )
+        return updated
+
+    def release_within_transaction(
+        self,
+        *,
+        warehouse_id: int,
+        sku_id: int,
+        quantity: int,
+        sku_code: str | None = None,
+        reference_type: str | None = None,
+        reference_id: int | None = None,
+        remark: str | None = None,
+    ) -> Inventory:
+        """在当前 Session 里释放预占，不 commit。
+
+        功能：条件 UPDATE 减少 reserved，并写 RELEASE 流水。quantity 不变。
+        参数：仓库、SKU、要释放的数量。数量必须大于 0，且不能超过当前预占。
+        返回：释放之后的库存行。
+        异常：库存不存在，或预占不够。不 rollback，避免拆开外层订单事务。
+        为什么和取消放在同一事务：如果先提交释放再改订单，中途失败会出现
+        库存已经放开、订单却还是待出库。
+        """
+        current = self.inventories.get_by_warehouse_and_sku(warehouse_id, sku_id)
+        if current is None:
+            raise AppError(_UNAVAILABLE, code=40450, status_code=404)
+        affected = self.inventories.release_if_reserved(
+            warehouse_id=warehouse_id,
+            sku_id=sku_id,
+            quantity=quantity,
+        )
+        if affected != 1:
+            raise AppError(
+                "预占数量不足，不能超额释放",
+                code=40071,
+                status_code=400,
+                data={
+                    "error": "INSUFFICIENT_RESERVED_INVENTORY",
+                    "sku_id": sku_id,
+                    "sku_code": sku_code or "",
+                    "quantity": quantity,
+                },
+            )
+        updated = self.inventories.get_by_warehouse_and_sku(warehouse_id, sku_id)
+        if updated is None:
+            raise AppError(_UNAVAILABLE, code=40450, status_code=404)
+        self._add_tx(
+            updated,
+            tx_type=InventoryTransactionType.RELEASE.value,
+            change_quantity=0,
+            before_qty=updated.quantity,
+            after_qty=updated.quantity,
+            before_reserved=updated.reserved_quantity + quantity,
+            after_reserved=updated.reserved_quantity,
+            remark=remark,
+            reference_type=reference_type,
+            reference_id=reference_id,
+        )
+        return updated
+
     def reserve_inventory(self, inventory_id: int, payload: InventoryQtyChange) -> InventoryItemOut:
         """预占：只增加 reserved，不减少 quantity。
 
-        后续订单占用库存时走这里。如果直接减 quantity，盘点会看到货已经没了，
-        但货还在仓库里等发。所以预占只动 reserved。
-        实现：WHERE quantity - reserved >= qty 的条件 UPDATE。rowcount=0 再查一次，
-        区分「没有这条库存」和「可用不够」，避免两个并发都读到 available=10 各扣 8 超卖。
+        库存页面的内部接口仍由本方法提交。销售订单不要直接调用它，
+        否则每个 SKU 都会自己 commit，多 SKU 失败时无法整单回滚。
+        条件 UPDATE 的规则在 reserve_within_transaction。
         """
         self.auth.require_all(self.context, (PermissionCode.INVENTORY_ADJUST,))
         current = self.inventories.get_in_tenant(inventory_id)
         if current is None:
             raise AppError(_UNAVAILABLE, code=40450, status_code=404)
         try:
-            affected = self.inventories.reserve_if_available(
+            self.reserve_within_transaction(
                 warehouse_id=current.warehouse_id,
                 sku_id=current.sku_id,
                 quantity=payload.quantity,
-            )
-            if affected != 1:
-                self.session.rollback()
-                again = self.inventories.get_in_tenant(inventory_id)
-                if again is None:
-                    raise AppError(_UNAVAILABLE, code=40450, status_code=404)
-                raise AppError(
-                    "可用库存不足",
-                    code=40070,
-                    status_code=400,
-                    data={"error": "INSUFFICIENT_AVAILABLE_INVENTORY"},
-                )
-            updated = self.inventories.get_in_tenant(inventory_id)
-            if updated is None:
-                raise AppError(_UNAVAILABLE, code=40450, status_code=404)
-            self._add_tx(
-                updated,
-                tx_type=InventoryTransactionType.RESERVE.value,
-                change_quantity=0,
-                before_qty=updated.quantity,
-                after_qty=updated.quantity,
-                before_reserved=updated.reserved_quantity - payload.quantity,
-                after_reserved=updated.reserved_quantity,
                 remark=payload.remark,
             )
             self.session.commit()
@@ -341,39 +493,16 @@ class InventoryService:
         return self._item_out(updated, updated.sku, updated.sku.product, updated.warehouse)
 
     def release_inventory(self, inventory_id: int, payload: InventoryQtyChange) -> InventoryItemOut:
-        """释放预占。reserved 不够时拒绝，不能减成负数。"""
+        """释放预占。reserved 不够时拒绝，不能减成负数。订单取消请用 release_within_transaction。"""
         self.auth.require_all(self.context, (PermissionCode.INVENTORY_ADJUST,))
         current = self.inventories.get_in_tenant(inventory_id)
         if current is None:
             raise AppError(_UNAVAILABLE, code=40450, status_code=404)
         try:
-            affected = self.inventories.release_if_reserved(
+            self.release_within_transaction(
                 warehouse_id=current.warehouse_id,
                 sku_id=current.sku_id,
                 quantity=payload.quantity,
-            )
-            if affected != 1:
-                self.session.rollback()
-                again = self.inventories.get_in_tenant(inventory_id)
-                if again is None:
-                    raise AppError(_UNAVAILABLE, code=40450, status_code=404)
-                raise AppError(
-                    "预占数量不足，不能超额释放",
-                    code=40071,
-                    status_code=400,
-                    data={"error": "INSUFFICIENT_RESERVED_INVENTORY"},
-                )
-            updated = self.inventories.get_in_tenant(inventory_id)
-            if updated is None:
-                raise AppError(_UNAVAILABLE, code=40450, status_code=404)
-            self._add_tx(
-                updated,
-                tx_type=InventoryTransactionType.RELEASE.value,
-                change_quantity=0,
-                before_qty=updated.quantity,
-                after_qty=updated.quantity,
-                before_reserved=updated.reserved_quantity + payload.quantity,
-                after_reserved=updated.reserved_quantity,
                 remark=payload.remark,
             )
             self.session.commit()
@@ -541,6 +670,8 @@ class InventoryService:
         before_reserved: int,
         after_reserved: int,
         remark: str | None,
+        reference_type: str | None = None,
+        reference_id: int | None = None,
     ) -> InventoryTransaction:
         row = InventoryTransaction(
             tenant_id=self.context.tenant_id,
@@ -553,6 +684,8 @@ class InventoryService:
             after_quantity=after_qty,
             before_reserved_quantity=before_reserved,
             after_reserved_quantity=after_reserved,
+            reference_type=reference_type,
+            reference_id=reference_id,
             remark=remark,
             operator_user_id=self.context.user_id,
         )

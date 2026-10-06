@@ -180,6 +180,18 @@ class InventoryRepository(BaseRepository):
         )
         return int(self.session.scalar(stmt) or 0)
 
+    def list_by_warehouse_skus(self, warehouse_id: int, sku_ids: list[int]) -> list[Inventory]:
+        """一次取出某仓库下多个 SKU 的库存，给订单确认前的可用量检查，避免逐行查询。"""
+        if not sku_ids:
+            return []
+        tenant_id = self.ensure_tenant()
+        stmt = select(Inventory).where(
+            Inventory.tenant_id == tenant_id,
+            Inventory.warehouse_id == warehouse_id,
+            Inventory.sku_id.in_(list(dict.fromkeys(sku_ids))),
+        )
+        return list(self.session.scalars(stmt).all())
+
     def count_by_sku(self, sku_id: int) -> int:
         tenant_id = self.ensure_tenant()
         stmt = select(func.count(Inventory.id)).where(

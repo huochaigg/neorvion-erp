@@ -16,7 +16,7 @@
 
 `GET /api/v1/health`
 
-依赖不可用时 HTTP 仍为 200，字段标记 `unavailable`。当前 `milestone` 为 `V6`。
+依赖不可用时 HTTP 仍为 200，字段标记 `unavailable`。当前 `milestone` 为 `V7`。
 
 ## 认证
 
@@ -132,5 +132,24 @@
 - `POST /api/v1/purchase-orders/{id}/submit|approve|reject|cancel`
 
 供应商编码冲突 → `40960`。使用中不能删除 → `40081` `SUPPLIER_IN_USE`。非法状态流转 → `40090`。不可编辑 → `40091`。并发审核冲突 → `40095` `PURCHASE_ORDER_STATE_CONFLICT`。跨租户采购单 → `40470`。
+
+## 销售订单（V7）
+
+详见 `docs/orders.md`。需要登录和有效 `X-Tenant-ID`。确认只预占库存，不减少实际数量。
+
+- `GET /api/v1/customers`（`customer:read`）分页：`q` / `status`
+- `POST /api/v1/customers`（`customer:create`）
+- `GET /api/v1/customers/{id}`（`customer:read`）
+- `PATCH /api/v1/customers/{id}`（`customer:update`）
+- `PATCH /api/v1/customers/{id}/status`（`customer:disable`）
+- `DELETE /api/v1/customers/{id}`（`customer:delete`）
+- `GET /api/v1/sales-orders`（`order:read`）分页：订单号、平台单号、客户、仓库、SKU、商品名、状态、来源、创建日期
+- `POST /api/v1/sales-orders`（`order:create`）同一事务写入主表 + 明细
+- `GET /api/v1/sales-orders/{id}`（`order:read`）
+- `PATCH /api/v1/sales-orders/{id}`（`order:update`）仅 DRAFT
+- `POST /api/v1/sales-orders/{id}/submit|confirm|cancel`
+- `GET /api/v1/inventory/availability`（`inventory:read`）按仓库和 SKU 返回可用量，只作提示
+
+客户编码冲突 → `40961`。使用中不能删除 → `40085` `CUSTOMER_IN_USE`。停用客户建单 → `40119`。重复 SKU → `40111`。不可编辑 → `40112`。非法流转 → `40114`。状态冲突 → `40115`。已取消 → `40117` `ORDER_ALREADY_CANCELLED`。库存不足 → `40070`，`data.items` 列出 SKU、需求量和可用量。平台单号冲突 → `40962`。跨租户订单 → `40471`。
 
 Swagger：http://localhost:8011/docs

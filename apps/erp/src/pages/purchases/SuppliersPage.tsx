@@ -211,7 +211,7 @@ export function SuppliersPage(props: PageProps) {
     {
       title: '操作',
       key: 'actions',
-      width: 200,
+      width: 180,
       fixed: 'right',
       render: (_, record) => (
         <ActionCell>
