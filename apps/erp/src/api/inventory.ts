@@ -6,6 +6,7 @@ import type {
   InventoryItem,
   InventoryList,
   InventoryTransactionList,
+  SkuAvailabilityList,
   SkuOptionList,
 } from '@neorvion/shared';
 import { apiClient, unwrapApi } from './client';
@@ -85,6 +86,18 @@ export function fetchInventoryTransactions(
         created_to: params.createdTo || undefined,
         page: params.page,
         page_size: params.pageSize,
+      },
+      signal,
+    }),
+  );
+}
+
+export function fetchSkuAvailability(warehouseId: number, skuIds: number[], signal?: AbortSignal) {
+  return unwrapApi(
+    apiClient.get<ApiResponse<SkuAvailabilityList>>('/api/v1/inventory/availability', {
+      params: {
+        warehouse_id: warehouseId,
+        sku_ids: skuIds.join(','),
       },
       signal,
     }),

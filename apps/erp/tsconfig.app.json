@@ -4,7 +4,6 @@
     "target": "ES2023",
     "lib": ["ES2023", "DOM", "DOM.Iterable"],
     "module": "ESNext",
-    "types": ["vite/client"],
     "skipLibCheck": true,
     "ignoreDeprecations": "6.0",
     "baseUrl": ".",

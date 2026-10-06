@@ -7,6 +7,9 @@ describe('safePathAfterTenantChange', () => {
     assert.equal(safePathAfterTenantChange('/dashboard'), null);
     assert.equal(safePathAfterTenantChange('/products/list'), null);
     assert.equal(safePathAfterTenantChange('/orders'), null);
+    assert.equal(safePathAfterTenantChange('/orders/list'), null);
+    assert.equal(safePathAfterTenantChange('/orders/create'), null);
+    assert.equal(safePathAfterTenantChange('/customers'), null);
     assert.equal(safePathAfterTenantChange('/inventory/list'), null);
     assert.equal(safePathAfterTenantChange('/inventory/transactions'), null);
   });
@@ -18,6 +21,8 @@ describe('safePathAfterTenantChange', () => {
     assert.equal(safePathAfterTenantChange('/purchases/list'), null);
     assert.equal(safePathAfterTenantChange('/purchases/88'), '/purchases/list');
     assert.equal(safePathAfterTenantChange('/purchases/88/edit'), '/purchases/list');
+    assert.equal(safePathAfterTenantChange('/orders/12'), '/orders/list');
+    assert.equal(safePathAfterTenantChange('/orders/12/edit'), '/orders/list');
     assert.equal(safePathAfterTenantChange('/suppliers'), null);
     assert.equal(safePathAfterTenantChange('/system/members/88'), '/system/members');
     assert.equal(safePathAfterTenantChange('/system/members'), null);

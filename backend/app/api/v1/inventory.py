@@ -21,6 +21,8 @@ from app.schemas.inventory import (
     InventoryOptimisticAdjust,
     InventoryQtyChange,
     InventoryTransactionListOut,
+    SkuAvailabilityListOut,
+    SkuAvailabilityOut,
     SkuOptionListOut,
 )
 from app.services.inventory import InventoryService
@@ -108,6 +110,32 @@ def list_all_transactions(
             page_size=page_size,
         )
     )
+
+
+@router.get(
+    "/availability",
+    response_model=ApiResponse[SkuAvailabilityListOut],
+    summary="按仓库和 SKU 查询可用库存",
+)
+def lookup_availability(
+    context: InventoryReadContext,
+    session: DbSession,
+    warehouse_id: int = Query(gt=0),
+    sku_ids: str = Query(min_length=1, max_length=400),
+) -> ApiResponse[SkuAvailabilityListOut]:
+    parsed: list[int] = []
+    for part in sku_ids.split(","):
+        text = part.strip()
+        if not text:
+            continue
+        if not text.isdigit():
+            continue
+        parsed.append(int(text))
+    rows = InventoryService(session, context).lookup_availability(
+        warehouse_id=warehouse_id,
+        sku_ids=parsed[:50],
+    )
+    return ok(SkuAvailabilityListOut(items=[SkuAvailabilityOut(**row) for row in rows]))
 
 
 @router.get("/{inventory_id}", response_model=ApiResponse[InventoryDetailOut], summary="库存详情")

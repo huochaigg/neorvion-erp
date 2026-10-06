@@ -47,6 +47,13 @@
 - `purchase_order_items`：采购明细；`UNIQUE(tenant_id, purchase_order_id, sku_id)`；`received_quantity` 预留给收货版本
 - 状态流转用条件 UPDATE；草稿编辑用 `SELECT ... FOR UPDATE`
 
+当前里程碑 V7 增加：
+
+- `customers`：租户客户；`UNIQUE(tenant_id, code)`；未填编码时 flush 后写 `CUS` + 10 位 id
+- `sales_orders`：销售订单；`UNIQUE(tenant_id, order_no)`；`UNIQUE(tenant_id, source, external_order_no)` 允许多个空平台单号；收货地址是下单快照
+- `sales_order_items`：销售明细；`UNIQUE(tenant_id, sales_order_id, sku_id)`；确认后 `reserved_quantity` 等于购买数量，`shipped_quantity` 留给出库
+- 确认 / 取消用 `SELECT ... FOR UPDATE` 锁订单；库存预占仍用条件 UPDATE，多 SKU 按 `sku_id` 升序
+
 所有业务表必须包含 `tenant_id`（`TenantMixin`），唯一约束必须带上租户，例如：
 
 ```sql

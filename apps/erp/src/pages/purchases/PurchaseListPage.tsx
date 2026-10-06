@@ -196,7 +196,7 @@ export function PurchaseListPage(props: PageProps) {
     {
       title: '操作',
       key: 'actions',
-      width: 280,
+      width: 220,
       fixed: 'right',
       render: (_, record) => (
         <ActionCell>

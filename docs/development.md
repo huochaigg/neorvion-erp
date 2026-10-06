@@ -1,6 +1,6 @@
 # 开发说明
 
-当前里程碑：V6（采购管理：供应商 / 采购单 / 审核状态机）。
+当前里程碑：V7（销售订单：客户 / 草稿 / 确认预占 / 取消释放）。
 
 ## 前置
 
@@ -114,8 +114,13 @@ pnpm test
 39. 可进入「采购单」选择供应商、仓库、多个 SKU 保存草稿；提交审核后核心字段锁定。管理员可审核通过（进入待收货）或驳回。
 40. 创建或审核采购单后库存数量不变。无 `purchase:read` 看不到采购菜单；无 `purchase:audit` 看不到审核按钮。直接调接口仍 403。
 41. 切换企业后采购单与供应商隔离；`/purchases/:id` 会回到采购列表。
+42. 登录并选择企业后，可进入「客户管理」创建客户；未填编码时生成 `CUS` + 10 位 id。停用后不能新建销售订单；已被订单引用不能删除。
+43. 可进入「销售订单」选择客户、履约仓库、多个 SKU 保存草稿。库存不足只提示，不阻止保存。提交后核心字段锁定，此时仍不预占库存。
+44. 有 `order:audit` 的成员确认后，订单进入待出库：实际库存不变，预占增加，可用减少，流水为 `RESERVE` 且指向该订单。任一 SKU 不足则整单回滚，并列出 SKU、可用量和需求量。
+45. 取消待出库会释放预占并写 `RELEASE`。再次取消返回 `ORDER_ALREADY_CANCELLED`。无 `order:read` 看不到订单菜单；无对应动作权限时按钮隐藏，直接调接口仍 403。
+46. 切换企业后客户与销售订单隔离；`/orders/:id` 会回到销售订单列表。改客户地址不影响已保存订单的收货快照。
 
-多租户说明见 `docs/multi-tenancy.md`。RBAC 见 `docs/rbac.md`。商品见 `docs/products.md`。仓库见 `docs/warehouses.md`。库存见 `docs/inventory.md`。采购见 `docs/purchases.md`。V3 见 `docs/versions/v3.md`。V4 见 `docs/versions/v4.md`。V5 见 `docs/versions/v5.md`。V6 见 `docs/versions/v6.md`。路由配置说明见 `docs/routing.md`。认证流程见 `docs/auth.md`。
+多租户说明见 `docs/multi-tenancy.md`。RBAC 见 `docs/rbac.md`。商品见 `docs/products.md`。仓库见 `docs/warehouses.md`。库存见 `docs/inventory.md`。采购见 `docs/purchases.md`。销售订单见 `docs/orders.md`。当前状态见 `docs/current-state.md`。V3 见 `docs/versions/v3.md`。V4 见 `docs/versions/v4.md`。V5 见 `docs/versions/v5.md`。V6 见 `docs/versions/v6.md`。V7 见 `docs/versions/v7.md`。路由配置说明见 `docs/routing.md`。认证流程见 `docs/auth.md`。
 
 ## 浏览器进 debugger
 

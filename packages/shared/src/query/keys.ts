@@ -101,7 +101,57 @@ export function warehouseQueryKey(tenantId: number | null, warehouseId: number |
 }
 
 export function ordersQueryKey(tenantId: number | null) {
-  return ['tenant', tenantId, 'orders'] as const;
+  return salesOrdersQueryKey(tenantId);
+}
+
+export function salesOrdersQueryKey(
+  tenantId: number | null,
+  filters?: {
+    q?: string;
+    orderNo?: string;
+    externalOrderNo?: string;
+    customerId?: number;
+    warehouseId?: number;
+    skuCode?: string;
+    productName?: string;
+    status?: string;
+    source?: string;
+    createdFrom?: string;
+    createdTo?: string;
+    page?: number;
+    pageSize?: number;
+  },
+) {
+  return ['tenant', tenantId, 'sales-orders', filters ?? {}] as const;
+}
+
+export function salesOrderQueryKey(tenantId: number | null, orderId: number | null) {
+  return ['tenant', tenantId, 'sales-order', orderId] as const;
+}
+
+export function customersQueryKey(
+  tenantId: number | null,
+  filters?: {
+    q?: string;
+    status?: string;
+    countryCode?: string;
+    page?: number;
+    pageSize?: number;
+  },
+) {
+  return ['tenant', tenantId, 'customers', filters ?? {}] as const;
+}
+
+export function customerQueryKey(tenantId: number | null, customerId: number | null) {
+  return ['tenant', tenantId, 'customer', customerId] as const;
+}
+
+export function skuInventoryQueryKey(
+  tenantId: number | null,
+  warehouseId: number | null,
+  skuIds: readonly number[],
+) {
+  return ['tenant', tenantId, 'sku-inventory', warehouseId, [...skuIds].sort((a, b) => a - b)] as const;
 }
 
 export function inventoryQueryKey(

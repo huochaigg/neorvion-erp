@@ -228,7 +228,7 @@ export function MembersPage(props: PageProps) {
     {
       title: '操作',
       key: 'actions',
-      width: 260,
+      width: 200,
       fixed: 'right',
       render: (_, record) => (
         <ActionCell>

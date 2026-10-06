@@ -7,4 +7,4 @@ class HealthCheckData(BaseModel):
     app: Literal["ok"] = "ok"
     mysql: Literal["ok", "unavailable"]
     redis: Literal["ok", "unavailable"]
-    milestone: str = Field(default="V6")
+    milestone: str = Field(default="V7")

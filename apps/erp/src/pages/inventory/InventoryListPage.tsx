@@ -242,7 +242,7 @@ export function InventoryListPage(props: PageProps) {
     {
       title: '操作',
       key: 'actions',
-      width: 200,
+      width: 160,
       fixed: 'right',
       render: (_, record) => (
         <ActionCell>

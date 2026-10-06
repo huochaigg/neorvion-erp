@@ -1,7 +1,7 @@
 /** 带资源 ID 的详情/编辑页不能跨租户沿用，切租户后回到模块列表。 */
 const RESOURCE_FALLBACKS: ReadonlyArray<{ pattern: RegExp; fallback: string }> = [
   { pattern: /^\/products\/\d+(\/edit)?\/?$/, fallback: '/products/list' },
-  { pattern: /^\/orders\/\d+(\/.*)?$/, fallback: '/orders' },
+  { pattern: /^\/orders\/\d+(\/edit)?\/?$/, fallback: '/orders/list' },
   { pattern: /^\/inventory\/\d+(\/.*)?$/, fallback: '/inventory/list' },
   { pattern: /^\/purchases\/\d+(\/edit)?\/?$/, fallback: '/purchases/list' },
   { pattern: /^\/system\/members\/\d+\/?$/, fallback: '/system/members' },

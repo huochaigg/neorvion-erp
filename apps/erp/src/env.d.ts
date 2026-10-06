@@ -1,4 +1,4 @@
-/// <reference types="vite/client" />
+/// <reference path="../node_modules/vite/client.d.ts" />
 
 interface ImportMetaEnv {
   readonly VITE_API_BASE_URL: string;
