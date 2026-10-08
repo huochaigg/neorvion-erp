@@ -129,6 +129,28 @@ export function salesOrderQueryKey(tenantId: number | null, orderId: number | nu
   return ['tenant', tenantId, 'sales-order', orderId] as const;
 }
 
+export function purchaseReceiptsQueryKey(
+  tenantId: number | null,
+  filters?: Record<string, unknown>,
+) {
+  return ['tenant', tenantId, 'purchase-receipts', filters ?? {}] as const;
+}
+
+export function purchaseReceiptQueryKey(tenantId: number | null, receiptId: number | null) {
+  return ['tenant', tenantId, 'purchase-receipt', receiptId] as const;
+}
+
+export function outboundOrdersQueryKey(
+  tenantId: number | null,
+  filters?: Record<string, unknown>,
+) {
+  return ['tenant', tenantId, 'outbound-orders', filters ?? {}] as const;
+}
+
+export function outboundOrderQueryKey(tenantId: number | null, outboundId: number | null) {
+  return ['tenant', tenantId, 'outbound-order', outboundId] as const;
+}
+
 export function customersQueryKey(
   tenantId: number | null,
   filters?: {

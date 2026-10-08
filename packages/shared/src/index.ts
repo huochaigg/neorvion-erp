@@ -127,6 +127,7 @@ export {
   canApprovePurchaseOrder,
   canRejectPurchaseOrder,
   canCancelPurchaseOrder,
+  canCreatePurchaseReceipt,
   mergePurchaseSkuLine,
 } from './types/purchase';
 export type {
@@ -162,6 +163,7 @@ export {
   canSubmitSalesOrder,
   canConfirmSalesOrder,
   canCancelSalesOrder,
+  canCreateOutbound,
   formatSalesInventoryShortage,
   mergeSalesSkuLine,
 } from './types/order';
@@ -209,6 +211,10 @@ export {
   purchaseOrderQueryKey,
   salesOrdersQueryKey,
   salesOrderQueryKey,
+  purchaseReceiptsQueryKey,
+  purchaseReceiptQueryKey,
+  outboundOrdersQueryKey,
+  outboundOrderQueryKey,
   customersQueryKey,
   customerQueryKey,
   skuInventoryQueryKey,

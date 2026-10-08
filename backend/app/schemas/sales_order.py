@@ -6,6 +6,8 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from app.schemas.outbound import OutboundPickOut
+
 
 class SalesOrderItemIn(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -202,3 +204,4 @@ class SalesOrderDetailOut(SalesOrderListItemOut):
     cancelled_by_name: str | None
     cancel_reason: str | None
     items: list[SalesOrderItemOut]
+    picks: list[OutboundPickOut] = Field(default_factory=list)

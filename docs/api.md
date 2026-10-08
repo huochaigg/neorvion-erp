@@ -16,7 +16,7 @@
 
 `GET /api/v1/health`
 
-依赖不可用时 HTTP 仍为 200，字段标记 `unavailable`。当前 `milestone` 为 `V7`。
+依赖不可用时 HTTP 仍为 200，字段标记 `unavailable`。当前 `milestone` 为 `V8`。
 
 ## 认证
 
@@ -150,6 +150,19 @@
 - `POST /api/v1/sales-orders/{id}/submit|confirm|cancel`
 - `GET /api/v1/inventory/availability`（`inventory:read`）按仓库和 SKU 返回可用量，只作提示
 
-客户编码冲突 → `40961`。使用中不能删除 → `40085` `CUSTOMER_IN_USE`。停用客户建单 → `40119`。重复 SKU → `40111`。不可编辑 → `40112`。非法流转 → `40114`。状态冲突 → `40115`。已取消 → `40117` `ORDER_ALREADY_CANCELLED`。库存不足 → `40070`，`data.items` 列出 SKU、需求量和可用量。平台单号冲突 → `40962`。跨租户订单 → `40471`。
+客户编码冲突 → `40961`。使用中不能删除 → `40085` `CUSTOMER_IN_USE`。停用客户建单 → `40119`。重复 SKU → `40111`。不可编辑 → `40112`。非法流转 → `40114`。状态冲突 → `40115`。已取消 → `40117` `ORDER_ALREADY_CANCELLED`。已出库不能整单取消 → `40120` `SALES_ORDER_HAS_SHIPMENTS`。库存不足 → `40070`，`data.items` 列出 SKU、需求量和可用量。平台单号冲突 → `40962`。跨租户订单 → `40471`。
+
+## 采购收货与销售出库（V8）
+
+详见 `docs/fulfillment.md`。
+
+- `GET/POST /api/v1/purchase-receipts`
+- `GET/PATCH /api/v1/purchase-receipts/{id}`
+- `POST /api/v1/purchase-receipts/{id}/confirm|cancel`
+- `GET/POST /api/v1/outbound-orders`
+- `GET /api/v1/outbound-orders/{id}`
+- `POST /api/v1/outbound-orders/{id}/pick|confirm|cancel`
+
+重复确认收货 → `40131` `PURCHASE_RECEIPT_ALREADY_CONFIRMED`。超额收货 → `40132`。重复确认出库 → `40141` `OUTBOUND_ALREADY_CONFIRMED`。出库超过预占 → `40142`。跨租户单据 → `40480` / `40481`。
 
 Swagger：http://localhost:8011/docs

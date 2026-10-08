@@ -10,7 +10,13 @@ PENDING_CONFIRMATION = SalesOrderStatus.PENDING_CONFIRMATION.value
 """待确认。提交后的审核态。确认才预占；取消不动库存。"""
 
 WAITING_OUTBOUND = SalesOrderStatus.WAITING_OUTBOUND.value
-"""待出库。已确认并预占。取消必须释放预占。"""
+"""待出库。已确认并预占。尚未正式出库时取消必须释放预占。"""
+
+PARTIALLY_SHIPPED = SalesOrderStatus.PARTIALLY_SHIPPED.value
+"""部分出库。已经有正式出库，不能整单取消，剩余预占继续出。"""
+
+SHIPPED = SalesOrderStatus.SHIPPED.value
+"""已出库。购买数量都已发完。"""
 
 CANCELLED = SalesOrderStatus.CANCELLED.value
 """已取消。终态，不能再变。"""
@@ -18,7 +24,9 @@ CANCELLED = SalesOrderStatus.CANCELLED.value
 ALLOWED_TRANSITIONS: dict[str, frozenset[str]] = {
     DRAFT: frozenset({PENDING_CONFIRMATION, CANCELLED}),
     PENDING_CONFIRMATION: frozenset({WAITING_OUTBOUND, CANCELLED}),
-    WAITING_OUTBOUND: frozenset({CANCELLED}),
+    WAITING_OUTBOUND: frozenset({PARTIALLY_SHIPPED, SHIPPED, CANCELLED}),
+    PARTIALLY_SHIPPED: frozenset({SHIPPED}),
+    SHIPPED: frozenset(),
     CANCELLED: frozenset(),
 }
 """合法流转：草稿→待确认/取消；待确认→待出库/取消；待出库→取消。已取消无出口。"""
@@ -30,7 +38,7 @@ SUBMITTABLE_STATUSES = frozenset({DRAFT})
 """允许提交审核的状态。目前只有草稿。"""
 
 CANCELLABLE_STATUSES = frozenset({DRAFT, PENDING_CONFIRMATION, WAITING_OUTBOUND})
-"""允许取消的状态。待出库取消还要释放预占。"""
+"""允许整单取消的状态。一旦有正式出库（部分出库 / 已出库）不能再整单取消。"""
 
 
 def can_transition(current: str, target: str) -> bool:

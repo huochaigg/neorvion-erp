@@ -34,17 +34,24 @@ SALES_ORDER_REFERENCE = "SALES_ORDER"
 class SalesOrderStatus(StrEnum):
     """销售订单状态。只能经提交 / 确认 / 取消流转，不要直接改 status 列。"""
 
-    DRAFT = "DRAFT"
     """草稿。可改客户、仓库、收货信息和明细；可提交或取消。未预占库存。"""
-
-    PENDING_CONFIRMATION = "PENDING_CONFIRMATION"
+    DRAFT = "DRAFT"
+    
     """待确认。已提交、等待审核。确认才会预占库存；也可取消且不动库存。"""
-
+    PENDING_CONFIRMATION = "PENDING_CONFIRMATION"
+    
+    """待出库。已确认并预占。尚未正式出库时可以整单取消并释放预占。"""
     WAITING_OUTBOUND = "WAITING_OUTBOUND"
-    """待出库。已确认并预占库存。本版本不能再改明细；取消必须释放预占。出库留给后续版本。"""
-
-    CANCELLED = "CANCELLED"
+    
+    """部分出库。已经扣过库存，不能整单取消。"""
+    PARTIALLY_SHIPPED = "PARTIALLY_SHIPPED"
+    
+    """已出库。购买数量都已发出。"""
+    SHIPPED = "SHIPPED"
+    
     """已取消。终态，不能再流转。"""
+    CANCELLED = "CANCELLED"
+    
 
 
 class SalesOrderSource(StrEnum):
@@ -181,13 +188,11 @@ class SalesOrderItem(TimestampMixin, TenantMixin, Base):
         CheckConstraint("quantity > 0", name="ck_so_items_quantity_positive"),
         CheckConstraint("reserved_quantity >= 0", name="ck_so_items_reserved_nonneg"),
         CheckConstraint("shipped_quantity >= 0", name="ck_so_items_shipped_nonneg"),
+        # 出库后 reserved 下降、shipped 上升，不能再要求 shipped <= reserved。
+        # 未出库的预占 + 已出库 不能超过购买数量。
         CheckConstraint(
-            "shipped_quantity <= reserved_quantity",
-            name="ck_so_items_shipped_lte_reserved",
-        ),
-        CheckConstraint(
-            "reserved_quantity <= quantity",
-            name="ck_so_items_reserved_lte_qty",
+            "reserved_quantity + shipped_quantity <= quantity",
+            name="ck_so_items_reserved_plus_shipped",
         ),
         Index("ix_so_items_tenant_order", "tenant_id", "sales_order_id"),
         Index("ix_so_items_tenant_sku", "tenant_id", "sku_id"),

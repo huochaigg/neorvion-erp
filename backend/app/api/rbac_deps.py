@@ -228,3 +228,43 @@ OrderCancelContext = Annotated[
     TenantContext,
     Depends(require_permission(PermissionCode.ORDER_CANCEL)),
 ]
+PurchaseReceiptReadContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.PURCHASE_RECEIPT_READ)),
+]
+PurchaseReceiptCreateContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.PURCHASE_RECEIPT_CREATE)),
+]
+PurchaseReceiptUpdateContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.PURCHASE_RECEIPT_UPDATE)),
+]
+PurchaseReceiptConfirmContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.PURCHASE_RECEIPT_CONFIRM)),
+]
+PurchaseReceiptCancelContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.PURCHASE_RECEIPT_CANCEL)),
+]
+OutboundReadContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.OUTBOUND_READ)),
+]
+OutboundCreateContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.OUTBOUND_CREATE)),
+]
+OutboundPickContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.OUTBOUND_PICK)),
+]
+OutboundConfirmContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.OUTBOUND_CONFIRM)),
+]
+OutboundCancelContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.OUTBOUND_CANCEL)),
+]

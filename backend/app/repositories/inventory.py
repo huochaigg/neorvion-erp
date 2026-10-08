@@ -278,6 +278,27 @@ class InventoryRepository(BaseRepository):
         )
         return self._execute_update(stmt)
 
+    def add_quantity(self, *, warehouse_id: int, sku_id: int, quantity: int) -> int:
+        """采购入库：只增加 quantity，不改 reserved。
+
+        入库的货还没被订单占住，所以可用量跟着实际库存一起增加。
+        """
+        tenant_id = self.ensure_tenant()
+        stmt = (
+            update(Inventory)
+            .where(
+                Inventory.tenant_id == tenant_id,
+                Inventory.warehouse_id == warehouse_id,
+                Inventory.sku_id == sku_id,
+            )
+            .values(
+                quantity=Inventory.quantity + quantity,
+                version=Inventory.version + 1,
+                updated_at=func.now(),
+            )
+        )
+        return self._execute_update(stmt)
+
     def update_quantity_if_version(
         self,
         *,

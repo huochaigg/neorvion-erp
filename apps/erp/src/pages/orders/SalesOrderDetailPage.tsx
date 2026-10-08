@@ -2,6 +2,7 @@ import {
   ApiError,
   canCancelSalesOrder,
   canConfirmSalesOrder,
+  canCreateOutbound,
   canEditSalesOrder,
   canSubmitSalesOrder,
   formatSalesAmount,
@@ -19,6 +20,7 @@ import { App, Button, Card, Descriptions, Input, Space, Tag, Timeline } from 'an
 import type { ColumnsType } from 'antd/es/table';
 import { useNavigate, useParams } from 'react-router-dom';
 import { cancelSalesOrder, confirmSalesOrder, fetchSalesOrder, submitSalesOrder } from '@/api/sales-orders';
+import { createOutboundOrder, fetchOutboundOrders } from '@/api/outbound-orders';
 import { AppTable, CodeCell, EllipsisCell } from '@/components/AppTable';
 import { Can } from '@/components/Can';
 import { FormPageContainer } from '@/components/PageContainer';
@@ -29,7 +31,13 @@ import type { PageProps } from '@/router/types';
 
 function statusTag(status: string) {
   const color =
-    status === 'PENDING_CONFIRMATION' ? 'processing' : status === 'WAITING_OUTBOUND' ? 'blue' : 'default';
+    status === 'PENDING_CONFIRMATION'
+      ? 'processing'
+      : status === 'WAITING_OUTBOUND' || status === 'PARTIALLY_SHIPPED'
+        ? 'blue'
+        : status === 'SHIPPED'
+          ? 'success'
+          : 'default';
   return <Tag color={color}>{salesOrderStatusLabel(status)}</Tag>;
 }
 
@@ -98,6 +106,12 @@ export function SalesOrderDetailPage(props: PageProps) {
     { title: '购买数量', dataIndex: 'quantity', key: 'quantity', width: 100 },
     { title: '已预占', dataIndex: 'reserved_quantity', key: 'reserved_quantity', width: 90 },
     { title: '已出库', dataIndex: 'shipped_quantity', key: 'shipped_quantity', width: 90 },
+    {
+      title: '剩余待出库',
+      key: 'remaining',
+      width: 110,
+      render: (_, record) => record.quantity - record.shipped_quantity,
+    },
     {
       title: '单价',
       dataIndex: 'unit_price',
@@ -168,6 +182,38 @@ export function SalesOrderDetailPage(props: PageProps) {
                 </Button>
               </Can>
             ) : null}
+            {order && canCreateOutbound(order.status) ? (
+              <Can permission={PERMISSION_CODE.outboundCreate}>
+                <Button
+                  type="primary"
+                  onClick={async () => {
+                    try {
+                      const existing = await fetchOutboundOrders({
+                        salesOrderId: order.id,
+                        page: 1,
+                        pageSize: 20,
+                      });
+                      const open = existing.items.find(
+                        (item) => item.status === 'PENDING_PICKING' || item.status === 'PICKED',
+                      );
+                      if (open) {
+                        navigate(`/outbound-orders/${open.id}`);
+                        return;
+                      }
+                      const created = await createOutboundOrder(order.id);
+                      message.success('已生成出库单');
+                      invalidate();
+                      navigate(`/outbound-orders/${created.id}`);
+                    } catch (error) {
+                      message.error(error instanceof ApiError ? error.message : '生成出库单失败');
+                    }
+                  }}
+                >
+                  {order.status === 'PARTIALLY_SHIPPED' ? '继续出库' : '查看出库单'}
+                </Button>
+              </Can>
+            ) : null}
+            {order && order.status === 'SHIPPED' ? <Tag color="success">已全部出库</Tag> : null}
             {order && canCancelSalesOrder(order.status) ? (
               <Can permission={PERMISSION_CODE.orderCancel}>
                 <Button
@@ -243,7 +289,42 @@ export function SalesOrderDetailPage(props: PageProps) {
               </Descriptions.Item>
             </Descriptions>
           </Card>
-          <Card title="订单明细">
+          <Card title="拣货记录" className="mt-4!">
+            <AppTable
+              rowKey="key"
+              size="small"
+              pagination={false}
+              fillHeight={false}
+              dataSource={(order.picks ?? []).flatMap((pick) =>
+                pick.lines.map((line) => ({
+                  key: `${pick.id}-${line.id}`,
+                  picked_at: pick.picked_at,
+                  picked_by_name: pick.picked_by_name,
+                  outbound_no: pick.outbound_no,
+                  sku_code: line.sku_code,
+                  product_name: line.product_name,
+                  quantity: line.quantity,
+                  change: `${line.picked_before} → ${line.picked_after}`,
+                })),
+              )}
+              locale={{ emptyText: '还没有拣货记录' }}
+              columns={[
+                {
+                  title: '时间',
+                  dataIndex: 'picked_at',
+                  width: 170,
+                  render: (value: string) => formatDateTime(value),
+                },
+                { title: '操作人', dataIndex: 'picked_by_name', width: 120, render: (value: string | null) => value || '-' },
+                { title: '出库单', dataIndex: 'outbound_no', width: 160 },
+                { title: 'SKU', dataIndex: 'sku_code', width: 140 },
+                { title: '商品', dataIndex: 'product_name', width: 160 },
+                { title: '本次拣货', dataIndex: 'quantity', width: 100 },
+                { title: '累计变化', dataIndex: 'change', width: 120 },
+              ]}
+            />
+          </Card>
+          <Card title="订单明细" className="mt-4!">
             <AppTable rowKey="id" size="small" columns={columns} dataSource={order.items} pagination={false} fillHeight={false} />
           </Card>
         </>

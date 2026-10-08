@@ -3,6 +3,7 @@ import {
   canAccess,
   canCancelSalesOrder,
   canConfirmSalesOrder,
+  canCreateOutbound,
   canEditSalesOrder,
   canSubmitSalesOrder,
   customersQueryKey,
@@ -13,6 +14,8 @@ import {
   salesOrderQueryKey,
   salesOrdersQueryKey,
   salesOrderStatusLabel,
+  outboundOrderQueryKey,
+  outboundOrdersQueryKey,
   skuInventoryQueryKey,
 } from '@neorvion/shared';
 import { describe, it } from 'vitest';
@@ -34,8 +37,14 @@ describe('销售订单与客户 UI 规则', () => {
     assert.equal(canConfirmSalesOrder(SALES_ORDER_STATUS.pendingConfirmation), true);
     assert.equal(canConfirmSalesOrder(SALES_ORDER_STATUS.waitingOutbound), false);
     assert.equal(canCancelSalesOrder(SALES_ORDER_STATUS.waitingOutbound), true);
-    assert.equal(canCancelSalesOrder(SALES_ORDER_STATUS.cancelled), false);
+    assert.equal(canCancelSalesOrder(SALES_ORDER_STATUS.partiallyShipped), false);
+    assert.equal(canCancelSalesOrder(SALES_ORDER_STATUS.shipped), false);
+    assert.equal(canCreateOutbound(SALES_ORDER_STATUS.waitingOutbound), true);
+    assert.equal(canCreateOutbound(SALES_ORDER_STATUS.partiallyShipped), true);
+    assert.equal(canCreateOutbound(SALES_ORDER_STATUS.shipped), false);
     assert.equal(salesOrderStatusLabel(SALES_ORDER_STATUS.waitingOutbound), '待出库');
+    assert.equal(salesOrderStatusLabel(SALES_ORDER_STATUS.partiallyShipped), '部分出库');
+    assert.equal(salesOrderStatusLabel(SALES_ORDER_STATUS.shipped), '已出库');
     assert.equal(salesOrderStatusLabel(SALES_ORDER_STATUS.pendingConfirmation), '待确认');
   });
 
@@ -50,6 +59,15 @@ describe('销售订单与客户 UI 规则', () => {
     assert.equal(canAccess(operator, [PERMISSION_CODE.orderSubmit]), true);
     assert.equal(canAccess(operator, [PERMISSION_CODE.orderAudit]), false);
     assert.equal(canAccess(operator, [PERMISSION_CODE.orderCancel]), true);
+    assert.equal(canAccess(operator, [PERMISSION_CODE.outboundRead]), false);
+    assert.equal(canAccess([PERMISSION_CODE.outboundRead], [PERMISSION_CODE.outboundConfirm]), false);
+    assert.equal(
+      canAccess(
+        [PERMISSION_CODE.outboundRead, PERMISSION_CODE.outboundPick, PERMISSION_CODE.outboundConfirm],
+        [PERMISSION_CODE.outboundConfirm],
+      ),
+      true,
+    );
   });
 
   it('Query Key 含 tenantId，确认后库存查询键和订单键互相独立', () => {
@@ -60,6 +78,8 @@ describe('销售订单与客户 UI 规则', () => {
       salesOrdersQueryKey(1, { status: 'WAITING_OUTBOUND', page: 1, pageSize: 20 }),
     );
     assert.notDeepEqual(salesOrderQueryKey(1, 8), salesOrderQueryKey(2, 8));
+    assert.notDeepEqual(outboundOrdersQueryKey(1), outboundOrdersQueryKey(2));
+    assert.notDeepEqual(outboundOrderQueryKey(1, 6), outboundOrderQueryKey(2, 6));
     assert.notDeepEqual(skuInventoryQueryKey(1, 3, [2, 1]), skuInventoryQueryKey(2, 3, [1, 2]));
     assert.deepEqual(skuInventoryQueryKey(1, 3, [2, 1])[4], [1, 2]);
   });

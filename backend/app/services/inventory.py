@@ -462,6 +462,133 @@ class InventoryService:
         )
         return updated
 
+    def inbound_within_transaction(
+        self,
+        *,
+        warehouse_id: int,
+        sku_id: int,
+        quantity: int,
+        reference_type: str | None = None,
+        reference_id: int | None = None,
+        remark: str | None = None,
+    ) -> Inventory:
+        """在当前事务里增加实际库存，不 commit，不改 reserved。
+
+        功能：采购确认收货时调用。没有库存行就先插入 0，再加数量。
+        参数：仓库、SKU、本次入库数量，以及收货单引用。
+        返回：入库后的库存行。
+        异常：插入后仍找不到行。本方法不 rollback。
+        为什么用保存点：两个收货同时给同一仓库+SKU 建第一行时，后一个会撞
+        UNIQUE(tenant_id, warehouse_id, sku_id)。如果直接让外层事务失败，
+        整张收货单会回滚。保存点只撤销这次插入，然后改去更新已经存在的行。
+        """
+        current = self.inventories.get_by_warehouse_and_sku(warehouse_id, sku_id)
+        if current is None:
+            self._insert_inventory_row(warehouse_id, sku_id)
+        before = self.inventories.get_by_warehouse_and_sku(warehouse_id, sku_id)
+        if before is None:
+            raise AppError("入库时未能创建库存", code=40450, status_code=404)
+        before_qty = before.quantity
+        before_reserved = before.reserved_quantity
+        affected = self.inventories.add_quantity(
+            warehouse_id=warehouse_id,
+            sku_id=sku_id,
+            quantity=quantity,
+        )
+        if affected != 1:
+            raise AppError("入库失败", code=40450, status_code=404)
+        updated = self.inventories.get_by_warehouse_and_sku(warehouse_id, sku_id)
+        if updated is None:
+            raise AppError(_UNAVAILABLE, code=40450, status_code=404)
+        self._add_tx(
+            updated,
+            tx_type=InventoryTransactionType.INBOUND.value,
+            change_quantity=quantity,
+            before_qty=before_qty,
+            after_qty=updated.quantity,
+            before_reserved=before_reserved,
+            after_reserved=updated.reserved_quantity,
+            remark=remark,
+            reference_type=reference_type,
+            reference_id=reference_id,
+        )
+        return updated
+
+    def _insert_inventory_row(self, warehouse_id: int, sku_id: int) -> None:
+        """插入 quantity=0 的库存行。并发插入冲突时只回滚保存点。"""
+        nested = self.session.begin_nested()
+        try:
+            self.inventories.add(
+                Inventory(
+                    tenant_id=self.context.tenant_id,
+                    warehouse_id=warehouse_id,
+                    sku_id=sku_id,
+                    quantity=0,
+                    reserved_quantity=0,
+                    version=0,
+                )
+            )
+            self.session.flush()
+            nested.commit()
+        except IntegrityError:
+            nested.rollback()
+
+    def deduct_within_transaction(
+        self,
+        *,
+        warehouse_id: int,
+        sku_id: int,
+        quantity: int,
+        reference_type: str | None = None,
+        reference_id: int | None = None,
+        remark: str | None = None,
+    ) -> Inventory:
+        """在当前事务里同时减少 quantity 和 reserved，不 commit。
+
+        功能：确认出库时调用，复用 V5 deduct_if_reserved。
+        为什么两个数一起减：这批货出库前已经从可用量里预占掉了。
+        只减 quantity 会让 reserved 还占着已经离库的货；只减 reserved 会让账面还显示货在库。
+        可用量 = quantity - reserved，两边减同一个数，可用量通常不变。
+        """
+        current = self.inventories.get_by_warehouse_and_sku(warehouse_id, sku_id)
+        if current is None:
+            raise AppError(
+                "预占或实际库存不足，不能确认出库",
+                code=40071,
+                status_code=400,
+                data={"error": "INSUFFICIENT_RESERVED_INVENTORY"},
+            )
+        before_qty = current.quantity
+        before_reserved = current.reserved_quantity
+        affected = self.inventories.deduct_if_reserved(
+            warehouse_id=warehouse_id,
+            sku_id=sku_id,
+            quantity=quantity,
+        )
+        if affected != 1:
+            raise AppError(
+                "预占或实际库存不足，不能确认出库",
+                code=40071,
+                status_code=400,
+                data={"error": "INSUFFICIENT_RESERVED_INVENTORY", "sku_id": sku_id},
+            )
+        updated = self.inventories.get_by_warehouse_and_sku(warehouse_id, sku_id)
+        if updated is None:
+            raise AppError(_UNAVAILABLE, code=40450, status_code=404)
+        self._add_tx(
+            updated,
+            tx_type=InventoryTransactionType.OUTBOUND.value,
+            change_quantity=-quantity,
+            before_qty=before_qty,
+            after_qty=updated.quantity,
+            before_reserved=before_reserved,
+            after_reserved=updated.reserved_quantity,
+            remark=remark,
+            reference_type=reference_type,
+            reference_id=reference_id,
+        )
+        return updated
+
     def reserve_inventory(self, inventory_id: int, payload: InventoryQtyChange) -> InventoryItemOut:
         """预占：只增加 reserved，不减少 quantity。
 
@@ -532,33 +659,10 @@ class InventoryService:
         if current is None:
             raise AppError(_UNAVAILABLE, code=40450, status_code=404)
         try:
-            affected = self.inventories.deduct_if_reserved(
+            self.deduct_within_transaction(
                 warehouse_id=current.warehouse_id,
                 sku_id=current.sku_id,
                 quantity=payload.quantity,
-            )
-            if affected != 1:
-                self.session.rollback()
-                again = self.inventories.get_in_tenant(inventory_id)
-                if again is None:
-                    raise AppError(_UNAVAILABLE, code=40450, status_code=404)
-                raise AppError(
-                    "预占或实际库存不足，不能确认出库",
-                    code=40070,
-                    status_code=400,
-                    data={"error": "INSUFFICIENT_AVAILABLE_INVENTORY"},
-                )
-            updated = self.inventories.get_in_tenant(inventory_id)
-            if updated is None:
-                raise AppError(_UNAVAILABLE, code=40450, status_code=404)
-            self._add_tx(
-                updated,
-                tx_type=InventoryTransactionType.OUTBOUND.value,
-                change_quantity=-payload.quantity,
-                before_qty=updated.quantity + payload.quantity,
-                after_qty=updated.quantity,
-                before_reserved=updated.reserved_quantity + payload.quantity,
-                after_reserved=updated.reserved_quantity,
                 remark=payload.remark,
             )
             self.session.commit()

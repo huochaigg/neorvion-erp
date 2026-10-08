@@ -1,14 +1,14 @@
 # 采购管理
 
-当前里程碑 **V6**。采购单表示企业向供应商采购一批 SKU，是计划而不是库存事实。
+当前里程碑 **V6 起的采购计划**。收货入库见 `docs/fulfillment.md`。采购单表示企业向供应商采购一批 SKU，是计划而不是库存事实。
 
 ```text
 创建供应商 → 创建采购单（草稿）→ 提交审核 → 审核通过进入待收货
 ```
 
-审核通过 **不会** 增加 `inventory.quantity`。货可能少到、晚到或根本没到。库存增加留给后续收货 / 入库版本，那时才写 `received_quantity` 并生成入库流水。
+审核通过 **不会** 增加 `inventory.quantity`。货可能少到、晚到或根本没到。V8 确认收货单时才增加实际库存，并累加 `received_quantity`。详见 `docs/fulfillment.md`。
 
-本版 **不** 开发：采购收货、采购入库、部分收货、库存增加、采购退货、采购付款、财务结算、销售订单、物流。
+本版采购计划 **不** 把审核当成入库。收货、部分收货、入库流水在 V8。采购退货、采购付款、财务结算仍未做。
 
 ## 为什么采购和库存必须分开
 
@@ -102,7 +102,9 @@ DRAFT ──submit──► PENDING_APPROVAL ──approve──► WAITING_RECE
 | DRAFT | PENDING_APPROVAL、CANCELLED |
 | PENDING_APPROVAL | WAITING_RECEIPT、REJECTED、CANCELLED |
 | REJECTED | PENDING_APPROVAL、CANCELLED |
-| WAITING_RECEIPT | 无（V6 不允许取消） |
+| WAITING_RECEIPT | PARTIALLY_RECEIVED、RECEIVED（V8 收货确认） |
+| PARTIALLY_RECEIVED | RECEIVED |
+| RECEIVED | 无 |
 | CANCELLED | 无 |
 
 不允许：`CANCELLED → APPROVED`、`WAITING_RECEIPT → DRAFT`。

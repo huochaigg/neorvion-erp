@@ -71,6 +71,17 @@ class PermissionCode(StrEnum):
     PURCHASE_SUBMIT = "purchase:submit"
     PURCHASE_AUDIT = "purchase:audit"
     PURCHASE_CANCEL = "purchase:cancel"
+    PURCHASE_RECEIPT_READ = "purchase:receipt:read"
+    PURCHASE_RECEIPT_CREATE = "purchase:receipt:create"
+    PURCHASE_RECEIPT_UPDATE = "purchase:receipt:update"
+    PURCHASE_RECEIPT_CONFIRM = "purchase:receipt:confirm"
+    PURCHASE_RECEIPT_CANCEL = "purchase:receipt:cancel"
+
+    OUTBOUND_READ = "outbound:read"
+    OUTBOUND_CREATE = "outbound:create"
+    OUTBOUND_PICK = "outbound:pick"
+    OUTBOUND_CONFIRM = "outbound:confirm"
+    OUTBOUND_CANCEL = "outbound:cancel"
 
     SUPPLIER_READ = "supplier:read"
     SUPPLIER_CREATE = "supplier:create"
@@ -186,6 +197,16 @@ PERMISSION_CATALOG: tuple[tuple[str, str, str, str], ...] = (
     (PermissionCode.PURCHASE_SUBMIT, "提交采购审核", "purchase", "提交或重新提交采购单审核"),
     (PermissionCode.PURCHASE_AUDIT, "审核采购单", "purchase", "审核通过或驳回采购单"),
     (PermissionCode.PURCHASE_CANCEL, "取消采购单", "purchase", "取消草稿、待审核或已驳回的采购单"),
+    (PermissionCode.PURCHASE_RECEIPT_READ, "查看收货单", "purchase", "查看采购收货单"),
+    (PermissionCode.PURCHASE_RECEIPT_CREATE, "新建收货单", "purchase", "创建收货草稿"),
+    (PermissionCode.PURCHASE_RECEIPT_UPDATE, "编辑收货单", "purchase", "修改草稿收货数量"),
+    (PermissionCode.PURCHASE_RECEIPT_CONFIRM, "确认收货", "purchase", "确认收货并增加库存"),
+    (PermissionCode.PURCHASE_RECEIPT_CANCEL, "取消收货单", "purchase", "作废尚未入库的收货草稿"),
+    (PermissionCode.OUTBOUND_READ, "查看出库单", "outbound", "查看销售出库单"),
+    (PermissionCode.OUTBOUND_CREATE, "创建出库单", "outbound", "为待出库订单生成出库任务"),
+    (PermissionCode.OUTBOUND_PICK, "拣货", "outbound", "确认拣货数量，不扣库存"),
+    (PermissionCode.OUTBOUND_CONFIRM, "确认出库", "outbound", "正式扣减实际库存和预占"),
+    (PermissionCode.OUTBOUND_CANCEL, "取消出库单", "outbound", "取消尚未出库的拣货任务"),
     (PermissionCode.SUPPLIER_READ, "查看供应商", "supplier", "查看本企业供应商"),
     (PermissionCode.SUPPLIER_CREATE, "新增供应商", "supplier", "创建供应商"),
     (PermissionCode.SUPPLIER_UPDATE, "编辑供应商", "supplier", "编辑供应商档案，编码创建后只读"),
@@ -231,6 +252,8 @@ _READ_CODES: tuple[str, ...] = (
     PermissionCode.INVENTORY_TRANSACTION_READ,
     PermissionCode.WAREHOUSE_READ,
     PermissionCode.PURCHASE_READ,
+    PermissionCode.PURCHASE_RECEIPT_READ,
+    PermissionCode.OUTBOUND_READ,
     PermissionCode.SUPPLIER_READ,
 )
 
@@ -269,6 +292,9 @@ DEFAULT_ROLE_TEMPLATES: tuple[tuple[str, str, str, tuple[str, ...]], ...] = (
             PermissionCode.PURCHASE_UPDATE,
             PermissionCode.PURCHASE_SUBMIT,
             PermissionCode.PURCHASE_CANCEL,
+            PermissionCode.PURCHASE_RECEIPT_READ,
+            PermissionCode.PURCHASE_RECEIPT_CREATE,
+            PermissionCode.OUTBOUND_READ,
         ),
     ),
     (
@@ -290,6 +316,16 @@ DEFAULT_ROLE_TEMPLATES: tuple[tuple[str, str, str, tuple[str, ...]], ...] = (
             PermissionCode.WAREHOUSE_UPDATE,
             PermissionCode.SUPPLIER_READ,
             PermissionCode.PURCHASE_READ,
+            PermissionCode.PURCHASE_RECEIPT_READ,
+            PermissionCode.PURCHASE_RECEIPT_CREATE,
+            PermissionCode.PURCHASE_RECEIPT_UPDATE,
+            PermissionCode.PURCHASE_RECEIPT_CONFIRM,
+            PermissionCode.PURCHASE_RECEIPT_CANCEL,
+            PermissionCode.OUTBOUND_READ,
+            PermissionCode.OUTBOUND_CREATE,
+            PermissionCode.OUTBOUND_PICK,
+            PermissionCode.OUTBOUND_CONFIRM,
+            PermissionCode.OUTBOUND_CANCEL,
         ),
     ),
     (
@@ -682,6 +718,43 @@ PERMISSION_TREE: tuple[PermissionTreeDef, ...] = (
                     ),
                 ),
             ),
+            PermissionTreeDef(
+                key="menu:outbound",
+                title="销售出库",
+                type="MENU",
+                children=(
+                    PermissionTreeDef(
+                        key="action:outbound-read",
+                        title="查看",
+                        type="ACTION",
+                        permission_code=PermissionCode.OUTBOUND_READ,
+                    ),
+                    PermissionTreeDef(
+                        key="action:outbound-create",
+                        title="创建",
+                        type="ACTION",
+                        permission_code=PermissionCode.OUTBOUND_CREATE,
+                    ),
+                    PermissionTreeDef(
+                        key="action:outbound-pick",
+                        title="拣货",
+                        type="ACTION",
+                        permission_code=PermissionCode.OUTBOUND_PICK,
+                    ),
+                    PermissionTreeDef(
+                        key="action:outbound-confirm",
+                        title="确认出库",
+                        type="ACTION",
+                        permission_code=PermissionCode.OUTBOUND_CONFIRM,
+                    ),
+                    PermissionTreeDef(
+                        key="action:outbound-cancel",
+                        title="取消",
+                        type="ACTION",
+                        permission_code=PermissionCode.OUTBOUND_CANCEL,
+                    ),
+                ),
+            ),
         ),
     ),
     PermissionTreeDef(
@@ -729,6 +802,43 @@ PERMISSION_TREE: tuple[PermissionTreeDef, ...] = (
                         title="取消",
                         type="ACTION",
                         permission_code=PermissionCode.PURCHASE_CANCEL,
+                    ),
+                ),
+            ),
+            PermissionTreeDef(
+                key="menu:purchase-receipts",
+                title="采购收货",
+                type="MENU",
+                children=(
+                    PermissionTreeDef(
+                        key="action:receipt-read",
+                        title="查看",
+                        type="ACTION",
+                        permission_code=PermissionCode.PURCHASE_RECEIPT_READ,
+                    ),
+                    PermissionTreeDef(
+                        key="action:receipt-create",
+                        title="新建",
+                        type="ACTION",
+                        permission_code=PermissionCode.PURCHASE_RECEIPT_CREATE,
+                    ),
+                    PermissionTreeDef(
+                        key="action:receipt-update",
+                        title="编辑",
+                        type="ACTION",
+                        permission_code=PermissionCode.PURCHASE_RECEIPT_UPDATE,
+                    ),
+                    PermissionTreeDef(
+                        key="action:receipt-confirm",
+                        title="确认收货",
+                        type="ACTION",
+                        permission_code=PermissionCode.PURCHASE_RECEIPT_CONFIRM,
+                    ),
+                    PermissionTreeDef(
+                        key="action:receipt-cancel",
+                        title="取消",
+                        type="ACTION",
+                        permission_code=PermissionCode.PURCHASE_RECEIPT_CANCEL,
                     ),
                 ),
             ),

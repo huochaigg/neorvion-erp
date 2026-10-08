@@ -3,6 +3,7 @@ import {
   canAccess,
   canApprovePurchaseOrder,
   canCancelPurchaseOrder,
+  canCreatePurchaseReceipt,
   canEditPurchaseOrder,
   canRejectPurchaseOrder,
   canSubmitPurchaseOrder,
@@ -13,6 +14,8 @@ import {
   purchaseOrderQueryKey,
   purchaseOrdersQueryKey,
   purchaseOrderStatusLabel,
+  purchaseReceiptQueryKey,
+  purchaseReceiptsQueryKey,
   supplierLocation,
   supplierQueryKey,
   suppliersQueryKey,
@@ -43,7 +46,26 @@ describe('采购与供应商 UI 规则', () => {
     assert.equal(canRejectPurchaseOrder(PURCHASE_ORDER_STATUS.pendingApproval), true);
     assert.equal(canCancelPurchaseOrder(PURCHASE_ORDER_STATUS.draft), true);
     assert.equal(canCancelPurchaseOrder(PURCHASE_ORDER_STATUS.waitingReceipt), false);
+    assert.equal(canCreatePurchaseReceipt(PURCHASE_ORDER_STATUS.waitingReceipt), true);
+    assert.equal(canCreatePurchaseReceipt(PURCHASE_ORDER_STATUS.partiallyReceived), true);
+    assert.equal(canCreatePurchaseReceipt(PURCHASE_ORDER_STATUS.received), false);
     assert.equal(purchaseOrderStatusLabel(PURCHASE_ORDER_STATUS.waitingReceipt), '待收货');
+    assert.equal(purchaseOrderStatusLabel(PURCHASE_ORDER_STATUS.partiallyReceived), '部分收货');
+    assert.equal(purchaseOrderStatusLabel(PURCHASE_ORDER_STATUS.received), '已收货');
+  });
+
+  it('收货确认按钮按权限隐藏，运营默认可建草稿但不能确认', () => {
+    const operator = [
+      PERMISSION_CODE.purchaseReceiptRead,
+      PERMISSION_CODE.purchaseReceiptCreate,
+    ];
+    assert.equal(canAccess(operator, [PERMISSION_CODE.purchaseReceiptCreate]), true);
+    assert.equal(canAccess(operator, [PERMISSION_CODE.purchaseReceiptConfirm]), false);
+    const warehouse = [
+      PERMISSION_CODE.purchaseReceiptRead,
+      PERMISSION_CODE.purchaseReceiptConfirm,
+    ];
+    assert.equal(canAccess(warehouse, [PERMISSION_CODE.purchaseReceiptConfirm]), true);
   });
 
   it('运营有提交没有审核，审核按钮应对齐 purchase:audit', () => {
@@ -72,6 +94,8 @@ describe('采购与供应商 UI 规则', () => {
       purchaseOrdersQueryKey(1, { status: 'WAITING_RECEIPT', page: 1, pageSize: 20 }),
     );
     assert.notDeepEqual(purchaseOrderQueryKey(1, 8), purchaseOrderQueryKey(2, 8));
+    assert.notDeepEqual(purchaseReceiptsQueryKey(1), purchaseReceiptsQueryKey(2));
+    assert.notDeepEqual(purchaseReceiptQueryKey(1, 4), purchaseReceiptQueryKey(2, 4));
   });
 
   it('同一 SKU 再次添加时合并数量，金额缺省显示为 -', () => {
