@@ -1,6 +1,6 @@
 # 销售订单
 
-当前里程碑 **V7**。销售订单表示企业向客户销售一批 SKU，并在确认后预占履约仓库的可用库存。
+当前里程碑 **V7 起的销售订单**。拣货和正式出库见 `docs/fulfillment.md`。销售订单表示企业向客户销售一批 SKU，并在确认后预占履约仓库的可用库存。
 
 ```text
 创建客户 → 创建销售订单草稿 → 提交待确认 → 确认并预占 → 待出库
@@ -9,7 +9,7 @@
 
 预占只增加 `Inventory.reserved_quantity`，**不**减少 `Inventory.quantity`。可用量 = 实际 − 预占，所以确认后可用量下降，货仍在仓库里。
 
-本版 **不** 开发：拣货、正式出库、发货、物流、平台订单同步、退货退款、售后、订单完成。
+本版订单确认 **不** 开发物流、平台订单同步、退货退款。正式出库在 V8：确认出库时同时减少 `quantity` 和 `reserved_quantity`。
 
 ## 为什么草稿不预占
 
@@ -28,7 +28,7 @@
 - 明细 `SalesOrderItem.reserved_quantity = quantity`
 - 流水类型 `RESERVE`，`reference_type = SALES_ORDER`，`reference_id = 订单 id`，备注里写订单号
 
-正式出库留给后续版本：那时才同时减少 `quantity` 和 `reserved_quantity`。明细上的 `shipped_quantity` 本版保持 0，给那一版用。
+正式出库在 V8：同时减少 `quantity` 和 `reserved_quantity`，并增加明细 `shipped_quantity`、减少仍占用的 `reserved_quantity`。出库后不再满足「已出库 ≤ 当前预占」。约束改为 `reserved_quantity + shipped_quantity <= quantity`。
 
 ## Customer
 
@@ -80,7 +80,7 @@
 | `shipped_quantity` | 默认 0，本版不改 |
 | `unit_price` | 可空 |
 
-约束：`0 <= shipped_quantity <= reserved_quantity <= quantity`。数据库 CHECK 与 Service 同时校验。
+约束：`reserved_quantity >= 0`，`shipped_quantity >= 0`，且 `reserved_quantity + shipped_quantity <= quantity`。出库 6 件后可以是预占 4、已出库 6。
 
 ## 状态机
 
@@ -89,13 +89,17 @@
 | `DRAFT` | 草稿 |
 | `PENDING_CONFIRMATION` | 待确认 |
 | `WAITING_OUTBOUND` | 待出库 |
+| `PARTIALLY_SHIPPED` | 部分出库（V8） |
+| `SHIPPED` | 已出库（V8） |
 | `CANCELLED` | 已取消 |
 
 允许：
 
 - `DRAFT` → `PENDING_CONFIRMATION`（提交）
-- `PENDING_CONFIRMATION` → `WAITING_OUTBOUND`（确认并预占）
-- `DRAFT` / `PENDING_CONFIRMATION` / `WAITING_OUTBOUND` → `CANCELLED`
+- `PENDING_CONFIRMATION` → `WAITING_OUTBOUND`（确认并预占，并生成第一张出库单）
+- `WAITING_OUTBOUND` → `PARTIALLY_SHIPPED` 或 `SHIPPED`（确认出库）
+- `PARTIALLY_SHIPPED` → `SHIPPED`
+- `DRAFT` / `PENDING_CONFIRMATION` / `WAITING_OUTBOUND` → `CANCELLED`（已有出库数量时不能取消）
 
 不允许任意 `PATCH status`。已取消不能再确认。待确认之后不能改客户、仓库、收货信息和明细。没有驳回或撤回提交。
 

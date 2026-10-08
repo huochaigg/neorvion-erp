@@ -30,11 +30,31 @@ from app.models.warehouse import Warehouse
 
 
 class PurchaseOrderStatus(StrEnum):
+    """采购单状态。只能经提交 / 审核 / 收货 / 取消流转，不要直接改 status 列。
+
+    审核通过不改库存；收货确认才增加 quantity。
+    """
+
     DRAFT = "DRAFT"
+    """草稿。可改供应商、仓库和明细；可提交审核或取消。未入库。"""
+
     PENDING_APPROVAL = "PENDING_APPROVAL"
+    """待审核。可批准进入待收货、驳回，或取消。批准同事务直达待收货，无单独 APPROVED。"""
+
     WAITING_RECEIPT = "WAITING_RECEIPT"
+    """待收货。审核已通过，等待收货入库。可部分收货或一次收完；本版本不可取消。"""
+
+    PARTIALLY_RECEIVED = "PARTIALLY_RECEIVED"
+    """部分收货。已有收货单入库，但仍有未收完的明细；继续收货直至收完。"""
+
+    RECEIVED = "RECEIVED"
+    """已收货。全部明细收齐。终态，不能再流转。"""
+
     REJECTED = "REJECTED"
+    """已驳回。可改单后重新提交，或取消。"""
+
     CANCELLED = "CANCELLED"
+    """已取消。终态，不能再流转。"""
 
 
 class PurchaseOrder(TimestampMixin, TenantMixin, Base):
@@ -117,7 +137,11 @@ class PurchaseOrder(TimestampMixin, TenantMixin, Base):
 
 
 class PurchaseOrderItem(TimestampMixin, TenantMixin, Base):
-    """采购明细。received_quantity 预留给收货版本，V6 保持 0。"""
+    """采购明细。同一采购单内每个 SKU 只能一行。
+
+    quantity 是计划采购量；收货确认后累加 received_quantity，并增加库存 quantity。
+    约束：0 <= received_quantity <= quantity。
+    """
 
     __tablename__ = "purchase_order_items"
     __table_args__ = (
@@ -149,17 +173,19 @@ class PurchaseOrderItem(TimestampMixin, TenantMixin, Base):
     )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    """所属采购单 id。与 tenant_id 组成复合外键，防止串租户挂单。"""
     purchase_order_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
     sku_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
     quantity: Mapped[int] = mapped_column(Integer, nullable=False)
     unit_price: Mapped[Decimal | None] = mapped_column(Numeric(12, 2), nullable=True)
+    """已收货累计数量。收货确认时累加；未收完 = quantity - received_quantity。"""
     received_quantity: Mapped[int] = mapped_column(
         Integer,
         nullable=False,
         server_default=text("0"),
     )
     remark: Mapped[str | None] = mapped_column(String(255), nullable=True)
-
+    """所属采购单。ORM 导航属性，对应 purchase_order_id。"""
     purchase_order: Mapped[PurchaseOrder] = relationship(back_populates="items")
     sku: Mapped[ProductSku] = relationship(
         primaryjoin="PurchaseOrderItem.sku_id == ProductSku.id",

@@ -4,6 +4,8 @@ const RESOURCE_FALLBACKS: ReadonlyArray<{ pattern: RegExp; fallback: string }> =
   { pattern: /^\/orders\/\d+(\/edit)?\/?$/, fallback: '/orders/list' },
   { pattern: /^\/inventory\/\d+(\/.*)?$/, fallback: '/inventory/list' },
   { pattern: /^\/purchases\/\d+(\/edit)?\/?$/, fallback: '/purchases/list' },
+  { pattern: /^\/purchase-receipts\/\d+\/?$/, fallback: '/purchase-receipts' },
+  { pattern: /^\/outbound-orders\/\d+\/?$/, fallback: '/outbound-orders' },
   { pattern: /^\/system\/members\/\d+\/?$/, fallback: '/system/members' },
 ];
 

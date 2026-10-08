@@ -9,6 +9,8 @@ export const PURCHASE_ORDER_STATUS = {
   draft: 'DRAFT',
   pendingApproval: 'PENDING_APPROVAL',
   waitingReceipt: 'WAITING_RECEIPT',
+  partiallyReceived: 'PARTIALLY_RECEIVED',
+  received: 'RECEIVED',
   rejected: 'REJECTED',
   cancelled: 'CANCELLED',
 } as const;
@@ -17,6 +19,8 @@ export const PURCHASE_ORDER_STATUS_LABEL: Record<string, string> = {
   DRAFT: '草稿',
   PENDING_APPROVAL: '待审核',
   WAITING_RECEIPT: '待收货',
+  PARTIALLY_RECEIVED: '部分收货',
+  RECEIVED: '已收货',
   REJECTED: '已驳回',
   CANCELLED: '已取消',
 };
@@ -25,6 +29,8 @@ export const PURCHASE_ORDER_STATUS_OPTIONS = [
   { value: PURCHASE_ORDER_STATUS.draft, label: '草稿' },
   { value: PURCHASE_ORDER_STATUS.pendingApproval, label: '待审核' },
   { value: PURCHASE_ORDER_STATUS.waitingReceipt, label: '待收货' },
+  { value: PURCHASE_ORDER_STATUS.partiallyReceived, label: '部分收货' },
+  { value: PURCHASE_ORDER_STATUS.received, label: '已收货' },
   { value: PURCHASE_ORDER_STATUS.rejected, label: '已驳回' },
   { value: PURCHASE_ORDER_STATUS.cancelled, label: '已取消' },
 ];
@@ -73,6 +79,13 @@ export function canCancelPurchaseOrder(status: string): boolean {
     status === PURCHASE_ORDER_STATUS.draft ||
     status === PURCHASE_ORDER_STATUS.pendingApproval ||
     status === PURCHASE_ORDER_STATUS.rejected
+  );
+}
+
+export function canCreatePurchaseReceipt(status: string): boolean {
+  return (
+    status === PURCHASE_ORDER_STATUS.waitingReceipt ||
+    status === PURCHASE_ORDER_STATUS.partiallyReceived
   );
 }
 

@@ -3,8 +3,16 @@
 from app.db.base import Base
 from app.models.customer import Customer, CustomerStatus
 from app.models.inventory import Inventory, InventoryTransaction, InventoryTransactionType
+from app.models.outbound import (
+    OutboundOrder,
+    OutboundOrderItem,
+    OutboundOrderStatus,
+    OutboundPick,
+    OutboundPickLine,
+)
 from app.models.product import Brand, Product, ProductCategory, ProductSku
 from app.models.purchase import PurchaseOrder, PurchaseOrderItem, PurchaseOrderStatus
+from app.models.purchase_receipt import PurchaseReceipt, PurchaseReceiptItem, PurchaseReceiptStatus
 from app.models.rbac import MemberRoleGrant, Permission, Role, RolePermission
 from app.models.sales_order import (
     SALES_ORDER_REFERENCE,
@@ -29,6 +37,11 @@ __all__ = [
     "MemberRole",
     "MemberRoleGrant",
     "MemberStatus",
+    "OutboundOrder",
+    "OutboundOrderItem",
+    "OutboundOrderStatus",
+    "OutboundPick",
+    "OutboundPickLine",
     "Permission",
     "Product",
     "ProductCategory",
@@ -36,6 +49,9 @@ __all__ = [
     "PurchaseOrder",
     "PurchaseOrderItem",
     "PurchaseOrderStatus",
+    "PurchaseReceipt",
+    "PurchaseReceiptItem",
+    "PurchaseReceiptStatus",
     "Role",
     "RolePermission",
     "SALES_ORDER_REFERENCE",

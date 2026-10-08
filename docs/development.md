@@ -1,6 +1,6 @@
 # 开发说明
 
-当前里程碑：V7（销售订单：客户 / 草稿 / 确认预占 / 取消释放）。
+当前里程碑：V8（采购收货入库 / 销售拣货出库）。
 
 ## 前置
 
@@ -120,7 +120,7 @@ pnpm test
 45. 取消待出库会释放预占并写 `RELEASE`。再次取消返回 `ORDER_ALREADY_CANCELLED`。无 `order:read` 看不到订单菜单；无对应动作权限时按钮隐藏，直接调接口仍 403。
 46. 切换企业后客户与销售订单隔离；`/orders/:id` 会回到销售订单列表。改客户地址不影响已保存订单的收货快照。
 
-多租户说明见 `docs/multi-tenancy.md`。RBAC 见 `docs/rbac.md`。商品见 `docs/products.md`。仓库见 `docs/warehouses.md`。库存见 `docs/inventory.md`。采购见 `docs/purchases.md`。销售订单见 `docs/orders.md`。当前状态见 `docs/current-state.md`。V3 见 `docs/versions/v3.md`。V4 见 `docs/versions/v4.md`。V5 见 `docs/versions/v5.md`。V6 见 `docs/versions/v6.md`。V7 见 `docs/versions/v7.md`。路由配置说明见 `docs/routing.md`。认证流程见 `docs/auth.md`。
+多租户说明见 `docs/multi-tenancy.md`。RBAC 见 `docs/rbac.md`。商品见 `docs/products.md`。仓库见 `docs/warehouses.md`。库存见 `docs/inventory.md`。采购见 `docs/purchases.md`。销售订单见 `docs/orders.md`。履约见 `docs/fulfillment.md`。当前状态见 `docs/current-state.md`。V3 见 `docs/versions/v3.md`。V4 见 `docs/versions/v4.md`。V5 见 `docs/versions/v5.md`。V6 见 `docs/versions/v6.md`。V7 见 `docs/versions/v7.md`。V8 见 `docs/versions/v8.md`。路由配置说明见 `docs/routing.md`。认证流程见 `docs/auth.md`。
 
 ## 浏览器进 debugger
 

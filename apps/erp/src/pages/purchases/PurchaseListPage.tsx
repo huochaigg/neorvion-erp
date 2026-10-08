@@ -332,78 +332,78 @@ export function PurchaseListPage(props: PageProps) {
       />
       <ListToolbar>
         <div className="flex flex-wrap gap-2">
-        <Input
-          className="w-44!"
-          placeholder="采购单号"
-          value={q}
-          onChange={(event) => setQ(event.target.value)}
-          onPressEnter={() => {
-            setKeyword(q.trim());
-            setPage(1);
-          }}
-          allowClear
-        />
-        <Select
-          className="w-48!"
-          allowClear
-          showSearch
-          optionFilterProp="label"
-          placeholder="供应商"
-          value={supplierId}
-          onChange={(value) => {
-            setSupplierId(value);
-            setPage(1);
-          }}
-          options={supplierOptions}
-        />
-        <Select
-          className="w-44!"
-          allowClear
-          showSearch
-          optionFilterProp="label"
-          placeholder="仓库"
-          value={warehouseId}
-          onChange={(value) => {
-            setWarehouseId(value);
-            setPage(1);
-          }}
-          options={warehouseOptions}
-        />
-        <Select
-          className="w-36"
-          allowClear
-          placeholder="状态"
-          value={status}
-          onChange={(value) => {
-            setStatus(value);
-            setPage(1);
-          }}
-          options={PURCHASE_ORDER_STATUS_OPTIONS}
-        />
-        <AppRangePicker
-          placeholder={['创建日期起', '创建日期止']}
-          onChange={(dates) => {
-            const { from, to } = rangeToDateTimes(dates);
-            setCreatedRange(from && to ? [from, to] : null);
-            setPage(1);
-          }}
-        />
-        <AppRangePicker
-          placeholder={['预计到货起', '预计到货止']}
-          onChange={(dates) => {
-            const { from, to } = rangeToDates(dates);
-            setExpectedRange(from && to ? [from, to] : null);
-            setPage(1);
-          }}
-        />
-        <Button
-          onClick={() => {
-            setKeyword(q.trim());
-            setPage(1);
-          }}
-        >
-          查询
-        </Button>
+          <Input
+            className="w-44!"
+            placeholder="采购单号"
+            value={q}
+            onChange={(event) => setQ(event.target.value)}
+            onPressEnter={() => {
+              setKeyword(q.trim());
+              setPage(1);
+            }}
+            allowClear
+          />
+          <Select
+            className="w-48!"
+            allowClear
+            showSearch
+            optionFilterProp="label"
+            placeholder="供应商"
+            value={supplierId}
+            onChange={(value) => {
+              setSupplierId(value);
+              setPage(1);
+            }}
+            options={supplierOptions}
+          />
+          <Select
+            className="w-44!"
+            allowClear
+            showSearch
+            optionFilterProp="label"
+            placeholder="仓库"
+            value={warehouseId}
+            onChange={(value) => {
+              setWarehouseId(value);
+              setPage(1);
+            }}
+            options={warehouseOptions}
+          />
+          <Select
+            className="w-36"
+            allowClear
+            placeholder="状态"
+            value={status}
+            onChange={(value) => {
+              setStatus(value);
+              setPage(1);
+            }}
+            options={PURCHASE_ORDER_STATUS_OPTIONS}
+          />
+          <AppRangePicker
+            placeholder={['创建日期起', '创建日期止']}
+            onChange={(dates) => {
+              const { from, to } = rangeToDateTimes(dates);
+              setCreatedRange(from && to ? [from, to] : null);
+              setPage(1);
+            }}
+          />
+          <AppRangePicker
+            placeholder={['预计到货起', '预计到货止']}
+            onChange={(dates) => {
+              const { from, to } = rangeToDates(dates);
+              setExpectedRange(from && to ? [from, to] : null);
+              setPage(1);
+            }}
+          />
+          <Button
+            onClick={() => {
+              setKeyword(q.trim());
+              setPage(1);
+            }}
+          >
+            查询
+          </Button>
         </div>
       </ListToolbar>
       <ListTableArea>

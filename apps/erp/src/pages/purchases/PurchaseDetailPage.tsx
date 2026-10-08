@@ -2,6 +2,7 @@ import {
   ApiError,
   canApprovePurchaseOrder,
   canCancelPurchaseOrder,
+  canCreatePurchaseReceipt,
   canEditPurchaseOrder,
   canRejectPurchaseOrder,
   canSubmitPurchaseOrder,
@@ -37,9 +38,12 @@ function statusTag(status: string) {
   const color =
     status === PURCHASE_ORDER_STATUS.pendingApproval
       ? 'processing'
-      : status === PURCHASE_ORDER_STATUS.waitingReceipt
-        ? 'blue'
-        : status === PURCHASE_ORDER_STATUS.rejected
+        : status === PURCHASE_ORDER_STATUS.waitingReceipt ||
+            status === PURCHASE_ORDER_STATUS.partiallyReceived
+          ? 'blue'
+          : status === PURCHASE_ORDER_STATUS.received
+            ? 'success'
+            : status === PURCHASE_ORDER_STATUS.rejected
           ? 'warning'
           : 'default';
   return <Tag color={color}>{purchaseOrderStatusLabel(status)}</Tag>;
@@ -57,6 +61,15 @@ function stepState(order: PurchaseOrderDetail) {
   }
   if (order.status === PURCHASE_ORDER_STATUS.rejected) {
     return { current: 2, status: 'error' as const };
+  }
+  if (order.status === PURCHASE_ORDER_STATUS.waitingReceipt) {
+    return { current: 3, status: 'process' as const };
+  }
+  if (order.status === PURCHASE_ORDER_STATUS.partiallyReceived) {
+    return { current: 4, status: 'process' as const };
+  }
+  if (order.status === PURCHASE_ORDER_STATUS.received) {
+    return { current: 4, status: 'finish' as const };
   }
   return { current: 3, status: 'finish' as const };
 }
@@ -130,6 +143,12 @@ export function PurchaseDetailPage(props: PageProps) {
     { title: '采购数量', dataIndex: 'quantity', key: 'quantity', width: 100 },
     { title: '已收数量', dataIndex: 'received_quantity', key: 'received_quantity', width: 100 },
     {
+      title: '剩余待收',
+      key: 'remaining',
+      width: 100,
+      render: (_, record) => record.quantity - record.received_quantity,
+    },
+    {
       title: '单价',
       dataIndex: 'unit_price',
       key: 'unit_price',
@@ -149,7 +168,7 @@ export function PurchaseDetailPage(props: PageProps) {
     <FormPageContainer>
       <PageHeader
         title={props.title ?? '采购单详情'}
-        description={props.description ?? '审核通过只进入待收货，不会增加库存。'}
+        description={props.description ?? '审核通过只进入待收货。确认收货单后才增加库存。'}
         extra={
           <Space wrap>
             <Button onClick={() => navigate('/purchases')}>返回列表</Button>
@@ -211,6 +230,19 @@ export function PurchaseDetailPage(props: PageProps) {
                 </Button>
               </Can>
             ) : null}
+            {order && canCreatePurchaseReceipt(order.status) ? (
+              <Can permission={PERMISSION_CODE.purchaseReceiptCreate}>
+                <Button
+                  type="primary"
+                  onClick={() => navigate(`/purchase-receipts/create?purchaseOrderId=${order.id}`)}
+                >
+                  {order.status === PURCHASE_ORDER_STATUS.partiallyReceived ? '继续收货' : '创建收货单'}
+                </Button>
+              </Can>
+            ) : null}
+            {order && order.status === PURCHASE_ORDER_STATUS.received ? (
+              <Tag color="success">已全部收货</Tag>
+            ) : null}
             {order && canCancelPurchaseOrder(order.status) ? (
               <Can permission={PERMISSION_CODE.purchaseCancel}>
                 <Button
@@ -266,6 +298,7 @@ export function PurchaseDetailPage(props: PageProps) {
                 { title: '提交审核' },
                 { title: order.status === PURCHASE_ORDER_STATUS.rejected ? '已驳回' : '审核' },
                 { title: '待收货' },
+                { title: '收货完成' },
               ]}
             />
             <Descriptions column={2} size="small" className='mt-4!'>

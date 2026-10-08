@@ -51,8 +51,14 @@
 
 - `customers`：租户客户；`UNIQUE(tenant_id, code)`；未填编码时 flush 后写 `CUS` + 10 位 id
 - `sales_orders`：销售订单；`UNIQUE(tenant_id, order_no)`；`UNIQUE(tenant_id, source, external_order_no)` 允许多个空平台单号；收货地址是下单快照
-- `sales_order_items`：销售明细；`UNIQUE(tenant_id, sales_order_id, sku_id)`；确认后 `reserved_quantity` 等于购买数量，`shipped_quantity` 留给出库
-- 确认 / 取消用 `SELECT ... FOR UPDATE` 锁订单；库存预占仍用条件 UPDATE，多 SKU 按 `sku_id` 升序
+- `sales_order_items`：销售明细；`UNIQUE(tenant_id, sales_order_id, sku_id)`；`reserved_quantity + shipped_quantity <= quantity`
+
+当前里程碑 V8 增加：
+
+- `purchase_receipts` / `purchase_receipt_items`：收货单。单号 `PR` + 年 + 6 位 id。确认后才增加库存
+- `outbound_orders` / `outbound_order_items`：出库单。单号 `OUT` + 年 + 6 位 id。拣货不改库存，确认出库才扣减
+- 迁移 `20261006_0013` 只改 CHECK，不重建销售明细表
+- `outbound_picks` / `outbound_pick_lines`：每次拣货追加记录。`quantity` 是本次，`picked_before` / `picked_after` 是累计变化。出库明细 `picked_quantity` 仍是累计，确认出库继续用它
 
 所有业务表必须包含 `tenant_id`（`TenantMixin`），唯一约束必须带上租户，例如：
 

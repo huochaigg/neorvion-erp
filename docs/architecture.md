@@ -1,6 +1,6 @@
 # 架构说明
 
-当前里程碑：V7。当前有效范围见 `docs/current-state.md`。
+当前里程碑：V8。当前有效范围见 `docs/current-state.md`。
 
 ## 目标
 
@@ -50,7 +50,7 @@
 分层：
 
 1. API Router：HTTP、校验、依赖注入。
-2. Service：业务规则、事务、状态机。库存调整在这里 `SELECT ... FOR UPDATE`，预占用条件 UPDATE，与流水同一事务提交。销售订单确认和取消与库存预占 / 释放共用同一个 Session，库存方法不单独 commit。
+2. Service：业务规则、事务、状态机。库存调整在这里 `SELECT ... FOR UPDATE`，预占用条件 UPDATE。销售确认、收货确认、出库确认与库存共用同一个 Session，`*_within_transaction` 不单独 commit。
 3. Repository：查询与持久化，禁止 commit。
 4. Model / Schema：ORM 与 Pydantic。
 5. Core：配置、安全、异常、日志、租户 ContextVar。

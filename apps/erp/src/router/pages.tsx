@@ -66,6 +66,18 @@ export const PAGE_COMPONENTS: Record<PageKey, LazyExoticComponent<ComponentType<
     const module = await import('@/pages/purchases/PurchaseDetailPage');
     return { default: module.PurchaseDetailPage };
   }),
+  PurchaseReceiptList: lazy(async () => {
+    const module = await import('@/pages/purchases/PurchaseReceiptListPage');
+    return { default: module.PurchaseReceiptListPage };
+  }),
+  PurchaseReceiptForm: lazy(async () => {
+    const module = await import('@/pages/purchases/PurchaseReceiptFormPage');
+    return { default: module.PurchaseReceiptFormPage };
+  }),
+  PurchaseReceiptDetail: lazy(async () => {
+    const module = await import('@/pages/purchases/PurchaseReceiptDetailPage');
+    return { default: module.PurchaseReceiptDetailPage };
+  }),
   Suppliers: lazy(async () => {
     const module = await import('@/pages/purchases/SuppliersPage');
     return { default: module.SuppliersPage };
@@ -81,6 +93,14 @@ export const PAGE_COMPONENTS: Record<PageKey, LazyExoticComponent<ComponentType<
   SalesOrderDetail: lazy(async () => {
     const module = await import('@/pages/orders/SalesOrderDetailPage');
     return { default: module.SalesOrderDetailPage };
+  }),
+  OutboundList: lazy(async () => {
+    const module = await import('@/pages/orders/OutboundListPage');
+    return { default: module.OutboundListPage };
+  }),
+  OutboundDetail: lazy(async () => {
+    const module = await import('@/pages/orders/OutboundDetailPage');
+    return { default: module.OutboundDetailPage };
   }),
   Customers: lazy(async () => {
     const module = await import('@/pages/orders/CustomersPage');

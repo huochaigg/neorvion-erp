@@ -2,7 +2,7 @@
 
 多租户跨境电商 ERP。当前仓库按里程碑持续迭代，**不要为每个版本重建项目**。
 
-当前里程碑：**V7**。当前有效范围见 `docs/current-state.md`。
+当前里程碑：**V8**。当前有效范围见 `docs/current-state.md`。
 
 ## 技术栈
 
@@ -127,6 +127,16 @@ pnpm test
 - ERP 菜单「订单管理」：销售订单、客户；权限 `order:*` 与 `customer:*`，确认沿用 `order:audit`
 - 版本文档：`docs/versions/v7.md`，业务说明：`docs/orders.md`
 
+## V8
+
+- 采购收货单与采购单分开。草稿不入库；确认后 `quantity` 增加、预占不变，写 `INBOUND`
+- 支持部分收货。采购单从待收货进入部分收货或已收货
+- 销售出库单与销售订单分开。确认订单后自动生成第一张出库单；一张订单可以多次部分出库
+- 拣货不扣库存。确认出库同时减少 `quantity` 和 `reserved_quantity`，可用量通常不变，写 `OUTBOUND`
+- 销售明细约束改为 `reserved + shipped <= quantity`
+- ERP：采购收货、销售出库；权限 `purchase:receipt:*` 与 `outbound:*`
+- 版本文档：`docs/versions/v8.md`，业务说明：`docs/fulfillment.md`
+
 ## V6
 
 - 供应商档案：未填编码时生成 `SUP` + 10 位 id；停用后不能新建采购单
@@ -241,6 +251,6 @@ pnpm test
 
 ## 尚未开始
 
-完整菜单权限组件已在 V2.3.5 收尾。V3 完成商品档案。V4 完成仓库档案。V5 完成库存台账。V6 完成采购单与供应商。V7 完成销售订单确认预占与取消释放。尚未开始：采购收货入库、销售拣货出库、发货物流、平台订单同步、退货退款、OWNER 转移、操作日志。
+完整菜单权限组件已在 V2.3.5 收尾。V3 完成商品档案。V4 完成仓库档案。V5 完成库存台账。V6 完成采购单与供应商。V7 完成销售订单确认预占与取消释放。V8 完成采购收货入库和销售拣货出库。尚未开始：发货物流、平台订单同步、退货退款、财务结算、库存盘点、调拨、OWNER 转移、操作日志。
 
 更细的说明见 `docs/development.md`、`docs/architecture.md`、`docs/current-state.md`、`docs/auth.md`、`docs/multi-tenancy.md`、`docs/rbac.md`、`docs/products.md`、`docs/warehouses.md`、`docs/inventory.md`、`docs/purchases.md`、`docs/orders.md`、`docs/versions/v3.md`、`docs/versions/v6.md`、`docs/versions/v7.md`、`docs/routing.md`、`docs/micro-frontend-integration.md` 与 `docs/micro-frontend-interview.md`。

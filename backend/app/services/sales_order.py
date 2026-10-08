@@ -357,6 +357,10 @@ class SalesOrderService:
             locked.status = WAITING_OUTBOUND
             locked.confirmed_at = datetime.now()
             locked.confirmed_by = self.context.user_id
+            # 确认已经预占成功。同一事务生成第一张出库单，失败则预占一并撤销。
+            from app.services.outbound import OutboundOrderService
+
+            OutboundOrderService(self.session, self.context).attach_initial(order_id)
             self.session.commit()
         except AppError:
             self.session.rollback()
@@ -399,6 +403,24 @@ class SalesOrderService:
             order_no = order.order_no or str(order.id)
             warehouse_id = order.warehouse_id
             if release_stock:
+                shipped = [
+                    item
+                    for item in self.orders.list_items(order.id)
+                    if item.shipped_quantity > 0
+                ]
+                if shipped:
+                    raise AppError(
+                        "订单已经出库，不能整单取消",
+                        code=40120,
+                        status_code=400,
+                        data={"error": "SALES_ORDER_HAS_SHIPMENTS"},
+                    )
+                from app.repositories.outbound import OutboundOrderRepository
+
+                OutboundOrderRepository(
+                    self.session,
+                    self.context.tenant_id,
+                ).cancel_open_for_sales_order(order.id)
                 items = [
                     item
                     for item in self.orders.list_items(order.id)
@@ -639,7 +661,13 @@ class SalesOrderService:
             cancelled_by_name=self._user_name(order.cancelled_by),
             cancel_reason=order.cancel_reason,
             items=item_outs,
+            picks=self._order_picks(order.id),
         )
+
+    def _order_picks(self, order_id: int):
+        from app.services.outbound import OutboundOrderService
+
+        return OutboundOrderService(self.session, self.context).list_order_picks(order_id)
 
     def _stock_map(self, warehouse_id: int, sku_ids: list[int]) -> dict[int, Inventory]:
         if not sku_ids:

@@ -1,6 +1,6 @@
 # 库存管理
 
-当前里程碑 **V5**。库存不是 `SKU → quantity`，而是：
+当前里程碑 **V5 的库存台账**，V8 在此之上做采购入库和销售出库。库存不是 `SKU → quantity`，而是：
 
 ```text
 Tenant + Warehouse + SKU → Inventory
@@ -8,7 +8,7 @@ Tenant + Warehouse + SKU → Inventory
 
 同一 SKU 在深圳仓、广州仓、美国仓可以有完全不同的数量。唯一约束是 `UNIQUE(tenant_id, warehouse_id, sku_id)`。
 
-本版完成：库存台账、初始化、调整、流水、预占/释放/出库扣减底层能力、并发安全、RBAC、React 页面。采购单见 V6 `docs/purchases.md`。
+采购收货入库和销售确认出库见 `docs/fulfillment.md`。`INBOUND` 由确认收货写入，`OUTBOUND` 由确认出库写入。`reserve` / `release` / `deduct_within_transaction` / `inbound_within_transaction` 由业务 Service 在同一事务里调用。
 
 **不**开发：采购单、销售订单、正式采购入库/销售出库页面、物流、发货、平台订单。那些是后续版本。`INBOUND` / `OUTBOUND` 枚举已预留；`reserve` / `release` / `deduct-reserved` 只作为内部 Service（测试 API 有，ERP 菜单没有「手动预占」按钮）。
 
@@ -86,7 +86,7 @@ COMMIT
 | `INITIALIZE` | 初始化 | 使用 |
 | `ADJUST_IN` / `ADJUST_OUT` | 库存增加 / 减少 | 使用 |
 | `RESERVE` / `RELEASE` | 预占 / 释放 | 底层实现，不进业务菜单 |
-| `INBOUND` / `OUTBOUND` | 入库 / 出库 | 枚举预留；扣减预占流水记 `OUTBOUND` |
+| `INBOUND` / `OUTBOUND` | 入库 / 出库 | V8 确认收货写 `INBOUND`，确认出库写 `OUTBOUND` |
 
 ## 初始化
 

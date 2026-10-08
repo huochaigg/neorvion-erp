@@ -6,10 +6,12 @@ from app.api.v1.customers import router as customer_router
 from app.api.v1.health import router as health_router
 from app.api.v1.inventory import router as inventory_router
 from app.api.v1.inventory import sku_router as product_sku_router
+from app.api.v1.outbound_orders import router as outbound_order_router
 from app.api.v1.permissions import router as permission_router
 from app.api.v1.product_categories import router as product_category_router
 from app.api.v1.products import router as product_router
 from app.api.v1.purchase_orders import router as purchase_order_router
+from app.api.v1.purchase_receipts import router as purchase_receipt_router
 from app.api.v1.roles import router as role_router
 from app.api.v1.sales_orders import router as sales_order_router
 from app.api.v1.suppliers import router as supplier_router
@@ -30,5 +32,7 @@ api_router.include_router(inventory_router)
 api_router.include_router(product_sku_router)
 api_router.include_router(supplier_router)
 api_router.include_router(purchase_order_router)
+api_router.include_router(purchase_receipt_router)
 api_router.include_router(customer_router)
 api_router.include_router(sales_order_router)
+api_router.include_router(outbound_order_router)
