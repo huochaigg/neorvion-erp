@@ -32,6 +32,15 @@ export function toDateParam(value: Dayjs | string | null | undefined): string | 
   return parsed.isValid() ? parsed.format(DATE_FORMAT) : null;
 }
 
+/** DatePicker 提交本地墙钟时间，不转 UTC（与后端 naive DateTime 一致）。 */
+export function toDateTimeParam(value: Dayjs | string | null | undefined): string | null {
+  if (value == null || value === '') {
+    return null;
+  }
+  const parsed = typeof value === 'string' ? dayjs(value) : value;
+  return parsed.isValid() ? parsed.format('YYYY-MM-DDTHH:mm:ss') : null;
+}
+
 export function fromDateParam(value: string | null | undefined): Dayjs | null {
   if (!value) {
     return null;

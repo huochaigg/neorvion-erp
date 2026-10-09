@@ -10,6 +10,7 @@ import {
   rangeToDateTimes,
   rangeToDates,
   toDateParam,
+  toDateTimeParam,
 } from './datetime';
 
 describe('日期展示与 API 转换', () => {
@@ -29,6 +30,12 @@ describe('日期展示与 API 转换', () => {
     const back = fromDateParam('2026-10-15');
     assert.equal(back?.format(DATE_FORMAT), '2026-10-15');
     assert.equal(fromDateParam(null), null);
+  });
+
+  it('DateTimePicker 提交本地墙钟时间，不转 UTC', () => {
+    assert.equal(toDateTimeParam(dayjs('2026-10-09 16:17:25')), '2026-10-09T16:17:25');
+    assert.equal(toDateTimeParam(null), null);
+    assert.equal(toDateTimeParam('2026-10-09 16:17:25'), '2026-10-09T16:17:25');
   });
 
   it('RangePicker 转查询参数：创建时间带时分秒，预计到货只到日期', () => {
