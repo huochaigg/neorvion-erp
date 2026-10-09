@@ -2,11 +2,14 @@ import {
   ApiError,
   inventoryQueryKey,
   inventoryTransactionsQueryKey,
+  canCreateShipmentFromOutbound,
   outboundOrderQueryKey,
   outboundOrdersQueryKey,
   PERMISSION_CODE,
   salesOrderQueryKey,
   salesOrdersQueryKey,
+  shipmentStatusLabel,
+  shipmentsQueryKey,
 } from '@neorvion/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { App, Button, Descriptions, InputNumber, Popconfirm, Space, Table, Tag } from 'antd';
@@ -18,6 +21,7 @@ import {
   fetchOutboundOrder,
   pickOutboundOrder,
 } from '@/api/outbound-orders';
+import { fetchShipments } from '@/api/shipments';
 import { Can } from '@/components/Can';
 import { FormPageContainer } from '@/components/PageContainer';
 import { PageHeader } from '@/components/PageHeader';
@@ -44,6 +48,16 @@ export function OutboundDetailPage(props: PageProps) {
     enabled: tenantId != null && outboundId > 0,
   });
   const order = query.data;
+  const remainingShippable = (order?.items ?? []).reduce(
+    (sum, item) => sum + (item.remaining_shippable_quantity ?? 0),
+    0,
+  );
+  const shipmentsQuery = useQuery({
+    queryKey: shipmentsQueryKey(tenantId, { outboundOrderId: outboundId, page: 1, pageSize: 50 }),
+    queryFn: ({ signal }) =>
+      fetchShipments({ outboundOrderId: outboundId, page: 1, pageSize: 50 }, signal),
+    enabled: tenantId != null && outboundId > 0,
+  });
   const [picked, setPicked] = useState<Record<number, number>>({});
   useEffect(() => {
     if (!order) {
@@ -137,6 +151,13 @@ export function OutboundDetailPage(props: PageProps) {
                 </Popconfirm>
               </Can>
             ) : null}
+            {order && canCreateShipmentFromOutbound(order.status, remainingShippable) ? (
+              <Can permission={PERMISSION_CODE.shipmentCreate}>
+                <Button type="primary" onClick={() => navigate(`/shipments/create?outboundOrderId=${order.id}`)}>
+                  创建物流单
+                </Button>
+              </Can>
+            ) : null}
             {order && (order.status === 'PENDING_PICKING' || order.status === 'PICKED') ? (
               <Can permission={PERMISSION_CODE.outboundCancel}>
                 <Button danger loading={cancelMutation.isPending} onClick={() => cancelMutation.mutate()}>
@@ -196,6 +217,33 @@ export function OutboundDetailPage(props: PageProps) {
                 },
               },
               { title: '出库数量', dataIndex: 'outbound_quantity' },
+              { title: '已发货', dataIndex: 'shipped_quantity' },
+              { title: '剩余待发', dataIndex: 'remaining_shippable_quantity' },
+            ]}
+          />
+          <Table
+            className="mt-4!"
+            rowKey="id"
+            pagination={false}
+            locale={{ emptyText: '还没有物流单' }}
+            dataSource={shipmentsQuery.data?.items ?? []}
+            columns={[
+              { title: '物流单号', dataIndex: 'shipment_no' },
+              { title: '物流商', dataIndex: 'carrier_name' },
+              { title: '运单号', dataIndex: 'tracking_no', render: (value: string | null) => value || '-' },
+              {
+                title: '状态',
+                dataIndex: 'status',
+                render: (value: string) => shipmentStatusLabel(value),
+              },
+              {
+                title: '操作',
+                render: (_, row) => (
+                  <Button type="link" onClick={() => navigate(`/shipments/${row.id}`)}>
+                    详情
+                  </Button>
+                ),
+              },
             ]}
           />
           <Table

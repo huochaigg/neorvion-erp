@@ -36,22 +36,30 @@ class SalesOrderStatus(StrEnum):
 
     """草稿。可改客户、仓库、收货信息和明细；可提交或取消。未预占库存。"""
     DRAFT = "DRAFT"
-    
+
     """待确认。已提交、等待审核。确认才会预占库存；也可取消且不动库存。"""
     PENDING_CONFIRMATION = "PENDING_CONFIRMATION"
-    
+
     """待出库。已确认并预占。尚未正式出库时可以整单取消并释放预占。"""
     WAITING_OUTBOUND = "WAITING_OUTBOUND"
-    
+
     """部分出库。已经扣过库存，不能整单取消。"""
+    PARTIALLY_OUTBOUND = "PARTIALLY_OUTBOUND"
+
+    """已出库。购买数量都已离开库存账面，尚未全部交给承运商。"""
+    OUTBOUNDED = "OUTBOUNDED"
+
+    """部分发货。已经有物流单确认发货。"""
     PARTIALLY_SHIPPED = "PARTIALLY_SHIPPED"
-    
-    """已出库。购买数量都已发出。"""
+
+    """已发货。订单数量都已交给承运商。"""
     SHIPPED = "SHIPPED"
-    
+
+    """已完成。全部物流单都已签收。"""
+    COMPLETED = "COMPLETED"
+
     """已取消。终态，不能再流转。"""
     CANCELLED = "CANCELLED"
-    
 
 
 class SalesOrderSource(StrEnum):
@@ -164,7 +172,12 @@ class SalesOrder(TimestampMixin, TenantMixin, Base):
 
 
 class SalesOrderItem(TimestampMixin, TenantMixin, Base):
-    """销售明细。reserved_quantity 在确认时写成购买数量；shipped_quantity 留给出库。"""
+    """销售明细。
+
+    reserved_quantity：尚未出库的预占。
+    outbound_quantity：累计仓库已出库。
+    shipped_quantity：累计已交给承运商。
+    """
 
     __tablename__ = "sales_order_items"
     __table_args__ = (
@@ -187,12 +200,17 @@ class SalesOrderItem(TimestampMixin, TenantMixin, Base):
         ),
         CheckConstraint("quantity > 0", name="ck_so_items_quantity_positive"),
         CheckConstraint("reserved_quantity >= 0", name="ck_so_items_reserved_nonneg"),
+        CheckConstraint("outbound_quantity >= 0", name="ck_so_items_outbound_nonneg"),
         CheckConstraint("shipped_quantity >= 0", name="ck_so_items_shipped_nonneg"),
-        # 出库后 reserved 下降、shipped 上升，不能再要求 shipped <= reserved。
-        # 未出库的预占 + 已出库 不能超过购买数量。
+        # 预占尚未出库 + 已出库 不能超过购买数量。
         CheckConstraint(
-            "reserved_quantity + shipped_quantity <= quantity",
-            name="ck_so_items_reserved_plus_shipped",
+            "reserved_quantity + outbound_quantity <= quantity",
+            name="ck_so_items_reserved_plus_outbound",
+        ),
+        # 交给承运商的数量不能超过已经出库的数量。
+        CheckConstraint(
+            "shipped_quantity <= outbound_quantity",
+            name="ck_so_items_shipped_lte_outbound",
         ),
         Index("ix_so_items_tenant_order", "tenant_id", "sales_order_id"),
         Index("ix_so_items_tenant_sku", "tenant_id", "sku_id"),
@@ -204,6 +222,11 @@ class SalesOrderItem(TimestampMixin, TenantMixin, Base):
     quantity: Mapped[int] = mapped_column(Integer, nullable=False)
     unit_price: Mapped[Decimal | None] = mapped_column(Numeric(12, 2), nullable=True)
     reserved_quantity: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        server_default=text("0"),
+    )
+    outbound_quantity: Mapped[int] = mapped_column(
         Integer,
         nullable=False,
         server_default=text("0"),

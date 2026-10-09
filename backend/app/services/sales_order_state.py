@@ -1,7 +1,7 @@
-"""销售订单状态机。状态只能通过提交 / 确认 / 取消改变，不能直接改 status 字段。"""
+"""销售订单状态机。状态只能通过提交 / 确认 / 取消 / 出库 / 发货 / 签收改变。"""
 
 from app.core.exceptions import AppError
-from app.models.sales_order import SalesOrderStatus
+from app.models.sales_order import SalesOrderItem, SalesOrderStatus
 
 DRAFT = SalesOrderStatus.DRAFT.value
 """草稿。可改单；可提交或取消。未预占库存。"""
@@ -12,11 +12,20 @@ PENDING_CONFIRMATION = SalesOrderStatus.PENDING_CONFIRMATION.value
 WAITING_OUTBOUND = SalesOrderStatus.WAITING_OUTBOUND.value
 """待出库。已确认并预占。尚未正式出库时取消必须释放预占。"""
 
+PARTIALLY_OUTBOUND = SalesOrderStatus.PARTIALLY_OUTBOUND.value
+"""部分出库。已经有正式出库，不能整单取消。"""
+
+OUTBOUNDED = SalesOrderStatus.OUTBOUNDED.value
+"""已出库。购买数量都已离开库存账面。"""
+
 PARTIALLY_SHIPPED = SalesOrderStatus.PARTIALLY_SHIPPED.value
-"""部分出库。已经有正式出库，不能整单取消，剩余预占继续出。"""
+"""部分发货。已经有物流单确认交给承运商。"""
 
 SHIPPED = SalesOrderStatus.SHIPPED.value
-"""已出库。购买数量都已发完。"""
+"""已发货。订单数量都已交给承运商，尚未全部签收。"""
+
+COMPLETED = SalesOrderStatus.COMPLETED.value
+"""已完成。全部物流单都已签收。"""
 
 CANCELLED = SalesOrderStatus.CANCELLED.value
 """已取消。终态，不能再变。"""
@@ -24,21 +33,19 @@ CANCELLED = SalesOrderStatus.CANCELLED.value
 ALLOWED_TRANSITIONS: dict[str, frozenset[str]] = {
     DRAFT: frozenset({PENDING_CONFIRMATION, CANCELLED}),
     PENDING_CONFIRMATION: frozenset({WAITING_OUTBOUND, CANCELLED}),
-    WAITING_OUTBOUND: frozenset({PARTIALLY_SHIPPED, SHIPPED, CANCELLED}),
-    PARTIALLY_SHIPPED: frozenset({SHIPPED}),
-    SHIPPED: frozenset(),
+    WAITING_OUTBOUND: frozenset({PARTIALLY_OUTBOUND, OUTBOUNDED, CANCELLED}),
+    PARTIALLY_OUTBOUND: frozenset({OUTBOUNDED, PARTIALLY_SHIPPED, SHIPPED}),
+    OUTBOUNDED: frozenset({PARTIALLY_SHIPPED, SHIPPED}),
+    PARTIALLY_SHIPPED: frozenset({SHIPPED, COMPLETED}),
+    SHIPPED: frozenset({COMPLETED}),
+    COMPLETED: frozenset(),
     CANCELLED: frozenset(),
 }
-"""合法流转：草稿→待确认/取消；待确认→待出库/取消；待出库→取消。已取消无出口。"""
 
 EDITABLE_STATUSES = frozenset({DRAFT})
-"""允许改客户、仓库、收货信息和明细的状态。目前只有草稿。"""
-
 SUBMITTABLE_STATUSES = frozenset({DRAFT})
-"""允许提交审核的状态。目前只有草稿。"""
-
 CANCELLABLE_STATUSES = frozenset({DRAFT, PENDING_CONFIRMATION, WAITING_OUTBOUND})
-"""允许整单取消的状态。一旦有正式出库（部分出库 / 已出库）不能再整单取消。"""
+OUTBOUNDABLE_STATUSES = frozenset({WAITING_OUTBOUND, PARTIALLY_OUTBOUND, PARTIALLY_SHIPPED})
 
 
 def can_transition(current: str, target: str) -> bool:
@@ -66,3 +73,46 @@ def require_editable(status: str) -> None:
             status_code=400,
             data={"error": "SALES_ORDER_NOT_EDITABLE"},
         )
+
+
+def status_from_quantities(
+    items: list[SalesOrderItem],
+    *,
+    all_delivered: bool = False,
+) -> str:
+    """根据明细数量计算订单履约状态。
+
+    为什么不用前端 PATCH status：COMPLETED 必须由签收结果决定。
+    all_delivered 只在全部物流单都已签收时为真。
+    """
+    if not items:
+        return WAITING_OUTBOUND
+    all_outbound = all(item.outbound_quantity == item.quantity for item in items)
+    some_outbound = any(item.outbound_quantity > 0 for item in items)
+    all_shipped = all(item.shipped_quantity == item.quantity for item in items)
+    some_shipped = any(item.shipped_quantity > 0 for item in items)
+    if all_shipped and all_delivered:
+        return COMPLETED
+    if all_shipped:
+        return SHIPPED
+    if some_shipped:
+        return PARTIALLY_SHIPPED
+    if all_outbound:
+        return OUTBOUNDED
+    if some_outbound:
+        return PARTIALLY_OUTBOUND
+    return WAITING_OUTBOUND
+
+
+def apply_fulfillment_status(
+    order_status: str,
+    items: list[SalesOrderItem],
+    *,
+    all_delivered: bool = False,
+) -> str:
+    """算出目标状态；没有变化就返回当前状态，避免无意义流转。"""
+    target = status_from_quantities(items, all_delivered=all_delivered)
+    if target == order_status:
+        return order_status
+    require_transition(order_status, target)
+    return target

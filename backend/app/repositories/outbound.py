@@ -102,13 +102,10 @@ class OutboundOrderRepository(BaseRepository):
 
     def has_active(self, sales_order_id: int) -> bool:
         tenant_id = self.ensure_tenant()
-        stmt = (
-            select(func.count(OutboundOrder.id))
-            .where(
-                OutboundOrder.tenant_id == tenant_id,
-                OutboundOrder.sales_order_id == sales_order_id,
-                OutboundOrder.status != OutboundOrderStatus.CANCELLED.value,
-            )
+        stmt = select(func.count(OutboundOrder.id)).where(
+            OutboundOrder.tenant_id == tenant_id,
+            OutboundOrder.sales_order_id == sales_order_id,
+            OutboundOrder.status != OutboundOrderStatus.CANCELLED.value,
         )
         return int(self.session.scalar(stmt) or 0) > 0
 

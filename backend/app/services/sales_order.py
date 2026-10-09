@@ -156,7 +156,7 @@ class SalesOrderService:
         warehouse = self._require_active_warehouse(payload.warehouse_id)
         sku_map = self._require_active_skus([item.sku_id for item in payload.items])
         source = self._normalize_source(payload.source or SalesOrderSource.MANUAL.value)
-        currency = self._normalize_currency(payload.currency_code or "CNY") # TODO 后期支持多币种
+        currency = self._normalize_currency(payload.currency_code or "CNY")  # TODO 后期支持多币种
         snapshot = self._initial_snapshot(payload, customer)
         order = SalesOrder(
             tenant_id=self.context.tenant_id,
@@ -404,9 +404,7 @@ class SalesOrderService:
             warehouse_id = order.warehouse_id
             if release_stock:
                 shipped = [
-                    item
-                    for item in self.orders.list_items(order.id)
-                    if item.shipped_quantity > 0
+                    item for item in self.orders.list_items(order.id) if item.outbound_quantity > 0
                 ]
                 if shipped:
                     raise AppError(
@@ -422,9 +420,7 @@ class SalesOrderService:
                     self.context.tenant_id,
                 ).cancel_open_for_sales_order(order.id)
                 items = [
-                    item
-                    for item in self.orders.list_items(order.id)
-                    if item.reserved_quantity > 0
+                    item for item in self.orders.list_items(order.id) if item.reserved_quantity > 0
                 ]
                 # 和确认使用同一把 sku_id 顺序，避免确认、取消交叉加锁。
                 items.sort(key=lambda row: (row.sku_id, row.id))
@@ -534,6 +530,7 @@ class SalesOrderService:
                     quantity=item.quantity,
                     unit_price=item.unit_price,
                     reserved_quantity=0,
+                    outbound_quantity=0,
                     shipped_quantity=0,
                     remark=item.remark,
                 )
@@ -735,6 +732,7 @@ class SalesOrderService:
             unit_price=price,
             line_amount=line,
             reserved_quantity=item.reserved_quantity,
+            outbound_quantity=item.outbound_quantity,
             shipped_quantity=item.shipped_quantity,
             remark=item.remark,
             current_quantity=current_qty,

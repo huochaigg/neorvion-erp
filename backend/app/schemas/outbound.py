@@ -79,6 +79,8 @@ class OutboundItemOut(BaseModel):
     planned_quantity: int
     picked_quantity: int
     outbound_quantity: int
+    shipped_quantity: int = 0
+    remaining_shippable_quantity: int = 0
 
 
 class OutboundOrderOut(BaseModel):

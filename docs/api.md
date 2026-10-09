@@ -16,7 +16,7 @@
 
 `GET /api/v1/health`
 
-依赖不可用时 HTTP 仍为 200，字段标记 `unavailable`。当前 `milestone` 为 `V8`。
+依赖不可用时 HTTP 仍为 200，字段标记 `unavailable`。当前 `milestone` 为 `V9`。
 
 ## 认证
 
@@ -164,5 +164,20 @@
 - `POST /api/v1/outbound-orders/{id}/pick|confirm|cancel`
 
 重复确认收货 → `40131` `PURCHASE_RECEIPT_ALREADY_CONFIRMED`。超额收货 → `40132`。重复确认出库 → `40141` `OUTBOUND_ALREADY_CONFIRMED`。出库超过预占 → `40142`。跨租户单据 → `40480` / `40481`。
+
+## 物流商与物流单（V9）
+
+详见 `docs/shipping.md`。
+
+- `GET/POST /api/v1/carriers`
+- `GET/PATCH /api/v1/carriers/{id}`
+- `PATCH /api/v1/carriers/{id}/status`
+- `DELETE /api/v1/carriers/{id}`
+- `GET/POST /api/v1/shipments`
+- `GET/PATCH /api/v1/shipments/{id}`
+- `POST /api/v1/shipments/{id}/confirm|cancel|deliver`
+- `GET/POST /api/v1/shipments/{id}/tracking-events`
+
+物流商编码冲突 → `40970`。使用中不能删除 → `40096` `CARRIER_IN_USE`。停用承运商发货 → `CARRIER_DISABLED`。运单号冲突 → `40971`。重复确认发货 → `40151` `SHIPMENT_ALREADY_CONFIRMED`。超过出库剩余 → `40152` `SHIPMENT_EXCEEDS_OUTBOUND`。确认前无运单号 → `40153` `SHIPMENT_TRACKING_REQUIRED`。跨租户 → `40490` / `40491`。确认发货不修改库存。
 
 Swagger：http://localhost:8011/docs

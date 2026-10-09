@@ -151,6 +151,32 @@ export function outboundOrderQueryKey(tenantId: number | null, outboundId: numbe
   return ['tenant', tenantId, 'outbound-order', outboundId] as const;
 }
 
+export function carriersQueryKey(
+  tenantId: number | null,
+  filters?: Record<string, unknown>,
+) {
+  return ['tenant', tenantId, 'carriers', filters ?? {}] as const;
+}
+
+export function carrierQueryKey(tenantId: number | null, carrierId: number | null) {
+  return ['tenant', tenantId, 'carrier', carrierId] as const;
+}
+
+export function shipmentsQueryKey(
+  tenantId: number | null,
+  filters?: Record<string, unknown>,
+) {
+  return ['tenant', tenantId, 'shipments', filters ?? {}] as const;
+}
+
+export function shipmentQueryKey(tenantId: number | null, shipmentId: number | null) {
+  return ['tenant', tenantId, 'shipment', shipmentId] as const;
+}
+
+export function shipmentTrackingQueryKey(tenantId: number | null, shipmentId: number | null) {
+  return ['tenant', tenantId, 'shipment-tracking', shipmentId] as const;
+}
+
 export function customersQueryKey(
   tenantId: number | null,
   filters?: {

@@ -25,7 +25,9 @@ class PurchaseOrderRepository(BaseRepository):
             .options(
                 selectinload(PurchaseOrder.supplier),
                 selectinload(PurchaseOrder.warehouse),
-                selectinload(PurchaseOrder.items).selectinload(PurchaseOrderItem.sku).selectinload(
+                selectinload(PurchaseOrder.items)
+                .selectinload(PurchaseOrderItem.sku)
+                .selectinload(
                     ProductSku.product,
                 ),
             )

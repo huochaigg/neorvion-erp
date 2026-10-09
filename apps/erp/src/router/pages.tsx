@@ -102,6 +102,22 @@ export const PAGE_COMPONENTS: Record<PageKey, LazyExoticComponent<ComponentType<
     const module = await import('@/pages/orders/OutboundDetailPage');
     return { default: module.OutboundDetailPage };
   }),
+  ShipmentList: lazy(async () => {
+    const module = await import('@/pages/shipping/ShipmentListPage');
+    return { default: module.ShipmentListPage };
+  }),
+  ShipmentForm: lazy(async () => {
+    const module = await import('@/pages/shipping/ShipmentFormPage');
+    return { default: module.ShipmentFormPage };
+  }),
+  ShipmentDetail: lazy(async () => {
+    const module = await import('@/pages/shipping/ShipmentDetailPage');
+    return { default: module.ShipmentDetailPage };
+  }),
+  Carriers: lazy(async () => {
+    const module = await import('@/pages/shipping/CarriersPage');
+    return { default: module.CarriersPage };
+  }),
   Customers: lazy(async () => {
     const module = await import('@/pages/orders/CustomersPage');
     return { default: module.CustomersPage };

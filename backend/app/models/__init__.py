@@ -1,6 +1,7 @@
 """ORM 模型。Alembic 通过导入本包收集 metadata。"""
 
 from app.db.base import Base
+from app.models.carrier import Carrier, CarrierStatus, CarrierType
 from app.models.customer import Customer, CustomerStatus
 from app.models.inventory import Inventory, InventoryTransaction, InventoryTransactionType
 from app.models.outbound import (
@@ -21,6 +22,13 @@ from app.models.sales_order import (
     SalesOrderSource,
     SalesOrderStatus,
 )
+from app.models.shipment import (
+    Shipment,
+    ShipmentItem,
+    ShipmentStatus,
+    ShipmentTrackingEvent,
+    TrackingEventStatus,
+)
 from app.models.supplier import Supplier, SupplierStatus
 from app.models.tenant import MemberRole, MemberStatus, Tenant, TenantMember, TenantStatus
 from app.models.user import User, UserStatus
@@ -29,6 +37,9 @@ from app.models.warehouse import Warehouse, WarehouseStatus, WarehouseType
 __all__ = [
     "Base",
     "Brand",
+    "Carrier",
+    "CarrierStatus",
+    "CarrierType",
     "Customer",
     "CustomerStatus",
     "Inventory",
@@ -59,6 +70,11 @@ __all__ = [
     "SalesOrderItem",
     "SalesOrderSource",
     "SalesOrderStatus",
+    "Shipment",
+    "ShipmentItem",
+    "ShipmentStatus",
+    "ShipmentTrackingEvent",
+    "TrackingEventStatus",
     "Supplier",
     "SupplierStatus",
     "Tenant",

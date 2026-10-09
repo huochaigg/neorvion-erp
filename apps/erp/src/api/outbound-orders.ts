@@ -12,6 +12,8 @@ export interface OutboundItem {
   planned_quantity: number;
   picked_quantity: number;
   outbound_quantity: number;
+  shipped_quantity: number;
+  remaining_shippable_quantity: number;
 }
 
 export interface OutboundDetail {

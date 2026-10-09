@@ -5,4 +5,3 @@ from app.repositories.tenant import TenantMemberRepository, TenantRepository
 from app.repositories.user import UserRepository
 
 __all__ = ["BaseRepository", "TenantMemberRepository", "TenantRepository", "UserRepository"]
-

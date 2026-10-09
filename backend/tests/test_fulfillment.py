@@ -260,8 +260,9 @@ def test_outbound_pick_does_not_change_stock_and_confirm_deducts(client: TestCli
     assert final_stock["reserved_quantity"] == 4
     assert final_stock["quantity"] - final_stock["reserved_quantity"] == 90
     sales = client.get(f"/api/v1/sales-orders/{order_id}", headers=header).json()["data"]
-    assert sales["status"] == "PARTIALLY_SHIPPED"
-    assert sales["items"][0]["shipped_quantity"] == 6
+    assert sales["status"] == "PARTIALLY_OUTBOUND"
+    assert sales["items"][0]["outbound_quantity"] == 6
+    assert sales["items"][0]["shipped_quantity"] == 0
     assert sales["items"][0]["reserved_quantity"] == 4
     txs = client.get(
         "/api/v1/inventory/transactions",
@@ -287,9 +288,10 @@ def test_outbound_pick_does_not_change_stock_and_confirm_deducts(client: TestCli
     done = client.post(f"/api/v1/outbound-orders/{second_id}/confirm", headers=header)
     assert done.status_code == 200, done.text
     finished = client.get(f"/api/v1/sales-orders/{order_id}", headers=header).json()["data"]
-    assert finished["status"] == "SHIPPED"
+    assert finished["status"] == "OUTBOUNDED"
     assert finished["items"][0]["reserved_quantity"] == 0
-    assert finished["items"][0]["shipped_quantity"] == 10
+    assert finished["items"][0]["outbound_quantity"] == 10
+    assert finished["items"][0]["shipped_quantity"] == 0
     blocked = client.post(
         f"/api/v1/sales-orders/{order_id}/cancel",
         json={"reason": "太晚"},

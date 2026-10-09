@@ -37,14 +37,20 @@ describe('销售订单与客户 UI 规则', () => {
     assert.equal(canConfirmSalesOrder(SALES_ORDER_STATUS.pendingConfirmation), true);
     assert.equal(canConfirmSalesOrder(SALES_ORDER_STATUS.waitingOutbound), false);
     assert.equal(canCancelSalesOrder(SALES_ORDER_STATUS.waitingOutbound), true);
+    assert.equal(canCancelSalesOrder(SALES_ORDER_STATUS.partiallyOutbound), false);
     assert.equal(canCancelSalesOrder(SALES_ORDER_STATUS.partiallyShipped), false);
     assert.equal(canCancelSalesOrder(SALES_ORDER_STATUS.shipped), false);
     assert.equal(canCreateOutbound(SALES_ORDER_STATUS.waitingOutbound), true);
+    assert.equal(canCreateOutbound(SALES_ORDER_STATUS.partiallyOutbound), true);
     assert.equal(canCreateOutbound(SALES_ORDER_STATUS.partiallyShipped), true);
+    assert.equal(canCreateOutbound(SALES_ORDER_STATUS.outbounded), false);
     assert.equal(canCreateOutbound(SALES_ORDER_STATUS.shipped), false);
     assert.equal(salesOrderStatusLabel(SALES_ORDER_STATUS.waitingOutbound), '待出库');
-    assert.equal(salesOrderStatusLabel(SALES_ORDER_STATUS.partiallyShipped), '部分出库');
-    assert.equal(salesOrderStatusLabel(SALES_ORDER_STATUS.shipped), '已出库');
+    assert.equal(salesOrderStatusLabel(SALES_ORDER_STATUS.partiallyOutbound), '部分出库');
+    assert.equal(salesOrderStatusLabel(SALES_ORDER_STATUS.outbounded), '已出库');
+    assert.equal(salesOrderStatusLabel(SALES_ORDER_STATUS.partiallyShipped), '部分发货');
+    assert.equal(salesOrderStatusLabel(SALES_ORDER_STATUS.shipped), '已发货');
+    assert.equal(salesOrderStatusLabel(SALES_ORDER_STATUS.completed), '已完成');
     assert.equal(salesOrderStatusLabel(SALES_ORDER_STATUS.pendingConfirmation), '待确认');
   });
 

@@ -9,8 +9,11 @@ export const SALES_ORDER_STATUS = {
   draft: 'DRAFT',
   pendingConfirmation: 'PENDING_CONFIRMATION',
   waitingOutbound: 'WAITING_OUTBOUND',
+  partiallyOutbound: 'PARTIALLY_OUTBOUND',
+  outbounded: 'OUTBOUNDED',
   partiallyShipped: 'PARTIALLY_SHIPPED',
   shipped: 'SHIPPED',
+  completed: 'COMPLETED',
   cancelled: 'CANCELLED',
 } as const;
 
@@ -18,8 +21,11 @@ export const SALES_ORDER_STATUS_LABEL: Record<string, string> = {
   DRAFT: '草稿',
   PENDING_CONFIRMATION: '待确认',
   WAITING_OUTBOUND: '待出库',
-  PARTIALLY_SHIPPED: '部分出库',
-  SHIPPED: '已出库',
+  PARTIALLY_OUTBOUND: '部分出库',
+  OUTBOUNDED: '已出库',
+  PARTIALLY_SHIPPED: '部分发货',
+  SHIPPED: '已发货',
+  COMPLETED: '已完成',
   CANCELLED: '已取消',
 };
 
@@ -27,8 +33,11 @@ export const SALES_ORDER_STATUS_OPTIONS = [
   { value: SALES_ORDER_STATUS.draft, label: '草稿' },
   { value: SALES_ORDER_STATUS.pendingConfirmation, label: '待确认' },
   { value: SALES_ORDER_STATUS.waitingOutbound, label: '待出库' },
-  { value: SALES_ORDER_STATUS.partiallyShipped, label: '部分出库' },
-  { value: SALES_ORDER_STATUS.shipped, label: '已出库' },
+  { value: SALES_ORDER_STATUS.partiallyOutbound, label: '部分出库' },
+  { value: SALES_ORDER_STATUS.outbounded, label: '已出库' },
+  { value: SALES_ORDER_STATUS.partiallyShipped, label: '部分发货' },
+  { value: SALES_ORDER_STATUS.shipped, label: '已发货' },
+  { value: SALES_ORDER_STATUS.completed, label: '已完成' },
   { value: SALES_ORDER_STATUS.cancelled, label: '已取消' },
 ];
 
@@ -106,6 +115,7 @@ export function canCancelSalesOrder(status: string): boolean {
 export function canCreateOutbound(status: string): boolean {
   return (
     status === SALES_ORDER_STATUS.waitingOutbound ||
+    status === SALES_ORDER_STATUS.partiallyOutbound ||
     status === SALES_ORDER_STATUS.partiallyShipped
   );
 }
@@ -221,6 +231,7 @@ export interface SalesOrderItem {
   unit_price: number | null;
   line_amount: number | null;
   reserved_quantity: number;
+  outbound_quantity: number;
   shipped_quantity: number;
   remark: string | null;
   current_quantity: number | null;
