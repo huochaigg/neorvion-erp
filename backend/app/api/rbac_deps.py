@@ -268,3 +268,51 @@ OutboundCancelContext = Annotated[
     TenantContext,
     Depends(require_permission(PermissionCode.OUTBOUND_CANCEL)),
 ]
+CarrierReadContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.CARRIER_READ)),
+]
+CarrierCreateContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.CARRIER_CREATE)),
+]
+CarrierUpdateContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.CARRIER_UPDATE)),
+]
+CarrierDisableContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.CARRIER_DISABLE)),
+]
+CarrierDeleteContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.CARRIER_DELETE)),
+]
+ShipmentReadContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.SHIPMENT_READ)),
+]
+ShipmentCreateContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.SHIPMENT_CREATE)),
+]
+ShipmentUpdateContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.SHIPMENT_UPDATE)),
+]
+ShipmentConfirmContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.SHIPMENT_CONFIRM)),
+]
+ShipmentTrackingContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.SHIPMENT_TRACKING_UPDATE)),
+]
+ShipmentDeliverContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.SHIPMENT_DELIVER)),
+]
+ShipmentCancelContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.SHIPMENT_CANCEL)),
+]

@@ -1,6 +1,6 @@
 # 库存管理
 
-当前里程碑 **V5 的库存台账**，V8 在此之上做采购入库和销售出库。库存不是 `SKU → quantity`，而是：
+当前里程碑 **V5 的库存台账**，V8 在此之上做采购入库和销售出库。V9 物流发货不再改库存。库存不是 `SKU → quantity`，而是：
 
 ```text
 Tenant + Warehouse + SKU → Inventory

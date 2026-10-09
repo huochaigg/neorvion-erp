@@ -1,6 +1,6 @@
 # 开发说明
 
-当前里程碑：V8（采购收货入库 / 销售拣货出库）。
+当前里程碑：V9（物流商 / 物流单 / 确认发货 / 签收）。
 
 ## 前置
 
@@ -119,8 +119,13 @@ pnpm test
 44. 有 `order:audit` 的成员确认后，订单进入待出库：实际库存不变，预占增加，可用减少，流水为 `RESERVE` 且指向该订单。任一 SKU 不足则整单回滚，并列出 SKU、可用量和需求量。
 45. 取消待出库会释放预占并写 `RELEASE`。再次取消返回 `ORDER_ALREADY_CANCELLED`。无 `order:read` 看不到订单菜单；无对应动作权限时按钮隐藏，直接调接口仍 403。
 46. 切换企业后客户与销售订单隔离；`/orders/:id` 会回到销售订单列表。改客户地址不影响已保存订单的收货快照。
+47. 可进入「物流商」创建承运商；未填编码时生成 `CAR` + 10 位 id。已被物流单引用不能删除，只能停用。停用后不能新建物流单。
+48. 已确认出库的单据可创建物流草稿。草稿不改库存、不改变销售订单发货状态。确认发货前必须有运单号。
+49. 确认发货后 `shipped_quantity` 增加，`Inventory.quantity` / `reserved_quantity` 不变。部分发货进入 `PARTIALLY_SHIPPED`，全部发货进入 `SHIPPED`。重复确认不再累计。
+50. 已发货可追加轨迹；签收后自动写签收轨迹。全部物流签收后销售订单进入 `COMPLETED`。无对应权限时按钮隐藏，直接调接口仍 403。
+51. 切换企业后物流商与物流单隔离；`/shipments/:id` 会回到物流单列表。
 
-多租户说明见 `docs/multi-tenancy.md`。RBAC 见 `docs/rbac.md`。商品见 `docs/products.md`。仓库见 `docs/warehouses.md`。库存见 `docs/inventory.md`。采购见 `docs/purchases.md`。销售订单见 `docs/orders.md`。履约见 `docs/fulfillment.md`。当前状态见 `docs/current-state.md`。V3 见 `docs/versions/v3.md`。V4 见 `docs/versions/v4.md`。V5 见 `docs/versions/v5.md`。V6 见 `docs/versions/v6.md`。V7 见 `docs/versions/v7.md`。V8 见 `docs/versions/v8.md`。路由配置说明见 `docs/routing.md`。认证流程见 `docs/auth.md`。
+多租户说明见 `docs/multi-tenancy.md`。RBAC 见 `docs/rbac.md`。商品见 `docs/products.md`。仓库见 `docs/warehouses.md`。库存见 `docs/inventory.md`。采购见 `docs/purchases.md`。销售订单见 `docs/orders.md`。履约见 `docs/fulfillment.md`。物流见 `docs/shipping.md`。当前状态见 `docs/current-state.md`。V3 见 `docs/versions/v3.md`。V4 见 `docs/versions/v4.md`。V5 见 `docs/versions/v5.md`。V6 见 `docs/versions/v6.md`。V7 见 `docs/versions/v7.md`。V8 见 `docs/versions/v8.md`。V9 见 `docs/versions/v9.md`。路由配置说明见 `docs/routing.md`。认证流程见 `docs/auth.md`。
 
 ## 浏览器进 debugger
 

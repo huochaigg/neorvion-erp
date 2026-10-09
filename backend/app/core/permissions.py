@@ -83,6 +83,20 @@ class PermissionCode(StrEnum):
     OUTBOUND_CONFIRM = "outbound:confirm"
     OUTBOUND_CANCEL = "outbound:cancel"
 
+    CARRIER_READ = "carrier:read"
+    CARRIER_CREATE = "carrier:create"
+    CARRIER_UPDATE = "carrier:update"
+    CARRIER_DISABLE = "carrier:disable"
+    CARRIER_DELETE = "carrier:delete"
+
+    SHIPMENT_READ = "shipment:read"
+    SHIPMENT_CREATE = "shipment:create"
+    SHIPMENT_UPDATE = "shipment:update"
+    SHIPMENT_CONFIRM = "shipment:confirm"
+    SHIPMENT_TRACKING_UPDATE = "shipment:tracking:update"
+    SHIPMENT_DELIVER = "shipment:deliver"
+    SHIPMENT_CANCEL = "shipment:cancel"
+
     SUPPLIER_READ = "supplier:read"
     SUPPLIER_CREATE = "supplier:create"
     SUPPLIER_UPDATE = "supplier:update"
@@ -207,6 +221,18 @@ PERMISSION_CATALOG: tuple[tuple[str, str, str, str], ...] = (
     (PermissionCode.OUTBOUND_PICK, "拣货", "outbound", "确认拣货数量，不扣库存"),
     (PermissionCode.OUTBOUND_CONFIRM, "确认出库", "outbound", "正式扣减实际库存和预占"),
     (PermissionCode.OUTBOUND_CANCEL, "取消出库单", "outbound", "取消尚未出库的拣货任务"),
+    (PermissionCode.CARRIER_READ, "查看物流商", "carrier", "查看本企业物流商档案"),
+    (PermissionCode.CARRIER_CREATE, "新增物流商", "carrier", "创建物流商"),
+    (PermissionCode.CARRIER_UPDATE, "编辑物流商", "carrier", "编辑物流商档案，编码创建后只读"),
+    (PermissionCode.CARRIER_DISABLE, "启用停用物流商", "carrier", "启用或禁用物流商"),
+    (PermissionCode.CARRIER_DELETE, "删除物流商", "carrier", "删除尚未被物流单引用的物流商"),
+    (PermissionCode.SHIPMENT_READ, "查看物流单", "shipment", "查看物流单与轨迹"),
+    (PermissionCode.SHIPMENT_CREATE, "新建物流单", "shipment", "为已出库单据创建物流草稿"),
+    (PermissionCode.SHIPMENT_UPDATE, "编辑物流单", "shipment", "修改草稿物流商、运单号和数量"),
+    (PermissionCode.SHIPMENT_CONFIRM, "确认发货", "shipment", "把已出库商品交给承运商，不再扣库存"),
+    (PermissionCode.SHIPMENT_TRACKING_UPDATE, "更新轨迹", "shipment", "手工追加物流轨迹"),
+    (PermissionCode.SHIPMENT_DELIVER, "确认签收", "shipment", "签收物流单；全部签收后完成销售订单"),
+    (PermissionCode.SHIPMENT_CANCEL, "取消物流单", "shipment", "取消尚未发货的物流草稿"),
     (PermissionCode.SUPPLIER_READ, "查看供应商", "supplier", "查看本企业供应商"),
     (PermissionCode.SUPPLIER_CREATE, "新增供应商", "supplier", "创建供应商"),
     (PermissionCode.SUPPLIER_UPDATE, "编辑供应商", "supplier", "编辑供应商档案，编码创建后只读"),
@@ -254,6 +280,8 @@ _READ_CODES: tuple[str, ...] = (
     PermissionCode.PURCHASE_READ,
     PermissionCode.PURCHASE_RECEIPT_READ,
     PermissionCode.OUTBOUND_READ,
+    PermissionCode.CARRIER_READ,
+    PermissionCode.SHIPMENT_READ,
     PermissionCode.SUPPLIER_READ,
 )
 
@@ -295,6 +323,14 @@ DEFAULT_ROLE_TEMPLATES: tuple[tuple[str, str, str, tuple[str, ...]], ...] = (
             PermissionCode.PURCHASE_RECEIPT_READ,
             PermissionCode.PURCHASE_RECEIPT_CREATE,
             PermissionCode.OUTBOUND_READ,
+            PermissionCode.CARRIER_READ,
+            PermissionCode.SHIPMENT_READ,
+            PermissionCode.SHIPMENT_CREATE,
+            PermissionCode.SHIPMENT_UPDATE,
+            PermissionCode.SHIPMENT_CONFIRM,
+            PermissionCode.SHIPMENT_TRACKING_UPDATE,
+            PermissionCode.SHIPMENT_DELIVER,
+            PermissionCode.SHIPMENT_CANCEL,
         ),
     ),
     (
@@ -326,6 +362,10 @@ DEFAULT_ROLE_TEMPLATES: tuple[tuple[str, str, str, tuple[str, ...]], ...] = (
             PermissionCode.OUTBOUND_PICK,
             PermissionCode.OUTBOUND_CONFIRM,
             PermissionCode.OUTBOUND_CANCEL,
+            PermissionCode.CARRIER_READ,
+            PermissionCode.SHIPMENT_READ,
+            PermissionCode.SHIPMENT_CREATE,
+            PermissionCode.SHIPMENT_CONFIRM,
         ),
     ),
     (
@@ -752,6 +792,99 @@ PERMISSION_TREE: tuple[PermissionTreeDef, ...] = (
                         title="取消",
                         type="ACTION",
                         permission_code=PermissionCode.OUTBOUND_CANCEL,
+                    ),
+                ),
+            ),
+        ),
+    ),
+    PermissionTreeDef(
+        key="dir:shipping",
+        title="物流管理",
+        type="DIRECTORY",
+        children=(
+            PermissionTreeDef(
+                key="menu:shipments",
+                title="物流单",
+                type="MENU",
+                children=(
+                    PermissionTreeDef(
+                        key="action:shipment-read",
+                        title="查看",
+                        type="ACTION",
+                        permission_code=PermissionCode.SHIPMENT_READ,
+                    ),
+                    PermissionTreeDef(
+                        key="action:shipment-create",
+                        title="新建",
+                        type="ACTION",
+                        permission_code=PermissionCode.SHIPMENT_CREATE,
+                    ),
+                    PermissionTreeDef(
+                        key="action:shipment-update",
+                        title="编辑",
+                        type="ACTION",
+                        permission_code=PermissionCode.SHIPMENT_UPDATE,
+                    ),
+                    PermissionTreeDef(
+                        key="action:shipment-confirm",
+                        title="确认发货",
+                        type="ACTION",
+                        permission_code=PermissionCode.SHIPMENT_CONFIRM,
+                    ),
+                    PermissionTreeDef(
+                        key="action:shipment-tracking",
+                        title="更新轨迹",
+                        type="ACTION",
+                        permission_code=PermissionCode.SHIPMENT_TRACKING_UPDATE,
+                    ),
+                    PermissionTreeDef(
+                        key="action:shipment-deliver",
+                        title="确认签收",
+                        type="ACTION",
+                        permission_code=PermissionCode.SHIPMENT_DELIVER,
+                    ),
+                    PermissionTreeDef(
+                        key="action:shipment-cancel",
+                        title="取消",
+                        type="ACTION",
+                        permission_code=PermissionCode.SHIPMENT_CANCEL,
+                    ),
+                ),
+            ),
+            PermissionTreeDef(
+                key="menu:carriers",
+                title="物流商",
+                type="MENU",
+                children=(
+                    PermissionTreeDef(
+                        key="action:carrier-read",
+                        title="查看",
+                        type="ACTION",
+                        permission_code=PermissionCode.CARRIER_READ,
+                    ),
+                    PermissionTreeDef(
+                        key="action:carrier-create",
+                        title="新建",
+                        type="ACTION",
+                        permission_code=PermissionCode.CARRIER_CREATE,
+                    ),
+                    PermissionTreeDef(
+                        key="action:carrier-update",
+                        title="编辑",
+                        type="ACTION",
+                        permission_code=PermissionCode.CARRIER_UPDATE,
+                    ),
+                    PermissionTreeDef(
+                        key="action:carrier-disable",
+                        title="启用 / 禁用",
+                        type="ACTION",
+                        permission_code=PermissionCode.CARRIER_DISABLE,
+                    ),
+                    PermissionTreeDef(
+                        key="action:carrier-delete",
+                        title="删除",
+                        type="ACTION",
+                        permission_code=PermissionCode.CARRIER_DELETE,
                     ),
                 ),
             ),

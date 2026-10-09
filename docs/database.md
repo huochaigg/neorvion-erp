@@ -51,7 +51,7 @@
 
 - `customers`：租户客户；`UNIQUE(tenant_id, code)`；未填编码时 flush 后写 `CUS` + 10 位 id
 - `sales_orders`：销售订单；`UNIQUE(tenant_id, order_no)`；`UNIQUE(tenant_id, source, external_order_no)` 允许多个空平台单号；收货地址是下单快照
-- `sales_order_items`：销售明细；`UNIQUE(tenant_id, sales_order_id, sku_id)`；`reserved_quantity + shipped_quantity <= quantity`
+- `sales_order_items`：销售明细；`UNIQUE(tenant_id, sales_order_id, sku_id)`；V9 起 `reserved + outbound <= quantity` 且 `shipped <= outbound`
 
 当前里程碑 V8 增加：
 
@@ -59,6 +59,14 @@
 - `outbound_orders` / `outbound_order_items`：出库单。单号 `OUT` + 年 + 6 位 id。拣货不改库存，确认出库才扣减
 - 迁移 `20261006_0013` 只改 CHECK，不重建销售明细表
 - `outbound_picks` / `outbound_pick_lines`：每次拣货追加记录。`quantity` 是本次，`picked_before` / `picked_after` 是累计变化。出库明细 `picked_quantity` 仍是累计，确认出库继续用它
+
+当前里程碑 V9 增加：
+
+- `carriers`：物流商；`UNIQUE(tenant_id, code)`；未填编码时 flush 后写 `CAR` + 10 位 id
+- `shipments`：物流单；`UNIQUE(tenant_id, shipment_no)`；`UNIQUE(tenant_id, carrier_id, tracking_no)`
+- `shipment_items`：本包裹实际发给承运商的数量；同一出库明细可拆多包裹
+- `shipment_tracking_events`：只追加的手工轨迹
+- 迁移 `20261008_0015` 把 V8 的 `shipped_quantity` 拷到 `outbound_quantity` 后清零，并把 `PARTIALLY_SHIPPED` / `SHIPPED` 改成 `PARTIALLY_OUTBOUND` / `OUTBOUNDED`
 
 所有业务表必须包含 `tenant_id`（`TenantMixin`），唯一约束必须带上租户，例如：
 

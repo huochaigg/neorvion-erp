@@ -5,6 +5,7 @@ export type IconName =
   | 'ShopOutlined'
   | 'ShoppingCartOutlined'
   | 'AccountBookOutlined'
+  | 'CarOutlined'
   | 'SettingOutlined';
 
 export type PageKey =
@@ -34,6 +35,10 @@ export type PageKey =
   | 'SalesOrderDetail'
   | 'OutboundList'
   | 'OutboundDetail'
+  | 'ShipmentList'
+  | 'ShipmentForm'
+  | 'ShipmentDetail'
+  | 'Carriers'
   | 'Customers';
 
 export type PermissionMode = 'any' | 'all';

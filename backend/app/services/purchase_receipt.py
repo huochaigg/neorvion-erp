@@ -235,9 +235,7 @@ class PurchaseReceiptService:
                     status_code=400,
                     data={"error": "PURCHASE_ORDER_NOT_RECEIVABLE"},
                 )
-            po_items = {
-                row.id: row for row in self.receipts.list_po_items_for_update(order.id)
-            }
+            po_items = {row.id: row for row in self.receipts.list_po_items_for_update(order.id)}
             draft_items = self.receipts.get_in_tenant(receipt.id)
             if draft_items is None or not draft_items.items:
                 raise AppError("收货单没有明细", code=40134, status_code=400)
@@ -285,9 +283,7 @@ class PurchaseReceiptService:
                     status_code=400,
                     data={"error": "PURCHASE_RECEIPT_ALREADY_CONFIRMED"},
                 )
-            fresh_items = {
-                row.id: row for row in self.receipts.list_po_items_for_update(order.id)
-            }
+            fresh_items = {row.id: row for row in self.receipts.list_po_items_for_update(order.id)}
             for _sku_id, po_item_id, qty in plan:
                 po_item = fresh_items[po_item_id]
                 if po_item.received_quantity + qty > po_item.quantity:

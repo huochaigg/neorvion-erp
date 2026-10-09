@@ -22,6 +22,7 @@ from app.models.sales_order import SalesOrderItem
 from app.models.user import User
 from app.repositories.outbound import OutboundOrderRepository
 from app.repositories.sales_order import SalesOrderRepository
+from app.repositories.shipment import ShipmentRepository
 from app.schemas.outbound import (
     OutboundCreate,
     OutboundItemIn,
@@ -38,18 +39,16 @@ from app.schemas.outbound import (
 from app.services.authorization import AuthorizationService
 from app.services.inventory import InventoryService
 from app.services.sales_order_state import (
-    PARTIALLY_SHIPPED,
-    SHIPPED,
-    WAITING_OUTBOUND,
-    require_transition,
+    OUTBOUNDABLE_STATUSES,
+    apply_fulfillment_status,
 )
 
 _UNAVAILABLE = "出库单不存在或不可访问"
 _PENDING = OutboundOrderStatus.PENDING_PICKING.value
+_FULFILLABLE = OUTBOUNDABLE_STATUSES
 _PICKED = OutboundOrderStatus.PICKED.value
 _CONFIRMED = OutboundOrderStatus.CONFIRMED.value
 _CANCELLED = OutboundOrderStatus.CANCELLED.value
-_FULFILLABLE = frozenset({WAITING_OUTBOUND, PARTIALLY_SHIPPED})
 
 
 class OutboundOrderService:
@@ -59,6 +58,7 @@ class OutboundOrderService:
         self.auth = AuthorizationService(session)
         self.outbounds = OutboundOrderRepository(session, context.tenant_id)
         self.orders = SalesOrderRepository(session, context.tenant_id)
+        self.shipments = ShipmentRepository(session, context.tenant_id)
         self.inventory = InventoryService(session, context)
 
     def list_outbounds(
@@ -298,8 +298,7 @@ class OutboundOrderService:
                     data={"error": "SALES_ORDER_NOT_OUTBOUNDABLE"},
                 )
             sales_items = {
-                row.id: row
-                for row in self.outbounds.list_sales_items_for_update(sales.id)
+                row.id: row for row in self.outbounds.list_sales_items_for_update(sales.id)
             }
             rows = self.outbounds.list_items(outbound_id)
             plan = sorted(
@@ -320,7 +319,7 @@ class OutboundOrderService:
                         status_code=400,
                         data={"error": "OUTBOUND_EXCEEDS_RESERVED", "sku_id": sku_id},
                     )
-                held = sales_item.reserved_quantity + sales_item.shipped_quantity
+                held = sales_item.reserved_quantity + sales_item.outbound_quantity
                 if held > sales_item.quantity:
                     raise AppError("订单数量关系不合法", code=40142, status_code=400)
             for sku_id, _sales_item_id, qty, _item_id in plan:
@@ -341,8 +340,7 @@ class OutboundOrderService:
                     data={"error": "OUTBOUND_ALREADY_CONFIRMED"},
                 )
             fresh_sales_items = {
-                row.id: row
-                for row in self.outbounds.list_sales_items_for_update(sales.id)
+                row.id: row for row in self.outbounds.list_sales_items_for_update(sales.id)
             }
             item_rows = {row.id: row for row in self.outbounds.list_items(outbound_id)}
             for _sku_id, sales_item_id, qty, item_id in plan:
@@ -355,7 +353,7 @@ class OutboundOrderService:
                         data={"error": "OUTBOUND_EXCEEDS_RESERVED"},
                     )
                 sales_item.reserved_quantity -= qty
-                sales_item.shipped_quantity += qty
+                sales_item.outbound_quantity += qty
                 item_rows[item_id].outbound_quantity = qty
             locked.status = _CONFIRMED
             locked.confirmed_at = datetime.now()
@@ -495,15 +493,7 @@ class OutboundOrderService:
         return chosen
 
     def _sync_sales_status(self, order, items: list[SalesOrderItem]) -> None:
-        if items and all(item.shipped_quantity == item.quantity for item in items):
-            target = SHIPPED
-        elif any(item.shipped_quantity > 0 for item in items):
-            target = PARTIALLY_SHIPPED
-        else:
-            target = WAITING_OUTBOUND
-        if order.status != target:
-            require_transition(order.status, target)
-            order.status = target
+        order.status = apply_fulfillment_status(order.status, items)
 
     def _out(self, order: OutboundOrder) -> OutboundOrderOut:
         sales = order.sales_order
@@ -513,6 +503,8 @@ class OutboundOrderService:
         warehouse_name = ""
         if sales is not None and sales.warehouse is not None:
             warehouse_name = sales.warehouse.name
+        confirmed = self.shipments.allocated_by_outbound_item(order.id, confirmed_only=True)
+        allocated = self.shipments.allocated_by_outbound_item(order.id, confirmed_only=False)
         return OutboundOrderOut(
             id=order.id,
             outbound_no=order.outbound_no or "",
@@ -530,12 +522,27 @@ class OutboundOrderService:
             confirmed_at=order.confirmed_at,
             confirmed_by=order.confirmed_by,
             created_at=order.created_at,
-            items=[self._item_out(item) for item in order.items],
+            items=[
+                self._item_out(
+                    item,
+                    shipped_quantity=confirmed.get(item.id, 0),
+                    remaining_shippable_quantity=max(
+                        item.outbound_quantity - allocated.get(item.id, 0),
+                        0,
+                    ),
+                )
+                for item in order.items
+            ],
             picks=self.pick_outs(self.outbounds.list_picks(order.id)),
         )
 
     @staticmethod
-    def _item_out(item: OutboundOrderItem) -> OutboundItemOut:
+    def _item_out(
+        item: OutboundOrderItem,
+        *,
+        shipped_quantity: int = 0,
+        remaining_shippable_quantity: int = 0,
+    ) -> OutboundItemOut:
         sku = item.sku
         spec = {} if sku is None or sku.spec_values is None else sku.spec_values
         return OutboundItemOut(
@@ -549,6 +556,8 @@ class OutboundOrderService:
             planned_quantity=item.planned_quantity,
             picked_quantity=item.picked_quantity,
             outbound_quantity=item.outbound_quantity,
+            shipped_quantity=shipped_quantity,
+            remaining_shippable_quantity=remaining_shippable_quantity,
         )
 
     def list_order_picks(self, sales_order_id: int) -> list[OutboundPickOut]:

@@ -11,6 +11,8 @@ import {
   salesOrderQueryKey,
   salesOrderSourceLabel,
   salesOrderStatusLabel,
+  shipmentStatusLabel,
+  shipmentsQueryKey,
   specValuesLabel,
   type SalesOrderDetail,
   type SalesOrderItem,
@@ -21,6 +23,7 @@ import type { ColumnsType } from 'antd/es/table';
 import { useNavigate, useParams } from 'react-router-dom';
 import { cancelSalesOrder, confirmSalesOrder, fetchSalesOrder, submitSalesOrder } from '@/api/sales-orders';
 import { createOutboundOrder, fetchOutboundOrders } from '@/api/outbound-orders';
+import { fetchShipments } from '@/api/shipments';
 import { AppTable, CodeCell, EllipsisCell } from '@/components/AppTable';
 import { Can } from '@/components/Can';
 import { FormPageContainer } from '@/components/PageContainer';
@@ -33,9 +36,9 @@ function statusTag(status: string) {
   const color =
     status === 'PENDING_CONFIRMATION'
       ? 'processing'
-      : status === 'WAITING_OUTBOUND' || status === 'PARTIALLY_SHIPPED'
+      : status === 'WAITING_OUTBOUND' || status === 'PARTIALLY_OUTBOUND' || status === 'PARTIALLY_SHIPPED'
         ? 'blue'
-        : status === 'SHIPPED'
+        : status === 'OUTBOUNDED' || status === 'SHIPPED' || status === 'COMPLETED'
           ? 'success'
           : 'default';
   return <Tag color={color}>{salesOrderStatusLabel(status)}</Tag>;
@@ -65,6 +68,12 @@ export function SalesOrderDetailPage(props: PageProps) {
   const detailQuery = useQuery({
     queryKey: salesOrderQueryKey(tenantId, validId ? orderId : null),
     queryFn: ({ signal }) => fetchSalesOrder(orderId, signal),
+    enabled: tenantId != null && validId,
+  });
+  const shipmentsQuery = useQuery({
+    queryKey: shipmentsQueryKey(tenantId, { salesOrderId: validId ? orderId : undefined, page: 1, pageSize: 50 }),
+    queryFn: ({ signal }) =>
+      fetchShipments({ salesOrderId: orderId, page: 1, pageSize: 50 }, signal),
     enabled: tenantId != null && validId,
   });
 
@@ -105,12 +114,19 @@ export function SalesOrderDetailPage(props: PageProps) {
     },
     { title: '购买数量', dataIndex: 'quantity', key: 'quantity', width: 100 },
     { title: '已预占', dataIndex: 'reserved_quantity', key: 'reserved_quantity', width: 90 },
-    { title: '已出库', dataIndex: 'shipped_quantity', key: 'shipped_quantity', width: 90 },
+    { title: '已出库', dataIndex: 'outbound_quantity', key: 'outbound_quantity', width: 90 },
+    { title: '已发货', dataIndex: 'shipped_quantity', key: 'shipped_quantity', width: 90 },
     {
       title: '剩余待出库',
-      key: 'remaining',
+      key: 'remaining_outbound',
       width: 110,
-      render: (_, record) => record.quantity - record.shipped_quantity,
+      render: (_, record) => record.quantity - record.outbound_quantity,
+    },
+    {
+      title: '剩余待发',
+      key: 'remaining_ship',
+      width: 100,
+      render: (_, record) => record.outbound_quantity - record.shipped_quantity,
     },
     {
       title: '单价',
@@ -182,7 +198,7 @@ export function SalesOrderDetailPage(props: PageProps) {
                 </Button>
               </Can>
             ) : null}
-            {order && canCreateOutbound(order.status) ? (
+            {order && canCreateOutbound(order.status) && order.items.some((item) => item.reserved_quantity > 0) ? (
               <Can permission={PERMISSION_CODE.outboundCreate}>
                 <Button
                   type="primary"
@@ -209,11 +225,14 @@ export function SalesOrderDetailPage(props: PageProps) {
                     }
                   }}
                 >
-                  {order.status === 'PARTIALLY_SHIPPED' ? '继续出库' : '查看出库单'}
+                  {order.status === 'PARTIALLY_OUTBOUND' || order.status === 'PARTIALLY_SHIPPED'
+                    ? '继续出库'
+                    : '查看出库单'}
                 </Button>
               </Can>
             ) : null}
-            {order && order.status === 'SHIPPED' ? <Tag color="success">已全部出库</Tag> : null}
+            {order && order.status === 'OUTBOUNDED' ? <Tag color="success">已全部出库</Tag> : null}
+            {order && order.status === 'COMPLETED' ? <Tag color="success">已完成</Tag> : null}
             {order && canCancelSalesOrder(order.status) ? (
               <Can permission={PERMISSION_CODE.orderCancel}>
                 <Button
@@ -288,6 +307,49 @@ export function SalesOrderDetailPage(props: PageProps) {
                 {order.remark || '-'}
               </Descriptions.Item>
             </Descriptions>
+          </Card>
+          <Card title="物流履约" className="mt-4!">
+            <AppTable
+              rowKey="id"
+              size="small"
+              pagination={false}
+              fillHeight={false}
+              dataSource={shipmentsQuery.data?.items ?? []}
+              locale={{ emptyText: '还没有物流单' }}
+              columns={[
+                { title: '物流单号', dataIndex: 'shipment_no', width: 160 },
+                { title: '出库单', dataIndex: 'outbound_no', width: 160 },
+                { title: '物流商', dataIndex: 'carrier_name', width: 140 },
+                {
+                  title: '运单号',
+                  dataIndex: 'tracking_no',
+                  width: 160,
+                  render: (value: string | null) => value || '-',
+                },
+                {
+                  title: '状态',
+                  dataIndex: 'status',
+                  width: 100,
+                  render: (value: string) => shipmentStatusLabel(value),
+                },
+                {
+                  title: '签收',
+                  dataIndex: 'delivered_at',
+                  width: 170,
+                  render: (value: string | null) => formatDateTime(value),
+                },
+                {
+                  title: '操作',
+                  key: 'actions',
+                  width: 90,
+                  render: (_, row) => (
+                    <Button type="link" onClick={() => navigate(`/shipments/${row.id}`)}>
+                      详情
+                    </Button>
+                  ),
+                },
+              ]}
+            />
           </Card>
           <Card title="拣货记录" className="mt-4!">
             <AppTable

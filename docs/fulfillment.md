@@ -1,6 +1,6 @@
 # 履约：采购收货与销售出库
 
-当前里程碑 **V8**。采购单和销售订单描述计划，收货单和出库单描述仓库实际做了什么。库存数字只在确认收货、确认出库时变化。
+当前里程碑 **V8 的收货与出库**。物流发货见 `docs/shipping.md`。采购单和销售订单描述计划，收货单和出库单描述仓库实际做了什么。库存数字只在确认收货、确认出库时变化。确认发货不再改库存。
 
 ## 四种单据
 
@@ -65,7 +65,8 @@ available 70 → 120
   → 确认出库
   → quantity 和 reserved 同时减少
   → OUTBOUND 流水
-  → 部分出库 PARTIALLY_SHIPPED，或一次出完 SHIPPED
+  → 部分出库 PARTIALLY_OUTBOUND，或一次出完 OUTBOUNDED
+  → 之后由 V9 物流单确认发货，不再扣库存
 ```
 
 一张销售订单可以有多张出库单。历史数据里已经是待出库、但没有出库单的订单，用 `POST /api/v1/outbound-orders` 补一张，迁移脚本不批量造业务单据。
@@ -100,27 +101,23 @@ available 90 → 90
 
 重复确认返回 `OUTBOUND_ALREADY_CONFIRMED`，不能再扣一次。
 
-### 订单明细的三个数量
+### 订单明细的数量
 
 | 字段 | 含义 |
 | --- | --- |
 | `quantity` | 订单要卖的数量 |
 | `reserved_quantity` | 还没出库、但已经预占的数量 |
-| `shipped_quantity` | 累计已经正式出库的数量 |
+| `outbound_quantity` | 累计已经正式出库的数量 |
+| `shipped_quantity` | 累计已经交给承运商的数量（V9） |
 
-V7 的约束 `shipped_quantity <= reserved_quantity` 在出库后不成立。例如买 10、出 6 之后是预占 4、已出库 6。
-
-V8 的长期约束：
+V8 曾把 `shipped_quantity` 当成已出库。V9 拆成 `outbound_quantity` / `shipped_quantity`。买 10、出 6 之后是预占 4、已出库 6、已发货 0。
 
 ```text
-reserved_quantity >= 0
-shipped_quantity >= 0
-reserved_quantity + shipped_quantity <= quantity
+reserved_quantity + outbound_quantity <= quantity
+shipped_quantity <= outbound_quantity
 ```
 
-订单全部预占且尚未出库时，`reserved + shipped = quantity`。出库 6 件后：预占 4、已出库 6，两者之和仍是 10。
-
-一旦有任何 `shipped_quantity > 0`，不能再取消整张销售订单。待出库、且尚未出库时取消，会在同一事务里作废未完成出库单并释放预占。
+一旦有任何 `outbound_quantity > 0`，不能再取消整张销售订单。待出库、且尚未出库时取消，会在同一事务里作废未完成出库单并释放预占。
 
 ## 状态机
 
@@ -134,11 +131,11 @@ WAITING_RECEIPT → RECEIVED
 销售订单在 V7 之后增加：
 
 ```text
-WAITING_OUTBOUND → PARTIALLY_SHIPPED → SHIPPED
-WAITING_OUTBOUND → SHIPPED
+WAITING_OUTBOUND → PARTIALLY_OUTBOUND → OUTBOUNDED
+WAITING_OUTBOUND → OUTBOUNDED
 ```
 
-`PARTIALLY_SHIPPED` 和 `SHIPPED` 不能取消。
+已经出库后不能取消整张销售订单。物流状态见 `docs/shipping.md`。
 
 ## 事务、锁、幂等
 

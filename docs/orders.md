@@ -9,7 +9,7 @@
 
 预占只增加 `Inventory.reserved_quantity`，**不**减少 `Inventory.quantity`。可用量 = 实际 − 预占，所以确认后可用量下降，货仍在仓库里。
 
-本版订单确认 **不** 开发物流、平台订单同步、退货退款。正式出库在 V8：确认出库时同时减少 `quantity` 和 `reserved_quantity`。
+正式出库在 V8：确认出库时同时减少 `quantity` 和 `reserved_quantity`。物流发货、签收、订单完成在 V9，见 `docs/shipping.md`。平台订单同步、退货退款仍未做。
 
 ## 为什么草稿不预占
 
@@ -28,7 +28,7 @@
 - 明细 `SalesOrderItem.reserved_quantity = quantity`
 - 流水类型 `RESERVE`，`reference_type = SALES_ORDER`，`reference_id = 订单 id`，备注里写订单号
 
-正式出库在 V8：同时减少 `quantity` 和 `reserved_quantity`，并增加明细 `shipped_quantity`、减少仍占用的 `reserved_quantity`。出库后不再满足「已出库 ≤ 当前预占」。约束改为 `reserved_quantity + shipped_quantity <= quantity`。
+正式出库在 V8：同时减少 `quantity` 和 `reserved_quantity`，并增加明细 `outbound_quantity`、减少仍占用的 `reserved_quantity`。V9 的 `shipped_quantity` 表示已经交给承运商的数量。约束是 `reserved_quantity + outbound_quantity <= quantity`，且 `shipped_quantity <= outbound_quantity`。
 
 ## Customer
 
@@ -76,11 +76,12 @@
 | 字段 | 说明 |
 | --- | --- |
 | `quantity` | `> 0` |
-| `reserved_quantity` | 默认 0；确认后等于 `quantity`；取消待出库后回到 0 |
-| `shipped_quantity` | 默认 0，本版不改 |
+| `reserved_quantity` | 当前已预占、尚未正式出库 |
+| `outbound_quantity` | 累计仓库已出库 |
+| `shipped_quantity` | 累计已交给承运商 |
 | `unit_price` | 可空 |
 
-约束：`reserved_quantity >= 0`，`shipped_quantity >= 0`，且 `reserved_quantity + shipped_quantity <= quantity`。出库 6 件后可以是预占 4、已出库 6。
+约束：`reserved + outbound <= quantity`，`shipped <= outbound`。买 10、出 6、发 4 之后可以是预占 4、已出库 6、已发货 4。
 
 ## 状态机
 
@@ -89,17 +90,22 @@
 | `DRAFT` | 草稿 |
 | `PENDING_CONFIRMATION` | 待确认 |
 | `WAITING_OUTBOUND` | 待出库 |
-| `PARTIALLY_SHIPPED` | 部分出库（V8） |
-| `SHIPPED` | 已出库（V8） |
+| `PARTIALLY_OUTBOUND` | 部分出库 |
+| `OUTBOUNDED` | 已出库 |
+| `PARTIALLY_SHIPPED` | 部分发货 |
+| `SHIPPED` | 已发货 |
+| `COMPLETED` | 已完成（全部签收） |
 | `CANCELLED` | 已取消 |
 
 允许：
 
 - `DRAFT` → `PENDING_CONFIRMATION`（提交）
 - `PENDING_CONFIRMATION` → `WAITING_OUTBOUND`（确认并预占，并生成第一张出库单）
-- `WAITING_OUTBOUND` → `PARTIALLY_SHIPPED` 或 `SHIPPED`（确认出库）
-- `PARTIALLY_SHIPPED` → `SHIPPED`
+- `WAITING_OUTBOUND` → `PARTIALLY_OUTBOUND` 或 `OUTBOUNDED`（确认出库）
+- `PARTIALLY_OUTBOUND` / `OUTBOUNDED` → `PARTIALLY_SHIPPED` 或 `SHIPPED`（确认发货）
+- `PARTIALLY_SHIPPED` → `SHIPPED` → `COMPLETED`（全部签收）
 - `DRAFT` / `PENDING_CONFIRMATION` / `WAITING_OUTBOUND` → `CANCELLED`（已有出库数量时不能取消）
+- 不能 `PATCH status = COMPLETED`，完成只能由签收结果决定
 
 不允许任意 `PATCH status`。已取消不能再确认。待确认之后不能改客户、仓库、收货信息和明细。没有驳回或撤回提交。
 
