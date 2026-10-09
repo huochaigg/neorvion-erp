@@ -35,7 +35,7 @@ import {
 import { Can } from '@/components/Can';
 import { FormPageContainer } from '@/components/PageContainer';
 import { PageHeader } from '@/components/PageHeader';
-import { DATETIME_FORMAT, formatDateTime } from '@/lib/datetime';
+import { DATETIME_FORMAT, formatDateTime, toDateTimeParam } from '@/lib/datetime';
 import type { PageProps } from '@/router/types';
 import { useErpTenantStore } from '@/stores/tenant-runtime';
 
@@ -293,7 +293,7 @@ export function ShipmentDetailPage(props: PageProps) {
               status: values.status,
               description: values.description,
               location: values.location?.trim() || undefined,
-              occurred_at: values.occurred_at.toISOString(),
+              occurred_at: toDateTimeParam(values.occurred_at)!,
             })
           }
         >
@@ -326,7 +326,7 @@ export function ShipmentDetailPage(props: PageProps) {
           initialValues={{ delivered_at: dayjs() }}
           onFinish={(values: { delivered_at?: dayjs.Dayjs; remark?: string }) =>
             deliverMutation.mutate({
-              delivered_at: values.delivered_at?.toISOString(),
+              delivered_at: toDateTimeParam(values.delivered_at) ?? undefined,
               remark: values.remark?.trim() || undefined,
             })
           }
