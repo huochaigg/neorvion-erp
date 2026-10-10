@@ -28,20 +28,34 @@ from app.models.sales_order import SalesOrder, SalesOrderItem
 
 
 class ShipmentStatus(StrEnum):
+    # 物流单状态
+    # 草稿
     DRAFT = "DRAFT"
+    # 已发货
     SHIPPED = "SHIPPED"
+    # 在途中
     IN_TRANSIT = "IN_TRANSIT"
+    # 已签收
     DELIVERED = "DELIVERED"
+    # 已取消
     CANCELLED = "CANCELLED"
 
 
 class TrackingEventStatus(StrEnum):
+    # 物流轨迹状态
+    # 揽收
     PICKED_UP = "PICKED_UP"
+    # 在途中
     IN_TRANSIT = "IN_TRANSIT"
+    # 到达分拨中心
     ARRIVED_AT_HUB = "ARRIVED_AT_HUB"
+    # 派送中
     OUT_FOR_DELIVERY = "OUT_FOR_DELIVERY"
+    # 已签收
     DELIVERED = "DELIVERED"
+    # 异常
     EXCEPTION = "EXCEPTION"
+    # 其他
     OTHER = "OTHER"
 
 

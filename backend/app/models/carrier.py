@@ -17,10 +17,16 @@ class CarrierStatus(StrEnum):
 
 
 class CarrierType(StrEnum):
+    # 物流商类型：
+    # 国内快递：快递，顺丰，圆通，中通，申通，韵达，百世，等。
     DOMESTIC_EXPRESS = "DOMESTIC_EXPRESS"
+    # 国际快递，DHL，UPS，FedEx，TNT，EMS，ARAMEX，等。
     INTERNATIONAL_EXPRESS = "INTERNATIONAL_EXPRESS"
+    # 货代，DHL，UPS，FedEx，TNT，EMS，ARAMEX，等。
     FREIGHT_FORWARDER = "FREIGHT_FORWARDER"
+    # 平台物流，京东物流，顺丰物流，等。
     PLATFORM_LOGISTICS = "PLATFORM_LOGISTICS"
+    # 其他，如邮政，等。
     OTHER = "OTHER"
 
 
