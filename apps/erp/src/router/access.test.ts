@@ -157,6 +157,27 @@ describe('动态权限菜单与页面守卫', () => {
     const carriers = matchRoute(routes, '/carriers');
     assert.equal(pageAllowsAccess(carriers, [PERMISSION_CODE.shipmentRead]), false);
     assert.equal(pageAllowsAccess(carriers, [PERMISSION_CODE.carrierRead]), true);
+    const stocktakeList = matchRoute(routes, '/stocktakes');
+    assert.equal(pageAllowsAccess(stocktakeList, [PERMISSION_CODE.inventoryRead]), false);
+    assert.equal(pageAllowsAccess(stocktakeList, [PERMISSION_CODE.stocktakeRead]), true);
+    const stocktakeDetail = matchRoute(routes, '/stocktakes/9');
+    assert.equal(pageAllowsAccess(stocktakeDetail, []), false);
+    assert.equal(pageAllowsAccess(stocktakeDetail, [PERMISSION_CODE.stocktakeRead]), true);
+    const stocktakeCreate = matchRoute(routes, '/stocktakes/create');
+    assert.equal(pageAllowsAccess(stocktakeCreate, [PERMISSION_CODE.stocktakeRead]), false);
+    assert.equal(pageAllowsAccess(stocktakeCreate, [PERMISSION_CODE.stocktakeCreate]), true);
+    const transferList = matchRoute(routes, '/stock-transfers');
+    assert.equal(pageAllowsAccess(transferList, [PERMISSION_CODE.inventoryRead]), false);
+    assert.equal(pageAllowsAccess(transferList, [PERMISSION_CODE.stockTransferRead]), true);
+    const transferCreate = matchRoute(routes, '/stock-transfers/create');
+    assert.equal(pageAllowsAccess(transferCreate, [PERMISSION_CODE.stockTransferRead]), false);
+    assert.equal(pageAllowsAccess(transferCreate, [PERMISSION_CODE.stockTransferCreate]), true);
+    const transferEdit = matchRoute(routes, '/stock-transfers/4/edit');
+    assert.equal(pageAllowsAccess(transferEdit, [PERMISSION_CODE.stockTransferRead]), false);
+    assert.equal(pageAllowsAccess(transferEdit, [PERMISSION_CODE.stockTransferUpdate]), true);
+    const transferDetail = matchRoute(routes, '/stock-transfers/4');
+    assert.equal(pageAllowsAccess(transferDetail, []), false);
+    assert.equal(pageAllowsAccess(transferDetail, [PERMISSION_CODE.stockTransferRead]), true);
   });
 
   it('租户 A 与 B 权限独立：仓库身份看不到系统管理', () => {

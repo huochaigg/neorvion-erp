@@ -14,6 +14,9 @@ export const INVENTORY_TRANSACTION_TYPE = {
   release: 'RELEASE',
   inbound: 'INBOUND',
   outbound: 'OUTBOUND',
+  stocktakeAdjustment: 'STOCKTAKE_ADJUSTMENT',
+  transferOut: 'TRANSFER_OUT',
+  transferIn: 'TRANSFER_IN',
 } as const;
 
 export const INVENTORY_TRANSACTION_TYPE_LABEL: Record<string, string> = {
@@ -24,6 +27,9 @@ export const INVENTORY_TRANSACTION_TYPE_LABEL: Record<string, string> = {
   RELEASE: '释放',
   INBOUND: '入库',
   OUTBOUND: '出库',
+  STOCKTAKE_ADJUSTMENT: '盘点调整',
+  TRANSFER_OUT: '调拨调出',
+  TRANSFER_IN: '调拨调入',
 };
 
 export const INVENTORY_TRANSACTION_TYPE_OPTIONS = [
@@ -34,6 +40,9 @@ export const INVENTORY_TRANSACTION_TYPE_OPTIONS = [
   { value: INVENTORY_TRANSACTION_TYPE.release, label: '释放' },
   { value: INVENTORY_TRANSACTION_TYPE.inbound, label: '入库' },
   { value: INVENTORY_TRANSACTION_TYPE.outbound, label: '出库' },
+  { value: INVENTORY_TRANSACTION_TYPE.stocktakeAdjustment, label: '盘点调整' },
+  { value: INVENTORY_TRANSACTION_TYPE.transferOut, label: '调拨调出' },
+  { value: INVENTORY_TRANSACTION_TYPE.transferIn, label: '调拨调入' },
 ];
 
 export function inventoryTransactionTypeLabel(type: string): string {

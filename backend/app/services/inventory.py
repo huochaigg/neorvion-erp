@@ -471,16 +471,17 @@ class InventoryService:
         reference_type: str | None = None,
         reference_id: int | None = None,
         remark: str | None = None,
+        tx_type: str | None = None,
     ) -> Inventory:
         """在当前事务里增加实际库存，不 commit，不改 reserved。
 
-        功能：采购确认收货时调用。没有库存行就先插入 0，再加数量。
-        参数：仓库、SKU、本次入库数量，以及收货单引用。
+        功能：采购确认收货、调拨确认调入时调用。没有库存行就先插入 0，再加数量。
+        参数：仓库、SKU、本次入库数量，单据引用；tx_type 默认 INBOUND，调拨传入 TRANSFER_IN。
         返回：入库后的库存行。
         异常：插入后仍找不到行。本方法不 rollback。
-        为什么用保存点：两个收货同时给同一仓库+SKU 建第一行时，后一个会撞
+        为什么用保存点：两个请求同时给同一仓库+SKU 建第一行时，后一个会撞
         UNIQUE(tenant_id, warehouse_id, sku_id)。如果直接让外层事务失败，
-        整张收货单会回滚。保存点只撤销这次插入，然后改去更新已经存在的行。
+        整张单据会回滚。保存点只撤销这次插入，然后改去更新已经存在的行。
         """
         current = self.inventories.get_by_warehouse_and_sku(warehouse_id, sku_id)
         if current is None:
@@ -502,8 +503,149 @@ class InventoryService:
             raise AppError(_UNAVAILABLE, code=40450, status_code=404)
         self._add_tx(
             updated,
-            tx_type=InventoryTransactionType.INBOUND.value,
+            tx_type=tx_type or InventoryTransactionType.INBOUND.value,
             change_quantity=quantity,
+            before_qty=before_qty,
+            after_qty=updated.quantity,
+            before_reserved=before_reserved,
+            after_reserved=updated.reserved_quantity,
+            remark=remark,
+            reference_type=reference_type,
+            reference_id=reference_id,
+        )
+        return updated
+
+    def apply_delta_within_transaction(
+        self,
+        *,
+        inventory_id: int,
+        change_quantity: int,
+        tx_type: str,
+        reference_type: str | None = None,
+        reference_id: int | None = None,
+        remark: str | None = None,
+    ) -> Inventory:
+        """在当前事务里按差异调整实际库存，不 commit。
+
+        功能：盘点确认时调用。新数量 = 当前 quantity + difference，不是直接改成实盘数。
+        参数：inventory_id、可正可负的 change_quantity、流水类型和单据引用。
+        返回：调整后的库存行。差异为 0 时不写流水。
+        异常：库存不存在；调整后小于 reserved。本方法不 rollback。
+        为什么用差异而不是覆盖：盘点期间可能还有采购入库。快照 100、实盘 98、
+        期间入库 20，当前已是 120。覆盖成 98 会把正常入库抹掉；120 + (-2) = 118 才对。
+        为什么现在才锁：盘点可能持续几小时。创建任务时不能 SELECT FOR UPDATE 一直占着。
+        确认是短事务，这时才锁行读最新数量。
+        """
+        inventory = self.inventories.get_for_update(inventory_id)
+        if inventory is None:
+            raise AppError(_UNAVAILABLE, code=40450, status_code=404)
+        if change_quantity == 0:
+            return inventory
+        before_qty = inventory.quantity
+        before_reserved = inventory.reserved_quantity
+        new_qty = before_qty + change_quantity
+        if new_qty < 0:
+            raise AppError(
+                "盘点调整后实际库存不能为负",
+                code=40205,
+                status_code=400,
+                data={"error": "STOCKTAKE_QUANTITY_NEGATIVE", "sku_id": inventory.sku_id},
+            )
+        if new_qty < before_reserved:
+            raise AppError(
+                "盘点调整后实际库存不能低于已预占数量",
+                code=40204,
+                status_code=400,
+                data={
+                    "error": "STOCKTAKE_CONFLICT_WITH_RESERVED_INVENTORY",
+                    "sku_id": inventory.sku_id,
+                    "inventory_id": inventory.id,
+                    "current_quantity": before_qty,
+                    "reserved_quantity": before_reserved,
+                    "difference_quantity": change_quantity,
+                    "new_quantity": new_qty,
+                },
+            )
+        inventory.quantity = new_qty
+        inventory.version = inventory.version + 1
+        self._add_tx(
+            inventory,
+            tx_type=tx_type,
+            change_quantity=change_quantity,
+            before_qty=before_qty,
+            after_qty=new_qty,
+            before_reserved=before_reserved,
+            after_reserved=before_reserved,
+            remark=remark,
+            reference_type=reference_type,
+            reference_id=reference_id,
+        )
+        return inventory
+
+    def deduct_available_within_transaction(
+        self,
+        *,
+        warehouse_id: int,
+        sku_id: int,
+        quantity: int,
+        sku_code: str | None = None,
+        reference_type: str | None = None,
+        reference_id: int | None = None,
+        remark: str | None = None,
+        tx_type: str | None = None,
+    ) -> Inventory:
+        """在当前事务里扣减可用库存，不 commit，不改 reserved。
+
+        功能：调拨确认调出时调用。只能动 available = quantity - reserved。
+        参数：源仓、SKU、调拨数量，以及调拨单引用。
+        返回：扣减后的库存行。
+        异常：可用不足。本方法不 rollback。
+        为什么只能用 available：账面 100、预占 80 时，那 80 已经卖给销售订单。
+        调走 50 会让 reserved 大于 quantity。调拨不能自行释放订单预占。
+        """
+        current = self.inventories.get_by_warehouse_and_sku(warehouse_id, sku_id)
+        if current is None:
+            raise AppError(
+                f"{sku_code or sku_id} 可用库存 0，调拨需要 {quantity}。",
+                code=40223,
+                status_code=400,
+                data={
+                    "error": "INSUFFICIENT_AVAILABLE_INVENTORY",
+                    "sku_id": sku_id,
+                    "sku_code": sku_code or "",
+                    "requested_quantity": quantity,
+                    "available_quantity": 0,
+                },
+            )
+        before_qty = current.quantity
+        before_reserved = current.reserved_quantity
+        affected = self.inventories.subtract_available_if_enough(
+            warehouse_id=warehouse_id,
+            sku_id=sku_id,
+            quantity=quantity,
+        )
+        if affected != 1:
+            again = self.inventories.get_by_warehouse_and_sku(warehouse_id, sku_id)
+            available = 0 if again is None else again.quantity - again.reserved_quantity
+            raise AppError(
+                f"{sku_code or sku_id} 可用库存 {available}，调拨需要 {quantity}。",
+                code=40223,
+                status_code=400,
+                data={
+                    "error": "INSUFFICIENT_AVAILABLE_INVENTORY",
+                    "sku_id": sku_id,
+                    "sku_code": sku_code or "",
+                    "requested_quantity": quantity,
+                    "available_quantity": available,
+                },
+            )
+        updated = self.inventories.get_by_warehouse_and_sku(warehouse_id, sku_id)
+        if updated is None:
+            raise AppError(_UNAVAILABLE, code=40450, status_code=404)
+        self._add_tx(
+            updated,
+            tx_type=tx_type or InventoryTransactionType.TRANSFER_OUT.value,
+            change_quantity=-quantity,
             before_qty=before_qty,
             after_qty=updated.quantity,
             before_reserved=before_reserved,

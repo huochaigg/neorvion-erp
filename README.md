@@ -2,7 +2,7 @@
 
 多租户跨境电商 ERP。当前仓库按里程碑持续迭代，**不要为每个版本重建项目**。
 
-当前里程碑：**V9**。当前有效范围见 `docs/current-state.md`。
+当前里程碑：**V10**。当前有效范围见 `docs/current-state.md`。
 
 ## 技术栈
 
@@ -126,6 +126,14 @@ pnpm test
 - 确认 / 取消锁订单主行；多 SKU 按 `sku_id` 升序复用 V5 条件预占，失败整单回滚
 - ERP 菜单「订单管理」：销售订单、客户；权限 `order:*` 与 `customer:*`，确认沿用 `order:audit`
 - 版本文档：`docs/versions/v7.md`，业务说明：`docs/orders.md`
+
+## V10
+
+- 库存盘点：创建时保存账面快照；确认按差异调整当前库存，不是覆盖成实盘数
+- 跨仓调拨：调出扣源仓 available，在途后确认调入才增加目标仓
+- 流水新增 `STOCKTAKE_ADJUSTMENT` / `TRANSFER_OUT` / `TRANSFER_IN`
+- ERP 菜单在仓储下增加库存盘点、库存调拨；权限 `stocktake:*` 与 `stock_transfer:*`
+- 版本文档：`docs/versions/v10.md`，业务说明：`docs/stocktake.md`、`docs/stock-transfer.md`
 
 ## V9
 
@@ -260,6 +268,6 @@ pnpm test
 
 ## 尚未开始
 
-完整菜单权限组件已在 V2.3.5 收尾。V3 完成商品档案。V4 完成仓库档案。V5 完成库存台账。V6 完成采购单与供应商。V7 完成销售订单确认预占与取消释放。V8 完成采购收货入库和销售拣货出库。V9 完成物流发货、轨迹与签收。尚未开始：真实承运商 API、平台订单同步、退货退款、财务结算、库存盘点、调拨、OWNER 转移、操作日志。
+完整菜单权限组件已在 V2.3.5 收尾。V3 完成商品档案。V4 完成仓库档案。V5 完成库存台账。V6 完成采购单与供应商。V7 完成销售订单确认预占与取消释放。V8 完成采购收货入库和销售拣货出库。V9 完成物流发货、轨迹与签收。V10 完成库存盘点与跨仓调拨。尚未开始：真实承运商 API、平台订单同步、退货退款、财务结算、库位批次、OWNER 转移、操作日志、AI Agent。
 
-更细的说明见 `docs/development.md`、`docs/architecture.md`、`docs/current-state.md`、`docs/auth.md`、`docs/multi-tenancy.md`、`docs/rbac.md`、`docs/products.md`、`docs/warehouses.md`、`docs/inventory.md`、`docs/purchases.md`、`docs/orders.md`、`docs/versions/v3.md`、`docs/versions/v6.md`、`docs/versions/v7.md`、`docs/routing.md`、`docs/micro-frontend-integration.md` 与 `docs/micro-frontend-interview.md`。
+更细的说明见 `docs/development.md`、`docs/architecture.md`、`docs/current-state.md`、`docs/auth.md`、`docs/multi-tenancy.md`、`docs/rbac.md`、`docs/products.md`、`docs/warehouses.md`、`docs/inventory.md`、`docs/purchases.md`、`docs/orders.md`、`docs/stocktake.md`、`docs/stock-transfer.md`、`docs/versions/v3.md`、`docs/versions/v6.md`、`docs/versions/v7.md`、`docs/versions/v10.md`、`docs/routing.md`、`docs/micro-frontend-integration.md` 与 `docs/micro-frontend-interview.md`。

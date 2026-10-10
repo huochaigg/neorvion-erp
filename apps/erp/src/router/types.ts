@@ -39,7 +39,13 @@ export type PageKey =
   | 'ShipmentForm'
   | 'ShipmentDetail'
   | 'Carriers'
-  | 'Customers';
+  | 'Customers'
+  | 'StocktakeList'
+  | 'StocktakeForm'
+  | 'StocktakeDetail'
+  | 'StockTransferList'
+  | 'StockTransferForm'
+  | 'StockTransferDetail';
 
 export type PermissionMode = 'any' | 'all';
 

@@ -97,6 +97,21 @@ class PermissionCode(StrEnum):
     SHIPMENT_DELIVER = "shipment:deliver"
     SHIPMENT_CANCEL = "shipment:cancel"
 
+    STOCKTAKE_READ = "stocktake:read"
+    STOCKTAKE_CREATE = "stocktake:create"
+    STOCKTAKE_UPDATE = "stocktake:update"
+    STOCKTAKE_SUBMIT = "stocktake:submit"
+    STOCKTAKE_CONFIRM = "stocktake:confirm"
+    STOCKTAKE_CANCEL = "stocktake:cancel"
+
+    STOCK_TRANSFER_READ = "stock_transfer:read"
+    STOCK_TRANSFER_CREATE = "stock_transfer:create"
+    STOCK_TRANSFER_UPDATE = "stock_transfer:update"
+    STOCK_TRANSFER_SUBMIT = "stock_transfer:submit"
+    STOCK_TRANSFER_OUTBOUND = "stock_transfer:outbound"
+    STOCK_TRANSFER_RECEIVE = "stock_transfer:receive"
+    STOCK_TRANSFER_CANCEL = "stock_transfer:cancel"
+
     SUPPLIER_READ = "supplier:read"
     SUPPLIER_CREATE = "supplier:create"
     SUPPLIER_UPDATE = "supplier:update"
@@ -233,6 +248,24 @@ PERMISSION_CATALOG: tuple[tuple[str, str, str, str], ...] = (
     (PermissionCode.SHIPMENT_TRACKING_UPDATE, "更新轨迹", "shipment", "手工追加物流轨迹"),
     (PermissionCode.SHIPMENT_DELIVER, "确认签收", "shipment", "签收物流单；全部签收后完成销售订单"),
     (PermissionCode.SHIPMENT_CANCEL, "取消物流单", "shipment", "取消尚未发货的物流草稿"),
+    (PermissionCode.STOCKTAKE_READ, "查看盘点", "stocktake", "查看库存盘点任务"),
+    (PermissionCode.STOCKTAKE_CREATE, "创建盘点", "stocktake", "创建整仓或指定 SKU 盘点任务"),
+    (PermissionCode.STOCKTAKE_UPDATE, "录入盘点", "stocktake", "填写实盘数量"),
+    (PermissionCode.STOCKTAKE_SUBMIT, "提交盘点", "stocktake", "提交盘点结果等待确认"),
+    (PermissionCode.STOCKTAKE_CONFIRM, "确认盘点", "stocktake", "按差异调整真实库存"),
+    (PermissionCode.STOCKTAKE_CANCEL, "取消盘点", "stocktake", "取消尚未确认的盘点任务"),
+    (PermissionCode.STOCK_TRANSFER_READ, "查看调拨", "stock_transfer", "查看库存调拨单"),
+    (PermissionCode.STOCK_TRANSFER_CREATE, "创建调拨", "stock_transfer", "创建跨仓库调拨草稿"),
+    (PermissionCode.STOCK_TRANSFER_UPDATE, "编辑调拨", "stock_transfer", "编辑草稿调拨单"),
+    (PermissionCode.STOCK_TRANSFER_SUBMIT, "提交调拨", "stock_transfer", "提交调拨单进入待调出"),
+    (
+        PermissionCode.STOCK_TRANSFER_OUTBOUND,
+        "确认调出",
+        "stock_transfer",
+        "从源仓扣减可用库存并进入在途",
+    ),
+    (PermissionCode.STOCK_TRANSFER_RECEIVE, "确认调入", "stock_transfer", "把在途库存增加到目标仓"),
+    (PermissionCode.STOCK_TRANSFER_CANCEL, "取消调拨", "stock_transfer", "取消尚未调出的调拨单"),
     (PermissionCode.SUPPLIER_READ, "查看供应商", "supplier", "查看本企业供应商"),
     (PermissionCode.SUPPLIER_CREATE, "新增供应商", "supplier", "创建供应商"),
     (PermissionCode.SUPPLIER_UPDATE, "编辑供应商", "supplier", "编辑供应商档案，编码创建后只读"),
@@ -282,6 +315,8 @@ _READ_CODES: tuple[str, ...] = (
     PermissionCode.OUTBOUND_READ,
     PermissionCode.CARRIER_READ,
     PermissionCode.SHIPMENT_READ,
+    PermissionCode.STOCKTAKE_READ,
+    PermissionCode.STOCK_TRANSFER_READ,
     PermissionCode.SUPPLIER_READ,
 )
 
@@ -331,6 +366,10 @@ DEFAULT_ROLE_TEMPLATES: tuple[tuple[str, str, str, tuple[str, ...]], ...] = (
             PermissionCode.SHIPMENT_TRACKING_UPDATE,
             PermissionCode.SHIPMENT_DELIVER,
             PermissionCode.SHIPMENT_CANCEL,
+            PermissionCode.STOCKTAKE_READ,
+            PermissionCode.STOCKTAKE_CREATE,
+            PermissionCode.STOCK_TRANSFER_READ,
+            PermissionCode.STOCK_TRANSFER_CREATE,
         ),
     ),
     (
@@ -366,6 +405,19 @@ DEFAULT_ROLE_TEMPLATES: tuple[tuple[str, str, str, tuple[str, ...]], ...] = (
             PermissionCode.SHIPMENT_READ,
             PermissionCode.SHIPMENT_CREATE,
             PermissionCode.SHIPMENT_CONFIRM,
+            PermissionCode.STOCKTAKE_READ,
+            PermissionCode.STOCKTAKE_CREATE,
+            PermissionCode.STOCKTAKE_UPDATE,
+            PermissionCode.STOCKTAKE_SUBMIT,
+            PermissionCode.STOCKTAKE_CONFIRM,
+            PermissionCode.STOCKTAKE_CANCEL,
+            PermissionCode.STOCK_TRANSFER_READ,
+            PermissionCode.STOCK_TRANSFER_CREATE,
+            PermissionCode.STOCK_TRANSFER_UPDATE,
+            PermissionCode.STOCK_TRANSFER_SUBMIT,
+            PermissionCode.STOCK_TRANSFER_OUTBOUND,
+            PermissionCode.STOCK_TRANSFER_RECEIVE,
+            PermissionCode.STOCK_TRANSFER_CANCEL,
         ),
     ),
     (
@@ -755,6 +807,98 @@ PERMISSION_TREE: tuple[PermissionTreeDef, ...] = (
                         title="查看库存流水",
                         type="ACTION",
                         permission_code=PermissionCode.INVENTORY_TRANSACTION_READ,
+                    ),
+                ),
+            ),
+            PermissionTreeDef(
+                key="menu:stocktakes",
+                title="库存盘点",
+                type="MENU",
+                children=(
+                    PermissionTreeDef(
+                        key="action:stocktake-read",
+                        title="查看",
+                        type="ACTION",
+                        permission_code=PermissionCode.STOCKTAKE_READ,
+                    ),
+                    PermissionTreeDef(
+                        key="action:stocktake-create",
+                        title="创建",
+                        type="ACTION",
+                        permission_code=PermissionCode.STOCKTAKE_CREATE,
+                    ),
+                    PermissionTreeDef(
+                        key="action:stocktake-update",
+                        title="录入",
+                        type="ACTION",
+                        permission_code=PermissionCode.STOCKTAKE_UPDATE,
+                    ),
+                    PermissionTreeDef(
+                        key="action:stocktake-submit",
+                        title="提交",
+                        type="ACTION",
+                        permission_code=PermissionCode.STOCKTAKE_SUBMIT,
+                    ),
+                    PermissionTreeDef(
+                        key="action:stocktake-confirm",
+                        title="确认",
+                        type="ACTION",
+                        permission_code=PermissionCode.STOCKTAKE_CONFIRM,
+                    ),
+                    PermissionTreeDef(
+                        key="action:stocktake-cancel",
+                        title="取消",
+                        type="ACTION",
+                        permission_code=PermissionCode.STOCKTAKE_CANCEL,
+                    ),
+                ),
+            ),
+            PermissionTreeDef(
+                key="menu:stock-transfers",
+                title="库存调拨",
+                type="MENU",
+                children=(
+                    PermissionTreeDef(
+                        key="action:stock-transfer-read",
+                        title="查看",
+                        type="ACTION",
+                        permission_code=PermissionCode.STOCK_TRANSFER_READ,
+                    ),
+                    PermissionTreeDef(
+                        key="action:stock-transfer-create",
+                        title="创建",
+                        type="ACTION",
+                        permission_code=PermissionCode.STOCK_TRANSFER_CREATE,
+                    ),
+                    PermissionTreeDef(
+                        key="action:stock-transfer-update",
+                        title="编辑",
+                        type="ACTION",
+                        permission_code=PermissionCode.STOCK_TRANSFER_UPDATE,
+                    ),
+                    PermissionTreeDef(
+                        key="action:stock-transfer-submit",
+                        title="提交",
+                        type="ACTION",
+                        permission_code=PermissionCode.STOCK_TRANSFER_SUBMIT,
+                    ),
+                    PermissionTreeDef(
+                        key="action:stock-transfer-outbound",
+                        title="确认调出",
+                        type="ACTION",
+                        permission_code=PermissionCode.STOCK_TRANSFER_OUTBOUND,
+                    ),
+                    PermissionTreeDef(
+                        key="action:stock-transfer-receive",
+                        title="确认调入",
+                        type="ACTION",
+                        permission_code=PermissionCode.STOCK_TRANSFER_RECEIVE,
+                    ),
+                    PermissionTreeDef(
+                        key="action:stock-transfer-cancel",
+                        title="取消",
+                        type="ACTION",
+                        permission_code=PermissionCode.STOCK_TRANSFER_CANCEL,
                     ),
                 ),
             ),

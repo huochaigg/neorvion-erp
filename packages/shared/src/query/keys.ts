@@ -177,6 +177,28 @@ export function shipmentTrackingQueryKey(tenantId: number | null, shipmentId: nu
   return ['tenant', tenantId, 'shipment-tracking', shipmentId] as const;
 }
 
+export function stocktakesQueryKey(
+  tenantId: number | null,
+  filters?: Record<string, unknown>,
+) {
+  return ['tenant', tenantId, 'stocktakes', filters ?? {}] as const;
+}
+
+export function stocktakeQueryKey(tenantId: number | null, stocktakeId: number | null) {
+  return ['tenant', tenantId, 'stocktake', stocktakeId] as const;
+}
+
+export function stockTransfersQueryKey(
+  tenantId: number | null,
+  filters?: Record<string, unknown>,
+) {
+  return ['tenant', tenantId, 'stock-transfers', filters ?? {}] as const;
+}
+
+export function stockTransferQueryKey(tenantId: number | null, transferId: number | null) {
+  return ['tenant', tenantId, 'stock-transfer', transferId] as const;
+}
+
 export function customersQueryKey(
   tenantId: number | null,
   filters?: {

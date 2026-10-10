@@ -316,3 +316,55 @@ ShipmentCancelContext = Annotated[
     TenantContext,
     Depends(require_permission(PermissionCode.SHIPMENT_CANCEL)),
 ]
+StocktakeReadContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.STOCKTAKE_READ)),
+]
+StocktakeCreateContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.STOCKTAKE_CREATE)),
+]
+StocktakeUpdateContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.STOCKTAKE_UPDATE)),
+]
+StocktakeSubmitContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.STOCKTAKE_SUBMIT)),
+]
+StocktakeConfirmContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.STOCKTAKE_CONFIRM)),
+]
+StocktakeCancelContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.STOCKTAKE_CANCEL)),
+]
+StockTransferReadContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.STOCK_TRANSFER_READ)),
+]
+StockTransferCreateContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.STOCK_TRANSFER_CREATE)),
+]
+StockTransferUpdateContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.STOCK_TRANSFER_UPDATE)),
+]
+StockTransferSubmitContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.STOCK_TRANSFER_SUBMIT)),
+]
+StockTransferOutboundContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.STOCK_TRANSFER_OUTBOUND)),
+]
+StockTransferReceiveContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.STOCK_TRANSFER_RECEIVE)),
+]
+StockTransferCancelContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.STOCK_TRANSFER_CANCEL)),
+]

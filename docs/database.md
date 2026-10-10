@@ -60,6 +60,12 @@
 - 迁移 `20261006_0013` 只改 CHECK，不重建销售明细表
 - `outbound_picks` / `outbound_pick_lines`：每次拣货追加记录。`quantity` 是本次，`picked_before` / `picked_after` 是累计变化。出库明细 `picked_quantity` 仍是累计，确认出库继续用它
 
+当前里程碑 V10 增加：
+
+- `stocktake_orders` / `stocktake_items`：盘点单。单号 `ST` + 年 + 6 位 id。明细保存账面快照，确认时按差异调整库存
+- `stock_transfers` / `stock_transfer_items`：调拨单。单号 `TR` + 年 + 6 位 id。调出仓不能等于调入仓
+- `inventory_transactions.type` 加长到 32，以容纳 `STOCKTAKE_ADJUSTMENT`
+
 当前里程碑 V9 增加：
 
 - `carriers`：物流商；`UNIQUE(tenant_id, code)`；未填编码时 flush 后写 `CAR` + 10 位 id

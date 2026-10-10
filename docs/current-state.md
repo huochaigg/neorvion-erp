@@ -1,6 +1,6 @@
 # 当前状态
 
-有效里程碑：**V9**。以本文件和当前代码为准。旧版本文档只描述当时范围。
+有效里程碑：**V10**。以本文件和当前代码为准。旧版本文档只描述当时范围。
 
 ## 已完成
 
@@ -12,29 +12,23 @@
 - V7 客户、销售订单、确认预占、取消释放
 - V8 采购收货入库、销售拣货与确认出库、部分收货 / 部分出库
 - V9 物流商、物流单、确认发货、手工轨迹、签收、销售订单完成
+- V10 库存盘点、跨仓调拨
+
+## 当前库存能力
+
+初始化、调整、预占、释放、采购入库、销售出库、盘点差异调整、跨仓调拨、库存流水。
+
+盘点状态：`COUNTING` → `PENDING_CONFIRMATION` → `CONFIRMED`。确认按差异调整当前账面，不是覆盖成实盘数。
+
+调拨状态：`DRAFT` → `PENDING_OUTBOUND` → `IN_TRANSIT` → `COMPLETED`。在途不建独立库存表，用调拨单状态和 `outbound_quantity` 表示。
 
 ## 采购
 
-采购 → 收货 → 入库。
-
-审核通过仍不增加库存。库存增加只发生在收货单确认：`Inventory.quantity` 增加，`reserved_quantity` 不变，流水 `INBOUND`。
+采购 → 收货 → 入库。审核通过仍不增加库存。库存增加只发生在收货单确认。
 
 ## 销售
 
-订单 → 预占 → 拣货 → 出库 → 物流发货 → 签收 → 完成。
-
-| 步骤 | Inventory.quantity | reserved_quantity | 订单数量字段 |
-| --- | --- | --- | --- |
-| 确认订单 | 不变 | 增加 | `reserved_quantity` 增加 |
-| 确认出库 | 减少 | 减少 | `outbound_quantity` 增加，`reserved_quantity` 减少 |
-| 确认发货 | 不变 | 不变 | `shipped_quantity` 增加 |
-| 签收 | 不变 | 不变 | 全部签收后订单 `COMPLETED` |
-
-`SalesOrderItem.quantity` 是订单数量。`reserved_quantity` 是尚未出库的预占。`outbound_quantity` 是累计仓库出库。`shipped_quantity` 是累计交给承运商。约束是 `reserved + outbound <= quantity`，且 `shipped <= outbound`。
-
-V8 曾用 `SHIPPED` 表示已出库。V9 把仓库出库改成 `PARTIALLY_OUTBOUND` / `OUTBOUNDED`，把 `PARTIALLY_SHIPPED` / `SHIPPED` 留给物流。
-
-有正式出库后不能取消整张销售订单。
+订单 → 预占 → 拣货 → 出库 → 物流发货 → 签收 → 完成。确认发货不再改库存。有正式出库后不能取消整张销售订单。
 
 ## 库存字段
 
@@ -46,12 +40,11 @@ V8 曾用 `SHIPPED` 表示已出库。V9 把仓库出库改成 `PARTIALLY_OUTBOU
 
 ## 下一版可复用
 
-- `inbound_within_transaction` / `deduct_within_transaction`
-- `reserve_within_transaction` / `release_within_transaction`
-- 收货、出库、发货按 `sku_id` 升序加锁
-- `ShipmentService.confirm_shipment` / `mark_delivered`：不改库存，只推进履约状态
-- Carrier 档案和手工轨迹模型，以后接真实物流 API 仍写入同一张表
+- `inbound_within_transaction` / `deduct_within_transaction` / `apply_delta_within_transaction` / `deduct_available_within_transaction`
+- 收货、出库、盘点、调拨按 `sku_id` 升序加锁
+- 盘点差异算法和调拨在途模型
+- Carrier 档案和手工轨迹模型
 
 ## 明确未做
 
-真实承运商 API、电子面单、自动轨迹、Amazon / Shopify / TikTok 同步、退货、退款、售后、财务结算、库存盘点、调拨、AI Agent。
+真实承运商 API、电子面单、自动轨迹、Amazon / Shopify / TikTok 同步、退货、退款、售后、财务结算、库位、批次、序列号、独立在途库存表、AI Agent。

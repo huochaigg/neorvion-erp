@@ -18,6 +18,10 @@ import {
   tenantMyPermissionsQueryKey,
   tenantRolesQueryKey,
   tenantIdFromQueryKey,
+  stocktakesQueryKey,
+  stocktakeQueryKey,
+  stockTransfersQueryKey,
+  stockTransferQueryKey,
 } from './keys';
 
 describe('query keys', () => {
@@ -52,6 +56,14 @@ describe('query keys', () => {
       purchaseOrdersQueryKey(1, { status: 'REJECTED', page: 1, pageSize: 20 }),
     );
     assert.notDeepEqual(purchaseOrderQueryKey(1, 9), purchaseOrderQueryKey(2, 9));
+    assert.notDeepEqual(stocktakesQueryKey(1), stocktakesQueryKey(2));
+    assert.notDeepEqual(
+      stocktakesQueryKey(1, { status: 'COUNTING' }),
+      stocktakesQueryKey(1, { status: 'CONFIRMED' }),
+    );
+    assert.notDeepEqual(stocktakeQueryKey(1, 9), stocktakeQueryKey(2, 9));
+    assert.notDeepEqual(stockTransfersQueryKey(1), stockTransfersQueryKey(2));
+    assert.notDeepEqual(stockTransferQueryKey(1, 4), stockTransferQueryKey(2, 4));
     assert.notDeepEqual(tenantMembersQueryKey(1), tenantMembersQueryKey(2));
     assert.notDeepEqual(
       tenantMembersQueryKey(1, { page: 1, pageSize: 20 }),

@@ -16,6 +16,8 @@ from app.api.v1.purchase_receipts import router as purchase_receipt_router
 from app.api.v1.roles import router as role_router
 from app.api.v1.sales_orders import router as sales_order_router
 from app.api.v1.shipments import router as shipment_router
+from app.api.v1.stock_transfers import router as stock_transfer_router
+from app.api.v1.stocktakes import router as stocktake_router
 from app.api.v1.suppliers import router as supplier_router
 from app.api.v1.tenants import router as tenant_router
 from app.api.v1.warehouses import router as warehouse_router
@@ -40,3 +42,5 @@ api_router.include_router(sales_order_router)
 api_router.include_router(outbound_order_router)
 api_router.include_router(carrier_router)
 api_router.include_router(shipment_router)
+api_router.include_router(stocktake_router)
+api_router.include_router(stock_transfer_router)
