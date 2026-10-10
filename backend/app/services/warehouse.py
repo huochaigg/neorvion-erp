@@ -278,9 +278,11 @@ class WarehouseService:
         return warehouse
 
     def _assert_not_referenced(self, warehouse: Warehouse) -> None:
-        """有库存或采购单就不能删仓库。历史单据必须还能看到仓库名称。"""
+        """有库存、采购单、盘点或调拨就不能删仓库。历史单据必须还能看到仓库名称。"""
         from app.repositories.inventory import InventoryRepository
         from app.repositories.purchase import PurchaseOrderRepository
+        from app.repositories.stock_transfer import StockTransferRepository
+        from app.repositories.stocktake import StocktakeRepository
 
         used_inventory = InventoryRepository(
             self.session,
@@ -290,9 +292,17 @@ class WarehouseService:
             self.session,
             self.context.tenant_id,
         ).count_by_warehouse(warehouse.id)
-        if used_inventory > 0 or used_purchase > 0:
+        used_stocktake = StocktakeRepository(
+            self.session,
+            self.context.tenant_id,
+        ).count_by_warehouse(warehouse.id)
+        used_transfer = StockTransferRepository(
+            self.session,
+            self.context.tenant_id,
+        ).count_by_warehouse(warehouse.id)
+        if used_inventory > 0 or used_purchase > 0 or used_stocktake > 0 or used_transfer > 0:
             raise AppError(
-                "仓库已被库存或采购单引用，不能删除。",
+                "仓库已被库存或业务单据引用，不能删除。",
                 code=40066,
                 status_code=400,
                 data={"error": "WAREHOUSE_IN_USE"},

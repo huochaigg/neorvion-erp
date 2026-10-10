@@ -27,6 +27,11 @@ describe('safePathAfterTenantChange', () => {
     assert.equal(safePathAfterTenantChange('/outbound-orders/3'), '/outbound-orders');
     assert.equal(safePathAfterTenantChange('/shipments'), null);
     assert.equal(safePathAfterTenantChange('/shipments/8'), '/shipments');
+    assert.equal(safePathAfterTenantChange('/stocktakes'), null);
+    assert.equal(safePathAfterTenantChange('/stocktakes/12'), '/stocktakes');
+    assert.equal(safePathAfterTenantChange('/stock-transfers'), null);
+    assert.equal(safePathAfterTenantChange('/stock-transfers/7'), '/stock-transfers');
+    assert.equal(safePathAfterTenantChange('/stock-transfers/7/edit'), '/stock-transfers');
     assert.equal(safePathAfterTenantChange('/carriers'), null);
     assert.equal(safePathAfterTenantChange('/orders/12'), '/orders/list');
     assert.equal(safePathAfterTenantChange('/orders/12/edit'), '/orders/list');

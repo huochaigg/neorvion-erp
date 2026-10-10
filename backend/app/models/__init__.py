@@ -29,6 +29,19 @@ from app.models.shipment import (
     ShipmentTrackingEvent,
     TrackingEventStatus,
 )
+from app.models.stock_transfer import (
+    STOCK_TRANSFER_REFERENCE,
+    StockTransfer,
+    StockTransferItem,
+    StockTransferStatus,
+)
+from app.models.stocktake import (
+    STOCKTAKE_REFERENCE,
+    StocktakeItem,
+    StocktakeOrder,
+    StocktakeOrderStatus,
+    StocktakeScope,
+)
 from app.models.supplier import Supplier, SupplierStatus
 from app.models.tenant import MemberRole, MemberStatus, Tenant, TenantMember, TenantStatus
 from app.models.user import User, UserStatus
@@ -74,6 +87,15 @@ __all__ = [
     "ShipmentItem",
     "ShipmentStatus",
     "ShipmentTrackingEvent",
+    "STOCK_TRANSFER_REFERENCE",
+    "STOCKTAKE_REFERENCE",
+    "StockTransfer",
+    "StockTransferItem",
+    "StockTransferStatus",
+    "StocktakeItem",
+    "StocktakeOrder",
+    "StocktakeOrderStatus",
+    "StocktakeScope",
     "TrackingEventStatus",
     "Supplier",
     "SupplierStatus",

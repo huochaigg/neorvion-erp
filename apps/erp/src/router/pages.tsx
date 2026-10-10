@@ -118,6 +118,30 @@ export const PAGE_COMPONENTS: Record<PageKey, LazyExoticComponent<ComponentType<
     const module = await import('@/pages/shipping/CarriersPage');
     return { default: module.CarriersPage };
   }),
+  StocktakeList: lazy(async () => {
+    const module = await import('@/pages/inventory/StocktakeListPage');
+    return { default: module.StocktakeListPage };
+  }),
+  StocktakeForm: lazy(async () => {
+    const module = await import('@/pages/inventory/StocktakeFormPage');
+    return { default: module.StocktakeFormPage };
+  }),
+  StocktakeDetail: lazy(async () => {
+    const module = await import('@/pages/inventory/StocktakeDetailPage');
+    return { default: module.StocktakeDetailPage };
+  }),
+  StockTransferList: lazy(async () => {
+    const module = await import('@/pages/inventory/StockTransferListPage');
+    return { default: module.StockTransferListPage };
+  }),
+  StockTransferForm: lazy(async () => {
+    const module = await import('@/pages/inventory/StockTransferFormPage');
+    return { default: module.StockTransferFormPage };
+  }),
+  StockTransferDetail: lazy(async () => {
+    const module = await import('@/pages/inventory/StockTransferDetailPage');
+    return { default: module.StockTransferDetailPage };
+  }),
   Customers: lazy(async () => {
     const module = await import('@/pages/orders/CustomersPage');
     return { default: module.CustomersPage };

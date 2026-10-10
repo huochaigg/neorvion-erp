@@ -192,6 +192,30 @@ class InventoryRepository(BaseRepository):
         )
         return list(self.session.scalars(stmt).all())
 
+    def list_in_warehouse(
+        self,
+        warehouse_id: int,
+        sku_ids: list[int] | None = None,
+    ) -> list[Inventory]:
+        """盘点创建时按仓库取库存行。只读快照，不加锁。"""
+        tenant_id = self.ensure_tenant()
+        filters = [
+            Inventory.tenant_id == tenant_id,
+            Inventory.warehouse_id == warehouse_id,
+        ]
+        if sku_ids is not None:
+            unique_ids = list(dict.fromkeys(sku_ids))
+            if not unique_ids:
+                return []
+            filters.append(Inventory.sku_id.in_(unique_ids))
+        stmt = (
+            select(Inventory)
+            .options(selectinload(Inventory.sku).selectinload(ProductSku.product))
+            .where(*filters)
+            .order_by(Inventory.sku_id.asc(), Inventory.id.asc())
+        )
+        return list(self.session.scalars(stmt).all())
+
     def count_by_sku(self, sku_id: int) -> int:
         tenant_id = self.ensure_tenant()
         stmt = select(func.count(Inventory.id)).where(
@@ -278,8 +302,38 @@ class InventoryRepository(BaseRepository):
         )
         return self._execute_update(stmt)
 
+    def subtract_available_if_enough(
+        self,
+        *,
+        warehouse_id: int,
+        sku_id: int,
+        quantity: int,
+    ) -> int:
+        """调拨调出：只减 quantity，不改 reserved。
+
+        WHERE 用当前行的 available = quantity - reserved 判断。两个调拨单
+        同时从同一仓扣同一 SKU 时，不会都先读到 available=100 再各自减 80。
+        reserved 不动：销售订单预占不属于调拨领域。
+        """
+        tenant_id = self.ensure_tenant()
+        stmt = (
+            update(Inventory)
+            .where(
+                Inventory.tenant_id == tenant_id,
+                Inventory.warehouse_id == warehouse_id,
+                Inventory.sku_id == sku_id,
+                Inventory.quantity - Inventory.reserved_quantity >= quantity,
+            )
+            .values(
+                quantity=Inventory.quantity - quantity,
+                version=Inventory.version + 1,
+                updated_at=func.now(),
+            )
+        )
+        return self._execute_update(stmt)
+
     def add_quantity(self, *, warehouse_id: int, sku_id: int, quantity: int) -> int:
-        """采购入库：只增加 quantity，不改 reserved。
+        """采购入库 / 调拨调入：只增加 quantity，不改 reserved。
 
         入库的货还没被订单占住，所以可用量跟着实际库存一起增加。
         """

@@ -16,7 +16,7 @@
 
 `GET /api/v1/health`
 
-依赖不可用时 HTTP 仍为 200，字段标记 `unavailable`。当前 `milestone` 为 `V9`。
+依赖不可用时 HTTP 仍为 200，字段标记 `unavailable`。当前 `milestone` 为 `V10`。
 
 ## 认证
 
@@ -179,5 +179,19 @@
 - `GET/POST /api/v1/shipments/{id}/tracking-events`
 
 物流商编码冲突 → `40970`。使用中不能删除 → `40096` `CARRIER_IN_USE`。停用承运商发货 → `CARRIER_DISABLED`。运单号冲突 → `40971`。重复确认发货 → `40151` `SHIPMENT_ALREADY_CONFIRMED`。超过出库剩余 → `40152` `SHIPMENT_EXCEEDS_OUTBOUND`。确认前无运单号 → `40153` `SHIPMENT_TRACKING_REQUIRED`。跨租户 → `40490` / `40491`。确认发货不修改库存。
+
+## 盘点与调拨（V10）
+
+详见 `docs/stocktake.md`、`docs/stock-transfer.md`。
+
+- `GET/POST /api/v1/stocktakes`
+- `GET/PATCH /api/v1/stocktakes/{id}`
+- `PUT /api/v1/stocktakes/{id}/items`
+- `POST /api/v1/stocktakes/{id}/submit|confirm|cancel`
+- `GET/POST /api/v1/stock-transfers`
+- `GET/PATCH /api/v1/stock-transfers/{id}`
+- `POST /api/v1/stock-transfers/{id}/submit|confirm-outbound|confirm-receive|cancel`
+
+重复确认盘点 → `40203` `STOCKTAKE_ALREADY_CONFIRMED`。盘亏低于预占 → `40204` `STOCKTAKE_CONFLICT_WITH_RESERVED_INVENTORY`。重复调出 → `40224`。重复调入 → `40225`。在途不能取消 → `40226`。跨租户 → `40492` / `40493`。
 
 Swagger：http://localhost:8011/docs

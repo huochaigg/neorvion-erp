@@ -34,6 +34,9 @@ class InventoryTransactionType(StrEnum):
     RELEASE = "RELEASE"
     INBOUND = "INBOUND"
     OUTBOUND = "OUTBOUND"
+    STOCKTAKE_ADJUSTMENT = "STOCKTAKE_ADJUSTMENT"
+    TRANSFER_OUT = "TRANSFER_OUT"
+    TRANSFER_IN = "TRANSFER_IN"
 
 
 class Inventory(TimestampMixin, TenantMixin, Base):
@@ -126,7 +129,7 @@ class InventoryTransaction(TenantMixin, Base):
     warehouse_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
     sku_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
     inventory_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
-    type: Mapped[str] = mapped_column(String(16), nullable=False)
+    type: Mapped[str] = mapped_column(String(32), nullable=False)
     change_quantity: Mapped[int] = mapped_column(Integer, nullable=False)
     before_quantity: Mapped[int] = mapped_column(Integer, nullable=False)
     after_quantity: Mapped[int] = mapped_column(Integer, nullable=False)

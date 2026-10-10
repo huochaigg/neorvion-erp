@@ -203,6 +203,50 @@ export {
   canDeliverShipment,
   canCreateShipmentFromOutbound,
 } from './types/shipping';
+export type {
+  StocktakeItem,
+  StocktakeDetail,
+  StocktakeListItem,
+  StocktakeList,
+  StocktakeCreatePayload,
+  StocktakeItemSavePayload,
+} from './types/stocktake';
+export {
+  STOCKTAKE_STATUS,
+  STOCKTAKE_STATUS_LABEL,
+  STOCKTAKE_STATUS_OPTIONS,
+  STOCKTAKE_SCOPE,
+  STOCKTAKE_SCOPE_LABEL,
+  stocktakeStatusLabel,
+  stocktakeScopeLabel,
+  canEditStocktakeCount,
+  canSubmitStocktake,
+  canConfirmStocktake,
+  canCancelStocktake,
+  stocktakeDifference,
+  stocktakeDifferenceText,
+} from './types/stocktake';
+export type {
+  StockTransferItem,
+  StockTransferDetail,
+  StockTransferListItem,
+  StockTransferList,
+  StockTransferItemInput,
+  StockTransferCreatePayload,
+  TransferSkuDraft,
+} from './types/stock-transfer';
+export {
+  STOCK_TRANSFER_STATUS,
+  STOCK_TRANSFER_STATUS_LABEL,
+  STOCK_TRANSFER_STATUS_OPTIONS,
+  stockTransferStatusLabel,
+  canEditStockTransfer,
+  canSubmitStockTransfer,
+  canConfirmTransferOutbound,
+  canConfirmTransferReceive,
+  canCancelStockTransfer,
+  transferStepIndex,
+} from './types/stock-transfer';
 export {
   TENANT_HEADER,
   TENANT_STATUS,
@@ -259,6 +303,10 @@ export {
   customersQueryKey,
   customerQueryKey,
   skuInventoryQueryKey,
+  stocktakesQueryKey,
+  stocktakeQueryKey,
+  stockTransfersQueryKey,
+  stockTransferQueryKey,
   isTenantScopedQueryKey,
   tenantIdFromQueryKey,
 } from './query/keys';
