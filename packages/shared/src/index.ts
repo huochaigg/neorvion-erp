@@ -164,6 +164,7 @@ export {
   canConfirmSalesOrder,
   canCancelSalesOrder,
   canCreateOutbound,
+  canApplyAfterSale,
   formatSalesInventoryShortage,
   mergeSalesSkuLine,
 } from './types/order';
@@ -226,6 +227,74 @@ export {
   stocktakeDifference,
   stocktakeDifferenceText,
 } from './types/stocktake';
+export type {
+  AfterSalePreviewItem,
+  AfterSalePreview,
+  AfterSaleItem,
+  AfterSaleDetail,
+  AfterSaleListItem,
+  AfterSaleList,
+  AfterSaleItemInput,
+  AfterSaleCreatePayload,
+  AfterSaleApproveItemInput,
+  AfterSaleApprovePayload,
+  AfterSaleRejectPayload,
+} from './types/after-sale';
+export {
+  AFTER_SALE_TYPE,
+  AFTER_SALE_TYPE_LABEL,
+  AFTER_SALE_TYPE_OPTIONS,
+  AFTER_SALE_STATUS,
+  AFTER_SALE_STATUS_LABEL,
+  AFTER_SALE_STATUS_OPTIONS,
+  AFTER_SALE_REFUND_STATUS,
+  AFTER_SALE_REFUND_STATUS_LABEL,
+  AFTER_SALE_REFUND_STATUS_OPTIONS,
+  afterSaleTypeLabel,
+  afterSaleStatusLabel,
+  afterSaleRefundStatusLabel,
+  canApproveAfterSale,
+  canRejectAfterSale,
+  canCancelAfterSale,
+  canCreateRefund,
+} from './types/after-sale';
+export type {
+  ReturnOrderItem,
+  ReturnOrderDetail,
+  ReturnOrderListItem,
+  ReturnOrderList,
+  ReturnReceiveItemInput,
+  ReturnReceivePayload,
+  ReturnOrderUpdatePayload,
+} from './types/return-order';
+export {
+  RETURN_ORDER_STATUS,
+  RETURN_ORDER_STATUS_LABEL,
+  RETURN_ORDER_STATUS_OPTIONS,
+  RETURN_CONDITION,
+  RETURN_CONDITION_LABEL,
+  RETURN_CONDITION_OPTIONS,
+  returnOrderStatusLabel,
+  returnConditionLabel,
+  canReceiveReturn,
+  canConfirmReturnInbound,
+  defaultInboundQuantity,
+} from './types/return-order';
+export type {
+  RefundRecord,
+  RefundList,
+  RefundCreatePayload,
+  RefundConfirmPayload,
+  RefundFailPayload,
+} from './types/refund';
+export {
+  REFUND_RECORD_STATUS,
+  REFUND_RECORD_STATUS_LABEL,
+  REFUND_RECORD_STATUS_OPTIONS,
+  refundRecordStatusLabel,
+  canConfirmRefundRecord,
+  canFailRefundRecord,
+} from './types/refund';
 export type {
   StockTransferItem,
   StockTransferDetail,
@@ -307,6 +376,13 @@ export {
   stocktakeQueryKey,
   stockTransfersQueryKey,
   stockTransferQueryKey,
+  afterSalesQueryKey,
+  afterSaleQueryKey,
+  afterSalePreviewQueryKey,
+  returnOrdersQueryKey,
+  returnOrderQueryKey,
+  refundsQueryKey,
+  refundQueryKey,
   isTenantScopedQueryKey,
   tenantIdFromQueryKey,
 } from './query/keys';

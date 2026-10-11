@@ -178,6 +178,21 @@ describe('动态权限菜单与页面守卫', () => {
     const transferDetail = matchRoute(routes, '/stock-transfers/4');
     assert.equal(pageAllowsAccess(transferDetail, []), false);
     assert.equal(pageAllowsAccess(transferDetail, [PERMISSION_CODE.stockTransferRead]), true);
+    const afterSaleList = matchRoute(routes, '/after-sales/list');
+    assert.equal(pageAllowsAccess(afterSaleList, [PERMISSION_CODE.orderRead]), false);
+    assert.equal(pageAllowsAccess(afterSaleList, [PERMISSION_CODE.afterSaleRead]), true);
+    const afterSaleCreate = matchRoute(routes, '/after-sales/create');
+    assert.equal(pageAllowsAccess(afterSaleCreate, [PERMISSION_CODE.afterSaleRead]), false);
+    assert.equal(pageAllowsAccess(afterSaleCreate, [PERMISSION_CODE.afterSaleCreate]), true);
+    const afterSaleDetail = matchRoute(routes, '/after-sales/9');
+    assert.equal(pageAllowsAccess(afterSaleDetail, []), false);
+    assert.equal(pageAllowsAccess(afterSaleDetail, [PERMISSION_CODE.afterSaleRead]), true);
+    const returnList = matchRoute(routes, '/return-orders');
+    assert.equal(pageAllowsAccess(returnList, [PERMISSION_CODE.afterSaleRead]), false);
+    assert.equal(pageAllowsAccess(returnList, [PERMISSION_CODE.returnOrderRead]), true);
+    const refundList = matchRoute(routes, '/refunds');
+    assert.equal(pageAllowsAccess(refundList, [PERMISSION_CODE.afterSaleRead]), false);
+    assert.equal(pageAllowsAccess(refundList, [PERMISSION_CODE.refundRead]), true);
   });
 
   it('租户 A 与 B 权限独立：仓库身份看不到系统管理', () => {

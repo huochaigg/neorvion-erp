@@ -37,6 +37,7 @@ class InventoryTransactionType(StrEnum):
     STOCKTAKE_ADJUSTMENT = "STOCKTAKE_ADJUSTMENT"
     TRANSFER_OUT = "TRANSFER_OUT"
     TRANSFER_IN = "TRANSFER_IN"
+    RETURN_INBOUND = "RETURN_INBOUND"
 
 
 class Inventory(TimestampMixin, TenantMixin, Base):

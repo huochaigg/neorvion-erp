@@ -281,6 +281,7 @@ class WarehouseService:
         """有库存、采购单、盘点或调拨就不能删仓库。历史单据必须还能看到仓库名称。"""
         from app.repositories.inventory import InventoryRepository
         from app.repositories.purchase import PurchaseOrderRepository
+        from app.repositories.return_order import ReturnOrderRepository
         from app.repositories.stock_transfer import StockTransferRepository
         from app.repositories.stocktake import StocktakeRepository
 
@@ -300,7 +301,17 @@ class WarehouseService:
             self.session,
             self.context.tenant_id,
         ).count_by_warehouse(warehouse.id)
-        if used_inventory > 0 or used_purchase > 0 or used_stocktake > 0 or used_transfer > 0:
+        used_return = ReturnOrderRepository(
+            self.session,
+            self.context.tenant_id,
+        ).count_by_warehouse(warehouse.id)
+        if (
+            used_inventory > 0
+            or used_purchase > 0
+            or used_stocktake > 0
+            or used_transfer > 0
+            or used_return > 0
+        ):
             raise AppError(
                 "仓库已被库存或业务单据引用，不能删除。",
                 code=40066,

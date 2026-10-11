@@ -1,6 +1,14 @@
 """ORM 模型。Alembic 通过导入本包收集 metadata。"""
 
 from app.db.base import Base
+from app.models.after_sale import (
+    AFTER_SALE_REFERENCE,
+    AfterSaleItem,
+    AfterSaleOrder,
+    AfterSaleStatus,
+    AfterSaleType,
+    RefundStatus,
+)
 from app.models.carrier import Carrier, CarrierStatus, CarrierType
 from app.models.customer import Customer, CustomerStatus
 from app.models.inventory import Inventory, InventoryTransaction, InventoryTransactionType
@@ -15,6 +23,14 @@ from app.models.product import Brand, Product, ProductCategory, ProductSku
 from app.models.purchase import PurchaseOrder, PurchaseOrderItem, PurchaseOrderStatus
 from app.models.purchase_receipt import PurchaseReceipt, PurchaseReceiptItem, PurchaseReceiptStatus
 from app.models.rbac import MemberRoleGrant, Permission, Role, RolePermission
+from app.models.refund import REFUND_REFERENCE, RefundRecord, RefundRecordStatus
+from app.models.return_order import (
+    RETURN_ORDER_REFERENCE,
+    ReturnCondition,
+    ReturnOrder,
+    ReturnOrderItem,
+    ReturnOrderStatus,
+)
 from app.models.sales_order import (
     SALES_ORDER_REFERENCE,
     SalesOrder,
@@ -48,6 +64,11 @@ from app.models.user import User, UserStatus
 from app.models.warehouse import Warehouse, WarehouseStatus, WarehouseType
 
 __all__ = [
+    "AFTER_SALE_REFERENCE",
+    "AfterSaleItem",
+    "AfterSaleOrder",
+    "AfterSaleStatus",
+    "AfterSaleType",
     "Base",
     "Brand",
     "Carrier",
@@ -76,6 +97,15 @@ __all__ = [
     "PurchaseReceipt",
     "PurchaseReceiptItem",
     "PurchaseReceiptStatus",
+    "REFUND_REFERENCE",
+    "RETURN_ORDER_REFERENCE",
+    "RefundRecord",
+    "RefundRecordStatus",
+    "RefundStatus",
+    "ReturnCondition",
+    "ReturnOrder",
+    "ReturnOrderItem",
+    "ReturnOrderStatus",
     "Role",
     "RolePermission",
     "SALES_ORDER_REFERENCE",

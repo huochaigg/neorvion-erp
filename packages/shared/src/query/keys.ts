@@ -199,6 +199,34 @@ export function stockTransferQueryKey(tenantId: number | null, transferId: numbe
   return ['tenant', tenantId, 'stock-transfer', transferId] as const;
 }
 
+export function afterSalesQueryKey(tenantId: number | null, filters?: Record<string, unknown>) {
+  return ['tenant', tenantId, 'after-sales', filters ?? {}] as const;
+}
+
+export function afterSaleQueryKey(tenantId: number | null, afterSaleId: number | null) {
+  return ['tenant', tenantId, 'after-sale', afterSaleId] as const;
+}
+
+export function afterSalePreviewQueryKey(tenantId: number | null, salesOrderId: number | null) {
+  return ['tenant', tenantId, 'after-sale-preview', salesOrderId] as const;
+}
+
+export function returnOrdersQueryKey(tenantId: number | null, filters?: Record<string, unknown>) {
+  return ['tenant', tenantId, 'return-orders', filters ?? {}] as const;
+}
+
+export function returnOrderQueryKey(tenantId: number | null, returnOrderId: number | null) {
+  return ['tenant', tenantId, 'return-order', returnOrderId] as const;
+}
+
+export function refundsQueryKey(tenantId: number | null, filters?: Record<string, unknown>) {
+  return ['tenant', tenantId, 'refunds', filters ?? {}] as const;
+}
+
+export function refundQueryKey(tenantId: number | null, refundId: number | null) {
+  return ['tenant', tenantId, 'refund', refundId] as const;
+}
+
 export function customersQueryKey(
   tenantId: number | null,
   filters?: {

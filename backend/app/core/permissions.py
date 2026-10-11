@@ -112,6 +112,18 @@ class PermissionCode(StrEnum):
     STOCK_TRANSFER_RECEIVE = "stock_transfer:receive"
     STOCK_TRANSFER_CANCEL = "stock_transfer:cancel"
 
+    AFTER_SALE_READ = "after_sale:read"
+    AFTER_SALE_CREATE = "after_sale:create"
+    AFTER_SALE_APPROVE = "after_sale:approve"
+    AFTER_SALE_REJECT = "after_sale:reject"
+    AFTER_SALE_CANCEL = "after_sale:cancel"
+    RETURN_ORDER_READ = "return_order:read"
+    RETURN_ORDER_RECEIVE = "return_order:receive"
+    RETURN_ORDER_INBOUND = "return_order:inbound"
+    REFUND_READ = "refund:read"
+    REFUND_CREATE = "refund:create"
+    REFUND_CONFIRM = "refund:confirm"
+
     SUPPLIER_READ = "supplier:read"
     SUPPLIER_CREATE = "supplier:create"
     SUPPLIER_UPDATE = "supplier:update"
@@ -266,6 +278,17 @@ PERMISSION_CATALOG: tuple[tuple[str, str, str, str], ...] = (
     ),
     (PermissionCode.STOCK_TRANSFER_RECEIVE, "确认调入", "stock_transfer", "把在途库存增加到目标仓"),
     (PermissionCode.STOCK_TRANSFER_CANCEL, "取消调拨", "stock_transfer", "取消尚未调出的调拨单"),
+    (PermissionCode.AFTER_SALE_READ, "查看售后", "after_sale", "查看售后申请"),
+    (PermissionCode.AFTER_SALE_CREATE, "创建售后", "after_sale", "为已履约销售订单创建售后申请"),
+    (PermissionCode.AFTER_SALE_APPROVE, "审核售后", "after_sale", "批准售后申请"),
+    (PermissionCode.AFTER_SALE_REJECT, "驳回售后", "after_sale", "拒绝售后申请并释放可退占用"),
+    (PermissionCode.AFTER_SALE_CANCEL, "取消售后", "after_sale", "取消尚未审核的售后申请"),
+    (PermissionCode.RETURN_ORDER_READ, "查看退货单", "return_order", "查看销售退货单"),
+    (PermissionCode.RETURN_ORDER_RECEIVE, "退货收货", "return_order", "登记客户退回商品"),
+    (PermissionCode.RETURN_ORDER_INBOUND, "退货入库", "return_order", "把 GOOD 退货重新入普通库存"),
+    (PermissionCode.REFUND_READ, "查看退款", "refund", "查看退款记录"),
+    (PermissionCode.REFUND_CREATE, "创建退款记录", "refund", "登记一笔待确认退款"),
+    (PermissionCode.REFUND_CONFIRM, "确认退款", "refund", "人工确认外部退款成功或失败"),
     (PermissionCode.SUPPLIER_READ, "查看供应商", "supplier", "查看本企业供应商"),
     (PermissionCode.SUPPLIER_CREATE, "新增供应商", "supplier", "创建供应商"),
     (PermissionCode.SUPPLIER_UPDATE, "编辑供应商", "supplier", "编辑供应商档案，编码创建后只读"),
@@ -317,6 +340,9 @@ _READ_CODES: tuple[str, ...] = (
     PermissionCode.SHIPMENT_READ,
     PermissionCode.STOCKTAKE_READ,
     PermissionCode.STOCK_TRANSFER_READ,
+    PermissionCode.AFTER_SALE_READ,
+    PermissionCode.RETURN_ORDER_READ,
+    PermissionCode.REFUND_READ,
     PermissionCode.SUPPLIER_READ,
 )
 
@@ -370,6 +396,10 @@ DEFAULT_ROLE_TEMPLATES: tuple[tuple[str, str, str, tuple[str, ...]], ...] = (
             PermissionCode.STOCKTAKE_CREATE,
             PermissionCode.STOCK_TRANSFER_READ,
             PermissionCode.STOCK_TRANSFER_CREATE,
+            PermissionCode.AFTER_SALE_READ,
+            PermissionCode.AFTER_SALE_CREATE,
+            PermissionCode.RETURN_ORDER_READ,
+            PermissionCode.REFUND_READ,
         ),
     ),
     (
@@ -418,6 +448,10 @@ DEFAULT_ROLE_TEMPLATES: tuple[tuple[str, str, str, tuple[str, ...]], ...] = (
             PermissionCode.STOCK_TRANSFER_OUTBOUND,
             PermissionCode.STOCK_TRANSFER_RECEIVE,
             PermissionCode.STOCK_TRANSFER_CANCEL,
+            PermissionCode.AFTER_SALE_READ,
+            PermissionCode.RETURN_ORDER_READ,
+            PermissionCode.RETURN_ORDER_RECEIVE,
+            PermissionCode.RETURN_ORDER_INBOUND,
         ),
     ),
     (
@@ -1029,6 +1063,100 @@ PERMISSION_TREE: tuple[PermissionTreeDef, ...] = (
                         title="删除",
                         type="ACTION",
                         permission_code=PermissionCode.CARRIER_DELETE,
+                    ),
+                ),
+            ),
+        ),
+    ),
+    PermissionTreeDef(
+        key="dir:after-sales",
+        title="售后管理",
+        type="DIRECTORY",
+        children=(
+            PermissionTreeDef(
+                key="menu:after-sales",
+                title="售后申请",
+                type="MENU",
+                children=(
+                    PermissionTreeDef(
+                        key="action:after-sale-read",
+                        title="查看",
+                        type="ACTION",
+                        permission_code=PermissionCode.AFTER_SALE_READ,
+                    ),
+                    PermissionTreeDef(
+                        key="action:after-sale-create",
+                        title="创建",
+                        type="ACTION",
+                        permission_code=PermissionCode.AFTER_SALE_CREATE,
+                    ),
+                    PermissionTreeDef(
+                        key="action:after-sale-approve",
+                        title="审核",
+                        type="ACTION",
+                        permission_code=PermissionCode.AFTER_SALE_APPROVE,
+                    ),
+                    PermissionTreeDef(
+                        key="action:after-sale-reject",
+                        title="驳回",
+                        type="ACTION",
+                        permission_code=PermissionCode.AFTER_SALE_REJECT,
+                    ),
+                    PermissionTreeDef(
+                        key="action:after-sale-cancel",
+                        title="取消",
+                        type="ACTION",
+                        permission_code=PermissionCode.AFTER_SALE_CANCEL,
+                    ),
+                ),
+            ),
+            PermissionTreeDef(
+                key="menu:return-orders",
+                title="退货管理",
+                type="MENU",
+                children=(
+                    PermissionTreeDef(
+                        key="action:return-order-read",
+                        title="查看",
+                        type="ACTION",
+                        permission_code=PermissionCode.RETURN_ORDER_READ,
+                    ),
+                    PermissionTreeDef(
+                        key="action:return-order-receive",
+                        title="收货",
+                        type="ACTION",
+                        permission_code=PermissionCode.RETURN_ORDER_RECEIVE,
+                    ),
+                    PermissionTreeDef(
+                        key="action:return-order-inbound",
+                        title="入库",
+                        type="ACTION",
+                        permission_code=PermissionCode.RETURN_ORDER_INBOUND,
+                    ),
+                ),
+            ),
+            PermissionTreeDef(
+                key="menu:refunds",
+                title="退款管理",
+                type="MENU",
+                children=(
+                    PermissionTreeDef(
+                        key="action:refund-read",
+                        title="查看",
+                        type="ACTION",
+                        permission_code=PermissionCode.REFUND_READ,
+                    ),
+                    PermissionTreeDef(
+                        key="action:refund-create",
+                        title="创建退款记录",
+                        type="ACTION",
+                        permission_code=PermissionCode.REFUND_CREATE,
+                    ),
+                    PermissionTreeDef(
+                        key="action:refund-confirm",
+                        title="确认退款",
+                        type="ACTION",
+                        permission_code=PermissionCode.REFUND_CONFIRM,
                     ),
                 ),
             ),

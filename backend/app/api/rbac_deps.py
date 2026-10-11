@@ -368,3 +368,47 @@ StockTransferCancelContext = Annotated[
     TenantContext,
     Depends(require_permission(PermissionCode.STOCK_TRANSFER_CANCEL)),
 ]
+AfterSaleReadContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.AFTER_SALE_READ)),
+]
+AfterSaleCreateContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.AFTER_SALE_CREATE)),
+]
+AfterSaleApproveContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.AFTER_SALE_APPROVE)),
+]
+AfterSaleRejectContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.AFTER_SALE_REJECT)),
+]
+AfterSaleCancelContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.AFTER_SALE_CANCEL)),
+]
+ReturnOrderReadContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.RETURN_ORDER_READ)),
+]
+ReturnOrderReceiveContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.RETURN_ORDER_RECEIVE)),
+]
+ReturnOrderInboundContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.RETURN_ORDER_INBOUND)),
+]
+RefundReadContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.REFUND_READ)),
+]
+RefundCreateContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.REFUND_CREATE)),
+]
+RefundConfirmContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.REFUND_CONFIRM)),
+]

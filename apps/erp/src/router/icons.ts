@@ -4,6 +4,7 @@ import {
   CarOutlined,
   DashboardOutlined,
   DatabaseOutlined,
+  RollbackOutlined,
   SettingOutlined,
   ShopOutlined,
   ShoppingCartOutlined,
@@ -20,4 +21,5 @@ export const ICON_MAP: Record<IconName, ComponentType<{ className?: string }>> =
   ShoppingCartOutlined,
   AccountBookOutlined,
   CarOutlined,
+  RollbackOutlined,
 };

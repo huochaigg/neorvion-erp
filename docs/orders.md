@@ -9,7 +9,7 @@
 
 预占只增加 `Inventory.reserved_quantity`，**不**减少 `Inventory.quantity`。可用量 = 实际 − 预占，所以确认后可用量下降，货仍在仓库里。
 
-正式出库在 V8：确认出库时同时减少 `quantity` 和 `reserved_quantity`。物流发货、签收、订单完成在 V9，见 `docs/shipping.md`。平台订单同步、退货退款仍未做。
+正式出库在 V8：确认出库时同时减少 `quantity` 和 `reserved_quantity`。物流发货、签收、订单完成在 V9，见 `docs/shipping.md`。销售售后、退货入库和退款状态在 V11，见 `docs/after-sales.md`、`docs/returns.md`。售后不改本表购买数量，也不回退履约状态。平台订单同步仍未做。
 
 ## 为什么草稿不预占
 
@@ -217,3 +217,5 @@
 选择仓库和 SKU 后展示当前可用量。数量超过可用时提示「当前库存可能不足，订单确认时将再次校验。」仍允许保存草稿。
 
 Query Key 带 `tenantId`：`customers`、`sales-orders`、`sales-order`、`sku-inventory`。确认或取消后失效订单列表、详情、库存和流水。
+
+已履约订单可申请售后，见 `docs/after-sales.md`。详情页展示售后列表，不把销售订单状态改成退货。

@@ -46,6 +46,25 @@ class SalesOrderRepository(BaseRepository):
         )
         return self.session.scalars(stmt).first()
 
+    def lock_items_by_ids(self, item_ids: list[int]) -> list[SalesOrderItem]:
+        """按 sku_id 稳定顺序锁销售明细。创建售后时重新计算可退数量必须拿这把锁。
+
+        两个请求同时对同一行申请退 8（出库只有 10）时，后一个会等到前一个提交后再读累计占用。
+        """
+        if not item_ids:
+            return []
+        tenant_id = self.ensure_tenant()
+        stmt = (
+            select(SalesOrderItem)
+            .where(
+                SalesOrderItem.tenant_id == tenant_id,
+                SalesOrderItem.id.in_(item_ids),
+            )
+            .order_by(SalesOrderItem.sku_id.asc(), SalesOrderItem.id.asc())
+            .with_for_update()
+        )
+        return list(self.session.scalars(stmt).all())
+
     def list_items(self, order_id: int) -> list[SalesOrderItem]:
         """按 sku_id 升序取出明细。确认/取消按这个顺序动库存，降低死锁概率。"""
         tenant_id = self.ensure_tenant()

@@ -51,6 +51,7 @@ describe('库存页 UI 规则', () => {
     assert.equal(inventoryTransactionTypeLabel('STOCKTAKE_ADJUSTMENT'), '盘点调整');
     assert.equal(inventoryTransactionTypeLabel('TRANSFER_OUT'), '调拨调出');
     assert.equal(inventoryTransactionTypeLabel('TRANSFER_IN'), '调拨调入');
+    assert.equal(inventoryTransactionTypeLabel('RETURN_INBOUND'), '退货入库');
     assert.equal(specValuesLabel({ 颜色: '黑', 尺码: '42' }), '颜色:黑 / 尺码:42');
     assert.equal(canAdjustOut(70, 80), false);
     assert.equal(canAdjustOut(70, 70), true);

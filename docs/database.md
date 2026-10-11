@@ -60,6 +60,13 @@
 - 迁移 `20261006_0013` 只改 CHECK，不重建销售明细表
 - `outbound_picks` / `outbound_pick_lines`：每次拣货追加记录。`quantity` 是本次，`picked_before` / `picked_after` 是累计变化。出库明细 `picked_quantity` 仍是累计，确认出库继续用它
 
+当前里程碑 V11 增加：
+
+- `after_sale_orders` / `after_sale_items`：售后单。单号 `AS` + 年 + 6 位 id。不修改销售明细购买数量
+- `return_orders` / `return_order_items`：退货单。单号 `RT` + 年 + 6 位 id。一张售后一张退货单
+- `refund_records`：退款尝试历史。单号 `RF` + 年 + 6 位 id。失败后新建一行，不覆盖
+- 迁移 `20261010_0017`
+
 当前里程碑 V10 增加：
 
 - `stocktake_orders` / `stocktake_items`：盘点单。单号 `ST` + 年 + 6 位 id。明细保存账面快照，确认时按差异调整库存

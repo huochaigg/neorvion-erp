@@ -142,6 +142,30 @@ export const PAGE_COMPONENTS: Record<PageKey, LazyExoticComponent<ComponentType<
     const module = await import('@/pages/inventory/StockTransferDetailPage');
     return { default: module.StockTransferDetailPage };
   }),
+  AfterSaleList: lazy(async () => {
+    const module = await import('@/pages/after-sales/AfterSaleListPage');
+    return { default: module.AfterSaleListPage };
+  }),
+  AfterSaleCreate: lazy(async () => {
+    const module = await import('@/pages/after-sales/AfterSaleCreatePage');
+    return { default: module.AfterSaleCreatePage };
+  }),
+  AfterSaleDetail: lazy(async () => {
+    const module = await import('@/pages/after-sales/AfterSaleDetailPage');
+    return { default: module.AfterSaleDetailPage };
+  }),
+  ReturnOrderList: lazy(async () => {
+    const module = await import('@/pages/after-sales/ReturnOrderListPage');
+    return { default: module.ReturnOrderListPage };
+  }),
+  ReturnOrderDetail: lazy(async () => {
+    const module = await import('@/pages/after-sales/ReturnOrderDetailPage');
+    return { default: module.ReturnOrderDetailPage };
+  }),
+  RefundList: lazy(async () => {
+    const module = await import('@/pages/after-sales/RefundListPage');
+    return { default: module.RefundListPage };
+  }),
   Customers: lazy(async () => {
     const module = await import('@/pages/orders/CustomersPage');
     return { default: module.CustomersPage };

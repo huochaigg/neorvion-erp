@@ -475,8 +475,9 @@ class InventoryService:
     ) -> Inventory:
         """在当前事务里增加实际库存，不 commit，不改 reserved。
 
-        功能：采购确认收货、调拨确认调入时调用。没有库存行就先插入 0，再加数量。
-        参数：仓库、SKU、本次入库数量，单据引用；tx_type 默认 INBOUND，调拨传入 TRANSFER_IN。
+        功能：采购确认收货、调拨确认调入、退货入库时调用。没有库存行就先插入 0，再加数量。
+        参数：仓库、SKU、本次入库数量，单据引用。
+        tx_type 默认 INBOUND；调拨传入 TRANSFER_IN，退货传入 RETURN_INBOUND。
         返回：入库后的库存行。
         异常：插入后仍找不到行。本方法不 rollback。
         为什么用保存点：两个请求同时给同一仓库+SKU 建第一行时，后一个会撞

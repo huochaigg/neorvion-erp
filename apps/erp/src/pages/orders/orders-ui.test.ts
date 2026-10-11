@@ -3,6 +3,7 @@ import {
   canAccess,
   canCancelSalesOrder,
   canConfirmSalesOrder,
+  canApplyAfterSale,
   canCreateOutbound,
   canEditSalesOrder,
   canSubmitSalesOrder,
@@ -45,6 +46,9 @@ describe('销售订单与客户 UI 规则', () => {
     assert.equal(canCreateOutbound(SALES_ORDER_STATUS.partiallyShipped), true);
     assert.equal(canCreateOutbound(SALES_ORDER_STATUS.outbounded), false);
     assert.equal(canCreateOutbound(SALES_ORDER_STATUS.shipped), false);
+    assert.equal(canApplyAfterSale(SALES_ORDER_STATUS.waitingOutbound), false);
+    assert.equal(canApplyAfterSale(SALES_ORDER_STATUS.outbounded), true);
+    assert.equal(canApplyAfterSale(SALES_ORDER_STATUS.completed), true);
     assert.equal(salesOrderStatusLabel(SALES_ORDER_STATUS.waitingOutbound), '待出库');
     assert.equal(salesOrderStatusLabel(SALES_ORDER_STATUS.partiallyOutbound), '部分出库');
     assert.equal(salesOrderStatusLabel(SALES_ORDER_STATUS.outbounded), '已出库');

@@ -6,6 +6,7 @@ export type IconName =
   | 'ShoppingCartOutlined'
   | 'AccountBookOutlined'
   | 'CarOutlined'
+  | 'RollbackOutlined'
   | 'SettingOutlined';
 
 export type PageKey =
@@ -45,7 +46,13 @@ export type PageKey =
   | 'StocktakeDetail'
   | 'StockTransferList'
   | 'StockTransferForm'
-  | 'StockTransferDetail';
+  | 'StockTransferDetail'
+  | 'AfterSaleList'
+  | 'AfterSaleCreate'
+  | 'AfterSaleDetail'
+  | 'ReturnOrderList'
+  | 'ReturnOrderDetail'
+  | 'RefundList';
 
 export type PermissionMode = 'any' | 'all';
 

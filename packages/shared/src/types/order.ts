@@ -120,6 +120,16 @@ export function canCreateOutbound(status: string): boolean {
   );
 }
 
+export function canApplyAfterSale(status: string): boolean {
+  return (
+    status === SALES_ORDER_STATUS.partiallyOutbound ||
+    status === SALES_ORDER_STATUS.outbounded ||
+    status === SALES_ORDER_STATUS.partiallyShipped ||
+    status === SALES_ORDER_STATUS.shipped ||
+    status === SALES_ORDER_STATUS.completed
+  );
+}
+
 export function formatSalesInventoryShortage(data: unknown, fallback: string): string {
   if (!data || typeof data !== 'object') {
     return fallback;

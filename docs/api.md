@@ -16,7 +16,7 @@
 
 `GET /api/v1/health`
 
-依赖不可用时 HTTP 仍为 200，字段标记 `unavailable`。当前 `milestone` 为 `V10`。
+依赖不可用时 HTTP 仍为 200，字段标记 `unavailable`。当前 `milestone` 为 `V11`。
 
 ## 认证
 
@@ -193,5 +193,23 @@
 - `POST /api/v1/stock-transfers/{id}/submit|confirm-outbound|confirm-receive|cancel`
 
 重复确认盘点 → `40203` `STOCKTAKE_ALREADY_CONFIRMED`。盘亏低于预占 → `40204` `STOCKTAKE_CONFLICT_WITH_RESERVED_INVENTORY`。重复调出 → `40224`。重复调入 → `40225`。在途不能取消 → `40226`。跨租户 → `40492` / `40493`。
+
+## 售后、退货与退款（V11）
+
+详见 `docs/after-sales.md`、`docs/returns.md`。
+
+- `GET/POST /api/v1/after-sales`
+- `GET /api/v1/after-sales/preview`
+- `GET /api/v1/after-sales/{id}`
+- `POST /api/v1/after-sales/{id}/approve|reject|cancel`
+- `POST /api/v1/after-sales/{id}/refunds`
+- `GET /api/v1/return-orders`
+- `GET/PATCH /api/v1/return-orders/{id}`
+- `POST /api/v1/return-orders/{id}/receive`
+- `POST /api/v1/return-orders/{id}/confirm-inbound`
+- `GET /api/v1/refunds`
+- `POST /api/v1/refunds/{id}/confirm|fail`
+
+未出库订单不能售后 → `40301`。超过可退数量 → `40302`。重复入库 → `40321`。未完成退货不能退款 → `40313`。跨租户 → `40494` / `40495` / `40496`。
 
 Swagger：http://localhost:8011/docs

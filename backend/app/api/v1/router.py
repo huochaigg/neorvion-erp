@@ -1,5 +1,6 @@
 from fastapi import APIRouter
 
+from app.api.v1.after_sales import router as after_sale_router
 from app.api.v1.auth import router as auth_router
 from app.api.v1.brands import router as brand_router
 from app.api.v1.carriers import router as carrier_router
@@ -13,6 +14,8 @@ from app.api.v1.product_categories import router as product_category_router
 from app.api.v1.products import router as product_router
 from app.api.v1.purchase_orders import router as purchase_order_router
 from app.api.v1.purchase_receipts import router as purchase_receipt_router
+from app.api.v1.refunds import router as refund_router
+from app.api.v1.return_orders import router as return_order_router
 from app.api.v1.roles import router as role_router
 from app.api.v1.sales_orders import router as sales_order_router
 from app.api.v1.shipments import router as shipment_router
@@ -44,3 +47,6 @@ api_router.include_router(carrier_router)
 api_router.include_router(shipment_router)
 api_router.include_router(stocktake_router)
 api_router.include_router(stock_transfer_router)
+api_router.include_router(after_sale_router)
+api_router.include_router(return_order_router)
+api_router.include_router(refund_router)

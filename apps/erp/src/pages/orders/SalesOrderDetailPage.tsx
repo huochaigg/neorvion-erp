@@ -1,5 +1,9 @@
 import {
+  afterSaleStatusLabel,
+  afterSalesQueryKey,
+  afterSaleTypeLabel,
   ApiError,
+  canApplyAfterSale,
   canCancelSalesOrder,
   canConfirmSalesOrder,
   canCreateOutbound,
@@ -21,6 +25,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { App, Button, Card, Descriptions, Input, Space, Tag, Timeline } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { useNavigate, useParams } from 'react-router-dom';
+import { fetchAfterSales } from '@/api/after-sales';
 import { cancelSalesOrder, confirmSalesOrder, fetchSalesOrder, submitSalesOrder } from '@/api/sales-orders';
 import { createOutboundOrder, fetchOutboundOrders } from '@/api/outbound-orders';
 import { fetchShipments } from '@/api/shipments';
@@ -60,7 +65,7 @@ export function SalesOrderDetailPage(props: PageProps) {
   const { message, modal } = App.useApp();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const { tenantId } = usePermissions();
+  const { tenantId, hasPermission } = usePermissions();
   const params = useParams();
   const orderId = Number(params.id);
   const validId = Number.isInteger(orderId) && orderId > 0;
@@ -75,6 +80,11 @@ export function SalesOrderDetailPage(props: PageProps) {
     queryFn: ({ signal }) =>
       fetchShipments({ salesOrderId: orderId, page: 1, pageSize: 50 }, signal),
     enabled: tenantId != null && validId,
+  });
+  const afterSalesQuery = useQuery({
+    queryKey: afterSalesQueryKey(tenantId, { salesOrderId: validId ? orderId : undefined, page: 1, pageSize: 50 }),
+    queryFn: ({ signal }) => fetchAfterSales({ salesOrderId: orderId, page: 1, pageSize: 50 }, signal),
+    enabled: tenantId != null && validId && hasPermission(PERMISSION_CODE.afterSaleRead),
   });
 
   const invalidate = () => {
@@ -233,6 +243,11 @@ export function SalesOrderDetailPage(props: PageProps) {
             ) : null}
             {order && order.status === 'OUTBOUNDED' ? <Tag color="success">已全部出库</Tag> : null}
             {order && order.status === 'COMPLETED' ? <Tag color="success">已完成</Tag> : null}
+            {order && canApplyAfterSale(order.status) ? (
+              <Can permission={PERMISSION_CODE.afterSaleCreate}>
+                <Button onClick={() => navigate(`/after-sales/create?salesOrderId=${order.id}`)}>申请售后</Button>
+              </Can>
+            ) : null}
             {order && canCancelSalesOrder(order.status) ? (
               <Can permission={PERMISSION_CODE.orderCancel}>
                 <Button
@@ -383,6 +398,48 @@ export function SalesOrderDetailPage(props: PageProps) {
                 { title: '商品', dataIndex: 'product_name', width: 160 },
                 { title: '本次拣货', dataIndex: 'quantity', width: 100 },
                 { title: '累计变化', dataIndex: 'change', width: 120 },
+              ]}
+            />
+          </Card>
+          <Card title="售后记录" className="mt-4!">
+            <AppTable
+              rowKey="id"
+              size="small"
+              pagination={false}
+              fillHeight={false}
+              dataSource={afterSalesQuery.data?.items ?? []}
+              locale={{ emptyText: '还没有售后单' }}
+              columns={[
+                { title: '售后单号', dataIndex: 'after_sale_no', width: 160 },
+                {
+                  title: '类型',
+                  dataIndex: 'type',
+                  width: 110,
+                  render: (value: string) => afterSaleTypeLabel(value),
+                },
+                {
+                  title: '状态',
+                  dataIndex: 'status',
+                  width: 110,
+                  render: (value: string) => afterSaleStatusLabel(value),
+                },
+                { title: '退货数量', dataIndex: 'return_quantity', width: 90 },
+                {
+                  title: '申请退款',
+                  dataIndex: 'requested_refund_amount',
+                  width: 110,
+                  render: (value: number) => formatSalesAmount(value),
+                },
+                {
+                  title: '操作',
+                  key: 'actions',
+                  width: 90,
+                  render: (_, row) => (
+                    <Button type="link" onClick={() => navigate(`/after-sales/${row.id}`)}>
+                      详情
+                    </Button>
+                  ),
+                },
               ]}
             />
           </Card>
