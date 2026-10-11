@@ -62,6 +62,7 @@ describe('售后页 UI 规则', () => {
     assert.equal(canCreateRefund(AFTER_SALE_STATUS.waitingReturn, AFTER_SALE_TYPE.returnAndRefund), false);
     assert.equal(canCreateRefund(AFTER_SALE_STATUS.waitingRefund, AFTER_SALE_TYPE.returnOnly), false);
     assert.equal(canReceiveReturn(RETURN_ORDER_STATUS.waitingReturn), true);
+    assert.equal(canReceiveReturn(RETURN_ORDER_STATUS.received), false);
     assert.equal(canConfirmReturnInbound(RETURN_ORDER_STATUS.received, 3), true);
     assert.equal(canConfirmReturnInbound(RETURN_ORDER_STATUS.inbounded, 3), false);
     assert.equal(defaultInboundQuantity(RETURN_CONDITION.good, 3), 3);

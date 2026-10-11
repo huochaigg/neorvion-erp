@@ -287,10 +287,10 @@ export function AfterSaleDetailPage(props: PageProps) {
               <Descriptions.Item label="申请时间">{formatDateTime(order.created_at)}</Descriptions.Item>
             </Descriptions>
           </Card>
-          <Card title="售后明细" className="mb-4">
+          <Card title="售后明细" className="mb-4 mt-4!">
             <AppTable rowKey="id" size="small" columns={columns} dataSource={order.items} pagination={false} fillHeight={false} />
           </Card>
-          <Card title="退款记录">
+          <Card title="退款记录" className="mt-4!">
             <AppTable
               rowKey="id"
               size="small"

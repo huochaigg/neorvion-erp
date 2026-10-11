@@ -56,17 +56,30 @@ export function returnConditionLabel(condition: string): string {
   return RETURN_CONDITION_LABEL[condition] ?? condition;
 }
 
+/** 仍可能继续登记实收：待退货 / 部分收货 / 部分入库（未收满时）。已收货表示已收满，不能再收。 */
 export function canReceiveReturn(status: string): boolean {
   return (
     status === RETURN_ORDER_STATUS.waitingReturn ||
     status === RETURN_ORDER_STATUS.partiallyReceived ||
-    status === RETURN_ORDER_STATUS.received ||
     status === RETURN_ORDER_STATUS.partiallyInbounded
   );
 }
 
+/** 收货完成前后都可改物流信息；已入库 / 已取消不可改。 */
+export function canUpdateReturnLogistics(status: string): boolean {
+  return (
+    canReceiveReturn(status) ||
+    status === RETURN_ORDER_STATUS.received
+  );
+}
+
 export function canConfirmReturnInbound(status: string, receivedQuantity: number): boolean {
-  return canReceiveReturn(status) && receivedQuantity > 0 && status !== RETURN_ORDER_STATUS.inbounded;
+  return (
+    receivedQuantity > 0 &&
+    (status === RETURN_ORDER_STATUS.partiallyReceived ||
+      status === RETURN_ORDER_STATUS.received ||
+      status === RETURN_ORDER_STATUS.partiallyInbounded)
+  );
 }
 
 export function defaultInboundQuantity(condition: string, receivedQuantity: number): number {

@@ -2,6 +2,7 @@ import {
   ApiError,
   canConfirmReturnInbound,
   canReceiveReturn,
+  canUpdateReturnLogistics,
   defaultInboundQuantity,
   PERMISSION_CODE,
   RETURN_CONDITION,
@@ -81,17 +82,14 @@ export function ReturnOrderDetailPage(props: PageProps) {
   };
 
   const receiveMutation = useMutation({
-    mutationFn: () =>
-      receiveReturnOrder(returnId, {
-        items: (order?.items ?? [])
-          .map((item) => ({
-            item_id: item.id,
-            received_quantity: draft[item.id]?.received_quantity ?? 0,
-            condition: draft[item.id]?.condition ?? item.condition,
-            remark: draft[item.id]?.remark || null,
-          }))
-          .filter((item) => item.received_quantity > 0),
-      }),
+    mutationFn: (
+      items: Array<{
+        item_id: number;
+        received_quantity: number;
+        condition: string;
+        remark: string | null;
+      }>,
+    ) => receiveReturnOrder(returnId, { items }),
     onSuccess: () => {
       message.success('已登记收货');
       invalidate();
@@ -187,7 +185,7 @@ export function ReturnOrderDetailPage(props: PageProps) {
             {order ? (
               <Button onClick={() => navigate(`/after-sales/${order.after_sale_order_id}`)}>售后单</Button>
             ) : null}
-            {order && canReceiveReturn(order.status) ? (
+            {order && canUpdateReturnLogistics(order.status) ? (
               <Can permission={PERMISSION_CODE.returnOrderReceive}>
                 <Button
                   onClick={() => {
@@ -206,7 +204,25 @@ export function ReturnOrderDetailPage(props: PageProps) {
             ) : null}
             {order && canReceiveReturn(order.status) ? (
               <Can permission={PERMISSION_CODE.returnOrderReceive}>
-                <Button type="primary" loading={receiveMutation.isPending} onClick={() => receiveMutation.mutate()}>
+                <Button
+                  type="primary"
+                  loading={receiveMutation.isPending}
+                  onClick={() => {
+                    const items = (order?.items ?? [])
+                      .map((item) => ({
+                        item_id: item.id,
+                        received_quantity: draft[item.id]?.received_quantity ?? 0,
+                        condition: draft[item.id]?.condition ?? item.condition,
+                        remark: draft[item.id]?.remark || null,
+                      }))
+                      .filter((item) => item.received_quantity > 0);
+                    if (items.length === 0) {
+                      message.warning('请至少填写一条本次收到数量');
+                      return;
+                    }
+                    receiveMutation.mutate(items);
+                  }}
+                >
                   登记收货
                 </Button>
               </Can>
@@ -254,7 +270,7 @@ export function ReturnOrderDetailPage(props: PageProps) {
               </Descriptions.Item>
               <Descriptions.Item label="收货时间">{formatDateTime(order.received_at)}</Descriptions.Item>
             </Descriptions>
-            {canReceiveReturn(order.status) ? (
+            {canUpdateReturnLogistics(order.status) ? (
               <div className="mt-3 flex flex-wrap gap-2">
                 <Input
                   style={{ width: 220 }}
@@ -271,7 +287,7 @@ export function ReturnOrderDetailPage(props: PageProps) {
               </div>
             ) : null}
           </Card>
-          <Card title="退货明细">
+          <Card title="退货明细" className='mt-4!'>
             <AppTable rowKey="id" size="small" columns={columns} dataSource={order.items} pagination={false} fillHeight={false} />
           </Card>
         </>

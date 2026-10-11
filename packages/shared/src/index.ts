@@ -277,6 +277,7 @@ export {
   returnOrderStatusLabel,
   returnConditionLabel,
   canReceiveReturn,
+  canUpdateReturnLogistics,
   canConfirmReturnInbound,
   defaultInboundQuantity,
 } from './types/return-order';
