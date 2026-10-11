@@ -92,7 +92,7 @@ def list_all_transactions(
     session: DbSession,
     warehouse_id: int | None = Query(default=None, gt=0),
     sku_id: int | None = Query(default=None, gt=0),
-    tx_type: str | None = Query(default=None, max_length=16, alias="type"),
+    tx_type: str | None = Query(default=None, max_length=32, alias="type"),
     created_from: Annotated[datetime | None, Query()] = None,
     created_to: Annotated[datetime | None, Query()] = None,
     page: int = Query(default=1, ge=1),

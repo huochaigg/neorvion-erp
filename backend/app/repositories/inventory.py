@@ -309,11 +309,11 @@ class InventoryRepository(BaseRepository):
         sku_id: int,
         quantity: int,
     ) -> int:
-        """调拨调出：只减 quantity，不改 reserved。
+        """只减 quantity，不改 reserved。调拨调出和采购退货出库共用。
 
-        WHERE 用当前行的 available = quantity - reserved 判断。两个调拨单
+        WHERE 用当前行的 available = quantity - reserved 判断。两张单
         同时从同一仓扣同一 SKU 时，不会都先读到 available=100 再各自减 80。
-        reserved 不动：销售订单预占不属于调拨领域。
+        reserved 不动：销售订单预占不属于调拨或采购退货领域。
         """
         tenant_id = self.ensure_tenant()
         stmt = (

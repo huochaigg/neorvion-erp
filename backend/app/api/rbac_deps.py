@@ -412,3 +412,47 @@ RefundConfirmContext = Annotated[
     TenantContext,
     Depends(require_permission(PermissionCode.REFUND_CONFIRM)),
 ]
+PurchaseReturnReadContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.PURCHASE_RETURN_READ)),
+]
+PurchaseReturnCreateContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.PURCHASE_RETURN_CREATE)),
+]
+PurchaseReturnUpdateContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.PURCHASE_RETURN_UPDATE)),
+]
+PurchaseReturnSubmitContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.PURCHASE_RETURN_SUBMIT)),
+]
+PurchaseReturnApproveContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.PURCHASE_RETURN_APPROVE)),
+]
+PurchaseReturnRejectContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.PURCHASE_RETURN_REJECT)),
+]
+PurchaseReturnCancelContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.PURCHASE_RETURN_CANCEL)),
+]
+PurchaseReturnOutboundContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.PURCHASE_RETURN_OUTBOUND)),
+]
+SupplierRefundReadContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.SUPPLIER_REFUND_READ)),
+]
+SupplierRefundCreateContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.SUPPLIER_REFUND_CREATE)),
+]
+SupplierRefundConfirmContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.SUPPLIER_REFUND_CONFIRM)),
+]

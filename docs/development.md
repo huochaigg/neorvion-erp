@@ -1,6 +1,6 @@
 # 开发说明
 
-当前里程碑：V11（销售售后 / 退货 / 退款状态）。
+当前里程碑：V12（采购退货 / 退货出库 / 供应商退款状态）。
 
 ## 前置
 
@@ -124,8 +124,13 @@ pnpm test
 49. 确认发货后 `shipped_quantity` 增加，`Inventory.quantity` / `reserved_quantity` 不变。部分发货进入 `PARTIALLY_SHIPPED`，全部发货进入 `SHIPPED`。重复确认不再累计。
 50. 已发货可追加轨迹；签收后自动写签收轨迹。全部物流签收后销售订单进入 `COMPLETED`。无对应权限时按钮隐藏，直接调接口仍 403。
 51. 切换企业后物流商与物流单隔离；`/shipments/:id` 会回到物流单列表。
+52. 已收货采购单详情可创建采购退货；可退数量基于已收货，不是采购计划数量。草稿不占用可退。
+53. 提交后占用可退；审核可部分批准。确认退货出库后 `quantity` 减少、`reserved` 不变，流水 `PURCHASE_RETURN_OUTBOUND`。
+54. `NO_REFUND` 全部出库后完成；`REFUND` 还需人工确认供应商退款。失败记录可重试新建。
+55. 无 `purchase_return:read` 看不到采购退货菜单；无 outbound 时仓库员不能审核；无 `supplier_refund:confirm` 看不到确认退款。直接调接口仍 403。
+56. 切换企业后采购退货 / 出库 / 供应商退款隔离；`/purchase-returns/:id` 会回到列表。
 
-多租户说明见 `docs/multi-tenancy.md`。RBAC 见 `docs/rbac.md`。商品见 `docs/products.md`。仓库见 `docs/warehouses.md`。库存见 `docs/inventory.md`。采购见 `docs/purchases.md`。销售订单见 `docs/orders.md`。履约见 `docs/fulfillment.md`。物流见 `docs/shipping.md`。盘点见 `docs/stocktake.md`。调拨见 `docs/stock-transfer.md`。售后见 `docs/after-sales.md`。退货见 `docs/returns.md`。当前状态见 `docs/current-state.md`。V3 见 `docs/versions/v3.md`。V4 见 `docs/versions/v4.md`。V5 见 `docs/versions/v5.md`。V6 见 `docs/versions/v6.md`。V7 见 `docs/versions/v7.md`。V8 见 `docs/versions/v8.md`。V9 见 `docs/versions/v9.md`。V10 见 `docs/versions/v10.md`。V11 见 `docs/versions/v11.md`。路由配置说明见 `docs/routing.md`。认证流程见 `docs/auth.md`。
+多租户说明见 `docs/multi-tenancy.md`。RBAC 见 `docs/rbac.md`。商品见 `docs/products.md`。仓库见 `docs/warehouses.md`。库存见 `docs/inventory.md`。采购见 `docs/purchases.md`。销售订单见 `docs/orders.md`。履约见 `docs/fulfillment.md`。物流见 `docs/shipping.md`。盘点见 `docs/stocktake.md`。调拨见 `docs/stock-transfer.md`。售后见 `docs/after-sales.md`。退货见 `docs/returns.md`。采购退货见 `docs/purchase-returns.md`。当前状态见 `docs/current-state.md`。V3 见 `docs/versions/v3.md`。V4 见 `docs/versions/v4.md`。V5 见 `docs/versions/v5.md`。V6 见 `docs/versions/v6.md`。V7 见 `docs/versions/v7.md`。V8 见 `docs/versions/v8.md`。V9 见 `docs/versions/v9.md`。V10 见 `docs/versions/v10.md`。V11 见 `docs/versions/v11.md`。V12 见 `docs/versions/v12.md`。路由配置说明见 `docs/routing.md`。认证流程见 `docs/auth.md`。
 
 ## 浏览器进 debugger
 

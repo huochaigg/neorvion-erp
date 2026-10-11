@@ -227,6 +227,41 @@ export function refundQueryKey(tenantId: number | null, refundId: number | null)
   return ['tenant', tenantId, 'refund', refundId] as const;
 }
 
+export function purchaseReturnsQueryKey(tenantId: number | null, filters?: Record<string, unknown>) {
+  return ['tenant', tenantId, 'purchase-returns', filters ?? {}] as const;
+}
+
+export function purchaseReturnQueryKey(tenantId: number | null, returnId: number | null) {
+  return ['tenant', tenantId, 'purchase-return', returnId] as const;
+}
+
+export function purchaseReturnPreviewQueryKey(
+  tenantId: number | null,
+  purchaseOrderId: number | null,
+  warehouseId?: number | null,
+) {
+  return ['tenant', tenantId, 'purchase-return-preview', purchaseOrderId, warehouseId ?? null] as const;
+}
+
+export function purchaseReturnOutboundsQueryKey(
+  tenantId: number | null,
+  filters?: Record<string, unknown>,
+) {
+  return ['tenant', tenantId, 'purchase-return-outbounds', filters ?? {}] as const;
+}
+
+export function purchaseReturnOutboundQueryKey(tenantId: number | null, outboundId: number | null) {
+  return ['tenant', tenantId, 'purchase-return-outbound', outboundId] as const;
+}
+
+export function supplierRefundsQueryKey(tenantId: number | null, filters?: Record<string, unknown>) {
+  return ['tenant', tenantId, 'supplier-refunds', filters ?? {}] as const;
+}
+
+export function supplierRefundQueryKey(tenantId: number | null, refundId: number | null) {
+  return ['tenant', tenantId, 'supplier-refund', refundId] as const;
+}
+
 export function customersQueryKey(
   tenantId: number | null,
   filters?: {

@@ -74,6 +74,30 @@ export const PAGE_COMPONENTS: Record<PageKey, LazyExoticComponent<ComponentType<
     const module = await import('@/pages/purchases/PurchaseReceiptFormPage');
     return { default: module.PurchaseReceiptFormPage };
   }),
+  PurchaseReturnList: lazy(async () => {
+    const module = await import('@/pages/purchases/PurchaseReturnListPage');
+    return { default: module.PurchaseReturnListPage };
+  }),
+  PurchaseReturnCreate: lazy(async () => {
+    const module = await import('@/pages/purchases/PurchaseReturnCreatePage');
+    return { default: module.PurchaseReturnCreatePage };
+  }),
+  PurchaseReturnDetail: lazy(async () => {
+    const module = await import('@/pages/purchases/PurchaseReturnDetailPage');
+    return { default: module.PurchaseReturnDetailPage };
+  }),
+  PurchaseReturnOutboundList: lazy(async () => {
+    const module = await import('@/pages/purchases/PurchaseReturnOutboundListPage');
+    return { default: module.PurchaseReturnOutboundListPage };
+  }),
+  PurchaseReturnOutboundDetail: lazy(async () => {
+    const module = await import('@/pages/purchases/PurchaseReturnOutboundDetailPage');
+    return { default: module.PurchaseReturnOutboundDetailPage };
+  }),
+  SupplierRefundList: lazy(async () => {
+    const module = await import('@/pages/purchases/SupplierRefundListPage');
+    return { default: module.SupplierRefundListPage };
+  }),
   PurchaseReceiptDetail: lazy(async () => {
     const module = await import('@/pages/purchases/PurchaseReceiptDetailPage');
     return { default: module.PurchaseReceiptDetailPage };

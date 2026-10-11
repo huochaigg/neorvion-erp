@@ -26,7 +26,7 @@
 
 只有 `WAITING_RECEIPT` 和 `PARTIALLY_RECEIVED` 能创建收货单。仓库必须是采购单上的仓库，不能在收货时换成别的仓。
 
-收货单状态：`DRAFT` 可改数量、可作废；`CONFIRMED` 已入库，不能再改、不能取消（取消入库要等以后的采购退货）；`CANCELLED` 作废，不能再确认。
+收货单状态：`DRAFT` 可改数量、可作废；`CONFIRMED` 已入库，不能再改、不能取消（退供应商走独立采购退货，见 `docs/purchase-returns.md`）；`CANCELLED` 作废，不能再确认。
 
 单号：flush 拿到 id 后写成 `PR` + 年份 + 6 位 id，例如 `PR2026000001`。不用 `MAX+1`。租户内唯一。
 
@@ -179,4 +179,4 @@ WAITING_OUTBOUND → OUTBOUNDED
 
 ## 本版不做
 
-物流公司、运单、轨迹、签收、采购退货、销售退货、退款、售后、财务、真实平台同步。
+本文件只描述 V8 收货与出库。物流见 `docs/shipping.md`。销售售后见 `docs/after-sales.md`。采购退货见 `docs/purchase-returns.md`。财务、真实平台同步仍未做。

@@ -3,6 +3,7 @@ import {
   canApprovePurchaseOrder,
   canCancelPurchaseOrder,
   canCreatePurchaseReceipt,
+  canCreatePurchaseReturn,
   canEditPurchaseOrder,
   canRejectPurchaseOrder,
   canSubmitPurchaseOrder,
@@ -142,6 +143,8 @@ export function PurchaseDetailPage(props: PageProps) {
     },
     { title: '采购数量', dataIndex: 'quantity', key: 'quantity', width: 100 },
     { title: '已收数量', dataIndex: 'received_quantity', key: 'received_quantity', width: 100 },
+    { title: '累计退货', dataIndex: 'returned_quantity', key: 'returned_quantity', width: 90 },
+    { title: '可退数量', dataIndex: 'returnable_quantity', key: 'returnable_quantity', width: 90 },
     {
       title: '剩余待收',
       key: 'remaining',
@@ -237,6 +240,13 @@ export function PurchaseDetailPage(props: PageProps) {
                   onClick={() => navigate(`/purchase-receipts/create?purchaseOrderId=${order.id}`)}
                 >
                   {order.status === PURCHASE_ORDER_STATUS.partiallyReceived ? '继续收货' : '创建收货单'}
+                </Button>
+              </Can>
+            ) : null}
+            {order && canCreatePurchaseReturn(order.status) ? (
+              <Can permission={PERMISSION_CODE.purchaseReturnCreate}>
+                <Button onClick={() => navigate(`/purchase-returns/create?purchaseOrderId=${order.id}`)}>
+                  创建采购退货
                 </Button>
               </Can>
             ) : null}

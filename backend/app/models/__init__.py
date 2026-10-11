@@ -22,6 +22,20 @@ from app.models.outbound import (
 from app.models.product import Brand, Product, ProductCategory, ProductSku
 from app.models.purchase import PurchaseOrder, PurchaseOrderItem, PurchaseOrderStatus
 from app.models.purchase_receipt import PurchaseReceipt, PurchaseReceiptItem, PurchaseReceiptStatus
+from app.models.purchase_return import (
+    PURCHASE_RETURN_REFERENCE,
+    PurchaseReturn,
+    PurchaseReturnItem,
+    PurchaseReturnRefundStatus,
+    PurchaseReturnSettlementType,
+    PurchaseReturnStatus,
+)
+from app.models.purchase_return_outbound import (
+    PURCHASE_RETURN_OUTBOUND_REFERENCE,
+    PurchaseReturnOutbound,
+    PurchaseReturnOutboundItem,
+    PurchaseReturnOutboundStatus,
+)
 from app.models.rbac import MemberRoleGrant, Permission, Role, RolePermission
 from app.models.refund import REFUND_REFERENCE, RefundRecord, RefundRecordStatus
 from app.models.return_order import (
@@ -59,6 +73,11 @@ from app.models.stocktake import (
     StocktakeScope,
 )
 from app.models.supplier import Supplier, SupplierStatus
+from app.models.supplier_refund import (
+    SUPPLIER_REFUND_REFERENCE,
+    SupplierRefundRecord,
+    SupplierRefundRecordStatus,
+)
 from app.models.tenant import MemberRole, MemberStatus, Tenant, TenantMember, TenantStatus
 from app.models.user import User, UserStatus
 from app.models.warehouse import Warehouse, WarehouseStatus, WarehouseType
@@ -94,9 +113,22 @@ __all__ = [
     "PurchaseOrder",
     "PurchaseOrderItem",
     "PurchaseOrderStatus",
+    "PURCHASE_RETURN_OUTBOUND_REFERENCE",
+    "PURCHASE_RETURN_REFERENCE",
     "PurchaseReceipt",
     "PurchaseReceiptItem",
     "PurchaseReceiptStatus",
+    "PurchaseReturn",
+    "PurchaseReturnItem",
+    "PurchaseReturnOutbound",
+    "PurchaseReturnOutboundItem",
+    "PurchaseReturnOutboundStatus",
+    "PurchaseReturnRefundStatus",
+    "PurchaseReturnSettlementType",
+    "PurchaseReturnStatus",
+    "SUPPLIER_REFUND_REFERENCE",
+    "SupplierRefundRecord",
+    "SupplierRefundRecordStatus",
     "REFUND_REFERENCE",
     "RETURN_ORDER_REFERENCE",
     "RefundRecord",

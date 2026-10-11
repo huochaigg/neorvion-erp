@@ -45,6 +45,38 @@ class PurchaseOrderRepository(BaseRepository):
         )
         return self.session.scalars(stmt).first()
 
+    def lock_items_by_ids(self, item_ids: list[int]) -> list[PurchaseOrderItem]:
+        """按 sku_id 稳定顺序锁采购明细。提交采购退货时重新计算可退数量必须拿这把锁。
+
+        两个请求同时对同一行申请退 80（已收只有 100）时，后一个会等到前一个提交后再读累计占用。
+        """
+        if not item_ids:
+            return []
+        tenant_id = self.ensure_tenant()
+        stmt = (
+            select(PurchaseOrderItem)
+            .where(
+                PurchaseOrderItem.tenant_id == tenant_id,
+                PurchaseOrderItem.id.in_(item_ids),
+            )
+            .order_by(PurchaseOrderItem.sku_id.asc(), PurchaseOrderItem.id.asc())
+            .with_for_update()
+        )
+        return list(self.session.scalars(stmt).all())
+
+    def list_items(self, order_id: int) -> list[PurchaseOrderItem]:
+        tenant_id = self.ensure_tenant()
+        stmt = (
+            select(PurchaseOrderItem)
+            .options(selectinload(PurchaseOrderItem.sku).selectinload(ProductSku.product))
+            .where(
+                PurchaseOrderItem.tenant_id == tenant_id,
+                PurchaseOrderItem.purchase_order_id == order_id,
+            )
+            .order_by(PurchaseOrderItem.sku_id.asc(), PurchaseOrderItem.id.asc())
+        )
+        return list(self.session.scalars(stmt).all())
+
     def list_page(
         self,
         *,

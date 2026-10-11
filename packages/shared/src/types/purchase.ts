@@ -181,6 +181,9 @@ export interface PurchaseOrderItem {
   unit_price: number | null;
   line_amount: number | null;
   received_quantity: number;
+  returned_quantity?: number;
+  occupied_return_quantity?: number;
+  returnable_quantity?: number;
   remark: string | null;
 }
 
@@ -224,6 +227,7 @@ export interface PurchaseOrderDetail extends PurchaseOrderListItem {
   cancelled_by: number | null;
   cancelled_by_name: string | null;
   cancel_reason: string | null;
+  purchase_return_count?: number;
   items: PurchaseOrderItem[];
 }
 

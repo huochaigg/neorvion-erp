@@ -93,6 +93,11 @@ def _wipe_business_tables() -> None:
         # 类目 parent_id 自关联，关外键后才能整表清空。
         session.execute(text("SET FOREIGN_KEY_CHECKS=0"))
         session.execute(text("DELETE FROM inventory_transactions"))
+        session.execute(text("DELETE FROM supplier_refund_records"))
+        session.execute(text("DELETE FROM purchase_return_outbound_items"))
+        session.execute(text("DELETE FROM purchase_return_outbounds"))
+        session.execute(text("DELETE FROM purchase_return_items"))
+        session.execute(text("DELETE FROM purchase_returns"))
         session.execute(text("DELETE FROM refund_records"))
         session.execute(text("DELETE FROM return_order_items"))
         session.execute(text("DELETE FROM return_orders"))

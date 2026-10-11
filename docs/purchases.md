@@ -8,7 +8,7 @@
 
 审核通过 **不会** 增加 `inventory.quantity`。货可能少到、晚到或根本没到。V8 确认收货单时才增加实际库存，并累加 `received_quantity`。详见 `docs/fulfillment.md`。
 
-本版采购计划 **不** 把审核当成入库。收货、部分收货、入库流水在 V8。采购退货、采购付款、财务结算仍未做。
+本版采购计划 **不** 把审核当成入库。收货、部分收货、入库流水在 V8。采购退货见 `docs/purchase-returns.md`。采购付款、财务结算仍未做。
 
 ## 为什么采购和库存必须分开
 
@@ -233,7 +233,7 @@ OWNER / ADMIN：全部。OPERATOR：供应商只读 + 采购 read/create/update/
 - `/suppliers` 供应商
 - `/purchases/create`、`/purchases/:id`、`/purchases/:id/edit` 不进菜单
 
-详情按状态 + 权限显示编辑、提交、通过、驳回、取消。待收货只展示状态，本版没有收货按钮。编辑 URL 在不可编辑状态会跳详情；后端仍拒绝保存。
+详情按状态 + 权限显示编辑、提交、通过、驳回、取消。已收货明细展示累计退货 / 可退数量；可从详情创建采购退货，见 `docs/purchase-returns.md`。编辑 URL 在不可编辑状态会跳详情；后端仍拒绝保存。
 
 SKU 下拉远程搜索，不要一次拉全表。前端重复选择同一 SKU 时合并数量；后端 UNIQUE 是最终保证。
 

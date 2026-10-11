@@ -18,6 +18,7 @@ from app.models.user import User
 from app.models.warehouse import WarehouseStatus
 from app.repositories.product import ProductSkuRepository
 from app.repositories.purchase import PurchaseOrderRepository
+from app.repositories.purchase_return import PurchaseReturnRepository
 from app.repositories.supplier import SupplierRepository
 from app.repositories.warehouse import WarehouseRepository
 from app.schemas.purchase import (
@@ -51,6 +52,7 @@ class PurchaseOrderService:
         self.context = context
         self.auth = AuthorizationService(session)
         self.orders = PurchaseOrderRepository(session, context.tenant_id)
+        self.purchase_returns = PurchaseReturnRepository(session, context.tenant_id)
         self.suppliers = SupplierRepository(session, context.tenant_id)
         self.warehouses = WarehouseRepository(session, context.tenant_id)
         self.skus = ProductSkuRepository(session, context.tenant_id)
@@ -403,7 +405,17 @@ class PurchaseOrderService:
         return self.session.scalar(select(User.display_name).where(User.id == user_id))
 
     def _detail_out(self, order: PurchaseOrder) -> PurchaseOrderDetailOut:
-        item_outs = [self._item_out(row) for row in order.items]
+        item_ids = [row.id for row in order.items]
+        occupied = self.purchase_returns.occupied_return_qty(item_ids)
+        returned = self.purchase_returns.actual_returned_qty(item_ids)
+        item_outs = [
+            self._item_out(
+                row,
+                occupied_return_quantity=occupied.get(row.id, 0),
+                returned_quantity=returned.get(row.id, 0),
+            )
+            for row in order.items
+        ]
         total_qty = sum(row.quantity for row in order.items)
         amounts = [row.line_amount for row in item_outs if row.line_amount is not None]
         total_amount = round(sum(amounts), 2) if amounts else None
@@ -431,6 +443,7 @@ class PurchaseOrderService:
             cancelled_by=order.cancelled_by,
             cancelled_by_name=self._user_name(order.cancelled_by),
             cancel_reason=order.cancel_reason,
+            purchase_return_count=self.purchase_returns.count_by_purchase_order(order.id),
             items=item_outs,
         )
 
@@ -465,11 +478,17 @@ class PurchaseOrderService:
         )
 
     @staticmethod
-    def _item_out(item: PurchaseOrderItem) -> PurchaseOrderItemOut:
+    def _item_out(
+        item: PurchaseOrderItem,
+        *,
+        occupied_return_quantity: int = 0,
+        returned_quantity: int = 0,
+    ) -> PurchaseOrderItemOut:
         sku = item.sku
         product = sku.product if sku is not None else None
         price = PurchaseOrderService._money(item.unit_price)
         line = None if price is None else round(price * item.quantity, 2)
+        returnable = max(item.received_quantity - occupied_return_quantity, 0)
         return PurchaseOrderItemOut(
             id=item.id,
             sku_id=item.sku_id,
@@ -482,6 +501,9 @@ class PurchaseOrderService:
             unit_price=price,
             line_amount=line,
             received_quantity=item.received_quantity,
+            returned_quantity=returned_quantity,
+            occupied_return_quantity=occupied_return_quantity,
+            returnable_quantity=returnable,
             remark=item.remark,
         )
 

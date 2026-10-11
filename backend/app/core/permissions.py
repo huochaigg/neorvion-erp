@@ -77,6 +77,18 @@ class PermissionCode(StrEnum):
     PURCHASE_RECEIPT_CONFIRM = "purchase:receipt:confirm"
     PURCHASE_RECEIPT_CANCEL = "purchase:receipt:cancel"
 
+    PURCHASE_RETURN_READ = "purchase_return:read"
+    PURCHASE_RETURN_CREATE = "purchase_return:create"
+    PURCHASE_RETURN_UPDATE = "purchase_return:update"
+    PURCHASE_RETURN_SUBMIT = "purchase_return:submit"
+    PURCHASE_RETURN_APPROVE = "purchase_return:approve"
+    PURCHASE_RETURN_REJECT = "purchase_return:reject"
+    PURCHASE_RETURN_CANCEL = "purchase_return:cancel"
+    PURCHASE_RETURN_OUTBOUND = "purchase_return:outbound"
+    SUPPLIER_REFUND_READ = "supplier_refund:read"
+    SUPPLIER_REFUND_CREATE = "supplier_refund:create"
+    SUPPLIER_REFUND_CONFIRM = "supplier_refund:confirm"
+
     OUTBOUND_READ = "outbound:read"
     OUTBOUND_CREATE = "outbound:create"
     OUTBOUND_PICK = "outbound:pick"
@@ -278,6 +290,62 @@ PERMISSION_CATALOG: tuple[tuple[str, str, str, str], ...] = (
     ),
     (PermissionCode.STOCK_TRANSFER_RECEIVE, "确认调入", "stock_transfer", "把在途库存增加到目标仓"),
     (PermissionCode.STOCK_TRANSFER_CANCEL, "取消调拨", "stock_transfer", "取消尚未调出的调拨单"),
+    (PermissionCode.PURCHASE_RETURN_READ, "查看采购退货", "purchase_return", "查看采购退货单"),
+    (
+        PermissionCode.PURCHASE_RETURN_CREATE,
+        "创建采购退货",
+        "purchase_return",
+        "为已收货采购单创建退货草稿",
+    ),
+    (PermissionCode.PURCHASE_RETURN_UPDATE, "编辑采购退货", "purchase_return", "修改草稿采购退货"),
+    (
+        PermissionCode.PURCHASE_RETURN_SUBMIT,
+        "提交采购退货",
+        "purchase_return",
+        "提交采购退货进入待审核并占用可退数量",
+    ),
+    (
+        PermissionCode.PURCHASE_RETURN_APPROVE,
+        "审核采购退货",
+        "purchase_return",
+        "批准采购退货进入待出库",
+    ),
+    (
+        PermissionCode.PURCHASE_RETURN_REJECT,
+        "驳回采购退货",
+        "purchase_return",
+        "拒绝采购退货并释放可退占用",
+    ),
+    (
+        PermissionCode.PURCHASE_RETURN_CANCEL,
+        "取消采购退货",
+        "purchase_return",
+        "取消尚未出库的采购退货",
+    ),
+    (
+        PermissionCode.PURCHASE_RETURN_OUTBOUND,
+        "采购退货出库",
+        "purchase_return",
+        "创建并确认退货出库，扣减可用库存",
+    ),
+    (
+        PermissionCode.SUPPLIER_REFUND_READ,
+        "查看供应商退款",
+        "supplier_refund",
+        "查看供应商退款记录",
+    ),
+    (
+        PermissionCode.SUPPLIER_REFUND_CREATE,
+        "创建供应商退款",
+        "supplier_refund",
+        "登记一笔待确认供应商退款",
+    ),
+    (
+        PermissionCode.SUPPLIER_REFUND_CONFIRM,
+        "确认供应商退款",
+        "supplier_refund",
+        "人工确认供应商退款成功或失败",
+    ),
     (PermissionCode.AFTER_SALE_READ, "查看售后", "after_sale", "查看售后申请"),
     (PermissionCode.AFTER_SALE_CREATE, "创建售后", "after_sale", "为已履约销售订单创建售后申请"),
     (PermissionCode.AFTER_SALE_APPROVE, "审核售后", "after_sale", "批准售后申请"),
@@ -343,6 +411,8 @@ _READ_CODES: tuple[str, ...] = (
     PermissionCode.AFTER_SALE_READ,
     PermissionCode.RETURN_ORDER_READ,
     PermissionCode.REFUND_READ,
+    PermissionCode.PURCHASE_RETURN_READ,
+    PermissionCode.SUPPLIER_REFUND_READ,
     PermissionCode.SUPPLIER_READ,
 )
 
@@ -400,6 +470,11 @@ DEFAULT_ROLE_TEMPLATES: tuple[tuple[str, str, str, tuple[str, ...]], ...] = (
             PermissionCode.AFTER_SALE_CREATE,
             PermissionCode.RETURN_ORDER_READ,
             PermissionCode.REFUND_READ,
+            PermissionCode.PURCHASE_RETURN_READ,
+            PermissionCode.PURCHASE_RETURN_CREATE,
+            PermissionCode.PURCHASE_RETURN_UPDATE,
+            PermissionCode.PURCHASE_RETURN_SUBMIT,
+            PermissionCode.SUPPLIER_REFUND_READ,
         ),
     ),
     (
@@ -452,6 +527,8 @@ DEFAULT_ROLE_TEMPLATES: tuple[tuple[str, str, str, tuple[str, ...]], ...] = (
             PermissionCode.RETURN_ORDER_READ,
             PermissionCode.RETURN_ORDER_RECEIVE,
             PermissionCode.RETURN_ORDER_INBOUND,
+            PermissionCode.PURCHASE_RETURN_READ,
+            PermissionCode.PURCHASE_RETURN_OUTBOUND,
         ),
     ),
     (
@@ -1244,6 +1321,86 @@ PERMISSION_TREE: tuple[PermissionTreeDef, ...] = (
                         title="取消",
                         type="ACTION",
                         permission_code=PermissionCode.PURCHASE_RECEIPT_CANCEL,
+                    ),
+                ),
+            ),
+            PermissionTreeDef(
+                key="menu:purchase-returns",
+                title="采购退货",
+                type="MENU",
+                children=(
+                    PermissionTreeDef(
+                        key="action:purchase-return-read",
+                        title="查看",
+                        type="ACTION",
+                        permission_code=PermissionCode.PURCHASE_RETURN_READ,
+                    ),
+                    PermissionTreeDef(
+                        key="action:purchase-return-create",
+                        title="创建",
+                        type="ACTION",
+                        permission_code=PermissionCode.PURCHASE_RETURN_CREATE,
+                    ),
+                    PermissionTreeDef(
+                        key="action:purchase-return-update",
+                        title="编辑",
+                        type="ACTION",
+                        permission_code=PermissionCode.PURCHASE_RETURN_UPDATE,
+                    ),
+                    PermissionTreeDef(
+                        key="action:purchase-return-submit",
+                        title="提交",
+                        type="ACTION",
+                        permission_code=PermissionCode.PURCHASE_RETURN_SUBMIT,
+                    ),
+                    PermissionTreeDef(
+                        key="action:purchase-return-approve",
+                        title="审核",
+                        type="ACTION",
+                        permission_code=PermissionCode.PURCHASE_RETURN_APPROVE,
+                    ),
+                    PermissionTreeDef(
+                        key="action:purchase-return-reject",
+                        title="驳回",
+                        type="ACTION",
+                        permission_code=PermissionCode.PURCHASE_RETURN_REJECT,
+                    ),
+                    PermissionTreeDef(
+                        key="action:purchase-return-cancel",
+                        title="取消",
+                        type="ACTION",
+                        permission_code=PermissionCode.PURCHASE_RETURN_CANCEL,
+                    ),
+                    PermissionTreeDef(
+                        key="action:purchase-return-outbound",
+                        title="退货出库",
+                        type="ACTION",
+                        permission_code=PermissionCode.PURCHASE_RETURN_OUTBOUND,
+                    ),
+                ),
+            ),
+            PermissionTreeDef(
+                key="menu:supplier-refunds",
+                title="供应商退款",
+                type="MENU",
+                children=(
+                    PermissionTreeDef(
+                        key="action:supplier-refund-read",
+                        title="查看",
+                        type="ACTION",
+                        permission_code=PermissionCode.SUPPLIER_REFUND_READ,
+                    ),
+                    PermissionTreeDef(
+                        key="action:supplier-refund-create",
+                        title="创建",
+                        type="ACTION",
+                        permission_code=PermissionCode.SUPPLIER_REFUND_CREATE,
+                    ),
+                    PermissionTreeDef(
+                        key="action:supplier-refund-confirm",
+                        title="确认",
+                        type="ACTION",
+                        permission_code=PermissionCode.SUPPLIER_REFUND_CONFIRM,
                     ),
                 ),
             ),

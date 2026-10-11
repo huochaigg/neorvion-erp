@@ -1,6 +1,6 @@
 # 库存管理
 
-当前里程碑 **V5 的库存台账**，V8 做采购入库和销售出库，V10 做盘点调整和跨仓调拨，V11 做销售退货入库。V9 物流发货不再改库存。库存不是 `SKU → quantity`，而是：
+当前里程碑 **V5 的库存台账**，V8 做采购入库和销售出库，V10 做盘点调整和跨仓调拨，V11 做销售退货入库，V12 做采购退货出库。V9 物流发货不再改库存。库存不是 `SKU → quantity`，而是：
 
 ```text
 Tenant + Warehouse + SKU → Inventory
@@ -8,7 +8,7 @@ Tenant + Warehouse + SKU → Inventory
 
 同一 SKU 在深圳仓、广州仓、美国仓可以有完全不同的数量。唯一约束是 `UNIQUE(tenant_id, warehouse_id, sku_id)`。
 
-采购收货入库和销售确认出库见 `docs/fulfillment.md`。盘点见 `docs/stocktake.md`。调拨见 `docs/stock-transfer.md`。`INBOUND` 由确认收货写入，`OUTBOUND` 由确认出库写入，`STOCKTAKE_ADJUSTMENT` 由确认盘点写入，`TRANSFER_OUT` / `TRANSFER_IN` 由调拨写入，`RETURN_INBOUND` 由销售退货入库写入。`reserve` / `release` / `deduct_within_transaction` / `inbound_within_transaction` / `apply_delta_within_transaction` / `deduct_available_within_transaction` 由业务 Service 在同一事务里调用。
+采购收货入库和销售确认出库见 `docs/fulfillment.md`。盘点见 `docs/stocktake.md`。调拨见 `docs/stock-transfer.md`。采购退货出库见 `docs/purchase-returns.md`。`INBOUND` 由确认收货写入，`OUTBOUND` 由确认出库写入，`STOCKTAKE_ADJUSTMENT` 由确认盘点写入，`TRANSFER_OUT` / `TRANSFER_IN` 由调拨写入，`RETURN_INBOUND` 由销售退货入库写入，`PURCHASE_RETURN_OUTBOUND` 由确认采购退货出库写入。`reserve` / `release` / `deduct_within_transaction` / `inbound_within_transaction` / `apply_delta_within_transaction` / `deduct_available_within_transaction` 由业务 Service 在同一事务里调用。
 
 **不**开发：采购单、销售订单、正式采购入库/销售出库页面、物流、发货、平台订单。那些是后续版本。`INBOUND` / `OUTBOUND` 枚举已预留；`reserve` / `release` / `deduct-reserved` 只作为内部 Service（测试 API 有，ERP 菜单没有「手动预占」按钮）。
 
@@ -90,6 +90,7 @@ COMMIT
 | `STOCKTAKE_ADJUSTMENT` | 盘点调整 | V10 确认盘点，`change_quantity` 可正可负 |
 | `TRANSFER_OUT` / `TRANSFER_IN` | 调拨调出 / 调拨调入 | V10 确认调出写源仓，确认调入写目标仓 |
 | `RETURN_INBOUND` | 退货入库 | V11 确认退货入库，只增加 `quantity`，reserved 不变 |
+| `PURCHASE_RETURN_OUTBOUND` | 采购退货出库 | V12 确认退供应商出库，只减少 `quantity`，reserved 不变 |
 
 ## 初始化
 

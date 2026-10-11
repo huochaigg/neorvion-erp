@@ -27,6 +27,9 @@ import {
   returnOrdersQueryKey,
   returnOrderQueryKey,
   refundsQueryKey,
+  purchaseReturnsQueryKey,
+  purchaseReturnQueryKey,
+  supplierRefundsQueryKey,
 } from './keys';
 
 describe('query keys', () => {
@@ -78,6 +81,9 @@ describe('query keys', () => {
     assert.notDeepEqual(returnOrdersQueryKey(1), returnOrdersQueryKey(2));
     assert.notDeepEqual(returnOrderQueryKey(1, 3), returnOrderQueryKey(2, 3));
     assert.notDeepEqual(refundsQueryKey(1), refundsQueryKey(2));
+    assert.notDeepEqual(purchaseReturnsQueryKey(1), purchaseReturnsQueryKey(2));
+    assert.notDeepEqual(purchaseReturnQueryKey(1, 9), purchaseReturnQueryKey(2, 9));
+    assert.notDeepEqual(supplierRefundsQueryKey(1), supplierRefundsQueryKey(2));
     assert.notDeepEqual(tenantMembersQueryKey(1), tenantMembersQueryKey(2));
     assert.notDeepEqual(
       tenantMembersQueryKey(1, { page: 1, pageSize: 20 }),

@@ -18,6 +18,7 @@ export const INVENTORY_TRANSACTION_TYPE = {
   transferOut: 'TRANSFER_OUT',
   transferIn: 'TRANSFER_IN',
   returnInbound: 'RETURN_INBOUND',
+  purchaseReturnOutbound: 'PURCHASE_RETURN_OUTBOUND',
 } as const;
 
 export const INVENTORY_TRANSACTION_TYPE_LABEL: Record<string, string> = {
@@ -32,6 +33,7 @@ export const INVENTORY_TRANSACTION_TYPE_LABEL: Record<string, string> = {
   TRANSFER_OUT: '调拨调出',
   TRANSFER_IN: '调拨调入',
   RETURN_INBOUND: '退货入库',
+  PURCHASE_RETURN_OUTBOUND: '采购退货出库',
 };
 
 export const INVENTORY_TRANSACTION_TYPE_OPTIONS = [
@@ -46,6 +48,7 @@ export const INVENTORY_TRANSACTION_TYPE_OPTIONS = [
   { value: INVENTORY_TRANSACTION_TYPE.transferOut, label: '调拨调出' },
   { value: INVENTORY_TRANSACTION_TYPE.transferIn, label: '调拨调入' },
   { value: INVENTORY_TRANSACTION_TYPE.returnInbound, label: '退货入库' },
+  { value: INVENTORY_TRANSACTION_TYPE.purchaseReturnOutbound, label: '采购退货出库' },
 ];
 
 export function inventoryTransactionTypeLabel(type: string): string {

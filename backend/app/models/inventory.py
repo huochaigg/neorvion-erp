@@ -38,6 +38,7 @@ class InventoryTransactionType(StrEnum):
     TRANSFER_OUT = "TRANSFER_OUT"
     TRANSFER_IN = "TRANSFER_IN"
     RETURN_INBOUND = "RETURN_INBOUND"
+    PURCHASE_RETURN_OUTBOUND = "PURCHASE_RETURN_OUTBOUND"
 
 
 class Inventory(TimestampMixin, TenantMixin, Base):

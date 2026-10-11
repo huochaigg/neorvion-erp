@@ -116,6 +116,18 @@ class PurchaseOrderItemOut(BaseModel):
     unit_price: float | None
     line_amount: float | None
     received_quantity: int
+    returned_quantity: int = Field(
+        default=0,
+        description="历史已经真正出库退给供应商的累计数量",
+    )
+    occupied_return_quantity: int = Field(
+        default=0,
+        description="有效采购退货占用的可退数量，含待审核和待出库",
+    )
+    returnable_quantity: int = Field(
+        default=0,
+        description="当前还能再申请退货的数量，基于已收货而不是采购计划",
+    )
     remark: str | None
 
 
@@ -159,4 +171,8 @@ class PurchaseOrderDetailOut(PurchaseOrderListItemOut):
     cancelled_by: int | None
     cancelled_by_name: str | None
     cancel_reason: str | None
+    purchase_return_count: int = Field(
+        default=0,
+        description="关联的采购退货单数量，不含草稿占用口径以外的统计",
+    )
     items: list[PurchaseOrderItemOut]

@@ -16,7 +16,7 @@
 
 `GET /api/v1/health`
 
-依赖不可用时 HTTP 仍为 200，字段标记 `unavailable`。当前 `milestone` 为 `V11`。
+依赖不可用时 HTTP 仍为 200，字段标记 `unavailable`。当前 `milestone` 为 `V12`。
 
 ## 认证
 
@@ -211,5 +211,23 @@
 - `POST /api/v1/refunds/{id}/confirm|fail`
 
 未出库订单不能售后 → `40301`。超过可退数量 → `40302`。重复入库 → `40321`。未完成退货不能退款 → `40313`。跨租户 → `40494` / `40495` / `40496`。
+
+## 采购退货与供应商退款（V12）
+
+详见 `docs/purchase-returns.md`。
+
+- `GET/POST /api/v1/purchase-returns`
+- `GET /api/v1/purchase-returns/preview`
+- `GET/PATCH /api/v1/purchase-returns/{id}`
+- `POST /api/v1/purchase-returns/{id}/submit|approve|reject|cancel`
+- `POST /api/v1/purchase-returns/{id}/outbounds`
+- `POST /api/v1/purchase-returns/{id}/refunds`
+- `GET /api/v1/purchase-return-outbounds`
+- `GET /api/v1/purchase-return-outbounds/{id}`
+- `POST /api/v1/purchase-return-outbounds/{id}/confirm|cancel`
+- `GET /api/v1/supplier-refunds`
+- `POST /api/v1/supplier-refunds/{id}/confirm|fail`
+
+未收货不能退 → `40350`。超过可退数量 → `40351`。重复确认出库 → `40355`。可用不足 → `40070`。超过批准退款 → `40358`。跨租户 → `40500` / `40501` / `40502`。
 
 Swagger：http://localhost:8011/docs

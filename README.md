@@ -2,7 +2,7 @@
 
 多租户跨境电商 ERP。当前仓库按里程碑持续迭代，**不要为每个版本重建项目**。
 
-当前里程碑：**V11**。当前有效范围见 `docs/current-state.md`。
+当前里程碑：**V12**。当前有效范围见 `docs/current-state.md`。
 
 ## 技术栈
 
@@ -126,6 +126,15 @@ pnpm test
 - 确认 / 取消锁订单主行；多 SKU 按 `sku_id` 升序复用 V5 条件预占，失败整单回滚
 - ERP 菜单「订单管理」：销售订单、客户；权限 `order:*` 与 `customer:*`，确认沿用 `order:audit`
 - 版本文档：`docs/versions/v7.md`，业务说明：`docs/orders.md`
+
+## V12
+
+- 必须关联原采购单。可退上限是已收货数量，不是采购计划数量。草稿不占用可退
+- 采购退货不改原采购明细计划数量和已收数量，也不回退采购收货状态
+- 退货出库只减少 `quantity`，不改 `reserved`；可用不足失败。流水 `PURCHASE_RETURN_OUTBOUND`
+- 供应商退款记录独立保存失败/成功历史；本版仅人工确认，不接银行
+- ERP 菜单「采购管理」增加采购退货、退货出库、供应商退款；权限 `purchase_return:*` / `supplier_refund:*`
+- 版本文档：`docs/versions/v12.md`，业务说明：`docs/purchase-returns.md`
 
 ## V11
 

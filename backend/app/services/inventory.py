@@ -597,17 +597,17 @@ class InventoryService:
     ) -> Inventory:
         """在当前事务里扣减可用库存，不 commit，不改 reserved。
 
-        功能：调拨确认调出时调用。只能动 available = quantity - reserved。
-        参数：源仓、SKU、调拨数量，以及调拨单引用。
+        功能：调拨确认调出、采购退货出库时调用。只能动 available = quantity - reserved。
+        参数：仓库、SKU、扣减数量，以及单据引用。
         返回：扣减后的库存行。
         异常：可用不足。本方法不 rollback。
         为什么只能用 available：账面 100、预占 80 时，那 80 已经卖给销售订单。
-        调走 50 会让 reserved 大于 quantity。调拨不能自行释放订单预占。
+        调走或退供应商 50 会让 reserved 大于 quantity。不能自行释放订单预占。
         """
         current = self.inventories.get_by_warehouse_and_sku(warehouse_id, sku_id)
         if current is None:
             raise AppError(
-                f"{sku_code or sku_id} 可用库存 0，调拨需要 {quantity}。",
+                f"{sku_code or sku_id} 可用库存 0，本次操作需要 {quantity}。",
                 code=40223,
                 status_code=400,
                 data={
@@ -629,7 +629,7 @@ class InventoryService:
             again = self.inventories.get_by_warehouse_and_sku(warehouse_id, sku_id)
             available = 0 if again is None else again.quantity - again.reserved_quantity
             raise AppError(
-                f"{sku_code or sku_id} 可用库存 {available}，调拨需要 {quantity}。",
+                f"{sku_code or sku_id} 可用库存 {available}，本次操作需要 {quantity}。",
                 code=40223,
                 status_code=400,
                 data={
