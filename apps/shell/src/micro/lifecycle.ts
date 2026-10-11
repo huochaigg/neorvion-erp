@@ -1,4 +1,5 @@
 import { destroyApp } from 'wujie';
+import { forgetSandboxContent } from '@/micro/sandbox-health';
 import { MICRO_APPS } from '@/micro/apps';
 import { clearAllLastMicroHrefs, clearLastMicroHref } from '@/micro/last-location';
 
@@ -27,6 +28,7 @@ export function destroyMicroApp(name: string) {
   return enqueueMicroJob(name, async () => {
     claimMicroGeneration(name);
     destroyApp(name);
+    forgetSandboxContent(name);
     clearLastMicroHref(name);
   });
 }

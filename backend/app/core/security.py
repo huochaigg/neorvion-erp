@@ -74,7 +74,7 @@ def create_access_token(user_id: int) -> str:
     token, _jti = create_token(
         user_id=user_id,
         token_type="access",
-        expires_delta=timedelta(minutes=settings.jwt_access_expire_minutes),
+        expires_delta=timedelta(seconds=settings.access_token_ttl_seconds()),
     )
     return token
 

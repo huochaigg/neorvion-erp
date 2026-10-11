@@ -143,6 +143,7 @@ Get-NetTCPConnection -LocalPort 8011 | Select-Object OwningProcess,State
 
 **子应用白屏**
 
+- 页面曾经正常，切回标签或反复进入仍空白、只有整页刷新能恢复：见 `docs/micro-frontend-white-screen.md`。
 - 确认 ERP 已启动在 8016。
 - 确认 CORS 与 `server.origin` 仍为 `http://localhost:8016`。
 - 确认入口调用了 `window.__WUJIE.mount()`。

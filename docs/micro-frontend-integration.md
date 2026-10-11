@@ -21,6 +21,7 @@
 | `apps/erp/src/main.tsx` | 子应用生命周期 |
 | `packages/shared/src/types/bridge.ts` | props 与 `MICRO_EVENTS` |
 | `docs/micro-frontend-interview.md` | 白屏排查与架构复盘（面试向） |
+| `docs/micro-frontend-white-screen.md` | 保活实例隔夜白屏：浏览器清掉隐藏 iframe 后重新挂载 |
 
 默认模式是 **Shadow DOM**（`degrade: false`）。不要为了排障把降级 iframe 当成正式方案。
 
@@ -574,6 +575,7 @@ startApp(1) 若已被取消则跳过
 - **现象**：Shell 布局在，内容区空白。
 - **排查**：Console 是否有 `_cacheListeners` / `Document.prototype` / `protocol`；Network 是否拉到 ERP HTML；`wujie-app` 的 shadow 里有没有 `#root`。
 - **处理**：确认未设置 `attrs.src`；确认 Host 串行队列；确认 ERP 调用了 `__WUJIE.mount()`；用系统 Chrome，不要用会拦 iframe 的内嵌浏览器。
+- **已经显示过、切回标签才白**：保活沙箱被浏览器清空后仍被 `active()` 挂回。见 `docs/micro-frontend-white-screen.md`。
 
 ### 独立运行正常，嵌入失败
 

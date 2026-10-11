@@ -70,6 +70,9 @@ export function ErpMicroApp() {
           alive={app.alive}
           fiber={app.fiber}
           degrade={app.degrade}
+          prefix={{ [app.name]: app.basename }}
+          plugins={app.plugins}
+          prepareRestart={refreshSessionFromShell}
           props={props}
           afterMount={() => {
             emitHostNavigate(app, {

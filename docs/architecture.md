@@ -25,7 +25,7 @@
 
 ### 无界
 
-- 宿主封装集中在 `apps/shell/src/micro`。子应用清单见 `apps.ts`，接入步骤见 `docs/micro-frontend-integration.md`，白屏排查与架构复盘见 `docs/micro-frontend-interview.md`。
+- 宿主封装集中在 `apps/shell/src/micro`。子应用清单见 `apps.ts`，接入步骤见 `docs/micro-frontend-integration.md`，白屏排查与架构复盘见 `docs/micro-frontend-interview.md`，保活实例隔夜白屏见 `docs/micro-frontend-white-screen.md`。
 - 默认 Shadow DOM（`degrade: false`）。ERP 当前 `alive: true`，离开 `/erp/*` 不销毁沙箱；退出登录或 Refresh 失败时调用 `destroyAllMicroApps()`。租户切换不销毁实例，改发 `shell:tenant-changed` 并隔离缓存。
 - 关闭 Wujie 原生 `sync`（`?erp=`），改用 Wujie bus 同步规范 pathname。Vite 子应用关闭 fiber，入口调用 `window.__WUJIE.mount()`。
 - 开发服务器开启 CORS，并用 `server.origin` 输出绝对资源地址。

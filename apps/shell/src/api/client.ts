@@ -13,6 +13,7 @@ import {
 } from '@neorvion/shared';
 import { getRegisteredQueryClient } from '@/lib/query-client';
 import { endSessionDueToExpiry } from '@/lib/session';
+import { syncTokenToAliveSandboxes } from '@/micro/sandbox-health';
 import { clearTenantSelection } from '@/lib/switch-tenant';
 import { useAuthStore } from '@/stores/auth-store';
 import { useTenantStore } from '@/stores/tenant-store';
@@ -28,6 +29,12 @@ export const apiClient = axios.create({
 const AUTH_REFRESH_URL = '/api/v1/auth/refresh';
 
 let refreshPromise: Promise<string> | null = null;
+
+useAuthStore.subscribe((state, previous) => {
+  if (state.accessToken && state.accessToken !== previous.accessToken) {
+    syncTokenToAliveSandboxes(state.accessToken);
+  }
+});
 
 function handleTenantInaccessible() {
   const queryClient = getRegisteredQueryClient();
@@ -48,6 +55,7 @@ function refreshAccessToken(): Promise<string> {
     refreshPromise = unwrapApi(authClient.post<ApiResponse<TokenPayload>>(AUTH_REFRESH_URL))
       .then((tokens) => {
         useAuthStore.getState().markAuthenticated(tokens.access_token);
+        syncTokenToAliveSandboxes(tokens.access_token);
         return tokens.access_token;
       })
       .finally(() => {

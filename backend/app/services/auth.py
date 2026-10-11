@@ -187,6 +187,6 @@ class AuthService:
         token_store.save_refresh_session(jti=jti, user_id=user_id, ttl_seconds=ttl_seconds)
         body = TokenResponse(
             access_token=access_token,
-            expires_in=settings.jwt_access_expire_minutes * 60,
+            expires_in=settings.access_token_ttl_seconds(),
         )
         return body, refresh_token, ttl_seconds
