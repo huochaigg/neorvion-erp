@@ -1,6 +1,8 @@
-# 部署
+# 本地 / 演示 Docker 部署
 
-面向单机 Docker 演示 / 小型自建。不做 Kubernetes。
+腾讯云第一次生产上线请看 **[`docs/deployment-production.md`](deployment-production.md)**，不要用本文件代替。
+
+本文面向开发机 Docker Compose（`docker-compose.yml`）。不做 Kubernetes。
 
 ## 依赖
 

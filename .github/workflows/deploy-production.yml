@@ -1,0 +1,102 @@
+name: Deploy production
+
+on:
+  push:
+    branches: [production]
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false
+
+jobs:
+  ci:
+    uses: ./.github/workflows/ci.yml
+
+  publish-and-deploy:
+    needs: ci
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      IMAGE: ghcr.io/${{ github.repository }}/erp-api
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Login GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push erp-api
+        uses: docker/build-push-action@v6
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile
+          push: true
+          tags: |
+            ${{ env.IMAGE }}:${{ github.sha }}
+            ${{ env.IMAGE }}:production-latest
+          build-args: |
+            GIT_SHA=${{ github.sha }}
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 12.3.4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Build frontend
+        env:
+          VITE_API_BASE_URL: https://${{ vars.PROD_DOMAIN || 'neorvion.com' }}
+          VITE_ERP_ENTRY: https://${{ vars.PROD_DOMAIN || 'neorvion.com' }}/erp
+          VITE_PUBLIC_BASE: /erp/
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm --filter @neorvion/shell build
+          VITE_PUBLIC_BASE=/erp/ pnpm --filter @neorvion/erp build
+
+      - name: Pack frontend dist
+        run: |
+          mkdir -p deploy-artifacts/frontend/shell deploy-artifacts/frontend/erp
+          cp -a apps/shell/dist/. deploy-artifacts/frontend/shell/
+          cp -a apps/erp/dist/. deploy-artifacts/frontend/erp/
+
+      - name: Upload frontend to server
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.PROD_HOST }}
+          username: ${{ secrets.PROD_USER }}
+          key: ${{ secrets.PROD_SSH_PRIVATE_KEY }}
+          port: ${{ vars.PROD_SSH_PORT || 22 }}
+          source: "deploy-artifacts/frontend"
+          target: "/opt/neorvion/staging/${{ github.sha }}"
+
+      - name: Deploy over SSH
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.PROD_HOST }}
+          username: ${{ secrets.PROD_USER }}
+          key: ${{ secrets.PROD_SSH_PRIVATE_KEY }}
+          port: ${{ vars.PROD_SSH_PORT || 22 }}
+          script_stop: true
+          script: |
+            set -Eeuo pipefail
+            export ERP_API_IMAGE="ghcr.io/${{ github.repository }}/erp-api:${{ github.sha }}"
+            export GIT_SHA="${{ github.sha }}"
+            export DEPLOY_SHA="${{ github.sha }}"
+            export FRONTEND_STAGING="/opt/neorvion/staging/${{ github.sha }}/frontend"
+            if [[ -f /opt/neorvion/env/ghcr.login ]]; then
+              # ghcr.login 两行：用户名、token。不要 echo token。
+              GHCR_USER=$(sed -n '1p' /opt/neorvion/env/ghcr.login)
+              GHCR_TOKEN=$(sed -n '2p' /opt/neorvion/env/ghcr.login)
+              printf '%s\n' "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin >/dev/null
+            fi
+            git -C /opt/neorvion/src fetch origin
+            git -C /opt/neorvion/src checkout --force "${{ github.sha }}"
+            /opt/neorvion/src/scripts/deploy-production.sh

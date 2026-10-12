@@ -2,7 +2,7 @@
 
 ## Git
 
-禁止 Agent 自动 add / commit / push / tag / reset / rebase。保持未提交，需要时只建议 Commit Message。
+禁止 Agent 自动 add / commit / push / tag / reset / rebase。禁止自动创建 / push `production` 分支。禁止自动 SSH 腾讯云。保持未提交，需要时只建议 Commit Message。
 
 ## Python / SQLAlchemy
 

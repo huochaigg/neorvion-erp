@@ -4,6 +4,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.core.async_tasks import WORKER_HEARTBEAT_KEY
+from app.core.config import settings
 from app.core.redis import ping_redis, redis_client
 from app.schemas.health import HealthCheckData
 
@@ -22,6 +23,8 @@ class HealthService:
             mysql=self._check_mysql(),
             redis="ok" if redis_ok else "unavailable",
             worker=self._check_worker() if redis_ok else "unavailable",
+            version=settings.app_version,
+            git_sha=settings.git_sha,
         )
 
     def _check_worker(self) -> HealthStatus:

@@ -17,7 +17,9 @@ def test_health_response_shape(client: TestClient) -> None:
     assert body["code"] == 0
     assert body["message"] == "ok"
     assert body["data"]["app"] == "ok"
-    assert body["data"]["milestone"] == "V15"
+    assert body["data"]["milestone"] == "V16"
+    assert body["data"]["version"]
+    assert "git_sha" in body["data"]
     assert body["data"]["mysql"] in {"ok", "unavailable"}
     assert body["data"]["redis"] in {"ok", "unavailable"}
     assert body["data"]["worker"] in {"ok", "unavailable"}

@@ -6,6 +6,8 @@ WORKDIR /app
 
 ENV UV_COMPILE_BYTECODE=1
 ENV UV_LINK_MODE=copy
+ARG GIT_SHA=
+ENV GIT_SHA=${GIT_SHA}
 
 COPY pyproject.toml uv.lock ./
 RUN uv sync --frozen --no-dev
@@ -13,7 +15,9 @@ RUN uv sync --frozen --no-dev
 COPY alembic.ini ./
 COPY alembic ./alembic
 COPY app ./app
+COPY scripts ./scripts
 
 EXPOSE 8011
 
-CMD ["uv", "run", "--no-dev", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8011"]
+# 生产不 --reload。Migration 不在容器启动时自动执行。
+CMD ["uv", "run", "--no-dev", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8011", "--proxy-headers", "--forwarded-allow-ips=127.0.0.1"]

@@ -27,7 +27,10 @@
 
 ## 基础设施
 
-- [部署](deployment.md)
+- [生产部署（腾讯云 / 第一次上线）](deployment-production.md)
+- [生产运维与排障](server-operations.md)
+- [GitHub CI/CD](github-cicd.md)
+- [本地 Docker 部署](deployment.md)
 - [备份](backup.md)
 - [微前端接入](micro-frontend-integration.md)
 
@@ -40,4 +43,4 @@
 
 历史里程碑只作当时范围参考。冲突时以代码和 `current-state.md` 为准。
 
-最新收口：[V15](versions/v15.md)
+最新收口：[V15](versions/v15.md)。部署里程碑：[V16](versions/v16.md)。

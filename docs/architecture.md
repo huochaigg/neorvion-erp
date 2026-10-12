@@ -8,16 +8,19 @@
 
 ```mermaid
 flowchart LR
-  Shell[Shell 8015] --> ERP[ERP Micro App 8016]
-  Shell --> API[FastAPI 8011]
-  ERP --> API
-  API --> MySQL[(MySQL 8)]
-  API --> Redis[(Redis 7)]
+  User[Browser] --> BT[BaoTa Nginx 80/443]
+  BT --> Shell[Shell static]
+  BT --> ERP[ERP static /erp]
+  BT --> API[erp-api 127.0.0.1:8011]
+  API --> MySQL[(MySQL 8.4 Docker)]
+  API --> Redis[(Redis 7 Docker)]
   Worker[Worker] --> Redis
   Worker --> MySQL
-  Nginx[Nginx 80/443] --> Shell
-  Nginx --> API
+  AgentFuture[Future Agent] -.-> PG[(Postgres pgvector)]
+  AgentFuture -.-> API
 ```
+
+开发机仍是 Shell 8015 / ERP 8016 / API 8011。生产静态资源由宝塔 Nginx 同域提供；API 不映射到 0.0.0.0。
 
 后续 Copilot：`Agent → Tool → ERP API → TenantContext / RBAC → Service → DB`。Agent 不直连 MySQL。
 

@@ -8,6 +8,8 @@ Neorvion ERP Core V1（V15 收口）。模块化单体，不是微服务。
 
 下一阶段才是 ERP Copilot / Agent。Agent **不直接写 ERP 数据库**。
 
+生产：OpenCloudOS 9.2 + 宝塔 Nginx + Docker Compose。ERP 用 MySQL。未来 Agent 用 PostgreSQL + pgvector。禁止自动 git commit / push / 创建 production 分支。
+
 ## 禁止
 
 - 自动 `git add` / `commit` / `push` / `tag` / `reset` / `rebase`
@@ -19,6 +21,11 @@ Neorvion ERP Core V1（V15 收口）。模块化单体，不是微服务。
 - Query Key 不带 `tenantId` 去拉租户数据
 - 破坏 Wujie：租户切换不要 `destroyApp`，不要 `queryClient.clear()`
 - 伪造生产客户、GMV、QPS、用户量
+- 自动 SSH / 操作腾讯云生产机
+- 把生产 Secret、RSA 私钥、数据库密码写进 Git
+- 公网开放 MySQL 3306 / Redis 6379 / Postgres 5432 / FastAPI 8011
+- ERP 业务写入走 PostgreSQL；Postgres 只给未来 Agent / RAG
+- 每个 API 容器启动时自动 Alembic；Migration 是独立部署步骤
 
 ## 技术栈
 

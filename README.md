@@ -109,9 +109,15 @@ pnpm --filter @neorvion/shell build
 pnpm --filter @neorvion/erp build
 ```
 
-## 部署与备份
+## 生产部署
 
-见 [`docs/deployment.md`](docs/deployment.md)、[`docs/backup.md`](docs/backup.md)。公网只开放 80/443。MySQL、Redis、FastAPI 不直接对公网。
+腾讯云 OpenCloudOS 9.2 + 宝塔 Nginx + Docker Compose。完整第一次手工上线：
+
+- [`docs/deployment-production.md`](docs/deployment-production.md)（主入口）
+- [`docs/server-operations.md`](docs/server-operations.md)
+- [`docs/github-cicd.md`](docs/github-cicd.md)
+
+本地开发 Docker 仍见 [`docs/deployment.md`](docs/deployment.md)。公网只开放 80/443。MySQL / Redis / Postgres / FastAPI 不直接对公网。
 
 ## 未来
 

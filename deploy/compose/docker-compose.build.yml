@@ -1,0 +1,11 @@
+# 仅第一次在服务器本地构建镜像时叠加使用。之后改用 GHCR 的 ERP_API_IMAGE。
+services:
+  erp-api:
+    build:
+      context: ../../backend
+      dockerfile: Dockerfile
+      args:
+        GIT_SHA: ${GIT_SHA:-local}
+    image: ${ERP_API_IMAGE:-neorvion-erp-api:local}
+  worker:
+    image: ${ERP_API_IMAGE:-neorvion-erp-api:local}

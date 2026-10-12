@@ -24,13 +24,15 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
 
 
 def create_app() -> FastAPI:
+    docs_enabled = settings.enable_api_docs
     app = FastAPI(
         title=settings.app_name,
-        version="1.0.0",
-        description="多租户跨境电商 ERP 后端。当前里程碑：ERP Core V1（V15 收口）。",
+        version=settings.app_version,
+        description="多租户跨境电商 ERP 后端。当前里程碑：ERP Core V1（V16 生产部署）。",
         lifespan=lifespan,
-        docs_url="/docs",
-        redoc_url="/redoc",
+        docs_url="/docs" if docs_enabled else None,
+        redoc_url="/redoc" if docs_enabled else None,
+        openapi_url="/openapi.json" if docs_enabled else None,
     )
     app.add_middleware(RequestIdMiddleware)
     app.add_middleware(

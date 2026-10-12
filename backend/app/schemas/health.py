@@ -11,4 +11,6 @@ class HealthCheckData(BaseModel):
         default="unavailable",
         description="独立 Worker 心跳。Redis 中 erp:worker:heartbeat 未过期则为 ok",
     )
-    milestone: str = Field(default="V15", description="当前 ERP Core 里程碑")
+    milestone: str = Field(default="V16", description="当前 ERP Core 里程碑")
+    version: str = Field(default="1.0.0", description="应用版本号，不含密钥")
+    git_sha: str = Field(default="", description="构建时的 Git commit SHA，不含密钥")

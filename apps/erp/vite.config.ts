@@ -7,9 +7,12 @@ import { defineConfig } from 'vite';
 const rootDir = fileURLToPath(new URL('.', import.meta.url));
 const erpOrigin = 'http://localhost:8016';
 
+const publicBase = process.env.VITE_PUBLIC_BASE || '/';
+
 export default defineConfig({
   plugins: [react(), tailwindcss()],
-  base: '/',
+  // 开发保持 /。生产同域部署到 https://neorvion.com/erp/ 时设 VITE_PUBLIC_BASE=/erp/
+  base: publicBase,
   resolve: {
     alias: {
       '@': path.resolve(rootDir, 'src'),

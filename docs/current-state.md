@@ -1,6 +1,6 @@
 # 当前状态
 
-**Neorvion ERP Core V1**（V15 收口）。只记录当前有效架构。版本历史见 `docs/versions/`。
+**Neorvion ERP Core V1**（业务收口 V15，生产部署 V16）。只记录当前有效架构。版本历史见 `docs/versions/`。
 
 ## 技术栈
 
@@ -68,6 +68,21 @@ Repository 不 commit。Service 管事务。多 SKU 升序加锁。库存条件 
 ## Agent 可复用只读 API
 
 商品 / 库存 / 销售订单 / 采购单 / 售后 / Analytics / Event / Task 查询。写操作必须走 ERP API + RBAC + 状态机。Agent 不直连 MySQL。
+
+## 生产部署（V16）
+
+- OS：腾讯云 **OpenCloudOS 9.2**
+- 反代：宝塔 Nginx（80/443）
+- 业务进程：Docker Compose（`erp-api` + `worker`）
+- ERP 数据库：Docker **MySQL 8.4**（不公网映射 3306）
+- 队列 / 会话：Docker **Redis 7**（不公网映射 6379）
+- 未来 AI：Docker **PostgreSQL + pgvector**（ERP SQLAlchemy 不连接）
+- CI/CD：GitHub Actions；发布分支 `production`；镜像 **GHCR**（commit SHA）
+- 前端：GitHub Actions 或本地构建静态文件，服务器不装 Node
+- API 宿主绑定：`127.0.0.1:8011`（项目端口是 8011，不是 8001）
+- Secret 只在 `/opt/neorvion/env/.env.production`，不进 Git
+
+第一次上线入口：`docs/deployment-production.md`。
 
 ## 已知限制
 

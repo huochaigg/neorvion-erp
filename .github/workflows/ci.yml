@@ -1,0 +1,93 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_call:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: test
+          MYSQL_DATABASE: neorvion_erp_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -ptest --silent"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=20
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd="redis-cli ping"
+          --health-interval=5s
+          --health-timeout=3s
+          --health-retries=20
+    defaults:
+      run:
+        working-directory: backend
+    env:
+      MYSQL_HOST: 127.0.0.1
+      MYSQL_PORT: "3306"
+      MYSQL_USER: root
+      MYSQL_PASSWORD: test
+      MYSQL_DATABASE: neorvion_erp_test
+      MYSQL_TEST_DATABASE: neorvion_erp_test
+      REDIS_HOST: 127.0.0.1
+      REDIS_PORT: "6379"
+      REDIS_DB: "15"
+      APP_ENV: test
+      SECRET_KEY: ci-secret-not-for-production
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v4
+        with:
+          enable-cache: true
+      - name: Install Python deps
+        run: uv sync --frozen
+      - name: Ruff
+        run: uv run ruff check app tests
+      - name: Alembic heads
+        run: uv run alembic heads
+      - name: Pytest (includes Alembic upgrade on test DB)
+        run: uv run pytest -q --tb=short
+
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 12.3.4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Install
+        run: pnpm install --frozen-lockfile
+      - name: Test
+        run: pnpm test
+      - name: Lint (ESLint 10 历史债，暂不阻断发布)
+        continue-on-error: true
+        run: pnpm lint
+      - name: Production build
+        env:
+          VITE_API_BASE_URL: https://neorvion.com
+          VITE_ERP_ENTRY: https://neorvion.com/erp
+          VITE_PUBLIC_BASE: /erp/
+        run: pnpm build

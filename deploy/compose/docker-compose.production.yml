@@ -1,0 +1,197 @@
+# 腾讯云生产 Compose。ERP 数据库仍是 MySQL。Postgres 只给未来 Agent。
+# 不要把 3306 / 5432 / 6379 映射到 0.0.0.0。
+# FastAPI 仅绑定 127.0.0.1:8011 给宝塔 Nginx。真实应用端口是 8011，不是 8001。
+
+name: neorvion
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "20m"
+    max-file: "5"
+
+x-env: &app-env
+  env_file:
+    - ${NEORVION_ENV_FILE:-/opt/neorvion/env/.env.production}
+
+networks:
+  internal:
+    name: neorvion_internal
+    driver: bridge
+
+volumes:
+  mysql_data:
+    name: neorvion_mysql_data
+  redis_data:
+    name: neorvion_redis_data
+  postgres_data:
+    name: neorvion_postgres_data
+
+services:
+  mysql:
+    image: mysql:8.4
+    container_name: neorvion-mysql
+    restart: unless-stopped
+    <<: *app-env
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-neorvion_erp}
+      MYSQL_USER: ${MYSQL_USER:-neorvion}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+    command: >
+      --character-set-server=utf8mb4
+      --collation-server=utf8mb4_unicode_ci
+      --innodb-buffer-pool-size=256M
+      --innodb-buffer-pool-instances=1
+      --max-connections=50
+      --performance-schema=OFF
+    volumes:
+      - mysql_data:/var/lib/mysql
+    networks:
+      - internal
+    logging: *default-logging
+    mem_limit: 512m
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "mysqladmin ping -h 127.0.0.1 -uroot -p$$MYSQL_ROOT_PASSWORD --silent",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 30s
+
+  redis:
+    image: redis:7-alpine
+    container_name: neorvion-redis
+    restart: unless-stopped
+    command:
+      - redis-server
+      - --appendonly
+      - "yes"
+      - --requirepass
+      - ${REDIS_PASSWORD}
+      - --maxmemory
+      - 128mb
+      - --maxmemory-policy
+      - noeviction
+    volumes:
+      - redis_data:/data
+    networks:
+      - internal
+    logging: *default-logging
+    mem_limit: 160m
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a \"$$REDIS_PASSWORD\" ping | grep -q PONG"]
+      interval: 10s
+      timeout: 3s
+      retries: 20
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: neorvion-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-neorvion_agent}
+      POSTGRES_USER: ${POSTGRES_USER:-neorvion_agent}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    command:
+      - postgres
+      - -c
+      - shared_buffers=128MB
+      - -c
+      - max_connections=30
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ../postgres/init-vector.sql:/docker-entrypoint-initdb.d/01-vector.sql:ro
+    networks:
+      - internal
+    logging: *default-logging
+    mem_limit: 256m
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+
+  erp-api:
+    image: ${ERP_API_IMAGE}
+    container_name: neorvion-erp-api
+    restart: unless-stopped
+    <<: *app-env
+    environment:
+      APP_ENV: production
+      MYSQL_HOST: mysql
+      MYSQL_PORT: "3306"
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-neorvion_erp}
+      MYSQL_USER: ${MYSQL_USER:-neorvion}
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      GIT_SHA: ${GIT_SHA:-unknown}
+      APP_VERSION: ${APP_VERSION:-1.0.0}
+    ports:
+      - "127.0.0.1:8011:8011"
+    volumes:
+      - /opt/neorvion/secrets/rsa:/app/secrets/rsa:ro
+      - /opt/neorvion/data/exports:/app/var/exports
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - internal
+    logging: *default-logging
+    mem_limit: 384m
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8011/api/v1/health')",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  worker:
+    image: ${ERP_API_IMAGE}
+    container_name: neorvion-worker
+    restart: unless-stopped
+    <<: *app-env
+    environment:
+      APP_ENV: production
+      MYSQL_HOST: mysql
+      MYSQL_PORT: "3306"
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-neorvion_erp}
+      MYSQL_USER: ${MYSQL_USER:-neorvion}
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      GIT_SHA: ${GIT_SHA:-unknown}
+    volumes:
+      - /opt/neorvion/secrets/rsa:/app/secrets/rsa:ro
+      - /opt/neorvion/data/exports:/app/var/exports
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - internal
+    logging: *default-logging
+    mem_limit: 256m
+    command:
+      [
+        "uv",
+        "run",
+        "--no-dev",
+        "python",
+        "-m",
+        "app.tasks.worker",
+      ]

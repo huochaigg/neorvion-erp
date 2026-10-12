@@ -21,6 +21,9 @@ class Settings(BaseSettings):
     app_env: str = "development"
     app_host: str = "0.0.0.0"
     app_port: int = 8011
+    app_version: str = "1.0.0"
+    git_sha: str = ""
+    enable_api_docs: bool = True
     secret_key: str = "change-me-in-local-dev"
     jwt_algorithm: str = "HS256"
     jwt_access_expire_minutes: int = 30

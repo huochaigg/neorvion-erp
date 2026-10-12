@@ -1,6 +1,8 @@
 # 备份与恢复
 
-小型演示项目的基础流程。不是自动备份平台。
+生产机请用 `scripts/backup-mysql.sh`（以及可选的 `scripts/backup-postgres.sh`），步骤见 `docs/deployment-production.md` 与 `docs/server-operations.md`。
+
+下面是开发机 / 通用说明。不是自动备份平台。
 
 ## MySQL
 
