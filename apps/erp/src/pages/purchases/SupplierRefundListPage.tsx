@@ -146,39 +146,41 @@ export function SupplierRefundListPage(props: PageProps) {
     <ListPageContainer>
       <PageHeader title={props.title ?? '供应商退款'} description={props.description} />
       <ListToolbar>
-        <Input
-          allowClear
-          placeholder="退款编号 / 退货单号 / 供应商"
-          value={q}
-          onChange={(event) => {
-            setQ(event.target.value);
-            setPage(1);
-          }}
-          style={{ width: 260 }}
-        />
-        <Select
-          allowClear
-          placeholder="状态"
-          value={status}
-          options={[
-            { value: 'PENDING', label: '待确认' },
-            { value: 'SUCCESS', label: '成功' },
-            { value: 'FAILED', label: '失败' },
-          ]}
-          onChange={(value) => {
-            setStatus(value);
-            setPage(1);
-          }}
-          style={{ width: 140 }}
-        />
-        <AppRangePicker
-          onChange={(range) => {
-            const { from, to } = rangeToDateTimes(range);
-            setCreatedFrom(from);
-            setCreatedTo(to);
-            setPage(1);
-          }}
-        />
+        <Space>
+          <Input
+            allowClear
+            placeholder="退款编号 / 退货单号 / 供应商"
+            value={q}
+            onChange={(event) => {
+              setQ(event.target.value);
+              setPage(1);
+            }}
+            style={{ width: 260 }}
+          />
+          <Select
+            allowClear
+            placeholder="状态"
+            value={status}
+            options={[
+              { value: 'PENDING', label: '待确认' },
+              { value: 'SUCCESS', label: '成功' },
+              { value: 'FAILED', label: '失败' },
+            ]}
+            onChange={(value) => {
+              setStatus(value);
+              setPage(1);
+            }}
+            style={{ width: 140 }}
+          />
+          <AppRangePicker
+            onChange={(range) => {
+              const { from, to } = rangeToDateTimes(range);
+              setCreatedFrom(from);
+              setCreatedTo(to);
+              setPage(1);
+            }}
+          />
+        </Space>
       </ListToolbar>
       <ListTableArea>
         <AppTable

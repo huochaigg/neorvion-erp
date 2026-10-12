@@ -286,7 +286,7 @@ export function PurchaseReturnDetailPage(props: PageProps) {
               </Descriptions.Item>
             </Descriptions>
           </Card>
-          <Card title="退货明细" className="mb-4">
+          <Card title="退货明细" className="mb-4 mt-4!">
             <AppTable
               rowKey="id"
               fillHeight={false}
@@ -296,7 +296,7 @@ export function PurchaseReturnDetailPage(props: PageProps) {
               scroll={{ x: 1400 }}
             />
           </Card>
-          <Card title="退货出库记录" className="mb-4">
+          <Card title="退货出库记录" className="mb-4 mt-4!">
             <AppTable
               rowKey="id"
               fillHeight={false}
@@ -351,7 +351,7 @@ export function PurchaseReturnDetailPage(props: PageProps) {
               ]}
             />
           </Card>
-          <Card title="供应商退款记录">
+          <Card title="供应商退款记录" className="mt-4!">
             <AppTable
               rowKey="id"
               fillHeight={false}
@@ -585,6 +585,7 @@ export function PurchaseReturnDetailPage(props: PageProps) {
           placeholder="外部流水号（可选）"
           value={refundExternal}
           onChange={(event) => setRefundExternal(event.target.value)}
+          className="mt-4!"
         />
       </Modal>
     </FormPageContainer>

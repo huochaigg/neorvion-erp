@@ -119,57 +119,59 @@ export function PurchaseReturnListPage(props: PageProps) {
         }
       />
       <ListToolbar>
-        <Input
-          allowClear
-          placeholder="退货单号 / 采购单号 / 供应商"
-          value={q}
-          onChange={(event) => {
-            setQ(event.target.value);
-            setPage(1);
-          }}
-          style={{ width: 240 }}
-        />
-        <Select
-          allowClear
-          placeholder="状态"
-          value={status}
-          options={PURCHASE_RETURN_STATUS_OPTIONS}
-          onChange={(value) => {
-            setStatus(value);
-            setPage(1);
-          }}
-          style={{ width: 140 }}
-        />
-        <Select
-          allowClear
-          placeholder="结算类型"
-          value={settlementType}
-          options={PURCHASE_RETURN_SETTLEMENT_OPTIONS}
-          onChange={(value) => {
-            setSettlementType(value);
-            setPage(1);
-          }}
-          style={{ width: 140 }}
-        />
-        <Select
-          allowClear
-          placeholder="退款状态"
-          value={refundStatus}
-          options={PURCHASE_RETURN_REFUND_STATUS_OPTIONS}
-          onChange={(value) => {
-            setRefundStatus(value);
-            setPage(1);
-          }}
-          style={{ width: 140 }}
-        />
-        <AppRangePicker
-          onChange={(range) => {
-            const { from, to } = rangeToDateTimes(range);
-            setCreatedFrom(from);
-            setCreatedTo(to);
-            setPage(1);
-          }}
-        />
+        <div className="flex flex-wrap gap-2">
+          <Input
+            allowClear
+            placeholder="退货单号 / 采购单号 / 供应商"
+            value={q}
+            onChange={(event) => {
+              setQ(event.target.value);
+              setPage(1);
+            }}
+            style={{ width: 240 }}
+          />
+          <Select
+            allowClear
+            placeholder="状态"
+            value={status}
+            options={PURCHASE_RETURN_STATUS_OPTIONS}
+            onChange={(value) => {
+              setStatus(value);
+              setPage(1);
+            }}
+            style={{ width: 140 }}
+          />
+          <Select
+            allowClear
+            placeholder="结算类型"
+            value={settlementType}
+            options={PURCHASE_RETURN_SETTLEMENT_OPTIONS}
+            onChange={(value) => {
+              setSettlementType(value);
+              setPage(1);
+            }}
+            style={{ width: 140 }}
+          />
+          <Select
+            allowClear
+            placeholder="退款状态"
+            value={refundStatus}
+            options={PURCHASE_RETURN_REFUND_STATUS_OPTIONS}
+            onChange={(value) => {
+              setRefundStatus(value);
+              setPage(1);
+            }}
+            style={{ width: 140 }}
+          />
+          <AppRangePicker
+            onChange={(range) => {
+              const { from, to } = rangeToDateTimes(range);
+              setCreatedFrom(from);
+              setCreatedTo(to);
+              setPage(1);
+            }}
+          />
+        </div>
       </ListToolbar>
       <ListTableArea>
         <AppTable

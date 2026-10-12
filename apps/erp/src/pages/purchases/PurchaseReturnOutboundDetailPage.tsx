@@ -56,37 +56,39 @@ export function PurchaseReturnOutboundDetailPage(props: PageProps) {
             ) : null}
             {order && canConfirmPurchaseReturnOutbound(order.status) ? (
               <Can permission={PERMISSION_CODE.purchaseReturnOutbound}>
-                <Button
-                  type="primary"
-                  onClick={() => {
-                    modal.confirm({
-                      title: '确认退货出库',
-                      content: '确认后将正式减少当前仓库库存，并生成采购退货库存流水，操作不可直接撤销。',
-                      onOk: async () => {
-                        await confirmPurchaseReturnOutbound(outboundId);
-                        message.success('已确认出库');
-                        invalidate();
-                      },
-                    });
-                  }}
-                >
-                  确认退货出库
-                </Button>
-                <Button
-                  danger
-                  onClick={() => {
-                    cancelPurchaseReturnOutbound(outboundId)
-                      .then(() => {
-                        message.success('已取消');
-                        invalidate();
-                      })
-                      .catch((error: unknown) =>
-                        message.error(error instanceof ApiError ? error.message : '取消失败'),
-                      );
-                  }}
-                >
-                  取消草稿
-                </Button>
+                <Space>
+                  <Button
+                    type="primary"
+                    onClick={() => {
+                      modal.confirm({
+                        title: '确认退货出库',
+                        content: '确认后将正式减少当前仓库库存，并生成采购退货库存流水，操作不可直接撤销。',
+                        onOk: async () => {
+                          await confirmPurchaseReturnOutbound(outboundId);
+                          message.success('已确认出库');
+                          invalidate();
+                        },
+                      });
+                    }}
+                  >
+                    确认退货出库
+                  </Button>
+                  <Button
+                    danger
+                    onClick={() => {
+                      cancelPurchaseReturnOutbound(outboundId)
+                        .then(() => {
+                          message.success('已取消');
+                          invalidate();
+                        })
+                        .catch((error: unknown) =>
+                          message.error(error instanceof ApiError ? error.message : '取消失败'),
+                        );
+                    }}
+                  >
+                    取消草稿
+                  </Button>
+                </Space>
               </Can>
             ) : null}
           </Space>
@@ -114,6 +116,7 @@ export function PurchaseReturnOutboundDetailPage(props: PageProps) {
             fillHeight={false}
             pagination={false}
             dataSource={order.items}
+            className='mt-4!'
             columns={[
               {
                 title: '商品',

@@ -4,7 +4,7 @@ import {
   purchaseReturnOutboundStatusLabel,
 } from '@neorvion/shared';
 import { useQuery } from '@tanstack/react-query';
-import { Button, Input, Select, Tag } from 'antd';
+import { Button, Input, Select, Tag, Space } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -62,31 +62,33 @@ export function PurchaseReturnOutboundListPage(props: PageProps) {
     <ListPageContainer>
       <PageHeader title={props.title ?? '采购退货出库'} description={props.description} />
       <ListToolbar>
-        <Input
-          allowClear
-          placeholder="出库单号 / 退货单号"
-          value={q}
-          onChange={(event) => {
-            setQ(event.target.value);
-            setPage(1);
-          }}
-          style={{ width: 240 }}
-        />
-        <Select
-          allowClear
-          placeholder="状态"
-          value={status}
-          options={[
-            { value: 'DRAFT', label: '草稿' },
-            { value: 'CONFIRMED', label: '已确认' },
-            { value: 'CANCELLED', label: '已取消' },
-          ]}
-          onChange={(value) => {
-            setStatus(value);
-            setPage(1);
-          }}
-          style={{ width: 140 }}
-        />
+        <Space>
+          <Input
+            allowClear
+            placeholder="出库单号 / 退货单号"
+            value={q}
+            onChange={(event) => {
+              setQ(event.target.value);
+              setPage(1);
+            }}
+            style={{ width: 240 }}
+          />
+          <Select
+            allowClear
+            placeholder="状态"
+            value={status}
+            options={[
+              { value: 'DRAFT', label: '草稿' },
+              { value: 'CONFIRMED', label: '已确认' },
+              { value: 'CANCELLED', label: '已取消' },
+            ]}
+            onChange={(value) => {
+              setStatus(value);
+              setPage(1);
+            }}
+            style={{ width: 140 }}
+          />
+        </Space>
       </ListToolbar>
       <ListTableArea>
         <AppTable
