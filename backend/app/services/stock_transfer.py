@@ -7,7 +7,9 @@ from datetime import datetime
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.core.events import AggregateType, EventType
 from app.core.exceptions import AppError
+from app.core.operations import OperationAction, OperationModule
 from app.core.permissions import PermissionCode
 from app.core.tenant import TenantContext
 from app.models.inventory import InventoryTransactionType
@@ -34,6 +36,7 @@ from app.schemas.stock_transfer import (
 )
 from app.services.authorization import AuthorizationService
 from app.services.inventory import InventoryService
+from app.services.observability import emit_event, emit_operation
 
 _UNAVAILABLE = "调拨单不存在或不可访问"
 _DRAFT = StockTransferStatus.DRAFT.value
@@ -390,6 +393,24 @@ class StockTransferService:
             locked.status = _COMPLETED
             locked.received_at = datetime.now()
             locked.received_by = self.context.user_id
+            emit_event(
+                self.session,
+                self.context,
+                event_type=EventType.STOCK_TRANSFER_COMPLETED,
+                aggregate_type=AggregateType.STOCK_TRANSFER,
+                aggregate_id=transfer_id,
+                payload={"transfer_no": locked.transfer_no},
+            )
+            emit_operation(
+                self.session,
+                self.context,
+                action=OperationAction.CONFIRM.value,
+                module=OperationModule.STOCK_TRANSFER.value,
+                resource_type="STOCK_TRANSFER",
+                resource_id=transfer_id,
+                resource_name=locked.transfer_no,
+                description="调拨收货完成",
+            )
             self.session.commit()
         except AppError:
             self.session.rollback()

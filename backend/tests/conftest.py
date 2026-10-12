@@ -92,6 +92,10 @@ def _wipe_business_tables() -> None:
     try:
         # 类目 parent_id 自关联，关外键后才能整表清空。
         session.execute(text("SET FOREIGN_KEY_CHECKS=0"))
+        session.execute(text("DELETE FROM async_task_logs"))
+        session.execute(text("DELETE FROM async_tasks"))
+        session.execute(text("DELETE FROM operation_logs"))
+        session.execute(text("DELETE FROM system_events"))
         session.execute(text("DELETE FROM inventory_transactions"))
         session.execute(text("DELETE FROM supplier_refund_records"))
         session.execute(text("DELETE FROM purchase_return_outbound_items"))

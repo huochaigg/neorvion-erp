@@ -148,6 +148,13 @@ class PermissionCode(StrEnum):
     ANALYTICS_INVENTORY_READ = "analytics:inventory:read"
     ANALYTICS_AFTER_SALE_READ = "analytics:after_sale:read"
 
+    EVENT_READ = "event:read"
+    OPERATION_LOG_READ = "operation_log:read"
+    TASK_READ = "task:read"
+    TASK_RETRY = "task:retry"
+    TASK_CANCEL = "task:cancel"
+    TASK_DOWNLOAD = "task:download"
+
 
 class SystemRoleCode(StrEnum):
     OWNER = "OWNER"
@@ -393,6 +400,17 @@ PERMISSION_CATALOG: tuple[tuple[str, str, str, str], ...] = (
         "analytics",
         "查看售后 KPI、售后率与类型分布",
     ),
+    (PermissionCode.EVENT_READ, "查看事件中心", "event", "查看业务事件与 Outbox 处理状态"),
+    (
+        PermissionCode.OPERATION_LOG_READ,
+        "查看操作日志",
+        "operation_log",
+        "查看用户操作审计，不能修改或删除",
+    ),
+    (PermissionCode.TASK_READ, "查看任务中心", "task", "查看异步任务状态、进度与日志"),
+    (PermissionCode.TASK_RETRY, "重试任务", "task", "对失败或未入队任务重新入队"),
+    (PermissionCode.TASK_CANCEL, "取消任务", "task", "取消尚未运行的异步任务"),
+    (PermissionCode.TASK_DOWNLOAD, "下载任务结果", "task", "下载报表导出等任务产物"),
     (PermissionCode.SUPPLIER_READ, "查看供应商", "supplier", "查看本企业供应商"),
     (PermissionCode.SUPPLIER_CREATE, "新增供应商", "supplier", "创建供应商"),
     (PermissionCode.SUPPLIER_UPDATE, "编辑供应商", "supplier", "编辑供应商档案，编码创建后只读"),
@@ -455,6 +473,7 @@ _READ_CODES: tuple[str, ...] = (
     PermissionCode.ANALYTICS_PURCHASE_READ,
     PermissionCode.ANALYTICS_INVENTORY_READ,
     PermissionCode.ANALYTICS_AFTER_SALE_READ,
+    PermissionCode.EVENT_READ,
 )
 
 DEFAULT_ROLE_TEMPLATES: tuple[tuple[str, str, str, tuple[str, ...]], ...] = (
@@ -519,6 +538,8 @@ DEFAULT_ROLE_TEMPLATES: tuple[tuple[str, str, str, tuple[str, ...]], ...] = (
             PermissionCode.ANALYTICS_OVERVIEW_READ,
             PermissionCode.ANALYTICS_SALES_READ,
             PermissionCode.ANALYTICS_PURCHASE_READ,
+            PermissionCode.EVENT_READ,
+            PermissionCode.TASK_READ,
         ),
     ),
     (
@@ -1556,6 +1577,70 @@ PERMISSION_TREE: tuple[PermissionTreeDef, ...] = (
                         title="查看",
                         type="ACTION",
                         permission_code=PermissionCode.ANALYTICS_AFTER_SALE_READ,
+                    ),
+                ),
+            ),
+        ),
+    ),
+    PermissionTreeDef(
+        key="dir:monitor",
+        title="系统监控",
+        type="DIRECTORY",
+        children=(
+            PermissionTreeDef(
+                key="menu:events",
+                title="事件中心",
+                type="MENU",
+                children=(
+                    PermissionTreeDef(
+                        key="action:event-read",
+                        title="查看",
+                        type="ACTION",
+                        permission_code=PermissionCode.EVENT_READ,
+                    ),
+                ),
+            ),
+            PermissionTreeDef(
+                key="menu:operation-logs",
+                title="操作日志",
+                type="MENU",
+                children=(
+                    PermissionTreeDef(
+                        key="action:operation-log-read",
+                        title="查看",
+                        type="ACTION",
+                        permission_code=PermissionCode.OPERATION_LOG_READ,
+                    ),
+                ),
+            ),
+            PermissionTreeDef(
+                key="menu:tasks",
+                title="任务中心",
+                type="MENU",
+                children=(
+                    PermissionTreeDef(
+                        key="action:task-read",
+                        title="查看",
+                        type="ACTION",
+                        permission_code=PermissionCode.TASK_READ,
+                    ),
+                    PermissionTreeDef(
+                        key="action:task-retry",
+                        title="重试",
+                        type="ACTION",
+                        permission_code=PermissionCode.TASK_RETRY,
+                    ),
+                    PermissionTreeDef(
+                        key="action:task-cancel",
+                        title="取消",
+                        type="ACTION",
+                        permission_code=PermissionCode.TASK_CANCEL,
+                    ),
+                    PermissionTreeDef(
+                        key="action:task-download",
+                        title="下载",
+                        type="ACTION",
+                        permission_code=PermissionCode.TASK_DOWNLOAD,
                     ),
                 ),
             ),

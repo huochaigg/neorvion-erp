@@ -8,7 +8,9 @@ from decimal import Decimal
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.core.events import AggregateType, EventType
 from app.core.exceptions import AppError
+from app.core.operations import OperationAction, OperationModule
 from app.core.permissions import PermissionCode
 from app.core.tenant import TenantContext
 from app.models.after_sale import (
@@ -39,6 +41,7 @@ from app.schemas.after_sale import (
     AfterSaleReject,
 )
 from app.services.authorization import AuthorizationService
+from app.services.observability import emit_event, emit_operation
 
 _UNAVAILABLE = "售后单不存在或不可访问"
 _ELIGIBLE = {
@@ -270,6 +273,26 @@ class AfterSaleService:
             for item in built:
                 item.after_sale_order_id = after_sale.id
                 self.after_sales.add_item(item)
+            emit_event(
+                self.session,
+                self.context,
+                event_type=EventType.AFTER_SALE_CREATED,
+                aggregate_type=AggregateType.AFTER_SALE,
+                aggregate_id=after_sale.id,
+                reference_type="SALES_ORDER",
+                reference_id=order.id,
+                payload={"after_sale_no": after_sale.after_sale_no, "type": after_sale.type},
+            )
+            emit_operation(
+                self.session,
+                self.context,
+                action=OperationAction.CREATE.value,
+                module=OperationModule.AFTER_SALE.value,
+                resource_type="AFTER_SALE",
+                resource_id=after_sale.id,
+                resource_name=after_sale.after_sale_no,
+                description="创建售后申请",
+            )
             self.session.commit()
         except AppError:
             self.session.rollback()
@@ -367,6 +390,26 @@ class AfterSaleService:
                 self._create_return_order(order, items, warehouse_id)
                 order.status = AfterSaleStatus.WAITING_RETURN.value
                 order.refund_status = RefundStatus.NONE.value
+            emit_event(
+                self.session,
+                self.context,
+                event_type=EventType.AFTER_SALE_APPROVED,
+                aggregate_type=AggregateType.AFTER_SALE,
+                aggregate_id=order.id,
+                reference_type="SALES_ORDER",
+                reference_id=order.sales_order_id,
+                payload={"after_sale_no": order.after_sale_no, "type": order.type},
+            )
+            emit_operation(
+                self.session,
+                self.context,
+                action=OperationAction.APPROVE.value,
+                module=OperationModule.AFTER_SALE.value,
+                resource_type="AFTER_SALE",
+                resource_id=order.id,
+                resource_name=order.after_sale_no,
+                description="审核通过售后申请",
+            )
             self.session.commit()
         except AppError:
             self.session.rollback()

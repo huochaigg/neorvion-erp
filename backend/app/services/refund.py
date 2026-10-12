@@ -8,7 +8,9 @@ from decimal import Decimal
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.core.events import AggregateType, EventType
 from app.core.exceptions import AppError
+from app.core.operations import OperationAction, OperationModule
 from app.core.permissions import PermissionCode
 from app.core.tenant import TenantContext
 from app.models.after_sale import AfterSaleStatus, AfterSaleType, RefundStatus
@@ -24,6 +26,7 @@ from app.schemas.refund import (
     RefundRecordOut,
 )
 from app.services.authorization import AuthorizationService
+from app.services.observability import emit_event, emit_operation
 
 _UNAVAILABLE = "退款记录不存在或不可访问"
 _ZERO = Decimal("0")
@@ -198,6 +201,36 @@ class RefundService:
                 after_sale.refund_status = RefundStatus.SUCCESS.value
                 after_sale.status = AfterSaleStatus.COMPLETED.value
                 after_sale.completed_at = datetime.now()
+                emit_event(
+                    self.session,
+                    self.context,
+                    event_type=EventType.AFTER_SALE_COMPLETED,
+                    aggregate_type=AggregateType.AFTER_SALE,
+                    aggregate_id=after_sale.id,
+                    reference_type="SALES_ORDER",
+                    reference_id=after_sale.sales_order_id,
+                    payload={"after_sale_no": after_sale.after_sale_no},
+                )
+            emit_event(
+                self.session,
+                self.context,
+                event_type=EventType.REFUND_SUCCESS,
+                aggregate_type=AggregateType.REFUND,
+                aggregate_id=record.id,
+                reference_type="AFTER_SALE",
+                reference_id=after_sale.id,
+                payload={"refund_no": record.refund_no, "amount": str(record.amount)},
+            )
+            emit_operation(
+                self.session,
+                self.context,
+                action=OperationAction.CONFIRM.value,
+                module=OperationModule.REFUND.value,
+                resource_type="REFUND",
+                resource_id=record.id,
+                resource_name=record.refund_no,
+                description="确认售后退款成功",
+            )
             self.session.commit()
         except AppError:
             self.session.rollback()

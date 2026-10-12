@@ -7,6 +7,7 @@ from datetime import datetime
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.core.events import AggregateType, EventType
 from app.core.exceptions import AppError
 from app.core.permissions import PermissionCode
 from app.core.tenant import TenantContext
@@ -32,6 +33,7 @@ from app.schemas.return_order import (
 )
 from app.services.authorization import AuthorizationService
 from app.services.inventory import InventoryService
+from app.services.observability import emit_event
 
 _UNAVAILABLE = "退货单不存在或不可访问"
 _EDITABLE = {
@@ -306,6 +308,16 @@ class ReturnOrderService:
             after_sale.status = AfterSaleStatus.COMPLETED.value
             after_sale.completed_at = datetime.now()
             after_sale.refund_status = RefundStatus.NONE.value
+            emit_event(
+                self.session,
+                self.context,
+                event_type=EventType.AFTER_SALE_COMPLETED,
+                aggregate_type=AggregateType.AFTER_SALE,
+                aggregate_id=after_sale.id,
+                reference_type="SALES_ORDER",
+                reference_id=after_sale.sales_order_id,
+                payload={"after_sale_no": after_sale.after_sale_no},
+            )
             return
         if after_sale.type == AfterSaleType.RETURN_AND_REFUND.value:
             after_sale.status = AfterSaleStatus.WAITING_REFUND.value

@@ -8,6 +8,7 @@ from decimal import Decimal
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.core.events import AggregateType, EventType
 from app.core.exceptions import AppError
 from app.core.permissions import PermissionCode
 from app.core.tenant import TenantContext
@@ -28,6 +29,7 @@ from app.schemas.supplier_refund import (
     SupplierRefundRecordOut,
 )
 from app.services.authorization import AuthorizationService
+from app.services.observability import emit_event
 from app.services.purchase_return_state import require_transition
 
 _UNAVAILABLE = "供应商退款记录不存在或不可访问"
@@ -216,6 +218,14 @@ class SupplierRefundService:
                     require_transition(record.status, PurchaseReturnStatus.COMPLETED.value)
                     record.status = PurchaseReturnStatus.COMPLETED.value
                     record.completed_at = datetime.now()
+                    emit_event(
+                        self.session,
+                        self.context,
+                        event_type=EventType.PURCHASE_RETURN_COMPLETED,
+                        aggregate_type=AggregateType.PURCHASE_RETURN,
+                        aggregate_id=record.id,
+                        payload={"purchase_return_no": record.purchase_return_no},
+                    )
             self.session.commit()
         except AppError:
             self.session.rollback()

@@ -9,9 +9,11 @@ from app.models.after_sale import (
     AfterSaleType,
     RefundStatus,
 )
+from app.models.async_task import AsyncTask, AsyncTaskLog
 from app.models.carrier import Carrier, CarrierStatus, CarrierType
 from app.models.customer import Customer, CustomerStatus
 from app.models.inventory import Inventory, InventoryTransaction, InventoryTransactionType
+from app.models.operation_log import OperationLog
 from app.models.outbound import (
     OutboundOrder,
     OutboundOrderItem,
@@ -78,6 +80,7 @@ from app.models.supplier_refund import (
     SupplierRefundRecord,
     SupplierRefundRecordStatus,
 )
+from app.models.system_event import SystemEvent
 from app.models.tenant import MemberRole, MemberStatus, Tenant, TenantMember, TenantStatus
 from app.models.user import User, UserStatus
 from app.models.warehouse import Warehouse, WarehouseStatus, WarehouseType
@@ -88,6 +91,8 @@ __all__ = [
     "AfterSaleOrder",
     "AfterSaleStatus",
     "AfterSaleType",
+    "AsyncTask",
+    "AsyncTaskLog",
     "Base",
     "Brand",
     "Carrier",
@@ -106,6 +111,7 @@ __all__ = [
     "OutboundOrderStatus",
     "OutboundPick",
     "OutboundPickLine",
+    "OperationLog",
     "Permission",
     "Product",
     "ProductCategory",
@@ -161,6 +167,7 @@ __all__ = [
     "TrackingEventStatus",
     "Supplier",
     "SupplierStatus",
+    "SystemEvent",
     "Tenant",
     "TenantMember",
     "TenantStatus",

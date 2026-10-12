@@ -53,6 +53,7 @@ class Settings(BaseSettings):
     rsa_previous_key_id: str = ""
     rsa_previous_private_key_path: str = ""
     rsa_challenge_ttl_seconds: int = 300
+    export_dir: str = str(_BACKEND_DIR / "var" / "exports")
 
     def access_token_ttl_seconds(self) -> int:
         return self.jwt_access_expire_minutes * 60

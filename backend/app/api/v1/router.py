@@ -6,9 +6,11 @@ from app.api.v1.auth import router as auth_router
 from app.api.v1.brands import router as brand_router
 from app.api.v1.carriers import router as carrier_router
 from app.api.v1.customers import router as customer_router
+from app.api.v1.events import router as event_router
 from app.api.v1.health import router as health_router
 from app.api.v1.inventory import router as inventory_router
 from app.api.v1.inventory import sku_router as product_sku_router
+from app.api.v1.operation_logs import router as operation_log_router
 from app.api.v1.outbound_orders import router as outbound_order_router
 from app.api.v1.permissions import router as permission_router
 from app.api.v1.product_categories import router as product_category_router
@@ -26,6 +28,7 @@ from app.api.v1.stock_transfers import router as stock_transfer_router
 from app.api.v1.stocktakes import router as stocktake_router
 from app.api.v1.supplier_refunds import router as supplier_refund_router
 from app.api.v1.suppliers import router as supplier_router
+from app.api.v1.tasks import router as task_router
 from app.api.v1.tenants import router as tenant_router
 from app.api.v1.warehouses import router as warehouse_router
 
@@ -58,3 +61,6 @@ api_router.include_router(after_sale_router)
 api_router.include_router(return_order_router)
 api_router.include_router(refund_router)
 api_router.include_router(analytics_router)
+api_router.include_router(event_router)
+api_router.include_router(operation_log_router)
+api_router.include_router(task_router)

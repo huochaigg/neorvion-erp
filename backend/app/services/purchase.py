@@ -8,7 +8,9 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.core.events import AggregateType, EventType
 from app.core.exceptions import AppError
+from app.core.operations import OperationAction, OperationModule
 from app.core.permissions import PermissionCode
 from app.core.tenant import TenantContext
 from app.models.product import ProductSku, SkuStatus
@@ -33,6 +35,7 @@ from app.schemas.purchase import (
     PurchaseOrderUpdate,
 )
 from app.services.authorization import AuthorizationService
+from app.services.observability import emit_event, emit_operation
 from app.services.purchase_state import (
     CANCELLABLE_STATUSES,
     PENDING_APPROVAL,
@@ -143,6 +146,24 @@ class PurchaseOrderService:
             self.session.flush()
             order.order_no = self._auto_order_no(order.id)
             self._insert_items(order.id, payload.items, sku_map)
+            emit_event(
+                self.session,
+                self.context,
+                event_type=EventType.PURCHASE_ORDER_CREATED,
+                aggregate_type=AggregateType.PURCHASE_ORDER,
+                aggregate_id=order.id,
+                payload={"order_no": order.order_no, "warehouse_id": order.warehouse_id},
+            )
+            emit_operation(
+                self.session,
+                self.context,
+                action=OperationAction.CREATE.value,
+                module=OperationModule.PURCHASE.value,
+                resource_type="PURCHASE_ORDER",
+                resource_id=order.id,
+                resource_name=order.order_no,
+                description="创建采购单",
+            )
             self.session.commit()
         except AppError:
             self.session.rollback()
@@ -318,6 +339,26 @@ class PurchaseOrderService:
                     code=40095,
                     status_code=400,
                     data={"error": "PURCHASE_ORDER_STATE_CONFLICT"},
+                )
+            if target == WAITING_RECEIPT:
+                current = self.orders.get_in_tenant(order_id)
+                emit_event(
+                    self.session,
+                    self.context,
+                    event_type=EventType.PURCHASE_ORDER_APPROVED,
+                    aggregate_type=AggregateType.PURCHASE_ORDER,
+                    aggregate_id=order_id,
+                    payload={"order_no": None if current is None else current.order_no},
+                )
+                emit_operation(
+                    self.session,
+                    self.context,
+                    action=OperationAction.APPROVE.value,
+                    module=OperationModule.PURCHASE.value,
+                    resource_type="PURCHASE_ORDER",
+                    resource_id=order_id,
+                    resource_name=None if current is None else current.order_no,
+                    description="审核通过采购单",
                 )
             self.session.commit()
         except AppError:

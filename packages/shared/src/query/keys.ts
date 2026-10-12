@@ -372,6 +372,40 @@ export function purchaseOrderQueryKey(tenantId: number | null, orderId: number |
   return ['tenant', tenantId, 'purchase-order', orderId] as const;
 }
 
+export function eventsQueryKey(
+  tenantId: number | null,
+  filters?: Record<string, unknown>,
+) {
+  return ['tenant', tenantId, 'events', filters ?? {}] as const;
+}
+
+export function eventQueryKey(tenantId: number | null, eventId: string | null) {
+  return ['tenant', tenantId, 'event', eventId] as const;
+}
+
+export function operationLogsQueryKey(
+  tenantId: number | null,
+  filters?: Record<string, unknown>,
+) {
+  return ['tenant', tenantId, 'operation-logs', filters ?? {}] as const;
+}
+
+export function operationLogQueryKey(tenantId: number | null, logId: number | null) {
+  return ['tenant', tenantId, 'operation-log', logId] as const;
+}
+
+export function tasksQueryKey(tenantId: number | null, filters?: Record<string, unknown>) {
+  return ['tenant', tenantId, 'tasks', filters ?? {}] as const;
+}
+
+export function taskQueryKey(tenantId: number | null, taskId: string | null) {
+  return ['tenant', tenantId, 'task', taskId] as const;
+}
+
+export function taskLogsQueryKey(tenantId: number | null, taskId: string | null) {
+  return ['tenant', tenantId, 'task-logs', taskId] as const;
+}
+
 export function analyticsQueryKey(
   tenantId: number | null,
   domain: string,

@@ -8,12 +8,14 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.core.events import AggregateType, EventType
 from app.core.exceptions import AppError
+from app.core.operations import OperationAction, OperationModule
 from app.core.permissions import PermissionCode
 from app.core.tenant import TenantContext
 from app.models.carrier import CarrierStatus
 from app.models.outbound import OutboundOrderItem, OutboundOrderStatus
-from app.models.sales_order import SalesOrderItem
+from app.models.sales_order import SalesOrderItem, SalesOrderStatus
 from app.models.shipment import (
     Shipment,
     ShipmentItem,
@@ -39,6 +41,7 @@ from app.schemas.shipment import (
     TrackingEventOut,
 )
 from app.services.authorization import AuthorizationService
+from app.services.observability import emit_event, emit_operation
 from app.services.sales_order_state import apply_fulfillment_status
 
 _UNAVAILABLE = "物流单不存在或不可访问"
@@ -298,6 +301,26 @@ class ShipmentService:
             locked.shipped_at = datetime.now()
             locked.shipped_by = self.context.user_id
             self._sync_sales(sales, list(sales_items.values()), all_delivered=False)
+            emit_event(
+                self.session,
+                self.context,
+                event_type=EventType.SHIPMENT_SHIPPED,
+                aggregate_type=AggregateType.SHIPMENT,
+                aggregate_id=shipment_id,
+                reference_type="SALES_ORDER",
+                reference_id=sales.id,
+                payload={"shipment_no": locked.shipment_no, "sales_order_id": sales.id},
+            )
+            emit_operation(
+                self.session,
+                self.context,
+                action=OperationAction.CONFIRM.value,
+                module=OperationModule.SHIPMENT.value,
+                resource_type="SHIPMENT",
+                resource_id=shipment_id,
+                resource_name=locked.shipment_no,
+                description="确认发货",
+            )
             self.session.commit()
         except AppError:
             self.session.rollback()
@@ -442,6 +465,35 @@ class ShipmentService:
                 row.status == _DELIVERED or row.id == shipment.id for row in confirmed
             )
             self._sync_sales(sales, sales_items, all_delivered=all_delivered)
+            emit_event(
+                self.session,
+                self.context,
+                event_type=EventType.SHIPMENT_DELIVERED,
+                aggregate_type=AggregateType.SHIPMENT,
+                aggregate_id=shipment_id,
+                reference_type="SALES_ORDER",
+                reference_id=sales.id,
+                payload={"shipment_no": shipment.shipment_no, "sales_order_id": sales.id},
+            )
+            if sales.status == SalesOrderStatus.COMPLETED.value:
+                emit_event(
+                    self.session,
+                    self.context,
+                    event_type=EventType.SALES_ORDER_COMPLETED,
+                    aggregate_type=AggregateType.SALES_ORDER,
+                    aggregate_id=sales.id,
+                    payload={"order_no": sales.order_no},
+                )
+            emit_operation(
+                self.session,
+                self.context,
+                action=OperationAction.CONFIRM.value,
+                module=OperationModule.SHIPMENT.value,
+                resource_type="SHIPMENT",
+                resource_id=shipment_id,
+                resource_name=shipment.shipment_no,
+                description="物流签收",
+            )
             self.session.commit()
         except AppError:
             self.session.rollback()

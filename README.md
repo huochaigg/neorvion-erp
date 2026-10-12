@@ -2,7 +2,7 @@
 
 多租户跨境电商 ERP。当前仓库按里程碑持续迭代，**不要为每个版本重建项目**。
 
-当前里程碑：**V13**。当前有效范围见 `docs/current-state.md`。
+当前里程碑：**V14**。当前有效范围见 `docs/current-state.md`。
 
 ## 技术栈
 
@@ -28,7 +28,7 @@ neorvion-erp/
 │   │   ├── repositories/      # 持久化，禁止自行 commit
 │   │   ├── services/          # 业务规则与事务边界
 │   │   ├── agents/            # AI Agent 预留
-│   │   └── tasks/             # Celery 预留
+│   │   └── tasks/             # Redis Worker（报表导出 / Outbox）
 │   ├── alembic/
 │   └── tests/
 ├── docs/
@@ -77,6 +77,13 @@ uv sync
 uv run alembic upgrade head
 uv run python -m app.scripts.seed_permissions
 uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 8011
+```
+
+异步任务 / Outbox Worker（另开终端）：
+
+```bash
+cd backend
+uv run python -m app.tasks.worker
 ```
 
 验证：

@@ -476,3 +476,27 @@ AnalyticsAfterSaleReadContext = Annotated[
     TenantContext,
     Depends(require_permission(PermissionCode.ANALYTICS_AFTER_SALE_READ)),
 ]
+EventReadContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.EVENT_READ)),
+]
+OperationLogReadContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.OPERATION_LOG_READ)),
+]
+TaskReadContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.TASK_READ)),
+]
+TaskRetryContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.TASK_RETRY)),
+]
+TaskCancelContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.TASK_CANCEL)),
+]
+TaskDownloadContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.TASK_DOWNLOAD)),
+]

@@ -9,7 +9,9 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.core.events import AggregateType, EventType
 from app.core.exceptions import AppError
+from app.core.operations import OperationAction, OperationModule
 from app.core.permissions import PermissionCode
 from app.core.tenant import TenantContext
 from app.models.customer import Customer, CustomerStatus
@@ -41,6 +43,7 @@ from app.schemas.sales_order import (
 )
 from app.services.authorization import AuthorizationService
 from app.services.inventory import InventoryService
+from app.services.observability import emit_event, emit_operation, rollback_with_failed_log
 from app.services.sales_order_state import (
     CANCELLABLE_STATUSES,
     CANCELLED,
@@ -176,6 +179,24 @@ class SalesOrderService:
             self.session.flush()
             order.order_no = self._auto_order_no(order.id)
             self._insert_items(order.id, payload.items, sku_map)
+            emit_event(
+                self.session,
+                self.context,
+                event_type=EventType.SALES_ORDER_CREATED,
+                aggregate_type=AggregateType.SALES_ORDER,
+                aggregate_id=order.id,
+                payload={"order_no": order.order_no, "warehouse_id": order.warehouse_id},
+            )
+            emit_operation(
+                self.session,
+                self.context,
+                action=OperationAction.CREATE.value,
+                module=OperationModule.ORDER.value,
+                resource_type="SALES_ORDER",
+                resource_id=order.id,
+                resource_name=order.order_no,
+                description="创建销售订单",
+            )
             self.session.commit()
         except AppError:
             self.session.rollback()
@@ -361,9 +382,39 @@ class SalesOrderService:
             from app.services.outbound import OutboundOrderService
 
             OutboundOrderService(self.session, self.context).attach_initial(order_id)
+            emit_event(
+                self.session,
+                self.context,
+                event_type=EventType.SALES_ORDER_CONFIRMED,
+                aggregate_type=AggregateType.SALES_ORDER,
+                aggregate_id=order_id,
+                payload={
+                    "order_no": locked.order_no,
+                    "warehouse_id": locked.warehouse_id,
+                    "item_count": len(plan),
+                },
+            )
+            emit_operation(
+                self.session,
+                self.context,
+                action=OperationAction.CONFIRM.value,
+                module=OperationModule.ORDER.value,
+                resource_type="SALES_ORDER",
+                resource_id=order_id,
+                resource_name=locked.order_no,
+                description="确认销售订单并预占库存",
+            )
             self.session.commit()
-        except AppError:
-            self.session.rollback()
+        except AppError as exc:
+            rollback_with_failed_log(
+                self.session,
+                self.context,
+                exc,
+                action=OperationAction.CONFIRM.value,
+                module=OperationModule.ORDER.value,
+                resource_type="SALES_ORDER",
+                resource_id=order_id,
+            )
             raise
         except Exception:
             self.session.rollback()
@@ -452,6 +503,24 @@ class SalesOrderService:
             locked.cancelled_at = datetime.now()
             locked.cancelled_by = self.context.user_id
             locked.cancel_reason = payload.reason
+            emit_event(
+                self.session,
+                self.context,
+                event_type=EventType.SALES_ORDER_CANCELLED,
+                aggregate_type=AggregateType.SALES_ORDER,
+                aggregate_id=order_id,
+                payload={"order_no": locked.order_no, "reason": payload.reason},
+            )
+            emit_operation(
+                self.session,
+                self.context,
+                action=OperationAction.CANCEL.value,
+                module=OperationModule.ORDER.value,
+                resource_type="SALES_ORDER",
+                resource_id=order_id,
+                resource_name=locked.order_no,
+                description="取消销售订单",
+            )
             self.session.commit()
         except AppError:
             self.session.rollback()

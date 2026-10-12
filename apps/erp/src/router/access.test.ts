@@ -42,6 +42,8 @@ describe('动态权限菜单与页面守卫', () => {
     assert.equal(paths.includes('/system/members'), true);
     assert.equal(paths.includes('/system/roles'), true);
     assert.equal(paths.includes('/system/permissions'), true);
+    assert.equal(paths.includes('/system/events'), false);
+    assert.equal(paths.includes('/system/tasks'), false);
     assert.equal(paths.includes('/inventory'), false);
     assert.equal(paths.includes('/warehouses'), false);
     assert.equal(paths.includes('/purchases'), false);
@@ -214,6 +216,12 @@ describe('动态权限菜单与页面守卫', () => {
     assert.equal(warehouseMenu.includes('/inventory'), true);
     assert.equal(warehouseMenu.includes('/warehouses'), true);
     assert.equal(adminMenu.includes('/system'), true);
+    const eventOnly = menuPaths(filterMenuRoutes(routes, [PERMISSION_CODE.eventRead]));
+    assert.equal(eventOnly.includes('/system/events'), true);
+    assert.equal(eventOnly.includes('/system/operation-logs'), false);
+    const eventMatch = matchRoute(routes, '/system/events');
+    assert.equal(pageAllowsAccess(eventMatch, [PERMISSION_CODE.eventRead]), true);
+    assert.equal(pageAllowsAccess(eventMatch, [PERMISSION_CODE.taskRead]), false);
     assert.notDeepEqual(warehouseMenu, adminMenu);
   });
 

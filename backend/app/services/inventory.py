@@ -7,7 +7,10 @@ from datetime import datetime
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.core.analytics import DEFAULT_LOW_STOCK_THRESHOLD
+from app.core.events import AggregateType, EventType
 from app.core.exceptions import AppError
+from app.core.operations import OperationAction, OperationModule
 from app.core.permissions import PermissionCode
 from app.core.tenant import TenantContext
 from app.models.inventory import Inventory, InventoryTransaction, InventoryTransactionType
@@ -34,6 +37,7 @@ from app.schemas.inventory import (
     SkuOptionOut,
 )
 from app.services.authorization import AuthorizationService
+from app.services.observability import emit_event, emit_operation
 
 _UNAVAILABLE = "库存不存在或不可访问"
 _SKU_UNAVAILABLE = "SKU 不存在或不可访问"
@@ -273,6 +277,43 @@ class InventoryService:
                 before_reserved=before_reserved,
                 after_reserved=inventory.reserved_quantity,
                 remark=payload.remark,
+            )
+            emit_event(
+                self.session,
+                self.context,
+                event_type=EventType.INVENTORY_ADJUSTED,
+                aggregate_type=AggregateType.INVENTORY,
+                aggregate_id=inventory.id,
+                payload={
+                    "sku_id": inventory.sku_id,
+                    "warehouse_id": inventory.warehouse_id,
+                    "change_quantity": change,
+                    "type": payload.type,
+                },
+            )
+            available = inventory.quantity - inventory.reserved_quantity
+            if available <= DEFAULT_LOW_STOCK_THRESHOLD:
+                emit_event(
+                    self.session,
+                    self.context,
+                    event_type=EventType.INVENTORY_LOW,
+                    aggregate_type=AggregateType.INVENTORY,
+                    aggregate_id=inventory.id,
+                    severity="WARNING",
+                    payload={
+                        "sku_id": inventory.sku_id,
+                        "available_quantity": available,
+                        "threshold": DEFAULT_LOW_STOCK_THRESHOLD,
+                    },
+                )
+            emit_operation(
+                self.session,
+                self.context,
+                action=OperationAction.UPDATE.value,
+                module=OperationModule.INVENTORY.value,
+                resource_type="INVENTORY",
+                resource_id=inventory.id,
+                description="手工调整库存",
             )
             self.session.commit()
             updated = self.inventories.get_in_tenant(inventory.id)

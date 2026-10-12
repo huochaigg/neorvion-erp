@@ -7,6 +7,7 @@ from datetime import datetime
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.core.events import AggregateType, EventType
 from app.core.exceptions import AppError
 from app.core.permissions import PermissionCode
 from app.core.tenant import TenantContext
@@ -36,6 +37,7 @@ from app.schemas.purchase_return_outbound import (
 )
 from app.services.authorization import AuthorizationService
 from app.services.inventory import InventoryService
+from app.services.observability import emit_event
 from app.services.purchase_return_state import OUTBOUND_STATUSES, require_transition
 
 _UNAVAILABLE = "采购退货出库单不存在或不可访问"
@@ -308,6 +310,14 @@ class PurchaseReturnOutboundService:
                 record.status = PurchaseReturnStatus.COMPLETED.value
                 record.completed_at = datetime.now()
                 record.refund_status = PurchaseReturnRefundStatus.NONE.value
+                emit_event(
+                    self.session,
+                    self.context,
+                    event_type=EventType.PURCHASE_RETURN_COMPLETED,
+                    aggregate_type=AggregateType.PURCHASE_RETURN,
+                    aggregate_id=record.id,
+                    payload={"purchase_return_no": record.purchase_return_no},
+                )
                 return
             require_transition(record.status, PurchaseReturnStatus.WAITING_REFUND.value)
             record.status = PurchaseReturnStatus.WAITING_REFUND.value
@@ -317,6 +327,14 @@ class PurchaseReturnOutboundService:
                 record.status = PurchaseReturnStatus.COMPLETED.value
                 record.completed_at = datetime.now()
                 record.refund_status = PurchaseReturnRefundStatus.NONE.value
+                emit_event(
+                    self.session,
+                    self.context,
+                    event_type=EventType.PURCHASE_RETURN_COMPLETED,
+                    aggregate_type=AggregateType.PURCHASE_RETURN,
+                    aggregate_id=record.id,
+                    payload={"purchase_return_no": record.purchase_return_no},
+                )
             return
         if any_out and record.status == PurchaseReturnStatus.WAITING_OUTBOUND.value:
             require_transition(record.status, PurchaseReturnStatus.PARTIALLY_RETURNED.value)

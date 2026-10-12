@@ -34,6 +34,30 @@ export const PAGE_COMPONENTS: Record<PageKey, LazyExoticComponent<ComponentType<
     const module = await import('@/pages/system/PermissionsPage');
     return { default: module.PermissionsPage };
   }),
+  EventList: lazy(async () => {
+    const module = await import('@/pages/system/EventListPage');
+    return { default: module.EventListPage };
+  }),
+  EventDetail: lazy(async () => {
+    const module = await import('@/pages/system/EventDetailPage');
+    return { default: module.EventDetailPage };
+  }),
+  OperationLogList: lazy(async () => {
+    const module = await import('@/pages/system/OperationLogListPage');
+    return { default: module.OperationLogListPage };
+  }),
+  OperationLogDetail: lazy(async () => {
+    const module = await import('@/pages/system/OperationLogDetailPage');
+    return { default: module.OperationLogDetailPage };
+  }),
+  TaskList: lazy(async () => {
+    const module = await import('@/pages/system/TaskListPage');
+    return { default: module.TaskListPage };
+  }),
+  TaskDetail: lazy(async () => {
+    const module = await import('@/pages/system/TaskDetailPage');
+    return { default: module.TaskDetailPage };
+  }),
   ProductList: lazy(async () => {
     const module = await import('@/pages/products/ProductListPage');
     return { default: module.ProductListPage };

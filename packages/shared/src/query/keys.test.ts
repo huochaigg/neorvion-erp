@@ -31,6 +31,8 @@ import {
   purchaseReturnQueryKey,
   supplierRefundsQueryKey,
   analyticsQueryKey,
+  eventsQueryKey,
+  tasksQueryKey,
 } from './keys';
 
 describe('query keys', () => {
@@ -88,6 +90,11 @@ describe('query keys', () => {
     assert.notDeepEqual(
       analyticsQueryKey(1, 'sales-summary', { startDate: '2026-10-01' }),
       analyticsQueryKey(2, 'sales-summary', { startDate: '2026-10-01' }),
+    );
+    assert.notDeepEqual(eventsQueryKey(1), eventsQueryKey(2));
+    assert.notDeepEqual(
+      tasksQueryKey(1, { status: 'RUNNING' }),
+      tasksQueryKey(1, { status: 'FAILED' }),
     );
     assert.notDeepEqual(tenantMembersQueryKey(1), tenantMembersQueryKey(2));
     assert.notDeepEqual(

@@ -32,8 +32,10 @@ from app.schemas.analytics import (
     TransactionTypePoint,
     WarehouseInventorySummaryOut,
 )
+from app.schemas.async_task import AsyncTaskOut, ReportExportCreate
 from app.schemas.common import ApiResponse, ok
 from app.services.analytics import AnalyticsService
+from app.services.async_task import AsyncTaskService
 
 router = APIRouter(prefix="/analytics", tags=["analytics"])
 
@@ -391,6 +393,59 @@ def after_sale_types(
             start_date, end_date, warehouse_id
         )
     )
+
+
+@router.post(
+    "/sales/export-tasks",
+    response_model=ApiResponse[AsyncTaskOut],
+    summary="异步导出销售按日汇总",
+)
+def create_sales_export_task(
+    context: AnalyticsSalesReadContext,
+    session: DbSession,
+    start_date: StartDate = None,
+    end_date: EndDate = None,
+    warehouse_id: WarehouseId = None,
+) -> ApiResponse[AsyncTaskOut]:
+    payload = ReportExportCreate(
+        kind="sales_trend", start_date=start_date, end_date=end_date, warehouse_id=warehouse_id
+    )
+    return ok(AsyncTaskService(session, context).create_report_export(payload), "已创建导出任务")
+
+
+@router.post(
+    "/purchases/export-tasks",
+    response_model=ApiResponse[AsyncTaskOut],
+    summary="异步导出采购按日汇总",
+)
+def create_purchase_export_task(
+    context: AnalyticsPurchaseReadContext,
+    session: DbSession,
+    start_date: StartDate = None,
+    end_date: EndDate = None,
+    warehouse_id: WarehouseId = None,
+) -> ApiResponse[AsyncTaskOut]:
+    payload = ReportExportCreate(
+        kind="purchase_trend", start_date=start_date, end_date=end_date, warehouse_id=warehouse_id
+    )
+    return ok(AsyncTaskService(session, context).create_report_export(payload), "已创建导出任务")
+
+
+@router.post(
+    "/inventory/export-tasks",
+    response_model=ApiResponse[AsyncTaskOut],
+    summary="异步导出低库存列表",
+)
+def create_inventory_export_task(
+    context: AnalyticsInventoryReadContext,
+    session: DbSession,
+    warehouse_id: WarehouseId = None,
+    low_stock_threshold: Threshold = 10,
+) -> ApiResponse[AsyncTaskOut]:
+    payload = ReportExportCreate(
+        kind="low_stock", warehouse_id=warehouse_id, low_stock_threshold=low_stock_threshold
+    )
+    return ok(AsyncTaskService(session, context).create_report_export(payload), "已创建导出任务")
 
 
 @router.get("/sales/trend.csv", summary="导出销售按日汇总 CSV")

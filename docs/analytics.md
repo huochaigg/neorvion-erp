@@ -80,8 +80,8 @@ V13 现有索引已够用：`sales_orders` / `purchase_orders` / `after_sale_ord
 | `analytics:inventory:read` | OWNER / ADMIN / WAREHOUSE / VIEWER |
 | `analytics:after_sale:read` | OWNER / ADMIN / VIEWER |
 
-导出沿用对应 read，不另设 `analytics:export`。CSV 由后端按筛选生成，最大 10000 行。
+导出沿用对应 read，不另设 `analytics:export`。同步 CSV 仍保留，最大 10000 行。大数据量请走 V14 异步导出：`POST /api/v1/analytics/*/export-tasks` 创建 `REPORT_EXPORT` 任务，结果从任务中心下载。详见 `docs/async-tasks.md`。
 
 ## Agent
 
-后续 Copilot 应调用这些受控 API，不要让 Agent 拼统计 SQL。V13 本身不开发 Agent。
+后续 Copilot 应调用这些受控 API，不要让 Agent 拼统计 SQL。V13 / V14 本身不开发 Agent。

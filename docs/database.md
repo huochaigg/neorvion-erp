@@ -62,6 +62,14 @@
 
 当前里程碑 V13 不增加业务表。报表实时聚合现有订单 / 采购 / 库存 / 售后表，不建日报表。
 
+当前里程碑 V14 增加：
+
+- `system_events`：业务事件 + Outbox。`event_id` 全局唯一。索引 `tenant_id + occurred_at`、`tenant_id + event_type + occurred_at`、`tenant_id + aggregate_type + aggregate_id`、`status + created_at`
+- `operation_logs`：应用层操作审计。索引 `tenant_id + occurred_at`、`tenant_id + operator_user_id + occurred_at`、`tenant_id + resource_type + resource_id`
+- `async_tasks`：异步任务。`task_id` 全局唯一。索引 `tenant_id + created_at`、`tenant_id + status + created_at`
+- `async_task_logs`：任务步骤日志
+- 迁移 `20261012_0019`
+
 当前里程碑 V12 增加：
 
 - `purchase_returns` / `purchase_return_items`：采购退货单。单号 `PRT` + 年 + 6 位 id。不修改采购明细计划数量和已收数量

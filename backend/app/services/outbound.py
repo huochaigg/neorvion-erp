@@ -7,7 +7,9 @@ from datetime import datetime
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.core.events import AggregateType, EventType
 from app.core.exceptions import AppError
+from app.core.operations import OperationAction, OperationModule
 from app.core.permissions import PermissionCode
 from app.core.tenant import TenantContext
 from app.models.outbound import (
@@ -38,6 +40,7 @@ from app.schemas.outbound import (
 )
 from app.services.authorization import AuthorizationService
 from app.services.inventory import InventoryService
+from app.services.observability import emit_event, emit_operation
 from app.services.sales_order_state import (
     OUTBOUNDABLE_STATUSES,
     apply_fulfillment_status,
@@ -362,6 +365,26 @@ class OutboundOrderService:
             if fresh_sales is None:
                 raise AppError("销售订单不存在或不可访问", code=40471, status_code=404)
             self._sync_sales_status(fresh_sales, list(fresh_sales_items.values()))
+            emit_event(
+                self.session,
+                self.context,
+                event_type=EventType.OUTBOUND_CONFIRMED,
+                aggregate_type=AggregateType.OUTBOUND_ORDER,
+                aggregate_id=outbound_id,
+                reference_type="SALES_ORDER",
+                reference_id=fresh_sales.id,
+                payload={"outbound_no": locked.outbound_no, "sales_order_id": fresh_sales.id},
+            )
+            emit_operation(
+                self.session,
+                self.context,
+                action=OperationAction.CONFIRM.value,
+                module=OperationModule.OUTBOUND.value,
+                resource_type="OUTBOUND_ORDER",
+                resource_id=outbound_id,
+                resource_name=locked.outbound_no,
+                description="确认销售出库",
+            )
             self.session.commit()
         except AppError:
             self.session.rollback()

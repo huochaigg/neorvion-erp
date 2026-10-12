@@ -56,6 +56,9 @@ describe('数据中心 UI 规则', () => {
     assert.equal(pageAllowsAccess(inventoryMatch, [PERMISSION_CODE.analyticsInventoryRead]), true);
     const afterMatch = matchRoute(routes, '/analytics/after-sales');
     assert.equal(pageAllowsAccess(afterMatch, [PERMISSION_CODE.analyticsAfterSaleRead]), true);
+    const eventMatch = matchRoute(routes, '/system/events');
+    assert.equal(pageAllowsAccess(eventMatch, [PERMISSION_CODE.eventRead]), true);
+    assert.equal(pageAllowsAccess(eventMatch, [PERMISSION_CODE.operationLogRead]), false);
     const dashboard = matchRoute(routes, '/dashboard');
     assert.equal(pageAllowsAccess(dashboard, []), true);
   });

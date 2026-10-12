@@ -6,7 +6,9 @@ from datetime import datetime
 
 from sqlalchemy.orm import Session
 
+from app.core.events import AggregateType, EventType
 from app.core.exceptions import AppError
+from app.core.operations import OperationAction, OperationModule
 from app.core.permissions import PermissionCode
 from app.core.tenant import TenantContext
 from app.models.product import ProductSku
@@ -31,6 +33,7 @@ from app.schemas.purchase_receipt import (
 )
 from app.services.authorization import AuthorizationService
 from app.services.inventory import InventoryService
+from app.services.observability import emit_event, emit_operation
 from app.services.purchase_state import (
     PARTIALLY_RECEIVED,
     RECEIVABLE_STATUSES,
@@ -301,6 +304,26 @@ class PurchaseReceiptService:
             if fresh_order is None:
                 raise AppError("采购单不存在或不可访问", code=40470, status_code=404)
             self._sync_purchase_status(fresh_order, list(fresh_items.values()))
+            emit_event(
+                self.session,
+                self.context,
+                event_type=EventType.PURCHASE_RECEIPT_CONFIRMED,
+                aggregate_type=AggregateType.PURCHASE_RECEIPT,
+                aggregate_id=receipt_id,
+                reference_type="PURCHASE_ORDER",
+                reference_id=fresh_order.id,
+                payload={"receipt_no": locked.receipt_no, "purchase_order_id": fresh_order.id},
+            )
+            emit_operation(
+                self.session,
+                self.context,
+                action=OperationAction.CONFIRM.value,
+                module=OperationModule.PURCHASE_RECEIPT.value,
+                resource_type="PURCHASE_RECEIPT",
+                resource_id=receipt_id,
+                resource_name=locked.receipt_no,
+                description="确认采购收货入库",
+            )
             self.session.commit()
         except AppError:
             self.session.rollback()

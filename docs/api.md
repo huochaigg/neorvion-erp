@@ -16,7 +16,7 @@
 
 `GET /api/v1/health`
 
-依赖不可用时 HTTP 仍为 200，字段标记 `unavailable`。当前 `milestone` 为 `V13`。
+依赖不可用时 HTTP 仍为 200，字段标记 `unavailable`。当前 `milestone` 为 `V14`。
 
 ## 认证
 
@@ -243,5 +243,25 @@
 - `GET /api/v1/analytics/sales/trend.csv`
 - `GET /api/v1/analytics/purchases/trend.csv`
 - `GET /api/v1/analytics/inventory/low-stock.csv`
+- `POST /api/v1/analytics/sales/export-tasks`
+- `POST /api/v1/analytics/purchases/export-tasks`
+- `POST /api/v1/analytics/inventory/export-tasks`
+
+## 事件 / 操作日志 / 任务（V14）
+
+详见 `docs/events.md`、`docs/operation-logs.md`、`docs/async-tasks.md`。列表默认按时间倒序。操作日志只读。
+
+- `GET /api/v1/events`
+- `GET /api/v1/events/{event_id}`
+- `GET /api/v1/operation-logs`
+- `GET /api/v1/operation-logs/{id}`
+- `GET /api/v1/tasks`
+- `GET /api/v1/tasks/{task_id}`
+- `GET /api/v1/tasks/{task_id}/logs`
+- `GET /api/v1/tasks/{task_id}/download`
+- `POST /api/v1/tasks/{task_id}/retry`
+- `POST /api/v1/tasks/{task_id}/cancel`
+
+请求/响应带 `X-Request-ID`。Worker：`uv run python -m app.tasks.worker`。
 
 Swagger：http://localhost:8011/docs

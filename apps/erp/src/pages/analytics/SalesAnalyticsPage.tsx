@@ -10,9 +10,10 @@ import {
   type TopSku,
 } from '@neorvion/shared';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Button, Card } from 'antd';
+import { App, Button, Card } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { useMemo, useState } from 'react';
+import { createSalesExportTask } from '@/api/tasks';
 import {
   exportSalesTrendCsv,
   fetchSalesStatus,
@@ -33,6 +34,7 @@ import { defaultAnalyticsRange, rangeToAnalyticsParams } from '@/lib/analytics-r
 import type { PageProps } from '@/router/types';
 
 export function SalesAnalyticsPage(props: PageProps) {
+  const { message } = App.useApp();
   const { tenantId } = usePermissions();
   const queryClient = useQueryClient();
   const [range, setRange] = useState(defaultAnalyticsRange);
@@ -159,7 +161,18 @@ export function SalesAnalyticsPage(props: PageProps) {
           void queryClient.invalidateQueries({ queryKey: ['tenant', tenantId, 'analytics'] });
         }}
         extra={
-          <Button onClick={() => void exportSalesTrendCsv(params)}>导出按日汇总</Button>
+          <>
+            <Button onClick={() => void exportSalesTrendCsv(params)}>同步导出</Button>
+            <Button
+              onClick={() => {
+                void createSalesExportTask(params)
+                  .then(() => message.success('已创建异步导出任务，请到任务中心查看'))
+                  .catch(() => message.error('创建导出任务失败'));
+              }}
+            >
+              异步导出
+            </Button>
+          </>
         }
       />
       <KpiGrid>

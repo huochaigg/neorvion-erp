@@ -1,6 +1,6 @@
 # 架构说明
 
-当前里程碑：V13。当前有效范围见 `docs/current-state.md`。
+当前里程碑：V14。当前有效范围见 `docs/current-state.md`。
 
 ## 目标
 
@@ -66,8 +66,9 @@
 
 AI 与异步：
 
-- `app/agents`：后续 OpenAI Agents SDK，Tool 调 Service。
-- `app/tasks`：后续 Celery。
+- `app/agents`：后续 OpenAI Agents SDK，Tool 调 Service。V14 不开发 Agent。
+- `app/tasks`：Redis List Worker + MySQL 任务表。不使用 Celery / FastAPI BackgroundTasks 跑关键长任务。
+- `system_events`：业务事件 + Outbox，与主事务同写。
 
 ## 端口
 

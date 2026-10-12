@@ -1,6 +1,6 @@
 # 当前状态
 
-有效里程碑：**V13**。以本文件和当前代码为准。旧版本文档只描述当时范围。
+有效里程碑：**V14**。以本文件和当前代码为准。旧版本文档只描述当时范围。
 
 ## 已完成
 
@@ -16,10 +16,15 @@
 - V11 销售售后、退货入库、退款状态
 - V12 采购退货、退货出库、供应商退款状态
 - V13 经营总览、销售 / 采购 / 库存 / 售后报表、统一统计口径、CSV 导出
+- V14 业务事件中心、操作审计日志、异步任务中心、报表异步导出、request_id
 
 ## 报表
 
-Analytics 当前实时从 MySQL 聚合。暂未引入汇总表、OLAP、Redis Analytics Cache。口径见 `docs/analytics.md`。为后续 V14 / Agent 提供稳定只读统计 API。
+Analytics 当前实时从 MySQL 聚合。暂未引入汇总表、OLAP、Redis Analytics Cache。口径见 `docs/analytics.md`。V14 增加异步导出任务，同步 CSV 仍保留。
+
+## 事件 / 任务
+
+事件存在 MySQL `system_events`（Outbox）。任务状态在 `async_tasks`，Redis List 只投递 `task_id`。Worker：`uv run python -m app.tasks.worker`。尚未：Kafka、OpenTelemetry、通知中心、Agent Event Consumer。
 
 ## 采购正向与逆向
 
@@ -68,7 +73,8 @@ Analytics 当前实时从 MySQL 聚合。暂未引入汇总表、OLAP、Redis An
 - 售后 / 采购退货可退数量占用与 `SELECT FOR UPDATE`
 - RefundRecord / SupplierRefundRecord 预留给支付渠道对账
 - Analytics 只读聚合 API（销售 / 采购 / 库存 / 售后 summary、趋势、Top N）
+- EventPublisher / OperationLog / AsyncTask + Redis 队列，供后续 Agent 复用只读查询与长任务
 
 ## 明确未做
 
-真实银行退款、应付账款、采购发票、财务凭证、税务、采购换货、补货单、次品库存台账、复杂质检、平台售后同步、换货重新发货、真实承运商 API、库位批次、日报表、OLAP、AI Agent。
+真实银行退款、应付账款、采购发票、财务凭证、税务、采购换货、补货单、次品库存台账、复杂质检、平台售后同步、换货重新发货、真实承运商 API、库位批次、日报表、OLAP、Kafka、OpenTelemetry、站内通知、AI Agent。

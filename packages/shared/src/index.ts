@@ -28,6 +28,26 @@ export {
   formatAnalyticsRate,
   toChartNumber,
 } from './types/analytics';
+export type {
+  AsyncTask,
+  AsyncTaskList,
+  AsyncTaskLog,
+  OperationLog,
+  OperationLogList,
+  SystemEvent,
+  SystemEventList,
+} from './types/platform';
+export {
+  EVENT_SEVERITY,
+  EVENT_SEVERITY_LABEL,
+  EVENT_STATUS_LABEL,
+  OPERATION_RESULT_LABEL,
+  TASK_STATUS,
+  TASK_STATUS_LABEL,
+  eventBusinessPath,
+  eventSeverityLabel,
+  taskStatusLabel,
+} from './types/platform';
 export { ApiError } from './errors/api-error';
 export type { TokenPayload, UserProfile, AuthPublicKey, EncryptedPasswordPayload } from './types/auth';
 export { AUTH_ERROR_CODE, SESSION_EXPIRED_MESSAGE } from './types/auth';
@@ -474,6 +494,13 @@ export {
   purchaseReturnOutboundQueryKey,
   supplierRefundsQueryKey,
   supplierRefundQueryKey,
+  eventsQueryKey,
+  eventQueryKey,
+  operationLogsQueryKey,
+  operationLogQueryKey,
+  tasksQueryKey,
+  taskQueryKey,
+  taskLogsQueryKey,
   analyticsQueryKey,
   isTenantScopedQueryKey,
   tenantIdFromQueryKey,
