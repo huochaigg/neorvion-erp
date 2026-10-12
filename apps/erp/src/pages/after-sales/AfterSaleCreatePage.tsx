@@ -241,7 +241,7 @@ export function AfterSaleCreatePage(props: PageProps) {
               本次退货 {totalReturn}，申请退款 {formatSalesAmount(totalRefund)}
             </p>
           </Card>
-          <Card title="售后明细">
+          <Card title="售后明细" className='mt-4!'>
             <AppTable
               rowKey="sales_order_item_id"
               size="small"

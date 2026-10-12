@@ -40,9 +40,9 @@ flowchart LR
 
 ### 状态
 
-- Zustand：Access Token、当前租户 UI、`isSwitching`
-- React Query：服务端数据。租户 Key 必须 `['tenant', tenantId, ...]`
-- 切换租户：取消并移除旧 tenant 查询，不清空整个 QueryClient
+- Zustand：Access Token、当前租户 UI、`isSwitching`。ERP 多页签在子应用内 `useTabsStore`（persist / localStorage），不放进 Shell。Tab UI 用 `@sinm/react-chrome-tabs`，不承载页面内容
+- React Query：服务端数据。租户 Key 必须 `['tenant', tenantId, ...]`。不要用 React Query 存 Tab UI 状态
+- 切换租户：取消并移除旧 tenant 查询，不清空整个 QueryClient；ERP Tab 重置为工作台
 
 ### 样式
 

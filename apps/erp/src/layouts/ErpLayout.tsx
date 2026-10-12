@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import { useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { AppBreadcrumb } from '@/components/AppBreadcrumb';
+import { TabBar } from '@/components/TabBar';
 import { usePermissions } from '@/hooks/usePermissions';
 import { isEmbeddedInWujie } from '@/lib/runtime';
 import { buildMenuItems } from '@/router/menu';
@@ -68,6 +69,9 @@ export function ErpLayout({ children }: ErpLayoutProps) {
           />
         </Sider>
         <Content className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden px-5 pb-4 pt-4">
+          <div className="mb-3 min-w-0 w-full shrink-0">
+            <TabBar />
+          </div>
           <div className="shrink-0">
             <AppBreadcrumb pathname={location.pathname} />
           </div>

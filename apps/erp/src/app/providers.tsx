@@ -6,10 +6,17 @@ import dayjs from 'dayjs';
 import 'dayjs/locale/zh-cn';
 import { useState, type ReactNode } from 'react';
 import { getPopupContainer } from '@/lib/runtime';
+import type { ThemeConfig } from 'antd';
 
 dayjs.locale('zh-cn');
 
-const theme = {
+/** 侧栏选中底 & TabBar 底，保持同一色值 */
+const MENU_ITEM_SELECTED_BG = '#e8f1f8';
+
+const theme: ThemeConfig = {
+  cssVar: {
+    prefix: 'erp-theme',
+  },
   token: {
     colorPrimary: '#0f4c81',
     colorPrimaryHover: '#1a5f9a',
@@ -28,7 +35,7 @@ const theme = {
       bodyBg: '#f3f5f8',
     },
     Menu: {
-      itemSelectedBg: '#e8f1f8',
+      itemSelectedBg: MENU_ITEM_SELECTED_BG,
       itemSelectedColor: '#0f4c81',
     },
     Button: {
@@ -62,7 +69,10 @@ export function AppProviders({ children }: AppProvidersProps) {
   return (
     <QueryClientProvider client={queryClient}>
       <ConfigProvider locale={zhCN} theme={theme} getPopupContainer={getPopupContainer}>
-        <AntdApp>{children}</AntdApp>
+        {/* Menu 组件 token 的 CSS 变量默认挂在 Menu 作用域，业务区拿不到；这里显式挂到应用根 */}
+        <AntdApp style={{ ['--erp-theme-menu-item-selected-bg' as string]: MENU_ITEM_SELECTED_BG }}>
+          {children}
+        </AntdApp>
       </ConfigProvider>
     </QueryClientProvider>
   );

@@ -69,6 +69,10 @@ Repository 不 commit。Service 管事务。多 SKU 升序加锁。库存条件 
 
 商品 / 库存 / 销售订单 / 采购单 / 售后 / Analytics / Event / Task 查询。写操作必须走 ERP API + RBAC + 状态机。Agent 不直连 MySQL。
 
+## ERP 布局
+
+`ErpLayout`：侧栏菜单 + **多页签 TabBar**（`@sinm/react-chrome-tabs`）+ 面包屑 + 主内容。Tab 元数据用 Zustand，持久化 `localStorage`（`neorvion.erp.tabs.v1`，含顺序）。工作台固定。租户切换后 Tabs 重置为工作台。页面仍由 React Router 渲染。
+
 ## 生产部署（V16）
 
 - OS：腾讯云 **OpenCloudOS 9.2**

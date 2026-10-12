@@ -499,6 +499,7 @@ export function AfterSaleDetailPage(props: PageProps) {
         <Input
           placeholder="外部退款流水号（可选）"
           value={refundExternal}
+          className='mt-3!'
           onChange={(event) => setRefundExternal(event.target.value)}
         />
       </Modal>
