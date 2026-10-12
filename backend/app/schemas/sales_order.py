@@ -150,9 +150,9 @@ class SalesOrderItemOut(BaseModel):
     quantity: int
     unit_price: float | None
     line_amount: float | None
-    reserved_quantity: int
-    outbound_quantity: int
-    shipped_quantity: int
+    reserved_quantity: int = Field(..., description="尚未出库的预占数量")
+    outbound_quantity: int = Field(..., description="累计已确认出库数量")
+    shipped_quantity: int = Field(..., description="累计已交给承运商数量，不超过 outbound_quantity")
     remark: str | None
     # 履约仓库上的实时账面，只给页面提示。不是订单历史，确认时以后端再查一次为准。
     current_quantity: int | None

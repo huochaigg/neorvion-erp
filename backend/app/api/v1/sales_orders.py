@@ -115,6 +115,7 @@ def submit_sales_order(
     "/{order_id}/confirm",
     response_model=ApiResponse[SalesOrderDetailOut],
     summary="确认销售订单并预占库存",
+    description="状态机 + 行锁。重复确认返回冲突，不会再次预占。预占与事件同事务。",
 )
 def confirm_sales_order(
     order_id: int,

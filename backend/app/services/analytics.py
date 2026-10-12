@@ -582,6 +582,13 @@ def _inventory_sku(row: tuple) -> InventorySkuOut:
     )
 
 
+def _csv_cell(value: object) -> object:
+    """防止 CSV Formula Injection：Excel 打开时不要执行用户输入公式。"""
+    if isinstance(value, str) and value[:1] in {"=", "+", "-", "@"}:
+        return f"'{value}"
+    return value
+
+
 def _csv(headers: list[str], rows: list[list[object]], filename: str) -> tuple[str, str]:
     import csv
 
@@ -589,5 +596,5 @@ def _csv(headers: list[str], rows: list[list[object]], filename: str) -> tuple[s
     buffer.write("\ufeff")
     writer = csv.writer(buffer)
     writer.writerow(headers)
-    writer.writerows(rows)
+    writer.writerows([[_csv_cell(cell) for cell in row] for row in rows])
     return filename, buffer.getvalue()

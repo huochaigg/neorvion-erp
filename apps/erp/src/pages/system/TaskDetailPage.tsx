@@ -16,7 +16,7 @@ import { formatDateTime } from '@/lib/datetime';
 import type { PageProps } from '@/router/types';
 import { useErpTenantStore } from '@/stores/tenant-runtime';
 
-export function TaskDetailPage(_props: PageProps) {
+export function TaskDetailPage({}: PageProps) {
   const { taskId = '' } = useParams();
   const { message } = App.useApp();
   const navigate = useNavigate();

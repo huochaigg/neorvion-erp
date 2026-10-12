@@ -1,6 +1,6 @@
 # 数据看板与报表中心（V13）
 
-第一版对 V3–V12 业务表做 **实时 / 准实时 MySQL 聚合**。不建 `daily_*_summary`，不引入 Redis Analytics Cache、物化视图或 OLAP。
+第一版对 V3–V12 业务表做 **实时 / 准实时 MySQL 聚合**。不建 `daily_*_summary`，不引入 Redis Analytics Cache、物化视图或 OLAP。CSV 导出对以 `= + - @` 开头的单元格加前缀，避免 Excel Formula Injection。
 
 报表日期边界按业务库 **naive 本地墙钟时间**（与 `datetime.now()` 一致），不是 UTC。
 

@@ -12,7 +12,12 @@ from app.services.event_query import EventQueryService
 router = APIRouter(prefix="/events", tags=["events"])
 
 
-@router.get("", response_model=ApiResponse[SystemEventListOut], summary="事件列表")
+@router.get(
+    "",
+    response_model=ApiResponse[SystemEventListOut],
+    summary="事件列表",
+    description="租户隔离的业务事件 / Outbox。默认 occurred_at 倒序。不是操作日志。",
+)
 def list_events(
     context: EventReadContext,
     session: DbSession,

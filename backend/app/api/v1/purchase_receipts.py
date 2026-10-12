@@ -83,6 +83,7 @@ def update_purchase_receipt(
     "/{receipt_id}/confirm",
     response_model=ApiResponse[PurchaseReceiptOut],
     summary="确认收货并入库",
+    description="草稿确认后增加 quantity，不改 reserved。重复确认拒绝。与库存流水同事务。",
 )
 def confirm_purchase_receipt(
     receipt_id: int,

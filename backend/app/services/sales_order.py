@@ -326,7 +326,7 @@ class SalesOrderService:
         这里不引入分布式锁，数据库行锁足够。
 
         为什么预占不减少 quantity：货还在仓库里，只是被这张订单占住。
-        实际出库留给后续版本，那时才同时减少 quantity 和 reserved。
+        确认出库时才同时减少 quantity 和 reserved_quantity。
         """
         self.auth.require_all(self.context, (PermissionCode.ORDER_AUDIT,))
         try:

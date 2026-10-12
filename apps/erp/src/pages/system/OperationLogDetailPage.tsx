@@ -9,7 +9,7 @@ import { formatDateTime } from '@/lib/datetime';
 import type { PageProps } from '@/router/types';
 import { useErpTenantStore } from '@/stores/tenant-runtime';
 
-export function OperationLogDetailPage(_props: PageProps) {
+export function OperationLogDetailPage({}: PageProps) {
   const { logId = '' } = useParams();
   const navigate = useNavigate();
   const tenantId = useErpTenantStore((state) => state.currentTenantId);

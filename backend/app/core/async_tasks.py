@@ -6,6 +6,8 @@ TASK_ID_PREFIX = "tsk_"
 TASK_MAX_RETRIES = 3
 TASK_QUEUE_KEY = "erp:queue:async-tasks"
 EVENT_QUEUE_KEY = "erp:queue:outbox-events"
+WORKER_HEARTBEAT_KEY = "erp:worker:heartbeat"
+WORKER_HEARTBEAT_TTL_SECONDS = 15
 
 
 class TaskType(StrEnum):

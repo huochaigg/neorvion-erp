@@ -266,8 +266,8 @@ class OutboundOrderService:
         3. 确认每个 SKU 的订单预占不少于本次出库数量。
         4. 按同一顺序调用 deduct_within_transaction。它复用 V5 条件 UPDATE，
            同时减少 quantity 和 reserved，不自己 commit。
-        5. 增加 shipped，减少订单 reserved，更新订单状态。
-        6. 一次 commit。
+        5. 减少订单 reserved_quantity，增加 outbound_quantity，更新订单履约状态。
+        6. 一次 commit。交给承运商的 shipped_quantity 由确认发货维护，本动作不改物流数量。
 
         为什么可用量通常不变：出库前 available = quantity - reserved。
         两边减去同一个数，差值不变。这批货出库前已经被预占，不算可售。

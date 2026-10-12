@@ -13,7 +13,12 @@ from datetime import datetime, timedelta
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.core.async_tasks import TASK_QUEUE_KEY, TaskStatus
+from app.core.async_tasks import (
+    TASK_QUEUE_KEY,
+    WORKER_HEARTBEAT_KEY,
+    WORKER_HEARTBEAT_TTL_SECONDS,
+    TaskStatus,
+)
 from app.core.events import EVENT_MAX_RETRIES, AggregateType, EventSource, EventStatus, EventType
 from app.core.redis import redis_client
 from app.core.sanitize import public_error_message
@@ -172,11 +177,20 @@ def run_once(*, block_seconds: int = 0) -> None:
         execute_task(task_id)
 
 
+def beat() -> None:
+    """写入短 TTL 心跳，供 /health 判断 Worker 进程是否还活着。不执行业务 SQL。"""
+    try:
+        redis_client.set(WORKER_HEARTBEAT_KEY, "1", ex=WORKER_HEARTBEAT_TTL_SECONDS)
+    except Exception:
+        logger.exception("worker heartbeat failed")
+
+
 def run_forever() -> None:
     logging.basicConfig(level=logging.INFO)
     logger.info("async worker started")
     while True:
         try:
+            beat()
             run_once(block_seconds=2)
         except Exception:
             logger.exception("worker loop error")

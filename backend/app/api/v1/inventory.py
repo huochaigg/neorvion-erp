@@ -151,6 +151,7 @@ def get_inventory(
     "/{inventory_id}/adjust",
     response_model=ApiResponse[InventoryItemOut],
     summary="库存调整",
+    description="FOR UPDATE 锁库存行。ADJUST_OUT 不能超过可用量。写流水后一次 commit。",
 )
 def adjust_inventory(
     inventory_id: int,

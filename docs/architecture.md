@@ -1,74 +1,84 @@
 # 架构说明
 
-当前里程碑：V14。当前有效范围见 `docs/current-state.md`。
+当前定义：**Neorvion ERP Core V1**。有效范围见 `docs/current-state.md`。
 
 ## 目标
 
-用模块化单体支撑后续采购、库存、订单、物流和 AI Agent，而不是一上来拆微服务。
+模块化单体支撑 Catalog 到售后全链路，以及后续 ERP Copilot。不拆微服务，不上 Kafka / Kubernetes / GraphQL。
+
+```mermaid
+flowchart LR
+  Shell[Shell 8015] --> ERP[ERP Micro App 8016]
+  Shell --> API[FastAPI 8011]
+  ERP --> API
+  API --> MySQL[(MySQL 8)]
+  API --> Redis[(Redis 7)]
+  Worker[Worker] --> Redis
+  Worker --> MySQL
+  Nginx[Nginx 80/443] --> Shell
+  Nginx --> API
+```
+
+后续 Copilot：`Agent → Tool → ERP API → TenantContext / RBAC → Service → DB`。Agent 不直连 MySQL。
 
 ## 前端
 
 ### 应用边界
 
-- `apps/shell`：统一登录、注册、当前用户、当前租户、工作空间选择/创建、顶部导航、微前端注册。
-- `apps/erp`：业务菜单、业务页面、业务客户端状态。可独立启动，便于调试。
-- `packages/shared`：主应用路由常量、API 响应类型、Wujie 通信类型、Query Key、`ApiError`、租户请求头规则。ERP 业务菜单不放在这里。
+- `apps/shell`：登录、注册、当前用户、当前租户、工作空间、顶部导航、Wujie 宿主
+- `apps/erp`：业务菜单与页面，可独立启动
+- `packages/shared`：路由常量、API 类型、Query Key、`ApiError`、租户请求头。ERP 业务菜单不放这里
 
-主应用不得读取 ERP 内部 store；ERP 只能通过 `window.$wujie.props` 与 `bus` 接收主应用显式传入的状态。
-
-### 路由
-
-- 主应用：`/` 工作台，`/workspaces` 选择企业，`/workspaces/create` 创建企业，`/erp/*` 挂载子应用。没有有效租户时不能进入工作台和 ERP。
-- 子应用独立运行在 `http://localhost:8016/`，内部路径由 `apps/erp/src/router/routes.ts` 配置（如 `/dashboard`、`/analytics/sales`、`/products/list`、`/inventory/list`、`/purchases/list`、`/purchase-returns`、`/orders/list`、`/after-sales/list`、`/return-orders`、`/refunds`、`/shipments`、`/carriers`、`/warehouses`），**没有** `/erp` 前缀。
-- 主应用浏览器地址是 `/erp/products/list`，由 Shell pathname 与子应用路由双向同步；刷新后仍由主应用按 `/erp/*` 加载子应用。
-- 侧栏「ERP 业务」进入应用并恢复上次路由；指定页面（如 `/erp/dashboard`）按目标路径打开。ERP 内部菜单不在 Shell 维护。
+主应用不得读取 ERP 内部 store。ERP 只通过 `window.$wujie.props` 与 bus 接收显式状态。
 
 ### 无界
 
-- 宿主封装集中在 `apps/shell/src/micro`。子应用清单见 `apps.ts`，接入步骤见 `docs/micro-frontend-integration.md`，白屏排查与架构复盘见 `docs/micro-frontend-interview.md`，保活实例隔夜白屏见 `docs/micro-frontend-white-screen.md`。
-- 默认 Shadow DOM（`degrade: false`）。ERP 当前 `alive: true`，离开 `/erp/*` 不销毁沙箱；退出登录或 Refresh 失败时调用 `destroyAllMicroApps()`。租户切换不销毁实例，改发 `shell:tenant-changed` 并隔离缓存。
-- 关闭 Wujie 原生 `sync`（`?erp=`），改用 Wujie bus 同步规范 pathname。Vite 子应用关闭 fiber，入口调用 `window.__WUJIE.mount()`。
-- 开发服务器开启 CORS，并用 `server.origin` 输出绝对资源地址。
-- Tailwind v4 的 `:root` → `:host` 只挂在需要它的子应用上，不是全局默认。
-- Ant Design Portal 由子应用自己的 `ConfigProvider.getPopupContainer` 处理，不是宿主强制方案。
+宿主在 `apps/shell/src/micro`。默认 Shadow DOM。ERP `alive: true`，离开 `/erp/*` 不销毁。租户切换发 `shell:tenant-changed` 并隔离 Query 缓存，不 `destroyApp`。关闭 Wujie 原生 `sync`。
 
 ### 状态
 
-- Zustand：`auth-store` 保存 Access Token 与登录状态；`tenant-store` 保存 `currentTenantId` / `isSwitching`。用户资料、租户列表走 React Query，不要在 Zustand 再存一份。
-- React Query：服务端数据。租户业务 Query Key 必须是 `['tenant', tenantId, ...]`；当前用户使用 `current-user`，我的租户列表使用 `my-tenants`。
-- 租户切换时取消并移除旧 `tenantId` 的查询，不清空全局 `QueryClient`。Axios 拦截器按 method+pathname 精确名单决定是否附加 `X-Tenant-ID`。切换租户不等于 Refresh Token。
+- Zustand：Access Token、当前租户 UI、`isSwitching`
+- React Query：服务端数据。租户 Key 必须 `['tenant', tenantId, ...]`
+- 切换租户：取消并移除旧 tenant 查询，不清空整个 QueryClient
 
 ### 样式
 
-- 优先 Tailwind CSS 4（`@tailwindcss/vite` + `@import "tailwindcss"`）。
-- 复杂品牌/页头使用 `*.module.scss`。
-- 全局 CSS 只放 reset、字体和主题变量。
-- Ant Design 主题只通过 ConfigProvider Token 定制，不使用 `!important` 覆盖。
+Tailwind CSS 4 + 必要 SCSS Modules。Ant Design 只走 ConfigProvider Token。V6.1 布局：`#root` 100%、Flex、`min-height: 0`、Table 内部滚动。
 
-## 后端
+## 后端分层
 
-分层：
+1. API Router：HTTP、校验、权限依赖
+2. Service：状态机、事务、锁顺序
+3. Repository：查询与持久化，禁止 commit
+4. Model / Schema
+5. Core：配置、安全、异常、日志、TenantContext
 
-1. API Router：HTTP、校验、依赖注入。
-2. Service：业务规则、事务、状态机。库存调整在这里 `SELECT ... FOR UPDATE`，预占用条件 UPDATE。销售确认、收货确认、出库确认、盘点确认、调拨调出/调入、退货入库、采购退货出库与库存共用同一个 Session，`*_within_transaction` 不单独 commit。
-3. Repository：查询与持久化，禁止 commit。报表走独立 Analytics Repository，以 SQL 聚合为主，不把明细拉到 Python 再 `sum()`。
-4. Model / Schema：ORM 与 Pydantic。
-5. Core：配置、安全、异常、日志、租户 ContextVar。
+库存调整 `SELECT FOR UPDATE`；预占/扣减用条件 UPDATE。收货、出库、盘点、调拨、退货与库存共用同一 Session。`*_within_transaction` 不单独 commit。
 
-认证：
+报表走 Analytics Repository，SQL 聚合，不把明细拉到 Python 再 sum。
 
-- `get_current_user()` 只给受保护接口解析 Access Token。`POST /refresh` 在白名单中，只校验 Refresh Cookie。
-- Refresh Token 会话写在 Redis（`GETDEL` 原子轮换），便于注销。
-- 密码传输使用独立 RSA-OAEP 密钥（`GET /api/crypto/public-key`），与 JWT `SECRET_KEY` 分开；一次性 `challenge_id` 写在 Redis。
-- Shell 独占 Refresh；ERP 只消费 Wujie props 里的 Access Token。
-- 后续业务接口注入 `get_tenant_context()` / `TenantContextDep`。`X-Tenant-ID` 只表示意愿，必须再查 `tenant_members`。不要把租户 ID 塞进 `users` 表或 JWT。
-- 细粒度授权走 `require_permission(...)`，最终权限由当前租户成员的角色并集计算。OWNER 表示所有权，不是跳过未知权限编码的后门。Agent / Celery 复用 `AuthorizationService.require_all_for_user`。详见 `docs/rbac.md`。
+## 认证与授权
 
-AI 与异步：
+- Access Token：Authorization Bearer
+- Refresh：HttpOnly Cookie，Redis `GETDEL` 轮换。ERP 不轮换 Refresh
+- 密码传输：RSA-OAEP，与 JWT `SECRET_KEY` 分开
+- `X-Tenant-ID` 必须再查 `tenant_members`
+- `require_permission`；OWNER 不是未知权限后门
 
-- `app/agents`：后续 OpenAI Agents SDK，Tool 调 Service。V14 不开发 Agent。
-- `app/tasks`：Redis List Worker + MySQL 任务表。不使用 Celery / FastAPI BackgroundTasks 跑关键长任务。
-- `system_events`：业务事件 + Outbox，与主事务同写。
+## 事件与任务
+
+- `system_events` Outbox，与主事务同写，after_commit 入 Redis
+- Worker 消费 `task_id`，状态在 `async_tasks`
+- 不用 Celery / FastAPI BackgroundTasks 跑关键长任务
+- `app/agents` 预留，Core V1 不实现
+
+## 连接池
+
+当前默认 `pool_size=5`、`max_overflow=5`、`pool_pre_ping=True`、`pool_recycle=3600`。面向 2C2G 单实例，不要按网上海量连接模板放大。每个请求一个 Session，Worker 另开连接，10 个总量足够开发与小型演示。
+
+## Redis
+
+任务队列、Refresh 会话、RSA challenge、Worker 心跳、可选限流。**禁止**缓存强一致库存 quantity。
 
 ## 端口
 
@@ -76,7 +86,7 @@ AI 与异步：
 | --- | --- |
 | Shell | 8015 |
 | ERP | 8016 |
-| FastAPI | 8011 |
-| MySQL | 3306 |
-| Redis | 6379 |
-| Nginx（可选） | 8080 |
+| FastAPI | 8011（公网不直接暴露） |
+| MySQL | 3306（不公网） |
+| Redis | 6379（不公网） |
+| Nginx | 80 / 443 |

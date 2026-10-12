@@ -26,8 +26,8 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
 def create_app() -> FastAPI:
     app = FastAPI(
         title=settings.app_name,
-        version="0.1.0",
-        description="多租户跨境电商 ERP 后端。当前里程碑：V14。",
+        version="1.0.0",
+        description="多租户跨境电商 ERP 后端。当前里程碑：ERP Core V1（V15 收口）。",
         lifespan=lifespan,
         docs_url="/docs",
         redoc_url="/redoc",

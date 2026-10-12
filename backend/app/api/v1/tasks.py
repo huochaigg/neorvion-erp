@@ -19,7 +19,12 @@ from app.services.async_task import AsyncTaskService
 router = APIRouter(prefix="/tasks", tags=["tasks"])
 
 
-@router.get("", response_model=ApiResponse[AsyncTaskListOut], summary="任务列表")
+@router.get(
+    "",
+    response_model=ApiResponse[AsyncTaskListOut],
+    summary="任务列表",
+    description="当前租户异步任务。状态以 MySQL 为准，Redis 只投递 task_id。",
+)
 def list_tasks(
     context: TaskReadContext,
     session: DbSession,

@@ -81,6 +81,7 @@ class Inventory(TimestampMixin, TenantMixin, Base):
         Integer,
         nullable=False,
         server_default=text("0"),
+        comment="已被销售订单预占、尚未出库；可用量 = quantity - reserved_quantity，不单独落库",
     )
     # 乐观锁版本号。正式调整走 FOR UPDATE；预占用条件 UPDATE；本字段给冲突演示和后续扩展。
     version: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))

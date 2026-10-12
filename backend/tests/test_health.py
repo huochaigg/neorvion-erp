@@ -17,9 +17,10 @@ def test_health_response_shape(client: TestClient) -> None:
     assert body["code"] == 0
     assert body["message"] == "ok"
     assert body["data"]["app"] == "ok"
-    assert body["data"]["milestone"] == "V14"
+    assert body["data"]["milestone"] == "V15"
     assert body["data"]["mysql"] in {"ok", "unavailable"}
     assert body["data"]["redis"] in {"ok", "unavailable"}
+    assert body["data"]["worker"] in {"ok", "unavailable"}
 
 
 def test_health_service_marks_unavailable(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -31,3 +32,4 @@ def test_health_service_marks_unavailable(monkeypatch: pytest.MonkeyPatch) -> No
     data: HealthCheckData = HealthService(DummySession()).check()  # type: ignore[arg-type]
     assert data.mysql == "unavailable"
     assert data.redis == "unavailable"
+    assert data.worker == "unavailable"

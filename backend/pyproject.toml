@@ -37,6 +37,7 @@ select = ["E", "F", "I", "UP", "B"]
 "tests/conftest.py" = ["E402"]
 "tests/test_after_sales.py" = ["E501"]
 "tests/test_purchase_returns.py" = ["E501"]
+"tests/test_core_flows.py" = ["E501"]
 "scripts/*.py" = ["E402"]
 
 [tool.pytest.ini_options]

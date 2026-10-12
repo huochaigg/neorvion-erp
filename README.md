@@ -1,75 +1,61 @@
-# Neorvion ERP
+# Neorvion ERP Core V1
 
-多租户跨境电商 ERP。当前仓库按里程碑持续迭代，**不要为每个版本重建项目**。
+多租户跨境电商 ERP。当前仓库是 **ERP Core 第一阶段收口**，不是每个版本重建的项目。
 
-当前里程碑：**V14**。当前有效范围见 `docs/current-state.md`。
+后续阶段：ERP Copilot / Agent、RAG、事件驱动分析。Agent 不直接写 ERP 数据库。
+
+当前有效状态：[`docs/current-state.md`](docs/current-state.md)。新会话先读 [`AI_CONTEXT.md`](AI_CONTEXT.md)。文档导航：[`docs/README.md`](docs/README.md)。
+
+## 它能做什么
+
+SaaS 多租户、RBAC、商品/SKU、仓库、库存一致性、采购与收货、销售预占与出库、物流签收、盘点调拨、销售售后、采购退货、经营看板、业务事件、操作日志、异步任务。
+
+演示数据是 **synthetic / demo**，不是真实客户或 GMV。
 
 ## 技术栈
 
-- 前端：React 19 + TypeScript strict + Vite + Wujie + Ant Design 6 + Tailwind CSS 4 + SCSS Modules + Zustand + TanStack Query
-- 后端：Python 3.12 + uv + FastAPI + SQLAlchemy 2.x + Alembic + MySQL 8 + Redis
-- 仓库：pnpm workspace 管理 `apps/*` 与 `packages/shared`
+- 前端：React 19、TypeScript、Vite、Wujie、Ant Design 6、Tailwind CSS 4、Zustand、TanStack Query
+- 后端：Python 3.12、uv、FastAPI、SQLAlchemy 2、Alembic、MySQL 8、Redis 7、独立 Worker
 
-## 目录结构
-
-```text
-neorvion-erp/
-├── apps/
-│   ├── shell/                 # 微前端主应用（登录、租户、整体导航）
-│   └── erp/                   # ERP 子应用（业务菜单与页面，可独立启动）
-├── packages/shared/           # 主应用路由常量、API 类型、Query Key、ApiError
-├── backend/
-│   ├── app/
-│   │   ├── api/               # HTTP 路由
-│   │   ├── core/              # 配置、异常、日志、安全、租户上下文
-│   │   ├── db/                # Engine / Session / Mixin
-│   │   ├── models/            # SQLAlchemy ORM
-│   │   ├── schemas/           # Pydantic
-│   │   ├── repositories/      # 持久化，禁止自行 commit
-│   │   ├── services/          # 业务规则与事务边界
-│   │   ├── agents/            # AI Agent 预留
-│   │   └── tasks/             # Redis Worker（报表导出 / Outbox）
-│   ├── alembic/
-│   └── tests/
-├── docs/
-├── nginx/
-├── docker-compose.yml
-└── .env.example
+```mermaid
+flowchart LR
+  Shell --> ERP
+  Shell --> API[FastAPI]
+  ERP --> API
+  API --> MySQL
+  API --> Redis
+  Worker --> Redis
+  Worker --> MySQL
 ```
 
-没有单独的 `modules/` 目录，避免与 `services/`、`repositories/` 职责重叠。后续业务按领域文件扩展，例如 `services/inventory.py`、`services/purchase.py`。
+## 关键设计
 
-## 本地运行
+- **多租户**：`users` 无 `tenant_id`；业务表有 `tenant_id`；跨租户 404
+- **RBAC**：Permission 全局目录，Role 租户内；按钮隐藏不是安全边界
+- **库存**：`available` 不落库；确认订单只预占；出库同时减实数和预占
+- **事务**：Repository 不 commit；Service 管边界；多 SKU 升序加锁
+- **事件 / 任务**：Outbox 与主事务同写；Worker 消费 Redis List 中的 `task_id`
 
-### 1. 环境变量
+## 目录
+
+```text
+apps/shell          登录与 Wujie 宿主
+apps/erp            ERP 业务微前端
+packages/shared     Query Key / ApiError
+backend             FastAPI 单体
+docs                文档导航见 docs/README.md
+nginx               反代示例
+```
+
+## 本地启动
 
 ```bash
 cp .env.example .env
 cp .env.example backend/.env
 cp apps/shell/.env.example apps/shell/.env
 cp apps/erp/.env.example apps/erp/.env
-```
-
-Windows PowerShell：
-
-```powershell
-Copy-Item .env.example .env
-Copy-Item .env.example backend\.env
-Copy-Item apps\shell\.env.example apps\shell\.env
-Copy-Item apps\erp\.env.example apps\erp\.env
-```
-
-### 2. 启动 MySQL 与 Redis
-
-推荐使用 Docker Compose（只需基础设施）：
-
-```bash
 docker compose up -d mysql redis
 ```
-
-如果本机已经有 MySQL / Redis，把 `backend/.env` 中的连接信息改成实际值。
-
-### 3. 启动后端（端口 8011）
 
 ```bash
 cd backend
@@ -79,39 +65,37 @@ uv run python -m app.scripts.seed_permissions
 uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 8011
 ```
 
-异步任务 / Outbox Worker（另开终端）：
+另开终端启动 Worker：
 
 ```bash
 cd backend
 uv run python -m app.tasks.worker
 ```
 
-验证：
-
-- Swagger：http://localhost:8011/docs
-- 健康检查：http://localhost:8011/api/v1/health
-
-### 4. 启动前端
-
-在仓库根目录：
-
 ```bash
 pnpm install
 pnpm dev
 ```
 
-- 主应用：http://localhost:8015 （工作台，不含 ERP 业务页）
-- ERP 子应用独立运行：http://localhost:8016
-- 主应用接入 ERP：http://localhost:8015/erp
+- 主应用 http://localhost:8015
+- ERP 独立 http://localhost:8016
+- 嵌入 ERP http://localhost:8015/erp
+- Swagger http://localhost:8011/docs
+- 健康检查 http://localhost:8011/api/v1/health
 
-分别启动：
+演示租户（不会在 API 启动时自动执行）：
 
 ```bash
-pnpm dev:shell
-pnpm dev:erp
+# 用环境变量提供账号，不要把真实密码写进 Git
+export DEMO_EMAIL=...
+export DEMO_PASSWORD=...
+cd backend
+uv run python -m app.scripts.seed_demo
 ```
 
-### 5. 测试与检查
+已存在 `code=neorvion-demo` 时直接跳过，不会重复插入。
+
+## 测试
 
 ```bash
 cd backend
@@ -120,179 +104,15 @@ uv run ruff check app tests
 ```
 
 ```bash
+pnpm test
 pnpm --filter @neorvion/shell build
 pnpm --filter @neorvion/erp build
-pnpm test
 ```
 
-## V7
+## 部署与备份
 
-- 客户档案：未填编码时生成 `CUS` + 10 位 id；停用后不能新建销售订单
-- 销售订单 + 明细同一事务；单号 `SO` + 年 + 6 位 id；收货地址是下单快照
-- 状态机：草稿 → 待确认 → 待出库，另有取消；草稿不预占，确认才预占且不减少实际库存
-- 确认 / 取消锁订单主行；多 SKU 按 `sku_id` 升序复用 V5 条件预占，失败整单回滚
-- ERP 菜单「订单管理」：销售订单、客户；权限 `order:*` 与 `customer:*`，确认沿用 `order:audit`
-- 版本文档：`docs/versions/v7.md`，业务说明：`docs/orders.md`
+见 [`docs/deployment.md`](docs/deployment.md)、[`docs/backup.md`](docs/backup.md)。公网只开放 80/443。MySQL、Redis、FastAPI 不直接对公网。
 
-## V12
+## 未来
 
-- 必须关联原采购单。可退上限是已收货数量，不是采购计划数量。草稿不占用可退
-- 采购退货不改原采购明细计划数量和已收数量，也不回退采购收货状态
-- 退货出库只减少 `quantity`，不改 `reserved`；可用不足失败。流水 `PURCHASE_RETURN_OUTBOUND`
-- 供应商退款记录独立保存失败/成功历史；本版仅人工确认，不接银行
-- ERP 菜单「采购管理」增加采购退货、退货出库、供应商退款；权限 `purchase_return:*` / `supplier_refund:*`
-- 版本文档：`docs/versions/v12.md`，业务说明：`docs/purchase-returns.md`
-
-## V11
-
-- 三种售后：仅退款、退货退款、仅退货。待审核即占用可退数量
-- 可退上限是已出库数量。售后不改原销售明细购买数量，也不回退销售履约状态
-- 退货入库只增加 `quantity`，写 `RETURN_INBOUND`；残次品可收不入普通库存
-- 退款记录独立保存失败/成功历史；本版仅人工确认，不接支付渠道
-- ERP 菜单「售后管理」：售后单、退货单、退款记录；权限 `after_sale:*` / `return_order:*` / `refund:*`
-- 版本文档：`docs/versions/v11.md`，业务说明：`docs/after-sales.md`、`docs/returns.md`
-
-## V10
-
-- 库存盘点：创建时保存账面快照；确认按差异调整当前库存，不是覆盖成实盘数
-- 跨仓调拨：调出扣源仓 available，在途后确认调入才增加目标仓
-- 流水新增 `STOCKTAKE_ADJUSTMENT` / `TRANSFER_OUT` / `TRANSFER_IN`
-- ERP 菜单在仓储下增加库存盘点、库存调拨；权限 `stocktake:*` 与 `stock_transfer:*`
-- 版本文档：`docs/versions/v10.md`，业务说明：`docs/stocktake.md`、`docs/stock-transfer.md`
-
-## V9
-
-- 物流商档案：未填编码时生成 `CAR` + 10 位 id；已被物流单引用只能停用
-- 物流单与出库单分开。草稿不改库存；确认发货只增加 `shipped_quantity`
-- 支持部分发货、手工轨迹、签收。全部签收后销售订单 `COMPLETED`
-- V8 的仓库出库状态迁到 `PARTIALLY_OUTBOUND` / `OUTBOUNDED`，`SHIPPED` 留给物流
-- ERP 菜单「物流管理」：物流单、物流商；权限 `carrier:*` 与 `shipment:*`
-- 版本文档：`docs/versions/v9.md`，业务说明：`docs/shipping.md`
-
-## V8
-
-- 采购收货单与采购单分开。草稿不入库；确认后 `quantity` 增加、预占不变，写 `INBOUND`
-- 支持部分收货。采购单从待收货进入部分收货或已收货
-- 销售出库单与销售订单分开。确认订单后自动生成第一张出库单；一张订单可以多次部分出库
-- 拣货不扣库存。确认出库同时减少 `quantity` 和 `reserved_quantity`，可用量通常不变，写 `OUTBOUND`
-- 销售明细约束改为 `reserved + shipped <= quantity`（V9 再拆成 outbound / shipped）
-- ERP：采购收货、销售出库；权限 `purchase:receipt:*` 与 `outbound:*`
-- 版本文档：`docs/versions/v8.md`，业务说明：`docs/fulfillment.md`
-
-## V6
-
-- 供应商档案：未填编码时生成 `SUP` + 10 位 id；停用后不能新建采购单
-- 采购单 + 明细同一事务；单号 `PO` + 年 + 6 位 id
-- 状态机：草稿 → 待审核 → 待收货，另有驳回 / 取消；审核不改库存
-- 条件 UPDATE 防止并发审核覆盖；草稿编辑整体替换明细
-- ERP 菜单「采购管理」：采购单、供应商；权限 `purchase:*` 与 `supplier:*`
-- 版本文档：`docs/versions/v6.md`，业务说明：`docs/purchases.md`
-
-## V5
-
-- 库存台账：`Tenant + Warehouse + SKU`，实际 / 预占 / 可用（计算）
-- 初始化、调整增减、不可变流水；预占/释放/出库扣减为底层能力
-- 调整用 `SELECT FOR UPDATE`；预占用条件 UPDATE；`version` 乐观锁仅演示
-- ERP 菜单「库存管理」：列表、流水、隐藏详情；权限 `inventory:read/initialize/adjust/transaction:read`
-- 版本文档：`docs/versions/v5.md`，业务说明：`docs/inventory.md`
-
-## V4
-
-- 仓库档案：名称、编码、类型、地址、联系人、启停、默认仓库
-- 未填编码时服务端生成 `WH` + 10 位 id；`(tenant_id, code)` 唯一
-- 默认仓切换同一事务 + `SELECT ... FOR UPDATE`，每租户最多一个默认仓
-- ERP 菜单「仓库管理」：列表 + Drawer；权限 `warehouse:read/create/update/disable/delete`
-- 版本文档：`docs/versions/v4.md`，业务说明：`docs/warehouses.md`
-
-## V3
-
-- 商品档案：类目（最多三级）、品牌、SPU、SKU（`spec_values` JSON）
-- 创建商品时 SPU + SKU 同一事务；列表按租户隔离，SKU 数量用 SQL 聚合
-- ERP 菜单：商品列表 / 类目管理 / 品牌管理；新增和编辑为独立页面
-- 权限沿用 `product:read/create/update/delete`，类目和品牌不另拆编码
-- 版本文档：`docs/versions/v3.md`，业务说明：`docs/products.md`
-
-## V2.3.5
-
-- 企业内 `TenantMember.display_name`，回退 `User.display_name`；改一家企业不影响全局账号
-- 成员/角色细粒度权限；旧 `*:manage` 迁移保留兼容
-- 角色授权改为菜单 + 按钮权限树；权限目录只读
-- 自定义角色编辑/删除（使用中返回 `ROLE_IN_USE`）；系统角色后端保护
-- 版本文档：`docs/versions/v2.3.5.md`
-
-## V2.3.4
-
-- 成员：添加已有账号、代建新账号（一次性临时密码）、查看、改角色、启用/禁用、移出企业
-- 角色：自定义角色编辑/删除、系统预置角色配置权限（OWNER 冻结）
-- 权限目录只读页；角色权限按模块勾选，保存后菜单和按钮立即生效
-- `users.must_change_password` + `POST /auth/change-password`；临时账号 40350
-- 版本文档：`docs/versions/v2.3.4.md`
-
-## V2.3.3
-
-- ERP 按当前成员有效权限生成菜单；无权限隐藏，空父级分组自动隐藏
-- 页面 `PermissionGuard`：加载中不放行，无权限显示 403，不登出、不 Refresh
-- 按钮 `<Can permission="..." />`；成员/角色页已接入
-- `GET /api/v1/tenants/current/my-permissions`；Query Key 带 tenantId
-- 版本文档：`docs/versions/v2.3.3.md`
-
-## V2.3.2
-
-- 企业成员管理闭环：按邮箱添加已注册用户、分配多个角色、启停成员
-- ERP「系统管理」：成员管理、角色管理页面；按钮按权限编码控制
-- 成员角色替换使用行锁；OWNER 保护仍在后端强制执行
-- 版本文档：`docs/versions/v2.3.2.md`
-
-## V2.3.1
-
-- RBAC：`permissions` / `roles` / `member_roles` / `role_permissions`
-- 权限目录幂等初始化；创建租户时生成 OWNER / ADMIN / OPERATOR / WAREHOUSE / VIEWER
-- `require_permission` / `require_any_permission`；角色管理 API
-- 历史租户 OWNER 成员回填系统角色，保留 `tenant_members.role` 与 `created_by`
-
-## V2.2.4
-
-- Shell 接入 V2.2.1 租户接口：创建企业、选择工作空间、切换企业
-- 当前租户只保存在 Shell `tenant-store`；ERP 通过 Wujie props 与 `shell:tenant-changed` 同步
-- Axios 按精确跳过名单自动附加 `X-Tenant-ID`；React Query 用 `['tenant', tenantId, ...]` 隔离缓存
-- 租户切换不 `destroyApp`、不重新登录、不 Refresh；离开 ERP 再进入仍保活
-- 上次选择按用户写入 `localStorage`（`neorvion:last-tenant-id:{userId}`），只作偏好，仍以后端成员关系为准
-
-## V2.2.1
-
-- 共享库多租户：`tenants`、`tenant_members`
-- `X-Tenant-ID` + `TenantContext`；创建者预留 OWNER
-- 一个用户可加入多家企业；成员管理最小权限
-
-## V2.1.2
-
-- 公钥改为公开接口 `GET /api/crypto/public-key`
-- 认证状态：`initializing` / `authenticated` / `unauthenticated`
-- 独立 `authClient`；登录成功不立刻 Refresh；ERP 不轮换 Refresh
-
-## V2.1.1
-
-- ERP 菜单与 React Router 共用 `apps/erp/src/router/routes.ts`
-- Refresh 明确为公开接口，不校验 Access Token
-- 前端 `ApiError` 统一业务错误；无 `debugger` 语句
-
-## V2.1 完成内容
-
-- 全局 `users` 表与 Alembic 迁移
-- 注册、登录、Refresh Cookie、退出登录、`/me`
-- Argon2id 密码哈希 + RSA-OAEP 传输加密 + Access/Refresh JWT
-- Shell 登录/注册页、路由守卫、Axios 单飞刷新
-- ERP 不重复登录，只接收主应用传入的 token
-- pytest 使用独立测试库 `neorvion_erp_test`
-
-本地注意：
-
-- 后端端口固定 8011，避免和本机其他 FastAPI（常见 8001）冲突。
-- MySQL 必须指向独立库 `neorvion_erp`，不要使用其他项目的业务库。
-- 无界依赖 iframe 沙箱，请用系统 Chrome 打开主应用验证嵌入。
-
-## 尚未开始
-
-完整菜单权限组件已在 V2.3.5 收尾。V3 完成商品档案。V4 完成仓库档案。V5 完成库存台账。V6 完成采购单与供应商。V7 完成销售订单确认预占与取消释放。V8 完成采购收货入库和销售拣货出库。V9 完成物流发货、轨迹与签收。V10 完成库存盘点与跨仓调拨。V11 完成销售售后、退货入库与退款状态。尚未开始：真实支付退款、平台售后同步、换货发货、采购退货、财务凭证、次品库存、库位批次、OWNER 转移、AI Agent。
-
-更细的说明见 `docs/development.md`、`docs/architecture.md`、`docs/current-state.md`、`docs/auth.md`、`docs/multi-tenancy.md`、`docs/rbac.md`、`docs/products.md`、`docs/warehouses.md`、`docs/inventory.md`、`docs/purchases.md`、`docs/orders.md`、`docs/stocktake.md`、`docs/stock-transfer.md`、`docs/versions/v3.md`、`docs/versions/v6.md`、`docs/versions/v7.md`、`docs/versions/v10.md`、`docs/routing.md`、`docs/micro-frontend-integration.md` 与 `docs/micro-frontend-interview.md`。
+ERP Copilot 将通过 Tool 调用现有只读查询 API；高风险写操作需要预览确认。设计见 [`docs/agent-readiness.md`](docs/agent-readiness.md)。

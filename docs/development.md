@@ -1,6 +1,6 @@
 # 开发说明
 
-当前里程碑：V14（事件中心 / 操作日志 / 异步任务）。
+当前定义：Neorvion ERP Core V1（V15 收口）。有效状态见 `docs/current-state.md`。
 
 ## 前置
 
@@ -39,6 +39,8 @@ cd backend
 uv run alembic current
 uv run alembic upgrade head
 uv run python -m app.scripts.seed_permissions
+# 演示数据（需 DEMO_EMAIL / DEMO_PASSWORD，幂等，不在启动时自动执行）
+uv run python -m app.scripts.seed_demo
 uv run alembic revision --autogenerate -m "your message"
 ```
 
@@ -137,7 +139,7 @@ pnpm test
 62. 销售分析可创建异步导出任务；任务中心看到排队 / 进度 / 成功后可下载。Worker：`uv run python -m app.tasks.worker`。
 63. 无 `event:read` / `operation_log:read` / `task:read` 看不到对应菜单。操作日志不能修改或删除。切换企业后三类数据隔离。
 
-多租户说明见 `docs/multi-tenancy.md`。RBAC 见 `docs/rbac.md`。商品见 `docs/products.md`。仓库见 `docs/warehouses.md`。库存见 `docs/inventory.md`。采购见 `docs/purchases.md`。销售订单见 `docs/orders.md`。履约见 `docs/fulfillment.md`。物流见 `docs/shipping.md`。盘点见 `docs/stocktake.md`。调拨见 `docs/stock-transfer.md`。售后见 `docs/after-sales.md`。退货见 `docs/returns.md`。采购退货见 `docs/purchase-returns.md`。报表见 `docs/analytics.md`。事件见 `docs/events.md`。操作日志见 `docs/operation-logs.md`。异步任务见 `docs/async-tasks.md`。当前状态见 `docs/current-state.md`。V3 见 `docs/versions/v3.md`。V4 见 `docs/versions/v4.md`。V5 见 `docs/versions/v5.md`。V6 见 `docs/versions/v6.md`。V7 见 `docs/versions/v7.md`。V8 见 `docs/versions/v8.md`。V9 见 `docs/versions/v9.md`。V10 见 `docs/versions/v10.md`。V11 见 `docs/versions/v11.md`。V12 见 `docs/versions/v12.md`。V13 见 `docs/versions/v13.md`。V14 见 `docs/versions/v14.md`。路由配置说明见 `docs/routing.md`。认证流程见 `docs/auth.md`。
+多租户说明见 `docs/multi-tenancy.md`。RBAC 见 `docs/rbac.md`。商品见 `docs/products.md`。仓库见 `docs/warehouses.md`。库存见 `docs/inventory.md`。采购见 `docs/purchases.md`。销售订单见 `docs/orders.md`。履约见 `docs/fulfillment.md`。物流见 `docs/shipping.md`。盘点见 `docs/stocktake.md`。调拨见 `docs/stock-transfer.md`。售后见 `docs/after-sales.md`。退货见 `docs/returns.md`。采购退货见 `docs/purchase-returns.md`。报表见 `docs/analytics.md`。事件见 `docs/events.md`。操作日志见 `docs/operation-logs.md`。异步任务见 `docs/async-tasks.md`。当前状态见 `docs/current-state.md`。V3 见 `docs/versions/v3.md`。V4 见 `docs/versions/v4.md`。V5 见 `docs/versions/v5.md`。V6 见 `docs/versions/v6.md`。V7 见 `docs/versions/v7.md`。V8 见 `docs/versions/v8.md`。V9 见 `docs/versions/v9.md`。V10 见 `docs/versions/v10.md`。V11 见 `docs/versions/v11.md`。V12 见 `docs/versions/v12.md`。V13 见 `docs/versions/v13.md`。V14 见 `docs/versions/v14.md`。V15 见 `docs/versions/v15.md`。路由配置说明见 `docs/routing.md`。认证流程见 `docs/auth.md`。文档导航见 `docs/README.md`。
 
 ## 浏览器进 debugger
 

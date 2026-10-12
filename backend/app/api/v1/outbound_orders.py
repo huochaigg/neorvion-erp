@@ -85,6 +85,7 @@ def pick_outbound_order(
     "/{outbound_id}/confirm",
     response_model=ApiResponse[OutboundOrderOut],
     summary="确认出库",
+    description="已拣货才能确认。quantity 与 reserved 同时减少。重复确认不再扣库存。",
 )
 def confirm_outbound_order(
     outbound_id: int,

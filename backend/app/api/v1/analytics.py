@@ -56,7 +56,12 @@ def _csv_response(filename: str, content: str) -> Response:
     )
 
 
-@router.get("/overview", response_model=ApiResponse[OverviewOut], summary="经营总览")
+@router.get(
+    "/overview",
+    response_model=ApiResponse[OverviewOut],
+    summary="经营总览",
+    description="实时从业务表聚合，无汇总表。取消单不计入销售额；成功退款减少净销售。",
+)
 def overview(
     context: AnalyticsOverviewReadContext,
     session: DbSession,
@@ -297,7 +302,7 @@ def inventory_low_stock(
     session: DbSession,
     warehouse_id: WarehouseId = None,
     low_stock_threshold: Threshold = 10,
-    limit: Annotated[int, Query(ge=1, le=10000)] = 100,
+    limit: Annotated[int, Query(ge=1, le=200)] = 100,
 ) -> ApiResponse[list[InventorySkuOut]]:
     return ok(
         AnalyticsService(session, context).low_stock(low_stock_threshold, limit, warehouse_id)

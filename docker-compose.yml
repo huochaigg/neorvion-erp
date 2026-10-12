@@ -70,9 +70,44 @@ services:
       REDIS_DB: 0
     ports:
       - "8011:8011"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8011/api/v1/health')",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
     command: >
       sh -c "uv run --no-dev alembic upgrade head &&
              uv run --no-dev uvicorn app.main:app --host 0.0.0.0 --port 8011"
+
+  worker:
+    build:
+      context: ./backend
+    container_name: neorvion-worker
+    restart: unless-stopped
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      APP_ENV: development
+      SECRET_KEY: ${SECRET_KEY:-change-me-in-local-dev}
+      MYSQL_HOST: mysql
+      MYSQL_PORT: 3306
+      MYSQL_USER: ${MYSQL_USER:-neorvion}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-neorvion_dev}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-neorvion_erp}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      REDIS_DB: 0
+    command: uv run --no-dev python -m app.tasks.worker
 
   nginx:
     image: nginx:1.27-alpine

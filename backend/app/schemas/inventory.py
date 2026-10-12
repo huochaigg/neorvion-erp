@@ -108,9 +108,11 @@ class InventoryItemOut(BaseModel):
     product_id: int
     product_name: str
     spec_values: dict[str, Any]
-    quantity: int
-    reserved_quantity: int
-    available_quantity: int
+    quantity: int = Field(..., description="仓库实际在库数量")
+    reserved_quantity: int = Field(..., description="已被销售订单预占、尚未出库的数量")
+    available_quantity: int = Field(
+        ..., description="可售数量，等于 quantity − reserved_quantity，不单独落库"
+    )
     version: int
     created_at: datetime
     updated_at: datetime
@@ -137,10 +139,10 @@ class InventoryTransactionOut(BaseModel):
     change_quantity: int
     before_quantity: int
     after_quantity: int
-    before_reserved_quantity: int
-    after_reserved_quantity: int
-    reference_type: str | None
-    reference_id: int | None
+    before_reserved_quantity: int = Field(..., description="变动前预占")
+    after_reserved_quantity: int = Field(..., description="变动后预占")
+    reference_type: str | None = Field(None, description="引起变动的业务类型，例如 SALES_ORDER")
+    reference_id: int | None = Field(None, description="引起变动的业务主键")
     remark: str | None
     operator_user_id: int | None
     operator_name: str | None
@@ -179,9 +181,9 @@ class SkuOptionListOut(BaseModel):
 class SkuAvailabilityOut(BaseModel):
     warehouse_id: int
     sku_id: int
-    quantity: int
-    reserved_quantity: int
-    available_quantity: int
+    quantity: int = Field(..., description="仓库实际在库数量")
+    reserved_quantity: int = Field(..., description="已被销售订单预占、尚未出库的数量")
+    available_quantity: int = Field(..., description="可售数量 = quantity − reserved_quantity")
     initialized: bool
 
 

@@ -14,7 +14,7 @@ import { formatDateTime } from '@/lib/datetime';
 import type { PageProps } from '@/router/types';
 import { useErpTenantStore } from '@/stores/tenant-runtime';
 
-export function EventDetailPage(_props: PageProps) {
+export function EventDetailPage({}: PageProps) {
   const { eventId = '' } = useParams();
   const navigate = useNavigate();
   const tenantId = useErpTenantStore((state) => state.currentTenantId);
