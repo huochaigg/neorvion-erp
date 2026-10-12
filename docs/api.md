@@ -16,7 +16,7 @@
 
 `GET /api/v1/health`
 
-依赖不可用时 HTTP 仍为 200，字段标记 `unavailable`。当前 `milestone` 为 `V12`。
+依赖不可用时 HTTP 仍为 200，字段标记 `unavailable`。当前 `milestone` 为 `V13`。
 
 ## 认证
 
@@ -229,5 +229,19 @@
 - `POST /api/v1/supplier-refunds/{id}/confirm|fail`
 
 未收货不能退 → `40350`。超过可退数量 → `40351`。重复确认出库 → `40355`。可用不足 → `40070`。超过批准退款 → `40358`。跨租户 → `40500` / `40501` / `40502`。
+
+## 数据看板（V13）
+
+详见 `docs/analytics.md`。日期 `YYYY-MM-DD`，后端转成 `[当天 00:00:00, 次日 00:00:00)`。非法区间 `40600`，导出超 10000 行 `40602`。
+
+- `GET /api/v1/analytics/overview`
+- `GET /api/v1/analytics/pending`
+- `GET /api/v1/analytics/sales/summary|trend|status|top-skus|top-products|top-customers`
+- `GET /api/v1/analytics/purchases/summary|trend|status|top-suppliers`
+- `GET /api/v1/analytics/inventory/summary|by-warehouse|top-skus|low-stock|transactions-trend|transactions-by-type`
+- `GET /api/v1/analytics/after-sales/summary|trend|types`
+- `GET /api/v1/analytics/sales/trend.csv`
+- `GET /api/v1/analytics/purchases/trend.csv`
+- `GET /api/v1/analytics/inventory/low-stock.csv`
 
 Swagger：http://localhost:8011/docs

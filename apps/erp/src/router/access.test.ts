@@ -228,4 +228,13 @@ describe('动态权限菜单与页面守卫', () => {
     const dashboard = matchRoute(routes, '/dashboard');
     assert.equal(pageAllowsAccess(dashboard, []), true);
   });
+
+  it('数据中心菜单按 analytics read 权限显示', () => {
+    const salesMatch = matchRoute(routes, '/analytics/sales');
+    assert.equal(pageAllowsAccess(salesMatch, []), false);
+    assert.equal(pageAllowsAccess(salesMatch, [PERMISSION_CODE.analyticsSalesRead]), true);
+    const inventoryMatch = matchRoute(routes, '/analytics/inventory');
+    assert.equal(pageAllowsAccess(inventoryMatch, [PERMISSION_CODE.analyticsSalesRead]), false);
+    assert.equal(pageAllowsAccess(inventoryMatch, [PERMISSION_CODE.analyticsInventoryRead]), true);
+  });
 });

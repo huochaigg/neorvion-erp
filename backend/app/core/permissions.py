@@ -142,6 +142,12 @@ class PermissionCode(StrEnum):
     SUPPLIER_DISABLE = "supplier:disable"
     SUPPLIER_DELETE = "supplier:delete"
 
+    ANALYTICS_OVERVIEW_READ = "analytics:overview:read"
+    ANALYTICS_SALES_READ = "analytics:sales:read"
+    ANALYTICS_PURCHASE_READ = "analytics:purchase:read"
+    ANALYTICS_INVENTORY_READ = "analytics:inventory:read"
+    ANALYTICS_AFTER_SALE_READ = "analytics:after_sale:read"
+
 
 class SystemRoleCode(StrEnum):
     OWNER = "OWNER"
@@ -357,6 +363,36 @@ PERMISSION_CATALOG: tuple[tuple[str, str, str, str], ...] = (
     (PermissionCode.REFUND_READ, "查看退款", "refund", "查看退款记录"),
     (PermissionCode.REFUND_CREATE, "创建退款记录", "refund", "登记一笔待确认退款"),
     (PermissionCode.REFUND_CONFIRM, "确认退款", "refund", "人工确认外部退款成功或失败"),
+    (
+        PermissionCode.ANALYTICS_OVERVIEW_READ,
+        "查看经营总览",
+        "analytics",
+        "查看经营总览 KPI 与待处理事项",
+    ),
+    (
+        PermissionCode.ANALYTICS_SALES_READ,
+        "查看销售分析",
+        "analytics",
+        "查看销售 KPI、趋势、Top SKU / 客户",
+    ),
+    (
+        PermissionCode.ANALYTICS_PURCHASE_READ,
+        "查看采购分析",
+        "analytics",
+        "查看采购 KPI、趋势、Top 供应商与采购退货指标",
+    ),
+    (
+        PermissionCode.ANALYTICS_INVENTORY_READ,
+        "查看库存分析",
+        "analytics",
+        "查看库存 KPI、仓库分布、低库存与流水趋势",
+    ),
+    (
+        PermissionCode.ANALYTICS_AFTER_SALE_READ,
+        "查看售后分析",
+        "analytics",
+        "查看售后 KPI、售后率与类型分布",
+    ),
     (PermissionCode.SUPPLIER_READ, "查看供应商", "supplier", "查看本企业供应商"),
     (PermissionCode.SUPPLIER_CREATE, "新增供应商", "supplier", "创建供应商"),
     (PermissionCode.SUPPLIER_UPDATE, "编辑供应商", "supplier", "编辑供应商档案，编码创建后只读"),
@@ -414,6 +450,11 @@ _READ_CODES: tuple[str, ...] = (
     PermissionCode.PURCHASE_RETURN_READ,
     PermissionCode.SUPPLIER_REFUND_READ,
     PermissionCode.SUPPLIER_READ,
+    PermissionCode.ANALYTICS_OVERVIEW_READ,
+    PermissionCode.ANALYTICS_SALES_READ,
+    PermissionCode.ANALYTICS_PURCHASE_READ,
+    PermissionCode.ANALYTICS_INVENTORY_READ,
+    PermissionCode.ANALYTICS_AFTER_SALE_READ,
 )
 
 DEFAULT_ROLE_TEMPLATES: tuple[tuple[str, str, str, tuple[str, ...]], ...] = (
@@ -475,6 +516,9 @@ DEFAULT_ROLE_TEMPLATES: tuple[tuple[str, str, str, tuple[str, ...]], ...] = (
             PermissionCode.PURCHASE_RETURN_UPDATE,
             PermissionCode.PURCHASE_RETURN_SUBMIT,
             PermissionCode.SUPPLIER_REFUND_READ,
+            PermissionCode.ANALYTICS_OVERVIEW_READ,
+            PermissionCode.ANALYTICS_SALES_READ,
+            PermissionCode.ANALYTICS_PURCHASE_READ,
         ),
     ),
     (
@@ -529,6 +573,8 @@ DEFAULT_ROLE_TEMPLATES: tuple[tuple[str, str, str, tuple[str, ...]], ...] = (
             PermissionCode.RETURN_ORDER_INBOUND,
             PermissionCode.PURCHASE_RETURN_READ,
             PermissionCode.PURCHASE_RETURN_OUTBOUND,
+            PermissionCode.ANALYTICS_OVERVIEW_READ,
+            PermissionCode.ANALYTICS_INVENTORY_READ,
         ),
     ),
     (
@@ -1438,6 +1484,78 @@ PERMISSION_TREE: tuple[PermissionTreeDef, ...] = (
                         title="删除",
                         type="ACTION",
                         permission_code=PermissionCode.SUPPLIER_DELETE,
+                    ),
+                ),
+            ),
+        ),
+    ),
+    PermissionTreeDef(
+        key="dir:analytics",
+        title="数据中心",
+        type="DIRECTORY",
+        children=(
+            PermissionTreeDef(
+                key="menu:analytics-overview",
+                title="经营总览",
+                type="MENU",
+                children=(
+                    PermissionTreeDef(
+                        key="action:analytics-overview-read",
+                        title="查看",
+                        type="ACTION",
+                        permission_code=PermissionCode.ANALYTICS_OVERVIEW_READ,
+                    ),
+                ),
+            ),
+            PermissionTreeDef(
+                key="menu:analytics-sales",
+                title="销售分析",
+                type="MENU",
+                children=(
+                    PermissionTreeDef(
+                        key="action:analytics-sales-read",
+                        title="查看",
+                        type="ACTION",
+                        permission_code=PermissionCode.ANALYTICS_SALES_READ,
+                    ),
+                ),
+            ),
+            PermissionTreeDef(
+                key="menu:analytics-purchase",
+                title="采购分析",
+                type="MENU",
+                children=(
+                    PermissionTreeDef(
+                        key="action:analytics-purchase-read",
+                        title="查看",
+                        type="ACTION",
+                        permission_code=PermissionCode.ANALYTICS_PURCHASE_READ,
+                    ),
+                ),
+            ),
+            PermissionTreeDef(
+                key="menu:analytics-inventory",
+                title="库存分析",
+                type="MENU",
+                children=(
+                    PermissionTreeDef(
+                        key="action:analytics-inventory-read",
+                        title="查看",
+                        type="ACTION",
+                        permission_code=PermissionCode.ANALYTICS_INVENTORY_READ,
+                    ),
+                ),
+            ),
+            PermissionTreeDef(
+                key="menu:analytics-after-sale",
+                title="售后分析",
+                type="MENU",
+                children=(
+                    PermissionTreeDef(
+                        key="action:analytics-after-sale-read",
+                        title="查看",
+                        type="ACTION",
+                        permission_code=PermissionCode.ANALYTICS_AFTER_SALE_READ,
                     ),
                 ),
             ),

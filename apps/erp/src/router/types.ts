@@ -1,5 +1,6 @@
 export type IconName =
   | 'DashboardOutlined'
+  | 'BarChartOutlined'
   | 'AppstoreOutlined'
   | 'DatabaseOutlined'
   | 'ShopOutlined'
@@ -58,7 +59,11 @@ export type PageKey =
   | 'AfterSaleDetail'
   | 'ReturnOrderList'
   | 'ReturnOrderDetail'
-  | 'RefundList';
+  | 'RefundList'
+  | 'SalesAnalytics'
+  | 'PurchaseAnalytics'
+  | 'InventoryAnalytics'
+  | 'AfterSaleAnalytics';
 
 export type PermissionMode = 'any' | 'all';
 

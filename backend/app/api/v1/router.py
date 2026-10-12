@@ -1,6 +1,7 @@
 from fastapi import APIRouter
 
 from app.api.v1.after_sales import router as after_sale_router
+from app.api.v1.analytics import router as analytics_router
 from app.api.v1.auth import router as auth_router
 from app.api.v1.brands import router as brand_router
 from app.api.v1.carriers import router as carrier_router
@@ -56,3 +57,4 @@ api_router.include_router(stock_transfer_router)
 api_router.include_router(after_sale_router)
 api_router.include_router(return_order_router)
 api_router.include_router(refund_router)
+api_router.include_router(analytics_router)

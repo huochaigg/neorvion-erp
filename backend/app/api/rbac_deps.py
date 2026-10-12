@@ -456,3 +456,23 @@ SupplierRefundConfirmContext = Annotated[
     TenantContext,
     Depends(require_permission(PermissionCode.SUPPLIER_REFUND_CONFIRM)),
 ]
+AnalyticsOverviewReadContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.ANALYTICS_OVERVIEW_READ)),
+]
+AnalyticsSalesReadContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.ANALYTICS_SALES_READ)),
+]
+AnalyticsPurchaseReadContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.ANALYTICS_PURCHASE_READ)),
+]
+AnalyticsInventoryReadContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.ANALYTICS_INVENTORY_READ)),
+]
+AnalyticsAfterSaleReadContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.ANALYTICS_AFTER_SALE_READ)),
+]

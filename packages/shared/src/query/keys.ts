@@ -372,6 +372,14 @@ export function purchaseOrderQueryKey(tenantId: number | null, orderId: number |
   return ['tenant', tenantId, 'purchase-order', orderId] as const;
 }
 
+export function analyticsQueryKey(
+  tenantId: number | null,
+  domain: string,
+  filters?: Record<string, unknown>,
+) {
+  return ['tenant', tenantId, 'analytics', domain, filters ?? {}] as const;
+}
+
 export function isTenantScopedQueryKey(queryKey: readonly unknown[]): boolean {
   return queryKey[0] === 'tenant';
 }

@@ -1,6 +1,7 @@
 import {
   AccountBookOutlined,
   AppstoreOutlined,
+  BarChartOutlined,
   CarOutlined,
   DashboardOutlined,
   DatabaseOutlined,
@@ -14,6 +15,7 @@ import type { IconName } from './types';
 
 export const ICON_MAP: Record<IconName, ComponentType<{ className?: string }>> = {
   DashboardOutlined,
+  BarChartOutlined,
   AppstoreOutlined,
   DatabaseOutlined,
   SettingOutlined,

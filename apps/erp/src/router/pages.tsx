@@ -6,6 +6,22 @@ export const PAGE_COMPONENTS: Record<PageKey, LazyExoticComponent<ComponentType<
     const module = await import('@/pages/DashboardPage');
     return { default: module.DashboardPage };
   }),
+  SalesAnalytics: lazy(async () => {
+    const module = await import('@/pages/analytics/SalesAnalyticsPage');
+    return { default: module.SalesAnalyticsPage };
+  }),
+  PurchaseAnalytics: lazy(async () => {
+    const module = await import('@/pages/analytics/PurchaseAnalyticsPage');
+    return { default: module.PurchaseAnalyticsPage };
+  }),
+  InventoryAnalytics: lazy(async () => {
+    const module = await import('@/pages/analytics/InventoryAnalyticsPage');
+    return { default: module.InventoryAnalyticsPage };
+  }),
+  AfterSaleAnalytics: lazy(async () => {
+    const module = await import('@/pages/analytics/AfterSaleAnalyticsPage');
+    return { default: module.AfterSaleAnalyticsPage };
+  }),
   Members: lazy(async () => {
     const module = await import('@/pages/system/MembersPage');
     return { default: module.MembersPage };

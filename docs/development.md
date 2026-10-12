@@ -1,6 +1,6 @@
 # 开发说明
 
-当前里程碑：V12（采购退货 / 退货出库 / 供应商退款状态）。
+当前里程碑：V13（经营数据看板 / 报表中心）。
 
 ## 前置
 
@@ -129,8 +129,12 @@ pnpm test
 54. `NO_REFUND` 全部出库后完成；`REFUND` 还需人工确认供应商退款。失败记录可重试新建。
 55. 无 `purchase_return:read` 看不到采购退货菜单；无 outbound 时仓库员不能审核；无 `supplier_refund:confirm` 看不到确认退款。直接调接口仍 403。
 56. 切换企业后采购退货 / 出库 / 供应商退款隔离；`/purchase-returns/:id` 会回到列表。
+57. 工作台可选时间范围，看到销售额、净销售额、订单数、采购额、可用库存、售后率与待处理事项。取消单不计入销售额；成功退款减少净销售。
+58. 数据中心可进入销售 / 采购 / 库存 / 售后分析，查看趋势、Top N、状态或仓库分布、低库存。
+59. 无对应 `analytics:*:read` 看不到分析菜单；工作台仍对成员开放，KPI 按权限显示。直接调接口仍 403。
+60. 切换企业后报表 Query Key 隔离，不闪现上一租户数字。导出 CSV 由后端按筛选生成。
 
-多租户说明见 `docs/multi-tenancy.md`。RBAC 见 `docs/rbac.md`。商品见 `docs/products.md`。仓库见 `docs/warehouses.md`。库存见 `docs/inventory.md`。采购见 `docs/purchases.md`。销售订单见 `docs/orders.md`。履约见 `docs/fulfillment.md`。物流见 `docs/shipping.md`。盘点见 `docs/stocktake.md`。调拨见 `docs/stock-transfer.md`。售后见 `docs/after-sales.md`。退货见 `docs/returns.md`。采购退货见 `docs/purchase-returns.md`。当前状态见 `docs/current-state.md`。V3 见 `docs/versions/v3.md`。V4 见 `docs/versions/v4.md`。V5 见 `docs/versions/v5.md`。V6 见 `docs/versions/v6.md`。V7 见 `docs/versions/v7.md`。V8 见 `docs/versions/v8.md`。V9 见 `docs/versions/v9.md`。V10 见 `docs/versions/v10.md`。V11 见 `docs/versions/v11.md`。V12 见 `docs/versions/v12.md`。路由配置说明见 `docs/routing.md`。认证流程见 `docs/auth.md`。
+多租户说明见 `docs/multi-tenancy.md`。RBAC 见 `docs/rbac.md`。商品见 `docs/products.md`。仓库见 `docs/warehouses.md`。库存见 `docs/inventory.md`。采购见 `docs/purchases.md`。销售订单见 `docs/orders.md`。履约见 `docs/fulfillment.md`。物流见 `docs/shipping.md`。盘点见 `docs/stocktake.md`。调拨见 `docs/stock-transfer.md`。售后见 `docs/after-sales.md`。退货见 `docs/returns.md`。采购退货见 `docs/purchase-returns.md`。报表见 `docs/analytics.md`。当前状态见 `docs/current-state.md`。V3 见 `docs/versions/v3.md`。V4 见 `docs/versions/v4.md`。V5 见 `docs/versions/v5.md`。V6 见 `docs/versions/v6.md`。V7 见 `docs/versions/v7.md`。V8 见 `docs/versions/v8.md`。V9 见 `docs/versions/v9.md`。V10 见 `docs/versions/v10.md`。V11 见 `docs/versions/v11.md`。V12 见 `docs/versions/v12.md`。V13 见 `docs/versions/v13.md`。路由配置说明见 `docs/routing.md`。认证流程见 `docs/auth.md`。
 
 ## 浏览器进 debugger
 

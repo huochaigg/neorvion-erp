@@ -60,6 +60,8 @@
 - 迁移 `20261006_0013` 只改 CHECK，不重建销售明细表
 - `outbound_picks` / `outbound_pick_lines`：每次拣货追加记录。`quantity` 是本次，`picked_before` / `picked_after` 是累计变化。出库明细 `picked_quantity` 仍是累计，确认出库继续用它
 
+当前里程碑 V13 不增加业务表。报表实时聚合现有订单 / 采购 / 库存 / 售后表，不建日报表。
+
 当前里程碑 V12 增加：
 
 - `purchase_returns` / `purchase_return_items`：采购退货单。单号 `PRT` + 年 + 6 位 id。不修改采购明细计划数量和已收数量

@@ -148,6 +148,7 @@ export const PERMISSION_MODULE_LABELS: Record<string, string> = {
   purchase_return: '采购退货',
   supplier_refund: '供应商退款',
   supplier: '供应商管理',
+  analytics: '数据中心',
 };
 
 export const TENANT_HEADER = 'X-Tenant-ID';
@@ -273,6 +274,11 @@ export const PERMISSION_CODE = {
   supplierUpdate: 'supplier:update',
   supplierDisable: 'supplier:disable',
   supplierDelete: 'supplier:delete',
+  analyticsOverviewRead: 'analytics:overview:read',
+  analyticsSalesRead: 'analytics:sales:read',
+  analyticsPurchaseRead: 'analytics:purchase:read',
+  analyticsInventoryRead: 'analytics:inventory:read',
+  analyticsAfterSaleRead: 'analytics:after_sale:read',
 } as const;
 
 export type PermissionMode = 'any' | 'all';
