@@ -33,7 +33,7 @@ uv run python -m app
 Windows 必须使用 `python -m app`（内部指定 Selector 事件循环）。不要直接 `uvicorn app.main:app`，否则 psycopg 异步驱动无法连接 PostgreSQL。Linux / CI 可继续使用：
 
 ```bash
-uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 8002
+uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 8012
 ```
 
 4. 前端：
@@ -45,7 +45,7 @@ pnpm --filter @neorvion/knowledge dev
 
 访问：
 
-- Knowledge API：http://127.0.0.1:8002/api/v1/health
+- Knowledge API：http://127.0.0.1:8012/api/v1/health
 - Knowledge 微前端：http://localhost:8017
 - Shell 入口：http://localhost:8015/knowledge
 

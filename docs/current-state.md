@@ -4,7 +4,7 @@
 
 ## 技术栈
 
-Shell（8015）+ ERP 微前端（8016）+ Knowledge 微前端（8017）+ ERP FastAPI（8011 / MySQL）+ Knowledge FastAPI（8002 / PostgreSQL）+ Redis 7 + 独立 Worker。前端 React 19 / Vite / Wujie / Ant Design 6 / TanStack Query / Zustand。后端 SQLAlchemy 2 / Alembic。
+Shell（8015）+ ERP 微前端（8016）+ Knowledge 微前端（8017）+ ERP FastAPI（8011 / MySQL）+ Knowledge FastAPI（8012 / PostgreSQL）+ Redis 7 + 独立 Worker。前端 React 19 / Vite / Wujie / Ant Design 6 / TanStack Query / Zustand。后端 SQLAlchemy 2 / Alembic。
 
 ## 目录
 

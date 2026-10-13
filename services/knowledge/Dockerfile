@@ -16,7 +16,7 @@ COPY alembic.ini ./
 COPY alembic ./alembic
 COPY app ./app
 
-EXPOSE 8002
+EXPOSE 8012
 
 # V1 仅准备镜像，不要求部署。Migration 不在容器启动时自动执行。
-CMD ["uv", "run", "--no-dev", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8002", "--proxy-headers", "--forwarded-allow-ips=127.0.0.1"]
+CMD ["uv", "run", "--no-dev", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8012", "--proxy-headers", "--forwarded-allow-ips=127.0.0.1"]

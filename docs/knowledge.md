@@ -10,7 +10,7 @@ flowchart LR
   Shell --> ERPFE[ERP 微前端 8016]
   Shell --> KFE[Knowledge 微前端 8017]
   ERPFE --> ERPAPI[ERP API 8011]
-  KFE --> KAPI[Knowledge API 8002]
+  KFE --> KAPI[Knowledge API 8012]
   KAPI --> ERPAPI
   ERPAPI --> MySQL[(ERP MySQL)]
   KAPI --> PG[(Knowledge PostgreSQL)]
