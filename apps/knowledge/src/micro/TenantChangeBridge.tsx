@@ -2,6 +2,7 @@ import { SHELL_EVENTS, isTenantChangedPayload, safeKnowledgePathAfterTenantChang
 import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
+import { abortKnowledgeStreams } from '@/lib/knowledge-stream';
 import { isolateTenantQueries } from '@/lib/query-tenant';
 import { getShellProps, isEmbeddedInWujie } from '@/lib/runtime';
 import { useKnowledgeTenantStore } from '@/stores/tenant-runtime';
@@ -33,6 +34,7 @@ export function TenantChangeBridge() {
       if (!isTenantChangedPayload(payload)) {
         return;
       }
+      abortKnowledgeStreams();
       isolateTenantQueries(queryClient, payload.previousTenantId);
       const fallback = safeKnowledgePathAfterTenantChange(locationRef.current.pathname);
       if (fallback) {

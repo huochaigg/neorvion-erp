@@ -5,6 +5,9 @@ export function safeKnowledgePathAfterTenantChange(pathname: string): string | n
   if (/^\/bases\/[^/]+(\/.*)?\/?$/.test(pathname)) {
     return KNOWLEDGE_DEFAULT_PATH;
   }
+  if (/^\/chat\/[^/]+\/?$/.test(pathname)) {
+    return '/chat';
+  }
   if (/^\/tasks\/[^/]+\/?$/.test(pathname)) {
     return '/tasks';
   }

@@ -10,7 +10,7 @@ Shell（8015）+ ERP 微前端（8016）+ Knowledge 微前端（8017）+ ERP Fas
 
 - `apps/shell`：登录、租户、导航、Wujie 宿主
 - `apps/erp`：业务页面
-- `apps/knowledge`：AI 知识库微前端（V2 文档解析与切片）
+- `apps/knowledge`：AI 知识库微前端（V3 检索与问答）
 - `packages/shared`：Query Key、ApiError、租户请求头
 - `services/erp/app/{api,core,models,schemas,repositories,services,tasks}`
 - `services/knowledge/`：Knowledge 独立 FastAPI
@@ -20,7 +20,7 @@ Shell（8015）+ ERP 微前端（8016）+ Knowledge 微前端（8017）+ ERP Fas
 
 Catalog、Warehouse、Inventory、Purchase、Sales、Fulfillment（收货 / 出库）、Shipping、Stocktake、Transfer、After-Sales、Purchase Return、Analytics、Events、Operation Logs、Async Tasks。SaaS 多租户 + RBAC。
 
-独立 Knowledge V2：租户内知识库、文档上传（PDF/DOCX/TXT/MD）、本地原文件存储、异步解析与字符切片、Chunk 启停编辑。身份与 RBAC 仍以 ERP JWT + introspect 为准。V3 再做 Embedding / 向量检索。
+独立 Knowledge V3：在 V2 文档/切片之上提供 Embedding、pgvector 精确检索、关键词/混合检索（RRF）、可选 Rerank、会话 SSE 问答与检索测试。身份与 RBAC 仍以 ERP JWT + introspect 为准。V4 再做评测集与 Recall@K。
 
 ## 库存
 

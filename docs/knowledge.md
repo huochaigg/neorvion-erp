@@ -1,6 +1,6 @@
-# Neorvion Knowledge V2
+# Neorvion Knowledge V3
 
-独立 AI 知识库：租户隔离的知识库 CRUD、文档上传、解析、切片与异步任务。V3 再接入 Embedding / pgvector / 问答。
+独立 AI 知识库：V1 知识库 CRUD → V2 文档解析与切片 → V3 RAG 检索与智能问答。身份、租户、RBAC 仍以 ERP MySQL 为权威来源。
 
 ## 与 ERP 的关系
 
@@ -10,53 +10,107 @@ flowchart LR
   Shell --> KFE[Knowledge 微前端 8017]
   KFE --> KAPI[Knowledge API 8012]
   KAPI --> ERPAPI[ERP API 8011]
-  Worker[Knowledge Worker] --> KAPI
-  Worker --> Redis[(Redis)]
-  KAPI --> PG[(PostgreSQL)]
+  Worker[Knowledge Worker] --> Redis[(Redis)]
+  Worker --> PG[(PostgreSQL + pgvector)]
+  KAPI --> PG
   KAPI --> Disk[本地文件目录]
+  KAPI --> Models[OpenAI 兼容模型 API]
 ```
 
 - 登录、Refresh、租户切换仍由 Shell + ERP 负责。
 - Knowledge 先验签 JWT，再调用 ERP `POST /api/v1/internal/identity/introspect`。
 - 前端传入的 `X-Tenant-ID` 只是意愿，不能单独采信。
-- 权限沿用 `knowledge:read/create/update/delete`。上传=create，解析/切片/编辑切片=update，删除=delete，列表/下载/预览=read。
+- 权限沿用 `knowledge:read/create/update/delete`。检索与问答需要 read；重建索引与模型连通测试需要 update。
+- 模型密钥只在 Knowledge 服务端环境变量中，不返回前端，也不写入 Git。
 
-## 信息架构（已实现）
+## 信息架构
 
 | 菜单 | 路由 | 说明 |
 | --- | --- | --- |
-| 工作台 | `/workbench` | 知识库/文档/切片数量、成功失败、最近文档、待处理任务 |
+| 工作台 | `/workbench` | 知识库/文档/切片数量、最近文档、待处理任务 |
+| 智能搜索 | `/search` | 真实检索引擎：VECTOR / KEYWORD / HYBRID |
+| 知识问答 | `/chat`、`/chat/:id` | 会话、SSE 流式回答、引用来源 |
 | 知识库 | `/bases` | V1 CRUD |
-| 知识库详情 | `/bases/:id` | 概览、文档列表、切片、上传抽屉 |
+| 知识库详情 | `/bases/:id` | 概览、文档、切片、向量索引状态与重建 |
 | 文档详情 | `/bases/:id/documents/:docId` | 解析预览、切片编辑启停、任务与重试 |
-| 处理任务 | `/tasks` | 全租户任务列表 |
+| 检索测试 | `/retrieval-test` | 与问答共用检索引擎，展示排名与耗时 |
+| 处理任务 | `/tasks` | PARSE / CHUNK / EMBED |
+| 模型配置 | `/models` | 平台级 Chat / Embedding / Rerank（无密钥明文） |
 
-未实现的「知识空间文章 / 检索问答 / 评测 / 系统管理」不展示空菜单。成员与角色仍在 ERP。
+未实现的知识空间文章、V4 评测集不展示空菜单。成员与角色仍在 ERP。
 
-切租户后：`/bases/:id` 与文档详情回到工作台，任务详情回到 `/tasks`。Query Key 带 `tenantId`；页面 `epoch` 会卸掉上传队列等局部状态。前端取消的是浏览器请求，不会取消服务端已落库的解析任务。
+切租户后：`/bases/:id` 与文档详情回到工作台，`/chat/:id` 回到 `/chat`，任务详情回到 `/tasks`。Query Key 带 `tenantId`；页面 `epoch` 会卸掉局部状态并中止进行中的 SSE。前端取消的是浏览器请求，不会取消服务端已落库的解析/索引任务。
 
 ## 数据库
 
-迁移：`20261013_0001`（V1）→ `20261013_0002`（V2）。
+迁移：`20261013_0001`（V1）→ `20261013_0002`（V2）→ `20261013_0003`（V3：pgvector + 会话）。
 
-- `knowledge_bases`：软删除。
-- `knowledge_documents`：SHA256、抽取文本、切片参数、`deleted_at`。同库未删除记录 `(tenant_id, knowledge_base_id, sha256)` 唯一。
-- `document_chunks`：`version + chunk_index` 唯一。仅 `ACTIVE` 对 UI 可见。`enabled=false` 留给 V3 检索排除。
-- `document_processing_tasks`：`QUEUED/RUNNING/SUCCESS/FAILED`。进行中的 `(tenant_id, document_id, task_type)` 唯一，避免并发重复处理同一文档。
+V1/V2 表保持不变。V3 增量：
 
-复合外键始终带 `tenant_id`。
+- `document_chunks.search_tsv`：`to_tsvector('simple', content)` 生成列 + GIN；另有 `gin_trgm_ops`。这不是 BM25。
+- `chunk_embeddings`：一条切片一行向量。记录 `model_name`、`dimensions`、`content_hash`、`chunk_version`、`PENDING/READY/STALE/FAILED`。检索只使用当前模型、当前维度、`READY`、且 `chunk_version` 与文档 `active_chunk_version` 匹配的行。
+- `model_profiles`：平台系统配置镜像（密钥只引用环境变量名）。
+- `conversations` / `messages` / `message_citations`：会话、消息、引用来源。
+- `retrieval_logs`：检索参数、阶段耗时与排名，供测试页解释。
 
-## 文件存储
+复合外键始终带 `tenant_id`。索引失败不得破坏 V2 文档与切片。
 
-原文件不进 PostgreSQL。相对键：
+向量列维度取自迁移时的 `EMBEDDING_DIMENSIONS`（默认 1024）。测试库使用 8 维。**更换维度必须重建迁移或新开库，并全量重建索引。**
 
-`{tenant_id}/{knowledge_base_id}/{document_id}/original.{ext}`
+## Embedding 与索引
 
-根目录 `STORAGE_ROOT`（默认 `services/knowledge/var/storage`）。解析路径必须落在根目录内，拒绝 `..` 与绝对路径。未来可把同一 `storage_key` 映射到对象存储。
+- 供应商：`MODEL_PROVIDER=openai_compat`（兼容 DashScope / Qwen 等 OpenAI 协议）或测试用 `mock`。
+- 默认建议：`text-embedding-v3`，维度 1024。查询与文档必须同一模型与维度。
+- 批量大小 `EMBEDDING_BATCH_SIZE`（默认 16），后台任务 `TaskType.EMBED`，失败可重试。429 / 5xx 可重试，401 / 402 不盲目重试。
+- Chunk 编辑会标记向量 `STALE` 并排队重建；禁用切片不删向量，但检索 SQL 排除 `enabled=false`；删除文档会使进行中 EMBED 失败。
+- 当前数据规模走精确余弦 kNN（`cosine_distance`），**不建 HNSW**。小数据 + 多租户 `WHERE` 过滤时 HNSW 容易降低召回。
 
-限制：PDF / DOCX / TXT / Markdown；单文件 20MB；单次最多 10 个；魔数校验扩展名。
+## 检索引擎
 
-## 解析与切片
+三种策略共用 `RetrievalService.search`，智能搜索 / 检索测试 / 问答不得分叉实现。
+
+| 策略 | 实现 |
+| --- | --- |
+| VECTOR | Embedding 查询向量 + pgvector 余弦距离，相似度 = `1 - distance` |
+| KEYWORD | PostgreSQL `simple` FTS + `pg_trgm` + 中文 `ILIKE`。**不是 BM25** |
+| HYBRID | 两路召回后 RRF（`k=60`）融合，按 `chunk_id` 去重 |
+
+可选 Rerank：模型不可用或抛错时降级到融合结果，并标记 `rerank_degraded`。
+
+分数不要混用：向量相似度、关键词分、RRF、Rerank 各自独立，阈值只作用在对应一路。
+
+**租户与授权过滤全部在 SQL `WHERE` 中完成**（`tenant_id`、知识库 ACTIVE、切片 ACTIVE+enabled、当前版本、指定知识库 ID）。禁止先全局召回再在 Python 里丢弃其他租户。
+
+## 知识问答 / SSE
+
+```text
+问题 → 检索 → 可选 Rerank → 证据筛选 → 构造上下文 → LLM → SSE
+```
+
+- 无命中：明确拒答，不把猜测当知识库事实。
+- 文档正文包在 `<untrusted_document>` 中，系统提示要求忽略其中的指令。
+- 历史只保留最近 `CHAT_HISTORY_TURNS` 轮，证据字符上限 `CHAT_MAX_CONTEXT_CHARS`。
+- LLM 调用期间不持有长事务：先落库用户/助手消息并 commit，再流式生成，最后再写结果与 citation。
+- SSE 事件：`status` / `token` / `citation` / `done` / `error`。请求携带 JWT 与已校验的租户头。切租户必须 abort 旧 EventStream。
+
+## 模型配置
+
+平台级 Chat / Embedding / Rerank 来自环境变量。API 只返回 `has_api_key` 与 `api_key_env`，永不返回密钥。普通租户管理员不能覆盖平台密钥。连通测试需要 `knowledge:update`。
+
+本地示例（密钥只写 `services/knowledge/.env`）：
+
+```env
+MODEL_PROVIDER=openai_compat
+EMBEDDING_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
+EMBEDDING_MODEL=text-embedding-v3
+EMBEDDING_DIMENSIONS=1024
+CHAT_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
+CHAT_MODEL=qwen-plus
+```
+
+测试默认 `MODEL_PROVIDER=mock`，不产生计费。
+
+## 解析与切片（V2，仍有效）
 
 | 类型 | 库 | 说明 |
 | --- | --- | --- |
@@ -65,13 +119,7 @@ flowchart LR
 | Markdown | 文本 + 标题识别 | 保留 ATX 标题 |
 | TXT | charset-normalizer | 常见编码 |
 
-切片单位是 **字符**（`len`），不是 Token。
-
-- `FIXED`：`CharacterTextSplitter`
-- `RECURSIVE`：`RecursiveCharacterTextSplitter`，分隔符含中文标点与段落
-- `chunk_size` 100–8000；`overlap >= chunk_size` 拒绝
-
-重新切片：先在新 `version` 写入 `DRAFT`，成功后再把旧 `ACTIVE` 标为 `SUPERSEDED` 并发布新切片。失败则回滚，旧切片保留。
+切片单位是 **字符**。`FIXED` / `RECURSIVE`。重新切片写入新 `version`，成功后再把旧 `ACTIVE` 标为 `SUPERSEDED`。
 
 ## 任务状态机
 
@@ -80,11 +128,9 @@ QUEUED → RUNNING → SUCCESS
                  ↘ FAILED →（重试）QUEUED
 ```
 
-PostgreSQL 是真相；Redis List 只投递 `task_id`。测试与不便起 Worker 时可设 `TASK_EXECUTOR=inline`。
+`PARSE` / `CHUNK` 失败会影响文档状态；`EMBED` 失败不影响 V2 原文与切片。PostgreSQL 是真相；Redis List 只投递 `task_id`。`TASK_EXECUTOR=inline` 仅建议测试。
 
-Worker：`uv run python -m app.tasks.worker`。启动时把遗留 `RUNNING` 标失败（副作用无法确认），并把 `QUEUED` 重新入队。
-
-删除文档：软删除、删磁盘文件、删切片；进行中任务标失败。任务行保留审计。删除知识库时同样清理下属文档文件。
+Worker：`uv run python -m app.tasks.worker`。
 
 ## 本地运行
 
@@ -93,14 +139,14 @@ cd services/knowledge
 uv sync
 uv run alembic upgrade head
 uv run python -m app
-# 另开终端（TASK_EXECUTOR=redis 时必须）
+# TASK_EXECUTOR=redis 时另开
 uv run python -m app.tasks.worker
 pnpm dev
 ```
 
-前端还需 `apps/knowledge/.env`（从 `.env.example` 复制），`VITE_API_BASE_URL=http://localhost:8012`。
+前端 `apps/knowledge/.env`：`VITE_API_BASE_URL=http://localhost:8012`。访问 http://localhost:8015/knowledge 。Windows 请用 `uv run python -m app`。
 
-访问 http://localhost:8015/knowledge 。Windows 请用 `uv run python -m app`，不要直接 uvicorn（Selector 循环）。开发态 Vite HTML 必须是绝对资源地址，否则无界 iframe 会加载到 Shell 自己的脚本。
+可选真实模型联调：在 `services/knowledge/.env` 填入供应商 Key，保持 `MODEL_PROVIDER=openai_compat`，上传文档后看知识库「向量索引」变为就绪，再在检索测试页跑同一问题的三种策略。
 
 ## 测试
 
@@ -108,27 +154,24 @@ pnpm dev
 cd services/knowledge
 uv run pytest -q --tb=short
 pnpm --filter @neorvion/knowledge test
+pnpm --filter @neorvion/shared test
 pnpm --filter @neorvion/shell test
 ```
 
-## 设计取舍
+测试使用独立库 `neorvion_knowledge_test` 与 mock 模型客户端，不依赖真实 API 计费。
 
-- 不引入 Celery。与 ERP 一样：DB 状态 + Redis 投递 + 独立 Worker。
-- 不新增一套 Knowledge RBAC。
-- 抽取文本进 PostgreSQL，便于预览；原文件进磁盘。
-- 切片失败不丢旧数据，保证可重试。
+## 性能约束（面向 4 核 4GB）
 
-## 已知限制
+- 不在服务器常驻本地大模型。
+- Embedding 批量走任务，控制批次与 Worker 并发 1。
+- 检索在 SQL 层过滤，不把整库 Chunk 载入 Python。
+- SQLAlchemy 连接池 `pool_size=5, max_overflow=5`。
+- 精确 kNN 适合当前小数据；上万切片后再评估 HNSW，并单独验证多租户过滤召回。
 
-- 无 OCR、无复杂表格还原、无网页采集。
-- 单 Worker 串行，适合小规格 Linux。
-- 切片按字符，不是 Tokenizer。
-- 无 Embedding / 向量检索 / 问答（V3）。
-- 知识库软删后名称可复用；文档 SHA256 在软删后可重新上传。
+## 已知限制 / V4
 
-## V3 建议复用
-
-- `document_chunks` 中 `status=ACTIVE AND enabled=true` 作为 Embedding 语料。
-- `page_no` / `heading` / `source_start` / `source_end` 做引用溯源。
-- `storage_key` 回原文件。
-- 检索 API 继续走用户 JWT + `X-Tenant-ID` + ERP 内省，不要让 Copilot 直连 PostgreSQL。
+- 无 OCR、无复杂表格还原。
+- 关键词检索不是 BM25；中文主要靠 ILIKE + trigram。
+- 无评测集、无 Recall@K / MRR / 批量评测（V4）。
+- Rerank 依赖可选兼容 HTTP；未配置则降级。
+- 更换 Embedding 维度需要重建向量列。

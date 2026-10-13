@@ -148,13 +148,16 @@ export function WorkbenchPage() {
           )}
         </Card>
       </div>
-      <Can permission={PERMISSION_CODE.knowledgeCreate}>
-        <div className="mt-4">
+      <Space className="mt-4" wrap>
+        <Can permission={PERMISSION_CODE.knowledgeCreate}>
           <Button type="primary" onClick={() => navigate('/bases')}>
             去知识库上传文档
           </Button>
-        </div>
-      </Can>
+        </Can>
+        <Button onClick={() => navigate('/search')}>智能搜索</Button>
+        <Button onClick={() => navigate('/chat')}>知识问答</Button>
+        <Button onClick={() => navigate('/retrieval-test')}>检索测试</Button>
+      </Space>
     </div>
   );
 }

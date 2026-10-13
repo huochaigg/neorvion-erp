@@ -30,6 +30,10 @@ os.environ["ERP_JWT_SECRET"] = "knowledge-test-jwt-secret-32bytes!"
 os.environ["ERP_INTERNAL_SERVICE_KEY"] = "knowledge-test-internal-key"
 os.environ["IDENTITY_CACHE_TTL_SECONDS"] = "30"
 os.environ["TASK_EXECUTOR"] = "inline"
+os.environ["MODEL_PROVIDER"] = "mock"
+os.environ["EMBEDDING_DIMENSIONS"] = "8"
+os.environ["EMBEDDING_MODEL"] = "mock-embed"
+os.environ["CHAT_MODEL"] = "mock-chat"
 os.environ.setdefault("STORAGE_ROOT", str(Path(__file__).resolve().parents[1] / "var" / "test-storage"))
 if not os.environ.get("TEST_DATABASE_URL"):
     raise RuntimeError("请在 knowledge/.env 或环境变量中设置 TEST_DATABASE_URL")
@@ -84,6 +88,12 @@ def _run_migrations() -> None:
 def _wipe_tables() -> None:
     engine = create_engine(settings.database_url)
     with engine.begin() as connection:
+        connection.execute(text("DELETE FROM message_citations"))
+        connection.execute(text("DELETE FROM messages"))
+        connection.execute(text("DELETE FROM conversations"))
+        connection.execute(text("DELETE FROM retrieval_logs"))
+        connection.execute(text("DELETE FROM chunk_embeddings"))
+        connection.execute(text("DELETE FROM model_profiles"))
         connection.execute(text("DELETE FROM document_chunks"))
         connection.execute(text("DELETE FROM document_processing_tasks"))
         connection.execute(text("DELETE FROM knowledge_documents"))

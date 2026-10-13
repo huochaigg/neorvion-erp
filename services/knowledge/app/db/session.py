@@ -13,6 +13,7 @@ engine = create_async_engine(
     echo=settings.app_env == "development",
 )
 
+
 SessionLocal = async_sessionmaker(
     bind=engine,
     autoflush=False,

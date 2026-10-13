@@ -8,12 +8,17 @@ describe('safeKnowledgePathAfterTenantChange', () => {
     assert.equal(safeKnowledgePathAfterTenantChange('/bases'), null);
     assert.equal(safeKnowledgePathAfterTenantChange('/bases/'), null);
     assert.equal(safeKnowledgePathAfterTenantChange('/tasks'), null);
+    assert.equal(safeKnowledgePathAfterTenantChange('/search'), null);
+    assert.equal(safeKnowledgePathAfterTenantChange('/chat'), null);
+    assert.equal(safeKnowledgePathAfterTenantChange('/retrieval-test'), null);
+    assert.equal(safeKnowledgePathAfterTenantChange('/models'), null);
   });
 
   it('带旧租户资源 ID 的路径回到模块首页', () => {
     assert.equal(safeKnowledgePathAfterTenantChange('/bases/2'), '/workbench');
     assert.equal(safeKnowledgePathAfterTenantChange('/bases/2/'), '/workbench');
     assert.equal(safeKnowledgePathAfterTenantChange('/bases/2/documents/9'), '/workbench');
+    assert.equal(safeKnowledgePathAfterTenantChange('/chat/18'), '/chat');
     assert.equal(safeKnowledgePathAfterTenantChange('/tasks/18'), '/tasks');
   });
 });

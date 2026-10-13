@@ -15,7 +15,7 @@ from app.core.config import settings
 from app.core.event_loop import selector_loop_factory
 from app.core.logging import setup_logging
 from app.db.session import SessionLocal
-from app.models.knowledge import KnowledgeDocument, KnowledgeDocumentStatus
+from app.models.knowledge import KnowledgeDocument, KnowledgeDocumentStatus, TaskType
 from app.repositories.documents import TaskRepository
 from app.services.processing import ProcessingService
 from app.tasks.queue import enqueue_task, pop_task
@@ -28,13 +28,14 @@ async def recover_stale_tasks() -> None:
     async with SessionLocal() as session:
         repo = TaskRepository(session)
         failed = await repo.fail_stale_running(message="Worker 重启，任务中断，请重试")
-        if failed:
+        parse_or_chunk_docs = {
+            row.document_id for row in failed if row.task_type in {TaskType.PARSE.value, TaskType.CHUNK.value}
+        }
+        if parse_or_chunk_docs:
             docs = list(
                 (
                     await session.scalars(
-                        select(KnowledgeDocument).where(
-                            KnowledgeDocument.status == KnowledgeDocumentStatus.PROCESSING.value
-                        )
+                        select(KnowledgeDocument).where(KnowledgeDocument.id.in_(parse_or_chunk_docs))
                     )
                 ).all()
             )
@@ -46,7 +47,7 @@ async def recover_stale_tasks() -> None:
         for task in queued:
             await enqueue_task(task.id)
         if failed or queued:
-            logger.info("knowledge worker recovered running=%s queued=%s", failed, len(queued))
+            logger.info("knowledge worker recovered running=%s queued=%s", len(failed), len(queued))
 
 
 async def handle_one(task_id: int) -> None:

@@ -30,7 +30,7 @@ export function UploadDocumentsDrawer({
   const submit = async () => {
     const files = fileList
       .map((item) => item.originFileObj)
-      .filter((item): item is File => typeof File !== 'undefined' && item instanceof File);
+      .filter((item): item is NonNullable<typeof item> => item != null);
     if (!files.length) {
       message.warning('请选择文件');
       return;

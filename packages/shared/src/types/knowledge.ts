@@ -22,6 +22,25 @@ export const KNOWLEDGE_TASK_STATUS = {
 export const KNOWLEDGE_TASK_TYPE = {
   parse: 'PARSE',
   chunk: 'CHUNK',
+  embed: 'EMBED',
+} as const;
+
+export const KNOWLEDGE_RETRIEVAL_STRATEGY = {
+  vector: 'VECTOR',
+  keyword: 'KEYWORD',
+  hybrid: 'HYBRID',
+} as const;
+
+export const KNOWLEDGE_MESSAGE_ROLE = {
+  user: 'USER',
+  assistant: 'ASSISTANT',
+} as const;
+
+export const KNOWLEDGE_MESSAGE_STATUS = {
+  streaming: 'STREAMING',
+  completed: 'COMPLETED',
+  failed: 'FAILED',
+  cancelled: 'CANCELLED',
 } as const;
 
 export const KNOWLEDGE_CHUNK_STRATEGY = {
@@ -51,6 +70,13 @@ export const KNOWLEDGE_TASK_STATUS_LABEL: Record<string, string> = {
 export const KNOWLEDGE_TASK_TYPE_LABEL: Record<string, string> = {
   PARSE: '解析',
   CHUNK: '切片',
+  EMBED: '向量化',
+};
+
+export const KNOWLEDGE_RETRIEVAL_STRATEGY_LABEL: Record<string, string> = {
+  VECTOR: '向量检索',
+  KEYWORD: '关键词检索',
+  HYBRID: '混合检索',
 };
 
 export interface KnowledgeBase {
@@ -217,6 +243,134 @@ export function knowledgeTaskStatusLabel(status: string): string {
 
 export function knowledgeTaskTypeLabel(type: string): string {
   return KNOWLEDGE_TASK_TYPE_LABEL[type] ?? type;
+}
+
+export interface KnowledgeSearchHit {
+  chunk_id: number;
+  document_id: number;
+  knowledge_base_id: number;
+  filename: string;
+  content: string;
+  page_no: number | null;
+  heading: string | null;
+  chunk_index: number;
+  version: number;
+  final_rank: number;
+  vector_score: number | null;
+  keyword_score: number | null;
+  rrf_score: number | null;
+  rerank_score: number | null;
+}
+
+export interface KnowledgeSearchResult {
+  items: KnowledgeSearchHit[];
+  strategy: string;
+  rerank_applied: boolean;
+  rerank_degraded: boolean;
+  stages: Record<string, unknown>;
+  latency_ms: number;
+  knowledge_base_ids: number[];
+}
+
+export interface KnowledgeSearchPayload {
+  query: string;
+  knowledge_base_ids?: number[];
+  strategy?: string;
+  top_k?: number;
+  candidate_k?: number;
+  similarity_threshold?: number | null;
+  rerank?: boolean;
+}
+
+export interface KnowledgeIndexStatus {
+  knowledge_base_id: number;
+  model_name: string;
+  dimensions: number;
+  total_active_chunks: number;
+  ready: number;
+  pending: number;
+  stale: number;
+  failed: number;
+}
+
+export interface KnowledgeConversation {
+  id: number;
+  tenant_id: number;
+  title: string;
+  knowledge_base_ids: number[];
+  created_by: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface KnowledgeConversationList {
+  items: KnowledgeConversation[];
+  total: number;
+  page: number;
+  page_size: number;
+}
+
+export interface KnowledgeCitation {
+  chunk_id: number;
+  document_id: number;
+  knowledge_base_id: number;
+  filename: string;
+  page_no: number | null;
+  heading: string | null;
+  snippet: string;
+  rank: number;
+  vector_score: number | null;
+  keyword_score: number | null;
+  rrf_score: number | null;
+  rerank_score: number | null;
+}
+
+export interface KnowledgeMessage {
+  id: number;
+  conversation_id: number;
+  role: string;
+  content: string;
+  status: string;
+  retrieval_strategy: string | null;
+  usage: Record<string, unknown> | null;
+  latency_ms: number | null;
+  error_message: string | null;
+  created_at: string;
+  citations: KnowledgeCitation[];
+}
+
+export interface KnowledgeConversationDetail extends KnowledgeConversation {
+  messages: KnowledgeMessage[];
+}
+
+export interface KnowledgeChatAskPayload {
+  content: string;
+  strategy?: string;
+  top_k?: number;
+  rerank?: boolean;
+  regenerate_of?: number | null;
+}
+
+export interface KnowledgeModelProfile {
+  id: number | null;
+  kind: string;
+  name: string;
+  provider: string;
+  base_url: string;
+  model_name: string;
+  dimensions: number | null;
+  api_key_env: string;
+  has_api_key: boolean;
+  is_default: boolean;
+  enabled: boolean;
+  is_system: boolean;
+  last_tested_at: string | null;
+  last_test_ok: boolean | null;
+  last_test_message: string | null;
+}
+
+export function knowledgeRetrievalStrategyLabel(strategy: string): string {
+  return KNOWLEDGE_RETRIEVAL_STRATEGY_LABEL[strategy] ?? strategy;
 }
 
 export function formatFileSize(bytes: number): string {

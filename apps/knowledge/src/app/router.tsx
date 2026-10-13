@@ -6,9 +6,13 @@ import { PermissionGuard } from '@/components/PermissionGuard';
 import { KnowledgeLayout } from '@/layouts/KnowledgeLayout';
 import { TenantChangeBridge } from '@/micro/TenantChangeBridge';
 import { WujieRouteBridge } from '@/micro/WujieRouteBridge';
+import { ChatPage } from '@/pages/ChatPage';
 import { DocumentDetailPage } from '@/pages/DocumentDetailPage';
 import { KnowledgeBaseDetailPage } from '@/pages/KnowledgeBaseDetailPage';
 import { KnowledgeBaseListPage } from '@/pages/KnowledgeBaseListPage';
+import { ModelsPage } from '@/pages/ModelsPage';
+import { RetrievalTestPage } from '@/pages/RetrievalTestPage';
+import { SearchPage } from '@/pages/SearchPage';
 import { TaskListPage } from '@/pages/TaskListPage';
 import { WorkbenchPage } from '@/pages/WorkbenchPage';
 import { useKnowledgeTenantStore } from '@/stores/tenant-runtime';
@@ -79,6 +83,46 @@ export function AppRouter() {
             element={
               <Suspense fallback={<Fallback />}>
                 <DocumentDetailPage />
+              </Suspense>
+            }
+          />
+          <Route
+            path="/search"
+            element={
+              <Suspense fallback={<Fallback />}>
+                <SearchPage />
+              </Suspense>
+            }
+          />
+          <Route
+            path="/chat"
+            element={
+              <Suspense fallback={<Fallback />}>
+                <ChatPage />
+              </Suspense>
+            }
+          />
+          <Route
+            path="/chat/:id"
+            element={
+              <Suspense fallback={<Fallback />}>
+                <ChatPage />
+              </Suspense>
+            }
+          />
+          <Route
+            path="/retrieval-test"
+            element={
+              <Suspense fallback={<Fallback />}>
+                <RetrievalTestPage />
+              </Suspense>
+            }
+          />
+          <Route
+            path="/models"
+            element={
+              <Suspense fallback={<Fallback />}>
+                <ModelsPage />
               </Suspense>
             }
           />

@@ -32,7 +32,7 @@ class HealthService:
             postgres=postgres,  # type: ignore[arg-type]
             pgvector=pgvector,  # type: ignore[arg-type]
             identity=identity,  # type: ignore[arg-type]
-            milestone="Knowledge V2",
+            milestone="Knowledge V3",
             version=settings.app_version,
             git_sha=settings.git_sha,
         )

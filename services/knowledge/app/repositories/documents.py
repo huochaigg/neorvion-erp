@@ -269,7 +269,7 @@ class TaskRepository(BaseRepository):
         )
         return list((await self.session.scalars(stmt)).all())
 
-    async def fail_stale_running(self, *, message: str) -> int:
+    async def fail_stale_running(self, *, message: str) -> list[DocumentProcessingTask]:
         stmt = select(DocumentProcessingTask).where(
             DocumentProcessingTask.status == TaskStatus.RUNNING.value
         )
@@ -279,4 +279,4 @@ class TaskRepository(BaseRepository):
             row.status = TaskStatus.FAILED.value
             row.error_message = message
             row.finished_at = now
-        return len(rows)
+        return rows

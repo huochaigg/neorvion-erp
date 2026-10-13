@@ -451,6 +451,25 @@ export function knowledgeChunksQueryKey(
   return ['tenant', tenantId, 'knowledge-chunks', filters ?? {}] as const;
 }
 
+export function knowledgeConversationsQueryKey(
+  tenantId: number | null,
+  filters?: { page?: number; pageSize?: number },
+) {
+  return ['tenant', tenantId, 'knowledge-conversations', filters ?? {}] as const;
+}
+
+export function knowledgeConversationQueryKey(tenantId: number | null, conversationId: number | null) {
+  return ['tenant', tenantId, 'knowledge-conversation', conversationId] as const;
+}
+
+export function knowledgeModelsQueryKey(tenantId: number | null) {
+  return ['tenant', tenantId, 'knowledge-models'] as const;
+}
+
+export function knowledgeIndexStatusQueryKey(tenantId: number | null, knowledgeBaseId: number | null) {
+  return ['tenant', tenantId, 'knowledge-index-status', knowledgeBaseId] as const;
+}
+
 export function knowledgeProcessingTasksQueryKey(
   tenantId: number | null,
   filters?: {

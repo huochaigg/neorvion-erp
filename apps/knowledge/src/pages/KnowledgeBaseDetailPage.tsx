@@ -9,6 +9,7 @@ import {
   knowledgeChunksQueryKey,
   knowledgeDocumentStatusLabel,
   knowledgeDocumentsQueryKey,
+  knowledgeIndexStatusQueryKey,
   PERMISSION_CODE,
   type KnowledgeChunk,
   type KnowledgeDocument,
@@ -20,6 +21,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { deleteDocument, fetchChunks, fetchDocuments, updateChunk } from '@/api/documents';
 import { fetchKnowledgeBase } from '@/api/knowledge-bases';
+import { fetchIndexStatus, reindexKnowledgeBase } from '@/api/rag';
 import { ActionCell, AppTable, EllipsisCell } from '@/components/AppTable';
 import { Can } from '@/components/Can';
 import { PageHeader } from '@/components/PageHeader';
@@ -114,6 +116,11 @@ export function KnowledgeBaseDetailPage() {
             key: 'chunks',
             label: '切片',
             children: <ChunkTable knowledgeBaseId={knowledgeBaseId} />,
+          },
+          {
+            key: 'index',
+            label: '向量索引',
+            children: <IndexStatusPanel knowledgeBaseId={knowledgeBaseId} />,
           },
         ]}
       />
@@ -314,5 +321,61 @@ function ChunkTable({ knowledgeBaseId }: { knowledgeBaseId: number }) {
       }}
       locale={{ emptyText: '暂无切片' }}
     />
+  );
+}
+
+function IndexStatusPanel({ knowledgeBaseId }: { knowledgeBaseId: number }) {
+  const { message } = App.useApp();
+  const queryClient = useQueryClient();
+  const { tenantId } = usePermissions();
+  const query = useQuery({
+    queryKey: knowledgeIndexStatusQueryKey(tenantId, knowledgeBaseId),
+    queryFn: ({ signal }) => fetchIndexStatus(knowledgeBaseId, signal),
+    enabled: tenantId != null,
+    refetchInterval: (current) => {
+      const data = current.state.data;
+      if (!data) {
+        return false;
+      }
+      return data.pending + data.stale + data.failed > 0 ? 3000 : false;
+    },
+  });
+
+  const reindexMutation = useMutation({
+    mutationFn: () => reindexKnowledgeBase(knowledgeBaseId),
+    onSuccess: (data) => {
+      message.success(`已排队 ${data.queued} 个索引任务`);
+      void queryClient.invalidateQueries({ queryKey: knowledgeIndexStatusQueryKey(tenantId, knowledgeBaseId) });
+    },
+    onError: (error: Error) => message.error(error.message),
+  });
+
+  const data = query.data;
+  return (
+    <Card
+      extra={
+        <Can permission={PERMISSION_CODE.knowledgeUpdate}>
+          <Button loading={reindexMutation.isPending} onClick={() => reindexMutation.mutate()}>
+            重建索引
+          </Button>
+        </Can>
+      }
+    >
+      {query.isLoading ? (
+        <Spin />
+      ) : data ? (
+        <Descriptions column={2} bordered size="small">
+          <Descriptions.Item label="Embedding 模型">{data.model_name}</Descriptions.Item>
+          <Descriptions.Item label="向量维度">{data.dimensions}</Descriptions.Item>
+          <Descriptions.Item label="有效切片">{data.total_active_chunks}</Descriptions.Item>
+          <Descriptions.Item label="已就绪">{data.ready}</Descriptions.Item>
+          <Descriptions.Item label="排队中">{data.pending}</Descriptions.Item>
+          <Descriptions.Item label="待更新">{data.stale}</Descriptions.Item>
+          <Descriptions.Item label="失败">{data.failed}</Descriptions.Item>
+        </Descriptions>
+      ) : (
+        <Empty description="暂无索引状态" />
+      )}
+    </Card>
   );
 }

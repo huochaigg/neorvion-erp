@@ -19,7 +19,7 @@ class Settings(BaseSettings):
     app_env: str = "development"
     app_host: str = "0.0.0.0"
     app_port: int = 8012
-    app_version: str = "2.0.0"
+    app_version: str = "3.0.0"
     git_sha: str = ""
     enable_api_docs: bool = True
     cors_origins: str = (
@@ -49,6 +49,27 @@ class Settings(BaseSettings):
     chunk_size_max: int = 8000
     default_chunk_size: int = 800
     default_chunk_overlap: int = 120
+
+    # 模型供应商：openai_compat 走 OpenAI 兼容 HTTP；mock 仅测试。
+    model_provider: str = "openai_compat"
+    embedding_base_url: str = "https://api.openai.com/v1"
+    embedding_api_key: str = ""
+    embedding_model: str = "text-embedding-3-small"
+    embedding_dimensions: int = 1024
+    embedding_batch_size: int = 16
+    chat_base_url: str = "https://api.openai.com/v1"
+    chat_api_key: str = ""
+    chat_model: str = "gpt-4o-mini"
+    rerank_base_url: str = ""
+    rerank_api_key: str = ""
+    rerank_model: str = ""
+    model_timeout_seconds: float = 30.0
+    embedding_max_retries: int = 2
+    default_top_k: int = 8
+    default_candidate_k: int = 24
+    rrf_k: int = 60
+    chat_history_turns: int = 4
+    chat_max_context_chars: int = 6000
 
     @property
     def is_production(self) -> bool:

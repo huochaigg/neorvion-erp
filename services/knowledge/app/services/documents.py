@@ -223,7 +223,7 @@ class DocumentService:
         self.auth.require_all(self.context, (PermissionCode.KNOWLEDGE_DELETE,))
         row = await self._require_document(document_id)
         active = None
-        for task_type in (TaskType.PARSE.value, TaskType.CHUNK.value):
+        for task_type in (TaskType.PARSE.value, TaskType.CHUNK.value, TaskType.EMBED.value):
             found = await self.tasks.find_active(row.id, task_type)
             if found is not None:
                 found.status = TaskStatus.FAILED.value
@@ -295,18 +295,40 @@ class DocumentService:
             page_size=page_size,
         )
 
+    async def get_chunk(self, chunk_id: int) -> ChunkOut:
+        """按租户读取单条切片，供问答引用查看原文。"""
+        self.auth.require_all(self.context, (PermissionCode.KNOWLEDGE_READ,))
+        row = await self.chunks.get_in_tenant(chunk_id)
+        if row is None or row.status != "ACTIVE":
+            raise AppError(_UNAVAILABLE_CHUNK, code=40453, status_code=404)
+        return self._chunk_out(row)
+
     async def update_chunk(self, chunk_id: int, payload: ChunkUpdateIn) -> ChunkOut:
         self.auth.require_all(self.context, (PermissionCode.KNOWLEDGE_UPDATE,))
         row = await self.chunks.get_in_tenant(chunk_id)
         if row is None or row.status != "ACTIVE":
             raise AppError(_UNAVAILABLE_CHUNK, code=40453, status_code=404)
+        content_changed = payload.content is not None and payload.content != row.content
         if payload.content is not None:
             row.content = payload.content
             row.char_count = len(payload.content)
         if payload.enabled is not None:
             row.enabled = payload.enabled
         row.updated_by = self.context.user_id
+        if content_changed:
+            from app.repositories.rag import EmbeddingRepository
+
+            embeddings = EmbeddingRepository(self.session, self.context.tenant_id)
+            await embeddings.mark_stale(row.id)
         await self.session.commit()
+        if content_changed:
+            from app.services.embedding import enqueue_embed_task
+
+            document = await self._require_document(row.document_id)
+            task = await enqueue_embed_task(self.session, document, self.context.user_id)
+            await self.session.commit()
+            if task is not None:
+                await self._dispatch(task.id)
         await self.session.refresh(row)
         return self._chunk_out(row)
 
@@ -360,7 +382,10 @@ class DocumentService:
         row.error_message = None
         row.started_at = None
         row.finished_at = None
-        document.status = KnowledgeDocumentStatus.PENDING.value if row.task_type == TaskType.PARSE.value else KnowledgeDocumentStatus.PROCESSING.value
+        if row.task_type == TaskType.PARSE.value:
+            document.status = KnowledgeDocumentStatus.PENDING.value
+        elif row.task_type != TaskType.EMBED.value:
+            document.status = KnowledgeDocumentStatus.PROCESSING.value
         await self.session.commit()
         await self._dispatch(row.id)
         await self.session.refresh(row)

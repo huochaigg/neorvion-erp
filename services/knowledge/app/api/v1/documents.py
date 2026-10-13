@@ -135,6 +135,15 @@ async def list_chunks(
     )
 
 
+@router.get("/chunks/{chunk_id}", response_model=ApiResponse[ChunkOut], summary="切片详情（引用原文）")
+async def get_chunk(
+    chunk_id: int,
+    context: KnowledgeReadContext,
+    session: DbSession,
+) -> ApiResponse[ChunkOut]:
+    return ok(await DocumentService(session, context).get_chunk(chunk_id))
+
+
 @router.patch("/chunks/{chunk_id}", response_model=ApiResponse[ChunkOut], summary="编辑切片")
 async def update_chunk(
     chunk_id: int,

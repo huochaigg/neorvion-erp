@@ -1,4 +1,12 @@
-import { BookOutlined, DatabaseOutlined, HomeOutlined } from '@ant-design/icons';
+import {
+  BookOutlined,
+  CommentOutlined,
+  DatabaseOutlined,
+  ExperimentOutlined,
+  HomeOutlined,
+  SearchOutlined,
+  SettingOutlined,
+} from '@ant-design/icons';
 import { Layout, Menu, Tag } from 'antd';
 import type { ReactNode } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
@@ -14,11 +22,16 @@ export function KnowledgeLayout({ children }: KnowledgeLayoutProps) {
   const embedded = isEmbeddedInWujie();
   const navigate = useNavigate();
   const location = useLocation();
-  const selectedKey = location.pathname.startsWith('/tasks')
-    ? '/tasks'
-    : location.pathname.startsWith('/bases')
-      ? '/bases'
-      : '/workbench';
+  const selectedKey = (
+    [
+      '/search',
+      '/chat',
+      '/retrieval-test',
+      '/models',
+      '/tasks',
+      '/bases',
+    ] as const
+  ).find((path) => location.pathname === path || location.pathname.startsWith(`${path}/`)) ?? '/workbench';
 
   return (
     <div className="flex h-full min-h-0 flex-col overflow-hidden bg-[#f3f5f8]">
@@ -36,8 +49,12 @@ export function KnowledgeLayout({ children }: KnowledgeLayoutProps) {
             className="h-full border-none pt-3"
             items={[
               { key: '/workbench', icon: <HomeOutlined />, label: '工作台' },
+              { key: '/search', icon: <SearchOutlined />, label: '智能搜索' },
+              { key: '/chat', icon: <CommentOutlined />, label: '知识问答' },
               { key: '/bases', icon: <BookOutlined />, label: '知识库' },
+              { key: '/retrieval-test', icon: <ExperimentOutlined />, label: '检索测试' },
               { key: '/tasks', icon: <DatabaseOutlined />, label: '处理任务' },
+              { key: '/models', icon: <SettingOutlined />, label: '模型配置' },
             ]}
             onClick={({ key }) => navigate(key)}
           />

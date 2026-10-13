@@ -8,6 +8,7 @@ from enum import StrEnum
 from sqlalchemy import (
     BigInteger,
     Boolean,
+    Computed,
     DateTime,
     ForeignKeyConstraint,
     Index,
@@ -17,7 +18,7 @@ from sqlalchemy import (
     UniqueConstraint,
     text,
 )
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import JSONB, TSVECTOR
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -45,6 +46,7 @@ class ChunkStatus(StrEnum):
 class TaskType(StrEnum):
     PARSE = "PARSE"
     CHUNK = "CHUNK"
+    EMBED = "EMBED"
 
 
 class TaskStatus(StrEnum):
@@ -228,6 +230,12 @@ class DocumentChunk(TimestampMixin, TenantMixin, Base):
     source_start: Mapped[int | None] = mapped_column(Integer, nullable=True, comment="原文起始字符偏移")
     source_end: Mapped[int | None] = mapped_column(Integer, nullable=True, comment="原文结束字符偏移")
     extra: Mapped[dict | None] = mapped_column(JSONB, nullable=True, comment="额外溯源元数据")
+    search_tsv: Mapped[str | None] = mapped_column(
+        TSVECTOR,
+        Computed("to_tsvector('simple', coalesce(content, ''))", persisted=True),
+        nullable=True,
+        comment="简单分词全文向量；中文主要靠 trigram，不是 BM25",
+    )
     status: Mapped[str] = mapped_column(
         String(16),
         nullable=False,
@@ -276,7 +284,11 @@ class DocumentProcessingTask(TimestampMixin, TenantMixin, Base):
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     knowledge_base_id: Mapped[int] = mapped_column(BigInteger, nullable=False, comment="所属知识库")
     document_id: Mapped[int] = mapped_column(BigInteger, nullable=False, comment="所属文档")
-    task_type: Mapped[str] = mapped_column(String(16), nullable=False, comment="PARSE 解析 / CHUNK 切片")
+    task_type: Mapped[str] = mapped_column(
+        String(16),
+        nullable=False,
+        comment="PARSE 解析 / CHUNK 切片 / EMBED 向量化",
+    )
     status: Mapped[str] = mapped_column(
         String(16),
         nullable=False,

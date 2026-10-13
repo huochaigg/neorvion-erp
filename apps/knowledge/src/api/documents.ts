@@ -45,7 +45,7 @@ export function fetchDocument(id: number, signal?: AbortSignal) {
   return unwrapApi(apiClient.get<ApiResponse<KnowledgeDocumentDetail>>(`/api/v1/documents/${id}`, { signal }));
 }
 
-export function uploadDocuments(knowledgeBaseId: number, files: File[]) {
+export function uploadDocuments(knowledgeBaseId: number, files: Blob[]) {
   const form = new FormData();
   files.forEach((file) => form.append('files', file));
   return unwrapApi(
@@ -80,6 +80,10 @@ export function requestParse(id: number) {
 
 export function requestChunk(id: number, payload: KnowledgeChunkParams) {
   return unwrapApi(apiClient.post<ApiResponse<KnowledgeTask>>(`/api/v1/documents/${id}/chunk`, payload));
+}
+
+export function fetchChunk(id: number, signal?: AbortSignal) {
+  return unwrapApi(apiClient.get<ApiResponse<KnowledgeChunk>>(`/api/v1/chunks/${id}`, { signal }));
 }
 
 export function fetchChunks(

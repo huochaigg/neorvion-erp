@@ -58,21 +58,31 @@ class ProcessingService:
             task.finished_at = datetime.now(UTC)
             await self.session.commit()
             return
-        document.status = KnowledgeDocumentStatus.PROCESSING.value
-        document.updated_by = task.created_by
+        if task.task_type != TaskType.EMBED.value:
+            document.status = KnowledgeDocumentStatus.PROCESSING.value
+            document.updated_by = task.created_by
         await self.session.commit()
         try:
             if task.task_type == TaskType.PARSE.value:
                 await self._parse(task, document)
             elif task.task_type == TaskType.CHUNK.value:
                 await self._chunk(task, document)
+            elif task.task_type == TaskType.EMBED.value:
+                from app.services.embedding import EmbeddingService
+
+                await EmbeddingService(self.session, document.tenant_id).execute(task)
             else:
                 raise AppError("未知任务类型", code=40078, status_code=400)
         except AppError as exc:
-            await self._fail(task.id, document.id, exc.message)
+            await self._fail(task.id, document.id, exc.message, fail_document=task.task_type != TaskType.EMBED.value)
         except Exception:
             logger.exception("knowledge task failed id=%s", task_id)
-            await self._fail(task.id, document.id, "处理失败，请查看任务详情后重试")
+            await self._fail(
+                task.id,
+                document.id,
+                "处理失败，请查看任务详情后重试",
+                fail_document=task.task_type != TaskType.EMBED.value,
+            )
 
     async def _parse(self, task: DocumentProcessingTask, document: KnowledgeDocument) -> None:
         task.progress = 20
@@ -207,8 +217,23 @@ class ProcessingService:
         task.progress = 100
         task.finished_at = datetime.now(UTC)
         await self.session.commit()
+        embed_task = await self._enqueue_followup_embed(document, task.created_by)
+        if embed_task is not None and settings.task_executor != "redis":
+            await ProcessingService(self.session).execute(embed_task.id)
 
-    async def _fail(self, task_id: int, document_id: int, message: str) -> None:
+    async def _enqueue_followup_embed(self, document: KnowledgeDocument, user_id: int) -> DocumentProcessingTask | None:
+        from app.services.embedding import enqueue_embed_task
+
+        return await enqueue_embed_task(self.session, document, user_id)
+
+    async def _fail(
+        self,
+        task_id: int,
+        document_id: int,
+        message: str,
+        *,
+        fail_document: bool = True,
+    ) -> None:
         await self.session.rollback()
         task = await self.session.get(DocumentProcessingTask, task_id)
         document = await self.session.get(KnowledgeDocument, document_id)
@@ -217,7 +242,7 @@ class ProcessingService:
             task.error_message = message
             task.finished_at = datetime.now(UTC)
             task.progress = min(task.progress or 0, 90)
-        if document is not None:
+        if fail_document and document is not None:
             document.status = KnowledgeDocumentStatus.FAILED.value
             document.error_message = message
         await self.session.commit()

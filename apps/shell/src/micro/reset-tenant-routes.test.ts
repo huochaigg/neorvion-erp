@@ -69,6 +69,7 @@ describe('resetUnsafeMicroLastLocations', () => {
 describe('hostPathToResetAfterTenantChange', () => {
   it('当前正在看旧租户详情时回到模块首页', () => {
     assert.equal(hostPathToResetAfterTenantChange('/knowledge/bases/2'), '/knowledge/workbench');
+    assert.equal(hostPathToResetAfterTenantChange('/knowledge/chat/18'), '/knowledge/chat');
     assert.equal(hostPathToResetAfterTenantChange('/erp/orders/9'), '/erp/orders/list');
   });
 
