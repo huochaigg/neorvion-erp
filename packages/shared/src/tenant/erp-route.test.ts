@@ -38,5 +38,13 @@ describe('safePathAfterTenantChange', () => {
     assert.equal(safePathAfterTenantChange('/suppliers'), null);
     assert.equal(safePathAfterTenantChange('/system/members/88'), '/system/members');
     assert.equal(safePathAfterTenantChange('/system/members'), null);
+    assert.equal(safePathAfterTenantChange('/after-sales/9'), '/after-sales/list');
+    assert.equal(safePathAfterTenantChange('/after-sales/create'), null);
+    assert.equal(safePathAfterTenantChange('/return-orders/4'), '/return-orders');
+    assert.equal(safePathAfterTenantChange('/purchase-returns/6'), '/purchase-returns');
+    assert.equal(safePathAfterTenantChange('/purchase-return-outbounds/2'), '/purchase-return-outbounds');
+    assert.equal(safePathAfterTenantChange('/system/events/evt_1'), '/system/events');
+    assert.equal(safePathAfterTenantChange('/system/operation-logs/9'), '/system/operation-logs');
+    assert.equal(safePathAfterTenantChange('/system/tasks/tsk_18a2'), '/system/tasks');
   });
 });

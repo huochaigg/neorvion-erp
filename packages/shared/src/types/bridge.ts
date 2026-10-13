@@ -22,6 +22,17 @@ export interface TenantChangedPayload {
   currentTenantId: number | null;
 }
 
+export function isTenantChangedPayload(value: unknown): value is TenantChangedPayload {
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
+  const payload = value as TenantChangedPayload;
+  return (
+    (payload.previousTenantId === null || typeof payload.previousTenantId === 'number') &&
+    (payload.currentTenantId === null || typeof payload.currentTenantId === 'number')
+  );
+}
+
 /** 主子应用路由同步。payload.name 区分 ERP / 未来的 SCM、CRM。 */
 export const MICRO_EVENTS = {
   childLocation: 'micro:child-location',

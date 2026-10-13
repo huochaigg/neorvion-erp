@@ -19,6 +19,7 @@ import { AppLogo } from '@/components/AppLogo';
 import { getMicroApp, getMicroAppEntryHref } from '@/micro/apps';
 import { getLastMicroHref } from '@/micro/last-location';
 import { destroyAllMicroApps } from '@/micro/lifecycle';
+import { MicroTenantRouteReset } from '@/micro/MicroTenantRouteReset';
 import { useAuthStore } from '@/stores/auth-store';
 import { useShellStore } from '@/stores/shell-store';
 import { useTenantStore } from '@/stores/tenant-store';
@@ -78,6 +79,7 @@ export function ShellLayout({ children }: ShellLayoutProps) {
 
   return (
     <Layout className="min-h-screen">
+      <MicroTenantRouteReset />
       <Header className="flex items-center justify-between px-4">
         <div className="flex items-center gap-4">
           <AppLogo compact={siderCollapsed} />

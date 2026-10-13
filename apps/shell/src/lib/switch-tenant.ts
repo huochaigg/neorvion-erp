@@ -11,6 +11,7 @@ import {
 } from '@neorvion/shared';
 import { bus } from 'wujie';
 import { isolateTenantQueries } from '@/lib/query-tenant';
+import { resetUnsafeMicroLastLocations } from '@/micro/reset-tenant-routes';
 import { writeLastTenantId } from '@/lib/tenant-persist';
 import { useTenantStore } from '@/stores/tenant-store';
 
@@ -39,6 +40,7 @@ export function applyCurrentTenant(
   if (options?.persist !== false) {
     persistForCurrentUser(queryClient, nextTenantId);
   }
+  resetUnsafeMicroLastLocations();
   emitTenantChanged({ previousTenantId, currentTenantId: nextTenantId });
 }
 

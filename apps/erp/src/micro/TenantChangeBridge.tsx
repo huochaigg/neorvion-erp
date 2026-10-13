@@ -1,25 +1,10 @@
-import {
-  SHELL_EVENTS,
-  safePathAfterTenantChange,
-  type TenantChangedPayload,
-} from '@neorvion/shared';
+import { SHELL_EVENTS, isTenantChangedPayload, safePathAfterTenantChange } from '@neorvion/shared';
 import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { isolateTenantQueries } from '@/lib/query-tenant';
 import { getShellProps, isEmbeddedInWujie } from '@/lib/runtime';
 import { useErpTenantStore } from '@/stores/tenant-runtime';
-
-function isTenantChangedPayload(value: unknown): value is TenantChangedPayload {
-  if (!value || typeof value !== 'object') {
-    return false;
-  }
-  const payload = value as TenantChangedPayload;
-  return (
-    (payload.previousTenantId === null || typeof payload.previousTenantId === 'number') &&
-    (payload.currentTenantId === null || typeof payload.currentTenantId === 'number')
-  );
-}
 
 /** 统一处理租户变化：隔离 Query、重置页面局部状态、必要时离开带资源 ID 的路由。 */
 export function TenantChangeBridge() {
@@ -50,11 +35,11 @@ export function TenantChangeBridge() {
         return;
       }
       isolateTenantQueries(queryClient, payload.previousTenantId);
-      applyTenantChange(payload.currentTenantId);
       const fallback = safePathAfterTenantChange(locationRef.current.pathname);
       if (fallback) {
         navigate(fallback, { replace: true });
       }
+      applyTenantChange(payload.currentTenantId);
     };
 
     eventBus.$on(SHELL_EVENTS.tenantChanged, onTenantChanged);

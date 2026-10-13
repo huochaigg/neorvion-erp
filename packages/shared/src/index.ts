@@ -76,7 +76,7 @@ export type {
   MicroHistoryAction,
   TenantChangedPayload,
 } from './types/bridge';
-export { SHELL_EVENTS, MICRO_EVENTS } from './types/bridge';
+export { SHELL_EVENTS, MICRO_EVENTS, isTenantChangedPayload } from './types/bridge';
 export type {
   Tenant,
   TenantContextInfo,
@@ -528,6 +528,12 @@ export {
 export { isUsableTenant, listUsableTenants, pickTenantSelection, lastTenantStorageKey } from './tenant/access';
 export type { TenantPickResult } from './tenant/access';
 export { safePathAfterTenantChange } from './tenant/erp-route';
+export { safeKnowledgePathAfterTenantChange } from './tenant/knowledge-route';
+export {
+  safeChildPathAfterTenantChange,
+  sanitizeMicroHrefAfterTenantChange,
+  safeHostPathAfterTenantChange,
+} from './tenant/micro-route';
 export {
   hasPermission,
   hasAnyPermission,
