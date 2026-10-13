@@ -419,7 +419,13 @@ PERMISSION_CATALOG: tuple[tuple[str, str, str, str], ...] = (
     (PermissionCode.KNOWLEDGE_READ, "查看知识库", "knowledge", "查看当前企业知识库列表与详情"),
     (PermissionCode.KNOWLEDGE_CREATE, "创建知识库", "knowledge", "创建企业知识库"),
     (PermissionCode.KNOWLEDGE_UPDATE, "编辑知识库", "knowledge", "修改知识库名称、描述与状态"),
-    (PermissionCode.KNOWLEDGE_DELETE, "删除知识库", "knowledge", "软删除知识库，不立即清理文档与向量"),
+    (
+        PermissionCode.KNOWLEDGE_DELETE,
+        "删除知识库",
+        "knowledge",
+        "软删除知识库，不立即清理文档与向量",
+    ),
+
     (PermissionCode.SUPPLIER_READ, "查看供应商", "supplier", "查看本企业供应商"),
     (PermissionCode.SUPPLIER_CREATE, "新增供应商", "supplier", "创建供应商"),
     (PermissionCode.SUPPLIER_UPDATE, "编辑供应商", "supplier", "编辑供应商档案，编码创建后只读"),

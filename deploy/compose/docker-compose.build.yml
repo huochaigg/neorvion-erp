@@ -2,7 +2,7 @@
 services:
   erp-api:
     build:
-      context: ../../backend
+      context: ../../services/erp
       dockerfile: Dockerfile
       args:
         GIT_SHA: ${GIT_SHA:-local}

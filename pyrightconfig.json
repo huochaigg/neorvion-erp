@@ -1,10 +1,16 @@
 {
-  "python": "backend/.venv/bin/python",
-  "venvPath": "backend",
+  "python": "services/erp/.venv/bin/python",
+  "venvPath": "services/erp",
   "venv": ".venv",
   "executionEnvironments": [
     {
-      "root": "backend",
+      "root": "services/erp",
+      "pythonVersion": "3.12",
+      "pythonPlatform": "All",
+      "extraPaths": ["."]
+    },
+    {
+      "root": "services/knowledge",
       "pythonVersion": "3.12",
       "pythonPlatform": "All",
       "extraPaths": ["."]

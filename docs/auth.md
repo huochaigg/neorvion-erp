@@ -110,7 +110,7 @@ RSA 只保护 **password 字段**，不能保护整次会话。
 
 ## 密钥管理
 
-- 开发：`uv run python scripts/generate_rsa_keys.py --key-id v1`，私钥写到 `backend/secrets/rsa/v1/private.pem`（已 gitignore）。
+- 开发：`uv run python scripts/generate_rsa_keys.py --key-id v1`，私钥写到 `services/erp/secrets/rsa/v1/private.pem`（已 gitignore）。
 - 生产：把 PEM 放到密钥管理系统或只读挂载文件，用 `RSA_PRIVATE_KEY_PATH` 指向它。不要把私钥写进镜像或仓库。
 - 不要每次请求都生成新密钥对。当前密钥用 `RSA_KEY_ID` 标识。
 - 轮换：先部署新密钥为 current，把旧私钥配到 `RSA_PREVIOUS_KEY_ID` / `RSA_PREVIOUS_PRIVATE_KEY_PATH`，窗口期内旧 `key_id` 仍可解密；确认无在途 challenge 后再下线旧钥。
@@ -212,7 +212,7 @@ Zustand `status`：`initializing` → `authenticated` | `unauthenticated`。初�
 
 ## 环境变量
 
-见 `backend/.env.example`。至少需要：
+见 `services/erp/.env.example`。至少需要：
 
 - `SECRET_KEY`（仅 JWT，不要复用为 RSA）
 - `JWT_ACCESS_EXPIRE_MINUTES` / `JWT_REFRESH_EXPIRE_DAYS`
@@ -229,7 +229,7 @@ Zustand `status`：`initializing` → `authenticated` | `unauthenticated`。初�
 ## 测试
 
 ```bash
-cd backend
+cd services/erp
 uv run pytest
 ```
 

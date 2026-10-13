@@ -19,7 +19,7 @@ V4 完成仓库档案。库存数量见 V5 `docs/inventory.md`。V4 **不**开�
 
 ## 表结构
 
-迁移：`backend/alembic/versions/20261003_0009_create_warehouses.py`
+迁移：`services/erp/alembic/versions/20261003_0009_create_warehouses.py`
 
 | 列 | 说明 |
 | --- | --- |

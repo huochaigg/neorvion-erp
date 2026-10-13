@@ -26,7 +26,7 @@ def main() -> None:
     print(f"RSA_KEY_ID={args.key_id}")
     print(f"RSA_PRIVATE_KEY_PATH={private_path}")
     print(f"RSA_PUBLIC_KEY_PATH={public_path}")
-    print("请把以上路径写入 backend/.env，不要把私钥提交到 Git。")
+    print("请把以上路径写入 services/erp/.env，不要把私钥提交到 Git。")
 
 
 if __name__ == "__main__":

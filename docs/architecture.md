@@ -20,7 +20,7 @@ flowchart LR
   AgentFuture -.-> API
 ```
 
-开发机仍是 Shell 8015 / ERP 8016 / API 8011。生产静态资源由宝塔 Nginx 同域提供；API 不映射到 0.0.0.0。
+开发机仍是 Shell 8015 / ERP 8016 / API 8011。生产静态资源由宝塔 Nginx 同域提供；API 不映射到 0.0.0.0。后端代码在 `services/erp` 与 `services/knowledge`，未来 Copilot / 客服放在同级目录，但尚未创建。
 
 后续 Copilot：`Agent → Tool → ERP API → TenantContext / RBAC → Service → DB`。Agent 不直连 MySQL。
 

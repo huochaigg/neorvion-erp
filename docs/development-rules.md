@@ -36,7 +36,7 @@ Repository 不 commit。Service 在 Action 成功路径 commit。库存、单据
 
 ## 测试
 
-`backend/tests/` 按领域文件组织。高频 setup 放 `tests/helpers/factory.py`。不要为 Factory 重写全部旧测试。并发测试覆盖预占竞争、双 confirm、售后可退、调拨、任务 retry。
+`services/erp/tests/` 按领域文件组织。高频 setup 放 `tests/helpers/factory.py`。不要为 Factory 重写全部旧测试。并发测试覆盖预占竞争、双 confirm、售后可退、调拨、任务 retry。
 
 ## 文档
 

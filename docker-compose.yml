@@ -37,10 +37,10 @@ services:
       timeout: 3s
       retries: 20
 
-  backend:
+  erp:
     build:
-      context: ./backend
-    container_name: neorvion-backend
+      context: ./services/erp
+    container_name: neorvion-erp
     restart: unless-stopped
     depends_on:
       mysql:
@@ -87,7 +87,7 @@ services:
 
   worker:
     build:
-      context: ./backend
+      context: ./services/erp
     container_name: neorvion-worker
     restart: unless-stopped
     depends_on:
@@ -114,7 +114,7 @@ services:
     container_name: neorvion-nginx
     restart: unless-stopped
     depends_on:
-      - backend
+      - erp
     ports:
       - "8080:80"
     volumes:

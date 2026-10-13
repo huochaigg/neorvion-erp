@@ -16,15 +16,15 @@ CREATE DATABASE neorvion_knowledge_test;
 2. 复制环境变量：
 
 ```bash
-cp knowledge/.env.example knowledge/.env
+cp services/knowledge/.env.example services/knowledge/.env
 ```
 
-把 `DATABASE_URL` 改成本机 PostgreSQL，把 `ERP_JWT_SECRET` 设成与 `backend/.env` 的 `SECRET_KEY` 相同，把 `ERP_INTERNAL_SERVICE_KEY` 设成与 ERP `INTERNAL_SERVICE_KEY` 相同。
+把 `DATABASE_URL` 改成本机 PostgreSQL，把 `ERP_JWT_SECRET` 设成与 `services/erp/.env` 的 `SECRET_KEY` 相同，把 `ERP_INTERNAL_SERVICE_KEY` 设成与 ERP `INTERNAL_SERVICE_KEY` 相同。
 
 3. 安装依赖并迁移：
 
 ```bash
-cd knowledge
+cd services/knowledge
 uv sync
 uv run alembic upgrade head
 uv run python -m app
@@ -49,4 +49,4 @@ pnpm --filter @neorvion/knowledge dev
 - Knowledge 微前端：http://localhost:8017
 - Shell 入口：http://localhost:8015/knowledge
 
-完整说明见 [docs/knowledge.md](../docs/knowledge.md)。
+完整说明见 [docs/knowledge.md](../../docs/knowledge.md)。

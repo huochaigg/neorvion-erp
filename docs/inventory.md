@@ -51,7 +51,7 @@ COMMIT
 
 ## 表结构
 
-迁移：`backend/alembic/versions/20261004_0010_create_inventory_tables.py`
+迁移：`services/erp/alembic/versions/20261004_0010_create_inventory_tables.py`
 
 ### inventories
 

@@ -32,7 +32,7 @@ V6 提前把 `received_quantity` 做成默认 0，避免下一版再改表结构
 
 ## 供应商 Supplier
 
-迁移：`backend/alembic/versions/20261005_0011_create_purchase_tables.py`
+迁移：`services/erp/alembic/versions/20261005_0011_create_purchase_tables.py`
 
 | 列 | 说明 |
 | --- | --- |

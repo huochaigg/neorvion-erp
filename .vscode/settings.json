@@ -1,6 +1,9 @@
 {
-  "python.defaultInterpreterPath": "${workspaceFolder}/backend/.venv/bin/python",
-  "python.analysis.extraPaths": ["${workspaceFolder}/backend"],
-  "python.analysis.venvPath": "${workspaceFolder}/backend",
+  "python.defaultInterpreterPath": "${workspaceFolder}/services/erp/.venv/bin/python",
+  "python.analysis.extraPaths": [
+    "${workspaceFolder}/services/erp",
+    "${workspaceFolder}/services/knowledge"
+  ],
+  "python.analysis.venvPath": "${workspaceFolder}/services/erp",
   "python.analysis.diagnosticMode": "workspace"
 }

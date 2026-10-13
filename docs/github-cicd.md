@@ -39,7 +39,7 @@ git push -u origin production
 
 仓库内：
 
-- `.github/workflows/ci.yml`：PR 与 `main`。backend ruff + pytest（MySQL 8.4 + Redis 服务），frontend test + build。`pnpm lint` 目前 ESLint 10 有历史债，**不阻断**。
+- `.github/workflows/ci.yml`：PR 与 `main`。`backend` job 在 `services/erp` 跑 ruff + pytest（MySQL 8.4 + Redis）；`knowledge` job 在 `services/knowledge` 跑；frontend test + build。`pnpm lint` 目前 ESLint 10 有历史债，**不阻断**。
 - `.github/workflows/deploy-production.yml`：仅 `production`。先复用 CI，再构建并推送 GHCR，SCP 前端，SSH 调用 `scripts/deploy-production.sh`。
 
 权限：`contents: read`，deploy 额外 `packages: write`。没有 `write-all`。
@@ -94,7 +94,7 @@ PAT 权限只要 `read:packages`。Deploy 脚本会 `docker login`，不会把 t
 | 现象 | 先看 |
 | --- | --- |
 | CI 红 | 对应 job 日志：pytest / pnpm build |
-| Docker build 失败 | Dockerfile、uv.lock、context=backend |
+| Docker build 失败 | Dockerfile、uv.lock、context=services/erp |
 | GHCR push 失败 | packages:write、login、镜像名是否含大写仓库名 |
 | SSH 失败 | PROD_HOST / deploy 用户 / 公钥 / 安全组 22 |
 | SCP 失败 | 磁盘、`/opt/neorvion/staging` 权限 |

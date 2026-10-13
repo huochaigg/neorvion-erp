@@ -25,14 +25,14 @@ flowchart LR
 ## 目录
 
 ```text
-knowledge/                 # 独立 FastAPI
+services/knowledge/        # 独立 FastAPI
   app/{api,core,db,models,schemas,repositories,services}
   alembic/
   tests/
   Dockerfile               # V1 仅准备，不要求部署
 apps/knowledge/            # React 微前端
 packages/shared/           # 权限码、Query Key、知识库类型
-backend/                   # 仅增加权限目录与内部身份内省
+services/erp/              # 仅增加权限目录与内部身份内省
 ```
 
 ## 认证、权限和租户隔离
@@ -104,13 +104,13 @@ CREATE EXTENSION IF NOT EXISTS vector; -- 可选
 
 ```bash
 # ERP：写入 INTERNAL_SERVICE_KEY 后
-cd backend
+cd services/erp
 uv run alembic upgrade head
 uv run python -m app.scripts.seed_permissions
 uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 8011
 
 # Knowledge
-cd knowledge
+cd services/knowledge
 uv sync
 uv run alembic upgrade head
 uv run python -m app
@@ -127,9 +127,9 @@ Windows 上 psycopg 异步驱动不能使用 uvicorn 默认的 `ProactorEventLoo
 ## 测试
 
 ```bash
-cd knowledge
+cd services/knowledge
 uv run pytest -q --tb=short
-cd backend
+cd services/erp
 uv run pytest tests/test_internal_identity.py -q --tb=short
 pnpm --filter @neorvion/knowledge test
 ```
@@ -138,7 +138,7 @@ Knowledge 测试使用 `neorvion_knowledge_test`，并用假身份客户端代�
 
 ## 联调注意
 
-- `backend/.env` 增加 `INTERNAL_SERVICE_KEY` 后必须重启 ERP，进程内 Settings 不会热更新该项。
+- `services/erp/.env` 增加 `INTERNAL_SERVICE_KEY` 后必须重启 ERP，进程内 Settings 不会热更新该项。
 - Knowledge 调用 ERP 时 `httpx` 使用 `trust_env=False`，避免本机 HTTP 代理剥掉 `X-Internal-Service-Key`。
 - `ERP_JWT_SECRET` 必须与 ERP `SECRET_KEY` 一致；权限仍以后端内省为准，不能只靠共享 Secret。
 

@@ -171,7 +171,7 @@ ERP 系统管理页：成员管理、角色管理、权限目录（只读）。�
 幂等灌入权限目录（不删已有行，并展开旧 manage）：
 
 ```bash
-cd backend
+cd services/erp
 uv run python -m app.scripts.seed_permissions
 ```
 

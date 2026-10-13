@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import os
 import sys
 from collections.abc import Iterator
@@ -9,6 +10,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from urllib.parse import urlparse, urlunparse
 from uuid import uuid4
+
 
 def _load_dotenv() -> None:
     path = Path(__file__).resolve().parents[1] / ".env"

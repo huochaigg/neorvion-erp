@@ -7,7 +7,7 @@ _KNOWLEDGE_DIR = Path(__file__).resolve().parents[2]
 
 
 class Settings(BaseSettings):
-    """应用配置，全部来自环境变量或 knowledge/.env，禁止把密钥写死在代码中。"""
+    """应用配置，全部来自环境变量或 services/knowledge/.env，禁止把密钥写死在代码中。"""
 
     model_config = SettingsConfigDict(
         env_file=_KNOWLEDGE_DIR / ".env",

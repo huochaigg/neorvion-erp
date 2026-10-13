@@ -39,26 +39,28 @@ flowchart LR
 ## 目录
 
 ```text
-apps/shell          登录与 Wujie 宿主
-apps/erp            ERP 业务微前端
-packages/shared     Query Key / ApiError
-backend             FastAPI 单体
-docs                文档导航见 docs/README.md
-nginx               反代示例
+apps/shell              登录与 Wujie 宿主
+apps/erp                ERP 业务微前端
+apps/knowledge          Knowledge 微前端
+packages/shared         Query Key / ApiError
+services/erp            ERP FastAPI + MySQL
+services/knowledge      Knowledge FastAPI + PostgreSQL
+docs                    文档导航见 docs/README.md
+nginx                   反代示例
 ```
 
 ## 本地启动
 
 ```bash
 cp .env.example .env
-cp .env.example backend/.env
+cp .env.example services/erp/.env
 cp apps/shell/.env.example apps/shell/.env
 cp apps/erp/.env.example apps/erp/.env
 docker compose up -d mysql redis
 ```
 
 ```bash
-cd backend
+cd services/erp
 uv sync
 uv run alembic upgrade head
 uv run python -m app.scripts.seed_permissions
@@ -68,7 +70,7 @@ uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 8011
 另开终端启动 Worker：
 
 ```bash
-cd backend
+cd services/erp
 uv run python -m app.tasks.worker
 ```
 
@@ -89,7 +91,7 @@ pnpm dev
 # 用环境变量提供账号，不要把真实密码写进 Git
 export DEMO_EMAIL=...
 export DEMO_PASSWORD=...
-cd backend
+cd services/erp
 uv run python -m app.scripts.seed_demo
 ```
 
@@ -98,7 +100,7 @@ uv run python -m app.scripts.seed_demo
 ## 测试
 
 ```bash
-cd backend
+cd services/erp
 uv run pytest
 uv run ruff check app tests
 ```

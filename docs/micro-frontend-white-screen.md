@@ -124,7 +124,7 @@ Shell 页面
 
 Shell 持有 Refresh Cookie。ERP 自己不调用 `/auth/refresh`，请求都带 `props.token`。
 
-修复前，Access Token 默认 30 分钟（`backend/.env` 的 `JWT_ACCESS_EXPIRE_MINUTES`）。仓库根目录 `.env` 里的 `JWT_EXPIRE_MINUTES` 后端不读。隔夜之后：
+修复前，Access Token 默认 30 分钟（`services/erp/.env` 的 `JWT_ACCESS_EXPIRE_MINUTES`）。仓库根目录 `.env` 里的 `JWT_EXPIRE_MINUTES` 后端不读。隔夜之后：
 
 1. 内存里的 access token 已过期。
 2. 子应用或 Shell 请求先 401，Shell 用 Refresh Cookie 换新 token。

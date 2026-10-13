@@ -30,7 +30,7 @@ docker exec neorvion-mysql mysqldump -uneorvion -pneorvion_dev --single-transact
 
 ## 文件
 
-- `backend/var/exports`：异步导出文件，可随磁盘备份
+- `services/erp/var/exports`：异步导出文件，可随磁盘备份
 - RSA 私钥：必须单独保管，丢失则无法解密进行中的登录 challenge；轮换 key_id 比找回旧私钥更现实
 
 ## 环境变量

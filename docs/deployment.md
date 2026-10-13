@@ -16,10 +16,10 @@
 ## Docker
 
 ```bash
-docker compose up -d mysql redis backend worker
+docker compose up -d mysql redis erp worker
 ```
 
-可选网关（把 `/api` 反代到 backend，`/` 指向本机 Shell）：
+可选网关（把 `/api` 反代到 erp，`/` 指向本机 Shell）：
 
 ```bash
 docker compose --profile gateway up -d nginx
@@ -27,7 +27,7 @@ docker compose --profile gateway up -d nginx
 
 当前 `docker-compose.yml` 仍映射 `8011:8011` 方便本地调试。生产应去掉该端口映射，只留 Nginx。
 
-`backend` 启动时执行 `alembic upgrade head`，**不会**自动 `seed_demo`。
+`erp` 启动时执行 `alembic upgrade head`，**不会**自动 `seed_demo`。
 
 Worker 与 API 共用同一镜像，命令为 `python -m app.tasks.worker`。健康状态看 Redis 键 `erp:worker:heartbeat`，`GET /api/v1/health` 的 `worker` 字段。
 
@@ -49,7 +49,7 @@ Worker 与 API 共用同一镜像，命令为 `python -m app.tasks.worker`。健
 
 ## Nginx
 
-仓库 `nginx/nginx.conf` 是本地 gateway 示例：`/api` → backend:8011，`/` → Shell。生产应：
+仓库 `nginx/nginx.conf` 是本地 gateway 示例：`/api` → erp:8011，`/` → Shell。生产应：
 
 - 监听 443，HTTP 跳转 HTTPS
 - 静态资源 gzip + 长期缓存 hash 文件

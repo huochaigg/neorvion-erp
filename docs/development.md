@@ -33,7 +33,7 @@ pnpm dev:knowledge
 安装并启动后端：
 
 ```bash
-cd backend
+cd services/erp
 uv sync
 uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 8011
 ```
@@ -41,7 +41,7 @@ uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 8011
 数据库迁移：
 
 ```bash
-cd backend
+cd services/erp
 uv run alembic current
 uv run alembic upgrade head
 uv run python -m app.scripts.seed_permissions
@@ -53,23 +53,23 @@ uv run alembic revision --autogenerate -m "your message"
 M1 的初始迁移为空。V2.1 增加 `users` 表，执行：
 
 ```bash
-cd backend
+cd services/erp
 uv run alembic upgrade head
 ```
 
 生成本地 RSA 密钥（私钥不会提交到 Git）：
 
 ```bash
-cd backend
+cd services/erp
 uv run python scripts/generate_rsa_keys.py --key-id v1
 ```
 
-把输出的 `RSA_KEY_ID` / `RSA_PRIVATE_KEY_PATH` / `RSA_PUBLIC_KEY_PATH` 写入 `backend/.env`。生产环境改为从密钥管理系统加载同一路径变量，不要把 PEM 打进镜像。
+把输出的 `RSA_KEY_ID` / `RSA_PRIVATE_KEY_PATH` / `RSA_PUBLIC_KEY_PATH` 写入 `services/erp/.env`。生产环境改为从密钥管理系统加载同一路径变量，不要把 PEM 打进镜像。
 
 代码检查：
 
 ```bash
-cd backend
+cd services/erp
 uv run ruff check app tests
 uv run pytest
 ```
@@ -77,7 +77,7 @@ uv run pytest
 Knowledge：
 
 ```bash
-cd knowledge
+cd services/knowledge
 uv sync
 uv run alembic upgrade head
 uv run python -m app
@@ -187,7 +187,7 @@ Get-NetTCPConnection -LocalPort 8011 | Select-Object OwningProcess,State
 
 **MySQL / Redis 为 unavailable**
 
-- 检查 `backend/.env` 账号是否与实际实例一致。FastAPI 只读取 `backend/.env`，仓库根目录 `.env` 给 Docker Compose 使用，二者可以不同。
+- 检查 `services/erp/.env` 账号是否与实际实例一致。FastAPI 只读取 `services/erp/.env`，仓库根目录 `.env` 给 Docker Compose 使用，二者可以不同。
 - 业务库必须是 `neorvion_erp`，测试库是 `neorvion_erp_test`，不要复用其他项目数据库。
 - 本机 3306/6379 可能已被其他服务占用，不要和 Docker 映射冲突。
 

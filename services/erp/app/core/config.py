@@ -4,7 +4,7 @@ from urllib.parse import quote_plus
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-# 只读 backend/.env，避免仓库根目录给 Docker Compose 用的账号覆盖本地独立配置。
+# 只读 services/erp/.env，避免仓库根目录给 Docker Compose 用的账号覆盖本地独立配置。
 _BACKEND_DIR = Path(__file__).resolve().parents[2]
 
 

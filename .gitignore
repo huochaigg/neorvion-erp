@@ -24,6 +24,7 @@ build/
 .env.*.local
 .env.production
 apps/*/.env
+services/*/.env
 backend/.env
 knowledge/.env
 
@@ -48,12 +49,15 @@ pnpm-debug.log*
 .cache/
 coverage/
 .python-version
+!services/erp/.python-version
 !backend/.python-version
 
 # 异步导出产物，禁止提交
+services/erp/var/exports/
 backend/var/exports/
 
 # RSA 私钥与本地密钥目录，禁止提交
+services/erp/secrets/
 backend/secrets/
 *.pem
 

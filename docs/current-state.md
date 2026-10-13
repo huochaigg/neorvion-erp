@@ -12,8 +12,8 @@ Shell（8015）+ ERP 微前端（8016）+ Knowledge 微前端（8017）+ ERP Fas
 - `apps/erp`：业务页面
 - `apps/knowledge`：AI 知识库微前端
 - `packages/shared`：Query Key、ApiError、租户请求头
-- `backend/app/{api,core,models,schemas,repositories,services,tasks}`
-- `knowledge/`：Knowledge 独立 FastAPI
+- `services/erp/app/{api,core,models,schemas,repositories,services,tasks}`
+- `services/knowledge/`：Knowledge 独立 FastAPI
 - `docs/`：导航见 `docs/README.md`
 
 ## 核心模块
