@@ -1,4 +1,12 @@
-import { ERP_APP_NAME, ERP_BASENAME, ERP_DEFAULT_PATH, childPathFromHost } from '@neorvion/shared';
+import {
+  ERP_APP_NAME,
+  ERP_BASENAME,
+  ERP_DEFAULT_PATH,
+  KNOWLEDGE_APP_NAME,
+  KNOWLEDGE_BASENAME,
+  KNOWLEDGE_DEFAULT_PATH,
+  childPathFromHost,
+} from '@neorvion/shared';
 import type { plugin } from 'wujie';
 import { tailwindV4ShadowCssPlugin } from '@/micro/css-plugins';
 
@@ -19,6 +27,16 @@ export const MICRO_APPS: MicroAppDefinition[] = [
     basename: ERP_BASENAME,
     defaultPath: ERP_DEFAULT_PATH,
     getEntry: () => (import.meta.env.VITE_ERP_ENTRY || 'http://localhost:8016').replace(/\/$/, ''),
+    fiber: false,
+    degrade: false,
+    alive: true,
+    plugins: [tailwindV4ShadowCssPlugin()],
+  },
+  {
+    name: KNOWLEDGE_APP_NAME,
+    basename: KNOWLEDGE_BASENAME,
+    defaultPath: KNOWLEDGE_DEFAULT_PATH,
+    getEntry: () => (import.meta.env.VITE_KNOWLEDGE_ENTRY || 'http://localhost:8017').replace(/\/$/, ''),
     fiber: false,
     degrade: false,
     alive: true,

@@ -1,5 +1,11 @@
-export { APP_CODE, DEFAULT_PAGE_SIZE, ERP_APP_NAME } from './constants/app';
-export { ERP_BASENAME, ERP_DEFAULT_PATH, SHELL_ROUTES } from './constants/routes';
+export { APP_CODE, DEFAULT_PAGE_SIZE, ERP_APP_NAME, KNOWLEDGE_APP_NAME } from './constants/app';
+export {
+  ERP_BASENAME,
+  ERP_DEFAULT_PATH,
+  KNOWLEDGE_BASENAME,
+  KNOWLEDGE_DEFAULT_PATH,
+  SHELL_ROUTES,
+} from './constants/routes';
 export type { ApiResponse, HealthCheckData } from './types/api';
 export type {
   AfterSaleSummary,
@@ -28,6 +34,18 @@ export {
   formatAnalyticsRate,
   toChartNumber,
 } from './types/analytics';
+export type {
+  KnowledgeBase,
+  KnowledgeBaseList,
+  KnowledgeBaseCreatePayload,
+  KnowledgeBaseUpdatePayload,
+} from './types/knowledge';
+export {
+  KNOWLEDGE_BASE_STATUS,
+  KNOWLEDGE_DOCUMENT_STATUS,
+  KNOWLEDGE_BASE_STATUS_LABEL,
+  knowledgeBaseStatusLabel,
+} from './types/knowledge';
 export type {
   AsyncTask,
   AsyncTaskList,
@@ -502,6 +520,8 @@ export {
   taskQueryKey,
   taskLogsQueryKey,
   analyticsQueryKey,
+  knowledgeBasesQueryKey,
+  knowledgeBaseQueryKey,
   isTenantScopedQueryKey,
   tenantIdFromQueryKey,
 } from './query/keys';

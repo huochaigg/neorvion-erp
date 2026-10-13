@@ -7,8 +7,10 @@ neorvion-erp/
 ├── AI_CONTEXT.md              # 新会话开发规则
 ├── apps/
 │   ├── shell/                 # 宿主：登录、租户、Wujie
-│   └── erp/                   # ERP 子应用：业务页
+│   ├── erp/                   # ERP 子应用：业务页
+│   └── knowledge/             # Knowledge 子应用：知识库
 ├── packages/shared/           # Query Key、ApiError、租户头规则
+├── knowledge/                 # Knowledge FastAPI + PostgreSQL
 ├── backend/
 │   ├── app/
 │   │   ├── api/               # HTTP，不做业务事务
@@ -39,5 +41,7 @@ neorvion-erp/
 | 新页面 | `apps/erp/src/pages/`，路由 `apps/erp/src/router/routes.ts` |
 | 共享类型 / Query Key | `packages/shared` |
 | 认证 UI | `apps/shell`，不要在 ERP 再做登录 |
+| Knowledge API | `knowledge/`，独立 FastAPI + PostgreSQL，禁止注册到 ERP |
+| Knowledge 页面 | `apps/knowledge/`，由 Shell `/knowledge` 挂载 |
 
 ERP 业务菜单不要放进 `packages/shared`。

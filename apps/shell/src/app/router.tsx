@@ -1,4 +1,4 @@
-import { ERP_BASENAME, SHELL_ROUTES } from '@neorvion/shared';
+import { ERP_BASENAME, KNOWLEDGE_BASENAME, SHELL_ROUTES } from '@neorvion/shared';
 import { BrowserRouter, Outlet, Route, Routes } from 'react-router-dom';
 import { AuthBootstrap } from '@/components/AuthBootstrap';
 import { GuestOnly } from '@/components/GuestOnly';
@@ -8,7 +8,8 @@ import { RequireTenant } from '@/components/RequireTenant';
 import { TenantBootstrap } from '@/components/TenantBootstrap';
 import { ShellLayout } from '@/layouts/ShellLayout';
 import { ErpMicroApp } from '@/micro/ErpMicroApp';
-import { ErpIndexRedirect } from '@/micro/MicroAppIndexRedirect';
+import { KnowledgeMicroApp } from '@/micro/KnowledgeMicroApp';
+import { ErpIndexRedirect, KnowledgeIndexRedirect } from '@/micro/MicroAppIndexRedirect';
 import { ChangePasswordPage } from '@/pages/ChangePasswordPage';
 import { CreateWorkspacePage } from '@/pages/CreateWorkspacePage';
 import { HomePage } from '@/pages/HomePage';
@@ -74,6 +75,9 @@ export function AppRouter() {
                 <Route path={ERP_BASENAME} element={<ErpIndexRedirect />} />
                 <Route path={`${ERP_BASENAME}/`} element={<ErpIndexRedirect />} />
                 <Route path={`${ERP_BASENAME}/*`} element={<ErpMicroApp />} />
+                <Route path={KNOWLEDGE_BASENAME} element={<KnowledgeIndexRedirect />} />
+                <Route path={`${KNOWLEDGE_BASENAME}/`} element={<KnowledgeIndexRedirect />} />
+                <Route path={`${KNOWLEDGE_BASENAME}/*`} element={<KnowledgeMicroApp />} />
                 <Route path="*" element={<NotFoundPage />} />
               </Route>
             </Route>

@@ -1,12 +1,13 @@
 import {
   AppstoreOutlined,
+  BookOutlined,
   LogoutOutlined,
   MenuFoldOutlined,
   MenuUnfoldOutlined,
   TeamOutlined,
   UserOutlined,
 } from '@ant-design/icons';
-import { currentUserQueryKey, ERP_APP_NAME, SHELL_ROUTES } from '@neorvion/shared';
+import { currentUserQueryKey, ERP_APP_NAME, KNOWLEDGE_APP_NAME, SHELL_ROUTES } from '@neorvion/shared';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Avatar, Button, Dropdown, Layout, Menu, Space, Spin, Tag } from 'antd';
 import type { ReactNode } from 'react';
@@ -47,15 +48,18 @@ export function ShellLayout({ children }: ShellLayoutProps) {
 
   const selectedKey = location.pathname.startsWith(SHELL_ROUTES.erp)
     ? SHELL_ROUTES.erp
-    : location.pathname.startsWith(SHELL_ROUTES.workspaces)
-      ? SHELL_ROUTES.workspaces
-      : SHELL_ROUTES.home;
+    : location.pathname.startsWith(SHELL_ROUTES.knowledge)
+      ? SHELL_ROUTES.knowledge
+      : location.pathname.startsWith(SHELL_ROUTES.workspaces)
+        ? SHELL_ROUTES.workspaces
+        : SHELL_ROUTES.home;
 
   const menuItems = useMemo(
     () => [
       { key: SHELL_ROUTES.home, icon: <AppstoreOutlined />, label: '工作台' },
       { key: SHELL_ROUTES.workspaces, icon: <TeamOutlined />, label: '工作空间' },
       { key: SHELL_ROUTES.erp, icon: <TeamOutlined />, label: 'ERP 业务' },
+      { key: SHELL_ROUTES.knowledge, icon: <BookOutlined />, label: 'AI 知识库' },
     ],
     [],
   );
@@ -119,6 +123,11 @@ export function ShellLayout({ children }: ShellLayoutProps) {
               onClick={({ key }) => {
                 if (key === SHELL_ROUTES.erp) {
                   const app = getMicroApp(ERP_APP_NAME);
+                  navigate(getMicroAppEntryHref(app, getLastMicroHref(app.name)));
+                  return;
+                }
+                if (key === SHELL_ROUTES.knowledge) {
+                  const app = getMicroApp(KNOWLEDGE_APP_NAME);
                   navigate(getMicroAppEntryHref(app, getLastMicroHref(app.name)));
                   return;
                 }

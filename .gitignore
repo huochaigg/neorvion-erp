@@ -25,6 +25,7 @@ build/
 .env.production
 apps/*/.env
 backend/.env
+knowledge/.env
 
 # IDE
 .idea/

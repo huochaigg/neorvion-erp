@@ -57,6 +57,8 @@ class Settings(BaseSettings):
     rsa_previous_private_key_path: str = ""
     rsa_challenge_ttl_seconds: int = 300
     export_dir: str = str(_BACKEND_DIR / "var" / "exports")
+    # Knowledge 等内部服务调用身份内省接口。空值表示拒绝所有内部调用。
+    internal_service_key: str = ""
 
     def access_token_ttl_seconds(self) -> int:
         return self.jwt_access_expire_minutes * 60

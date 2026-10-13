@@ -31,7 +31,8 @@ Neorvion ERP Core V1（V15 收口）。模块化单体，不是微服务。
 
 - 后端：Python 3.12 + FastAPI + SQLAlchemy 2 + Alembic + MySQL 8 + Redis
 - 前端：React 19 + Vite + Wujie + Ant Design 6 + TanStack Query + Zustand
-- 端口：Shell 8015 / ERP 8016 / API 8011
+- 端口：Shell 8015 / ERP 8016 / API 8011 / Knowledge 前端 8017 / Knowledge API 8002
+- Knowledge 是独立 FastAPI + PostgreSQL，不要把 Router 注册进 ERP，也不要 import ERP Model/Repository/Service
 
 ## 事务
 

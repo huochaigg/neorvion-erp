@@ -90,6 +90,9 @@ Tailwind CSS 4 + 必要 SCSS Modules。Ant Design 只走 ConfigProvider Token。
 | Shell | 8015 |
 | ERP | 8016 |
 | FastAPI | 8011（公网不直接暴露） |
+| Knowledge 微前端 | 8017 |
+| Knowledge FastAPI | 8002（公网不直接暴露） |
 | MySQL | 3306（不公网） |
+| PostgreSQL | 5432（Knowledge / 未来向量，不公网） |
 | Redis | 6379（不公网） |
 | Nginx | 80 / 443 |

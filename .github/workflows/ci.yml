@@ -67,6 +67,45 @@ jobs:
       - name: Pytest (includes Alembic upgrade on test DB)
         run: uv run pytest -q --tb=short
 
+  knowledge:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: neorvion_knowledge_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U postgres"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+    defaults:
+      run:
+        working-directory: knowledge
+    env:
+      APP_ENV: test
+      DATABASE_URL: postgresql+psycopg://postgres:test@127.0.0.1:5432/neorvion_knowledge_test
+      TEST_DATABASE_URL: postgresql+psycopg://postgres:test@127.0.0.1:5432/neorvion_knowledge_test
+      ERP_JWT_SECRET: ci-knowledge-jwt-secret-32bytes!
+      ERP_INTERNAL_SERVICE_KEY: ci-internal-service-key
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v4
+        with:
+          enable-cache: true
+      - name: Install Python deps
+        run: uv sync --frozen
+      - name: Ruff
+        run: uv run ruff check app tests
+      - name: Alembic heads
+        run: uv run alembic heads
+      - name: Pytest
+        run: uv run pytest -q --tb=short
+
   frontend:
     runs-on: ubuntu-latest
     steps:
@@ -86,8 +125,7 @@ jobs:
         continue-on-error: true
         run: pnpm lint
       - name: Production build
-        env:
-          VITE_API_BASE_URL: https://neorvion.com
-          VITE_ERP_ENTRY: https://neorvion.com/erp
-          VITE_PUBLIC_BASE: /erp/
-        run: pnpm build
+        run: |
+          VITE_API_BASE_URL=https://neorvion.com VITE_ERP_ENTRY=https://neorvion.com/erp VITE_KNOWLEDGE_ENTRY=https://neorvion.com/knowledge pnpm --filter @neorvion/shell build
+          VITE_API_BASE_URL=https://neorvion.com VITE_PUBLIC_BASE=/erp/ pnpm --filter @neorvion/erp build
+          VITE_API_BASE_URL=https://neorvion.com/knowledge-api VITE_PUBLIC_BASE=/knowledge/ pnpm --filter @neorvion/knowledge build

@@ -1,4 +1,4 @@
-/** 主应用通过 Wujie props 传给 ERP 子应用的受控状态。 */
+/** 主应用通过 Wujie props 传给 ERP / Knowledge 子应用的受控状态。 */
 export interface ShellToErpProps {
   token: string | null;
   tenantId: number | null;

@@ -155,6 +155,11 @@ class PermissionCode(StrEnum):
     TASK_CANCEL = "task:cancel"
     TASK_DOWNLOAD = "task:download"
 
+    KNOWLEDGE_READ = "knowledge:read"
+    KNOWLEDGE_CREATE = "knowledge:create"
+    KNOWLEDGE_UPDATE = "knowledge:update"
+    KNOWLEDGE_DELETE = "knowledge:delete"
+
 
 class SystemRoleCode(StrEnum):
     OWNER = "OWNER"
@@ -411,6 +416,10 @@ PERMISSION_CATALOG: tuple[tuple[str, str, str, str], ...] = (
     (PermissionCode.TASK_RETRY, "重试任务", "task", "对失败或未入队任务重新入队"),
     (PermissionCode.TASK_CANCEL, "取消任务", "task", "取消尚未运行的异步任务"),
     (PermissionCode.TASK_DOWNLOAD, "下载任务结果", "task", "下载报表导出等任务产物"),
+    (PermissionCode.KNOWLEDGE_READ, "查看知识库", "knowledge", "查看当前企业知识库列表与详情"),
+    (PermissionCode.KNOWLEDGE_CREATE, "创建知识库", "knowledge", "创建企业知识库"),
+    (PermissionCode.KNOWLEDGE_UPDATE, "编辑知识库", "knowledge", "修改知识库名称、描述与状态"),
+    (PermissionCode.KNOWLEDGE_DELETE, "删除知识库", "knowledge", "软删除知识库，不立即清理文档与向量"),
     (PermissionCode.SUPPLIER_READ, "查看供应商", "supplier", "查看本企业供应商"),
     (PermissionCode.SUPPLIER_CREATE, "新增供应商", "supplier", "创建供应商"),
     (PermissionCode.SUPPLIER_UPDATE, "编辑供应商", "supplier", "编辑供应商档案，编码创建后只读"),
@@ -474,6 +483,7 @@ _READ_CODES: tuple[str, ...] = (
     PermissionCode.ANALYTICS_INVENTORY_READ,
     PermissionCode.ANALYTICS_AFTER_SALE_READ,
     PermissionCode.EVENT_READ,
+    PermissionCode.KNOWLEDGE_READ,
 )
 
 DEFAULT_ROLE_TEMPLATES: tuple[tuple[str, str, str, tuple[str, ...]], ...] = (
@@ -540,6 +550,9 @@ DEFAULT_ROLE_TEMPLATES: tuple[tuple[str, str, str, tuple[str, ...]], ...] = (
             PermissionCode.ANALYTICS_PURCHASE_READ,
             PermissionCode.EVENT_READ,
             PermissionCode.TASK_READ,
+            PermissionCode.KNOWLEDGE_READ,
+            PermissionCode.KNOWLEDGE_CREATE,
+            PermissionCode.KNOWLEDGE_UPDATE,
         ),
     ),
     (
@@ -596,6 +609,7 @@ DEFAULT_ROLE_TEMPLATES: tuple[tuple[str, str, str, tuple[str, ...]], ...] = (
             PermissionCode.PURCHASE_RETURN_OUTBOUND,
             PermissionCode.ANALYTICS_OVERVIEW_READ,
             PermissionCode.ANALYTICS_INVENTORY_READ,
+            PermissionCode.KNOWLEDGE_READ,
         ),
     ),
     (
@@ -1641,6 +1655,44 @@ PERMISSION_TREE: tuple[PermissionTreeDef, ...] = (
                         title="下载",
                         type="ACTION",
                         permission_code=PermissionCode.TASK_DOWNLOAD,
+                    ),
+                ),
+            ),
+        ),
+    ),
+    PermissionTreeDef(
+        key="dir:knowledge",
+        title="AI 知识库",
+        type="DIRECTORY",
+        children=(
+            PermissionTreeDef(
+                key="menu:knowledge-bases",
+                title="知识库",
+                type="MENU",
+                children=(
+                    PermissionTreeDef(
+                        key="action:knowledge-read",
+                        title="查看",
+                        type="ACTION",
+                        permission_code=PermissionCode.KNOWLEDGE_READ,
+                    ),
+                    PermissionTreeDef(
+                        key="action:knowledge-create",
+                        title="新建",
+                        type="ACTION",
+                        permission_code=PermissionCode.KNOWLEDGE_CREATE,
+                    ),
+                    PermissionTreeDef(
+                        key="action:knowledge-update",
+                        title="编辑",
+                        type="ACTION",
+                        permission_code=PermissionCode.KNOWLEDGE_UPDATE,
+                    ),
+                    PermissionTreeDef(
+                        key="action:knowledge-delete",
+                        title="删除",
+                        type="ACTION",
+                        permission_code=PermissionCode.KNOWLEDGE_DELETE,
                     ),
                 ),
             ),

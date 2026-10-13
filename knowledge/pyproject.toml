@@ -1,0 +1,49 @@
+[project]
+name = "neorvion-knowledge-backend"
+version = "0.1.0"
+description = "Neorvion Knowledge FastAPI backend"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "alembic>=1.16.5",
+    "email-validator>=2.3.0",
+    "fastapi[standard]>=0.117.1",
+    "httpx>=0.28.1",
+    "psycopg[binary]>=3.2.9",
+    "pydantic-settings>=2.10.1",
+    "pyjwt>=2.10.1",
+    "sqlalchemy[asyncio]>=2.0.43",
+    "uvicorn[standard]>=0.35.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.4.2",
+    "pytest-asyncio>=0.25.3",
+    "ruff>=0.13.1",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["app", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/conftest.py" = ["E402"]
+"tests/*.py" = ["E501"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+
+[tool.pyright]
+venvPath = "."
+venv = ".venv"
+pythonVersion = "3.12"
+pythonPlatform = "All"
+extraPaths = ["."]

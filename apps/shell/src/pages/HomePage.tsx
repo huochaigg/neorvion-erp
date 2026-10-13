@@ -3,6 +3,8 @@ import {
   ERP_BASENAME,
   ERP_DEFAULT_PATH,
   healthQueryKey,
+  KNOWLEDGE_BASENAME,
+  KNOWLEDGE_DEFAULT_PATH,
   listUsableTenants,
   memberRoleNames,
   myTenantsQueryKey,
@@ -65,6 +67,9 @@ export function HomePage() {
         </Link>
         <Link to={`${ERP_BASENAME}/orders`}>
           <Button>打开 ERP 订单</Button>
+        </Link>
+        <Link to={`${KNOWLEDGE_BASENAME}${KNOWLEDGE_DEFAULT_PATH}`}>
+          <Button>打开 AI 知识库</Button>
         </Link>
       </Space>
 

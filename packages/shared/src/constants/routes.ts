@@ -7,6 +7,7 @@ export const SHELL_ROUTES = {
   workspaces: '/workspaces',
   workspaceCreate: '/workspaces/create',
   erp: '/erp',
+  knowledge: '/knowledge',
 } as const;
 
 /** 主应用里的子应用挂载前缀。ERP 内部业务路径不放在本文件。 */
@@ -14,3 +15,9 @@ export const ERP_BASENAME = '/erp';
 
 /** 主应用打开 ERP 时的默认落地页。具体菜单由 ERP 自己的 routes.ts 维护。 */
 export const ERP_DEFAULT_PATH = '/dashboard';
+
+/** 主应用里 Knowledge 子应用挂载前缀。 */
+export const KNOWLEDGE_BASENAME = '/knowledge';
+
+/** 主应用打开 Knowledge 时的默认落地页。 */
+export const KNOWLEDGE_DEFAULT_PATH = '/bases';

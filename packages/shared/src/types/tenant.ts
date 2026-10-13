@@ -152,6 +152,7 @@ export const PERMISSION_MODULE_LABELS: Record<string, string> = {
   event: '事件中心',
   operation_log: '操作日志',
   task: '任务中心',
+  knowledge: 'AI 知识库',
 };
 
 export const TENANT_HEADER = 'X-Tenant-ID';
@@ -288,6 +289,10 @@ export const PERMISSION_CODE = {
   taskRetry: 'task:retry',
   taskCancel: 'task:cancel',
   taskDownload: 'task:download',
+  knowledgeRead: 'knowledge:read',
+  knowledgeCreate: 'knowledge:create',
+  knowledgeUpdate: 'knowledge:update',
+  knowledgeDelete: 'knowledge:delete',
 } as const;
 
 export type PermissionMode = 'any' | 'all';

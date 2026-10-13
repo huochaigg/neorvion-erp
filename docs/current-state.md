@@ -4,14 +4,16 @@
 
 ## 技术栈
 
-Shell（8015）+ ERP 微前端（8016）+ FastAPI（8011）+ MySQL 8 + Redis 7 + 独立 Worker。前端 React 19 / Vite / Wujie / Ant Design 6 / TanStack Query / Zustand。后端 SQLAlchemy 2 / Alembic。
+Shell（8015）+ ERP 微前端（8016）+ Knowledge 微前端（8017）+ ERP FastAPI（8011 / MySQL）+ Knowledge FastAPI（8002 / PostgreSQL）+ Redis 7 + 独立 Worker。前端 React 19 / Vite / Wujie / Ant Design 6 / TanStack Query / Zustand。后端 SQLAlchemy 2 / Alembic。
 
 ## 目录
 
 - `apps/shell`：登录、租户、导航、Wujie 宿主
 - `apps/erp`：业务页面
+- `apps/knowledge`：AI 知识库微前端
 - `packages/shared`：Query Key、ApiError、租户请求头
 - `backend/app/{api,core,models,schemas,repositories,services,tasks}`
+- `knowledge/`：Knowledge 独立 FastAPI
 - `docs/`：导航见 `docs/README.md`
 
 ## 核心模块

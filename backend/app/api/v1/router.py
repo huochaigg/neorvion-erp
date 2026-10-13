@@ -8,6 +8,7 @@ from app.api.v1.carriers import router as carrier_router
 from app.api.v1.customers import router as customer_router
 from app.api.v1.events import router as event_router
 from app.api.v1.health import router as health_router
+from app.api.v1.internal_identity import router as internal_identity_router
 from app.api.v1.inventory import router as inventory_router
 from app.api.v1.inventory import sku_router as product_sku_router
 from app.api.v1.operation_logs import router as operation_log_router
@@ -34,6 +35,7 @@ from app.api.v1.warehouses import router as warehouse_router
 
 api_router = APIRouter(prefix="/api/v1")
 api_router.include_router(health_router, tags=["health"])
+api_router.include_router(internal_identity_router)
 api_router.include_router(auth_router, tags=["auth"])
 api_router.include_router(permission_router)
 api_router.include_router(role_router)

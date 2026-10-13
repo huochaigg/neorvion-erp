@@ -406,6 +406,17 @@ export function taskLogsQueryKey(tenantId: number | null, taskId: string | null)
   return ['tenant', tenantId, 'task-logs', taskId] as const;
 }
 
+export function knowledgeBasesQueryKey(
+  tenantId: number | null,
+  filters?: { q?: string; status?: string; page?: number; pageSize?: number },
+) {
+  return ['tenant', tenantId, 'knowledge-bases', filters ?? {}] as const;
+}
+
+export function knowledgeBaseQueryKey(tenantId: number | null, knowledgeBaseId: number | null) {
+  return ['tenant', tenantId, 'knowledge-base', knowledgeBaseId] as const;
+}
+
 export function analyticsQueryKey(
   tenantId: number | null,
   domain: string,
