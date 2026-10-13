@@ -1,6 +1,6 @@
-# Neorvion Knowledge V3
+# Neorvion Knowledge V4
 
-独立 AI 知识库：V1 知识库 CRUD → V2 文档解析与切片 → V3 RAG 检索与智能问答。身份、租户、RBAC 仍以 ERP MySQL 为权威来源。
+独立 AI 知识库：V1 知识库 CRUD → V2 文档解析与切片 → V3 RAG 检索与智能问答 → V4 RAG 评测与召回调优。身份、租户、RBAC 仍以 ERP MySQL 为权威来源。
 
 ## 与 ERP 的关系
 
@@ -33,17 +33,21 @@ flowchart LR
 | 知识库 | `/bases` | V1 CRUD |
 | 知识库详情 | `/bases/:id` | 概览、文档、切片、向量索引状态与重建 |
 | 文档详情 | `/bases/:id/documents/:docId` | 解析预览、切片编辑启停、任务与重试 |
-| 检索测试 | `/retrieval-test` | 与问答共用检索引擎，展示排名与耗时 |
+| 召回调优 | `/retrieval-test` | 与问答共用检索引擎；对比 VECTOR/KEYWORD/HYBRID 与 Rerank 前后 |
 | 处理任务 | `/tasks` | PARSE / CHUNK / EMBED |
 | 模型配置 | `/models` | 平台级 Chat / Embedding / Rerank（无密钥明文） |
+| 评测数据集 | `/datasets`、`/datasets/:id` | 数据集 CRUD、导入导出、问题标注 |
+| 检索评测 | `/experiments` | 参数方案、异步跑批、单题结果 |
+| 实验对比 | `/experiments/compare` | 多 run 指标、参数差异、低分问题 |
+| 使用统计 | `/stats` | 来自 retrieval_logs / messages 的真实用量 |
 
-未实现的知识空间文章、V4 评测集不展示空菜单。成员与角色仍在 ERP。
+成员与角色仍在 ERP。评测任务落在 PostgreSQL，切页面或切租户不会删除已排队的评测。
 
-切租户后：`/bases/:id` 与文档详情回到工作台，`/chat/:id` 回到 `/chat`，任务详情回到 `/tasks`。Query Key 带 `tenantId`；页面 `epoch` 会卸掉局部状态并中止进行中的 SSE。前端取消的是浏览器请求，不会取消服务端已落库的解析/索引任务。
+切租户后：`/bases/:id` 与文档详情回到工作台，`/chat/:id` 回到 `/chat`，任务详情回到 `/tasks`，`/datasets/:id` 回到 `/datasets`，`/experiments/:id` 回到 `/experiments`。Query Key 带 `tenantId`；页面 `epoch` 会卸掉局部状态并中止进行中的 SSE。前端取消的是浏览器请求，不会取消服务端已落库的解析/索引/评测任务。
 
 ## 数据库
 
-迁移：`20261013_0001`（V1）→ `20261013_0002`（V2）→ `20261013_0003`（V3：pgvector + 会话）。
+迁移：`20261013_0001`（V1）→ `20261013_0002`（V2）→ `20261013_0003`（V3：pgvector + 会话）→ `20261014_0004`（V4 评测）。
 
 V1/V2 表保持不变。V3 增量：
 
@@ -128,9 +132,9 @@ QUEUED → RUNNING → SUCCESS
                  ↘ FAILED →（重试）QUEUED
 ```
 
-`PARSE` / `CHUNK` 失败会影响文档状态；`EMBED` 失败不影响 V2 原文与切片。PostgreSQL 是真相；Redis List 只投递 `task_id`。`TASK_EXECUTOR=inline` 仅建议测试。
+`PARSE` / `CHUNK` 失败会影响文档状态；`EMBED` 失败不影响 V2 原文与切片。PostgreSQL 是真相；Redis List 只投递 `task_id` 或 `eval:{run_id}`。`TASK_EXECUTOR=inline` 仅建议测试。
 
-Worker：`uv run python -m app.tasks.worker`。
+Worker：`uv run python -m app.tasks.worker`。评测运行与文档任务共用同一队列，前缀 `eval:` 区分。重启后 RUNNING 评测标失败，QUEUED 重新入队。
 
 ## 本地运行
 
@@ -168,10 +172,98 @@ pnpm --filter @neorvion/shell test
 - SQLAlchemy 连接池 `pool_size=5, max_overflow=5`。
 - 精确 kNN 适合当前小数据；上万切片后再评估 HNSW，并单独验证多租户过滤召回。
 
-## 已知限制 / V4
+## V4 评测系统
+
+评测不改线上 Chunk / 向量索引。实验只调用 `RetrievalService.search(..., persist_log=False)`，参数快照写入 `evaluation_runs.config_snapshot`。
+
+```text
+数据集 → 标注 Chunk（0–3）→ 冻结版本快照 → 创建实验参数方案
+→ evaluation_runs QUEUED → Worker 批量检索（可选生成+Judge）
+→ 代码计算 Hit/Recall/Precision/MRR/nDCG → 对比 / 调参
+```
+
+### 数据集 Schema 与标注
+
+| 表 | 作用 |
+| --- | --- |
+| `evaluation_datasets` | 数据集元数据、关联知识库、当前冻结版本 |
+| `evaluation_dataset_versions` | JSONB 快照：问题、标准答案、标注、`source_key` |
+| `evaluation_cases` | 问题。`PENDING` 待标注 / `LABELED` 已标但无有效相关 / `READY` 可正式评测 |
+| `evaluation_judgments` | 多 Chunk 标注。`stale=true` 表示切片版本或正文哈希已变 |
+| `evaluation_experiments` | 可复用参数方案 |
+| `evaluation_runs` | 一次异步执行；PostgreSQL 是状态真相 |
+| `evaluation_results` | 单题召回快照、指标、Judge 原始输出 |
+
+`is_unanswerable=true` 是显式无答案题，状态可直接 `READY`，不能当成缺少标注。有监督检索只使用非 stale 且 `relevance>=1` 的 Chunk。
+
+稳定来源键：`kb:{kb_id}:doc:{doc_id}:sha:{sha256}:v:{chunk_version}:i:{chunk_index}`。文档更新导致 Chunk ID 变化时，按哈希/版本把旧标注标 stale，提示人工重确认，禁止悄悄当作有效相关。
+
+导入：CSV / JSONL / 简易 xlsx。中文表头别名：问题、标准答案、类型、难度、标签、无答案。错误行返回 `{row, message}`，成功行写入待标注（无答案题除外）。
+
+### 指标定义（Chunk 粒度，代码计算）
+
+相关集合 R = `{id | relevance >= 1}`。K 是实验配置的最终 Top-K，不是实际返回条数。
+
+| 指标 | 定义 | 例：排名 `[10,99,20]`，相关 `{10:3,20:1,30:2}`，K=3 |
+| --- | --- | --- |
+| Hit Rate@K | Top-K 是否至少命中一个相关 | 1 |
+| Recall@K | \|Top-K ∩ R\| / \|R\| | 2/3 |
+| Precision@K | \|Top-K ∩ R\| / K | 2/3 |
+| MRR | 第一个相关结果排名的倒数，未命中为 0 | 1 |
+| nDCG@K | 增益 `2^rel-1`，折损 `log2(rank+1)` | DCG/IDCG |
+
+Document 粒度单独计算并标记 `granularity=document`，不得与 Chunk 指标混用。无答案题不计算 Recall（分母为零），改为 `false_recall` / `empty_ok` / 拒答率。
+
+`METRIC_VERSION=v4-chunk-ndcg-exp`。
+
+### 生成质量与 Judge 选型
+
+未引入 Ragas：依赖重、与当前 FastAPI/mock 测试栈不契合，且检索指标必须由代码保证数学正确。也未强制 LangSmith。
+
+可选 LLM-as-a-Judge（默认关闭）：Faithfulness / Answer Relevancy / Answer Correctness。无标准答案时 `answer_correctness` 必须为 null。Judge 输出非法 JSON 或越界分数时 **不伪造分数**，只记 `judge_error`。知识库摘录包在 `<untrusted_document>` 中。记录 `judge_model` 与 `judge_prompt_version=v4-judge-1`。结果具有主观性与波动，界面会标明。支持人工 `human_override`。
+
+### 实验可复现
+
+每次运行冻结当前数据集版本。`config_snapshot` 含策略、Top-K、RRF、Rerank、Embedding 模型与维度、Chat/Rerank 模型、Prompt/指标版本。对比时若数据集版本或 Embedding/维度不同，标记 **非严格可比**，不给出误导性提升结论。Chunk Size / Overlap 变化必须通过独立索引版本对比，评测不得改写线上切片。
+
+### 任务与限额
+
+- 单任务最大题量 `EVAL_MAX_CASES`（默认 200）
+- Token 预算 `EVAL_TOKEN_BUDGET`
+- Worker 并发 `WORKER_CONCURRENCY`
+- 同一实验同时只能有一个 QUEUED/RUNNING
+- 取消：QUEUED 立即 CANCELLED；RUNNING 设 `cancel_requested`，下一题前退出
+- 重试：仅 FAILED/CANCELLED，先删本题结果再入队，`attempt+1`
+- 费用：`EVAL_PROMPT_TOKEN_USD` / `EVAL_COMPLETION_TOKEN_USD` 为 0 时不估算，不用假账单
+
+### 检索调优
+
+召回调优页对比 VECTOR / KEYWORD / HYBRID、调整 Vector/Keyword/最终 Top-K 与 RRF k、对比 Rerank 前后排名与阶段耗时。与问答共用 `RetrievalService.search`。
+
+### 本地评测步骤
+
+1. `uv run alembic upgrade head`
+2. 上传文档并等待 EMBED 完成
+3. 创建数据集 → 新增问题 → 标注相关 Chunk → 冻结（首次运行会自动冻结，之后复用该版本直到再次冻结）
+4. 创建实验（先关闭生成评测）→ 运行 → 查看 Recall/nDCG
+5. 复制实验、改策略或 Top-K 再跑 → 实验对比
+6. 可选打开生成评测（会产生模型费用；测试用 `MODEL_PROVIDER=mock`）
+
+## 已知限制
 
 - 无 OCR、无复杂表格还原。
 - 关键词检索不是 BM25；中文主要靠 ILIKE + trigram。
-- 无评测集、无 Recall@K / MRR / 批量评测（V4）。
 - Rerank 依赖可选兼容 HTTP；未配置则降级。
 - 更换 Embedding 维度需要重建向量列。
+- LLM Judge 不稳定，不能替代有监督检索指标。
+- xlsx 导入只支持简单共享字符串表，复杂 Excel 请改 CSV/JSONL。
+- 评测不会为对比自动创建独立向量索引；切片策略变化需另建知识库或重建后再评。
+
+## V5 建议
+
+- 可选 BM25 / 真正的中文分词检索。
+- 评测用独立索引版本（按 chunk_size 建影子库）做切片策略 A/B。
+- 人工标注工作台：检索候选一键标注、仲裁、一致性检查。
+- 可选对接 LangSmith / Ragas，作为旁路而不是核心依赖。
+- Token 单价按模型拆分、费用预警。
+- 大规模时评估 HNSW，并单独验证多租户 SQL 过滤召回。

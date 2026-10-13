@@ -1,8 +1,10 @@
 import {
+  BarChartOutlined,
   BookOutlined,
   CommentOutlined,
   DatabaseOutlined,
   ExperimentOutlined,
+  FileSearchOutlined,
   HomeOutlined,
   SearchOutlined,
   SettingOutlined,
@@ -27,6 +29,10 @@ export function KnowledgeLayout({ children }: KnowledgeLayoutProps) {
       '/search',
       '/chat',
       '/retrieval-test',
+      '/datasets',
+      '/experiments/compare',
+      '/experiments',
+      '/stats',
       '/models',
       '/tasks',
       '/bases',
@@ -49,12 +55,28 @@ export function KnowledgeLayout({ children }: KnowledgeLayoutProps) {
             className="h-full border-none pt-3"
             items={[
               { key: '/workbench', icon: <HomeOutlined />, label: '工作台' },
-              { key: '/search', icon: <SearchOutlined />, label: '智能搜索' },
-              { key: '/chat', icon: <CommentOutlined />, label: '知识问答' },
-              { key: '/bases', icon: <BookOutlined />, label: '知识库' },
-              { key: '/retrieval-test', icon: <ExperimentOutlined />, label: '检索测试' },
-              { key: '/tasks', icon: <DatabaseOutlined />, label: '处理任务' },
-              { key: '/models', icon: <SettingOutlined />, label: '模型配置' },
+              {
+                type: 'group',
+                label: '检索与 AI',
+                children: [
+                  { key: '/search', icon: <SearchOutlined />, label: '智能搜索' },
+                  { key: '/chat', icon: <CommentOutlined />, label: '知识问答' },
+                  { key: '/retrieval-test', icon: <ExperimentOutlined />, label: '召回调优' },
+                  { key: '/bases', icon: <BookOutlined />, label: '知识库' },
+                  { key: '/tasks', icon: <DatabaseOutlined />, label: '处理任务' },
+                  { key: '/models', icon: <SettingOutlined />, label: '模型配置' },
+                ],
+              },
+              {
+                type: 'group',
+                label: '质量与运营',
+                children: [
+                  { key: '/datasets', icon: <FileSearchOutlined />, label: '评测数据集' },
+                  { key: '/experiments', icon: <ExperimentOutlined />, label: '检索评测' },
+                  { key: '/experiments/compare', icon: <BarChartOutlined />, label: '实验对比' },
+                  { key: '/stats', icon: <BarChartOutlined />, label: '使用统计' },
+                ],
+              },
             ]}
             onClick={({ key }) => navigate(key)}
           />

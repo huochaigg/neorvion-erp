@@ -11,9 +11,14 @@ import { DocumentDetailPage } from '@/pages/DocumentDetailPage';
 import { KnowledgeBaseDetailPage } from '@/pages/KnowledgeBaseDetailPage';
 import { KnowledgeBaseListPage } from '@/pages/KnowledgeBaseListPage';
 import { ModelsPage } from '@/pages/ModelsPage';
+import { EvaluationComparePage } from '@/pages/EvaluationComparePage';
+import { EvaluationDatasetDetailPage } from '@/pages/EvaluationDatasetDetailPage';
+import { EvaluationDatasetsPage } from '@/pages/EvaluationDatasetsPage';
+import { EvaluationExperimentsPage } from '@/pages/EvaluationExperimentsPage';
 import { RetrievalTestPage } from '@/pages/RetrievalTestPage';
 import { SearchPage } from '@/pages/SearchPage';
 import { TaskListPage } from '@/pages/TaskListPage';
+import { UsageStatsPage } from '@/pages/UsageStatsPage';
 import { WorkbenchPage } from '@/pages/WorkbenchPage';
 import { useKnowledgeTenantStore } from '@/stores/tenant-runtime';
 
@@ -131,6 +136,46 @@ export function AppRouter() {
             element={
               <Suspense fallback={<Fallback />}>
                 <TaskListPage />
+              </Suspense>
+            }
+          />
+          <Route
+            path="/datasets"
+            element={
+              <Suspense fallback={<Fallback />}>
+                <EvaluationDatasetsPage />
+              </Suspense>
+            }
+          />
+          <Route
+            path="/datasets/:id"
+            element={
+              <Suspense fallback={<Fallback />}>
+                <EvaluationDatasetDetailPage />
+              </Suspense>
+            }
+          />
+          <Route
+            path="/experiments"
+            element={
+              <Suspense fallback={<Fallback />}>
+                <EvaluationExperimentsPage />
+              </Suspense>
+            }
+          />
+          <Route
+            path="/experiments/compare"
+            element={
+              <Suspense fallback={<Fallback />}>
+                <EvaluationComparePage />
+              </Suspense>
+            }
+          />
+          <Route
+            path="/stats"
+            element={
+              <Suspense fallback={<Fallback />}>
+                <UsageStatsPage />
               </Suspense>
             }
           />

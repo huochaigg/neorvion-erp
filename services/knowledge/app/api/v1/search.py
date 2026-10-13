@@ -52,6 +52,9 @@ async def search(
         top_k=payload.top_k,
         candidate_k=payload.candidate_k,
         similarity_threshold=payload.similarity_threshold,
+        vector_k=payload.vector_k,
+        keyword_k=payload.keyword_k,
+        rrf_k=payload.rrf_k,
         rerank=payload.rerank,
     )
     return ok(_to_out(result))
@@ -70,6 +73,9 @@ async def retrieval_test(
         top_k=payload.top_k,
         candidate_k=payload.candidate_k,
         similarity_threshold=payload.similarity_threshold,
+        vector_k=payload.vector_k,
+        keyword_k=payload.keyword_k,
+        rrf_k=payload.rrf_k,
         rerank=payload.rerank,
     )
     return ok(_to_out(result))

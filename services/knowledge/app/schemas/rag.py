@@ -15,6 +15,9 @@ class SearchIn(BaseModel):
     top_k: int = Field(default_factory=lambda: settings.default_top_k, ge=1, le=50)
     candidate_k: int = Field(default_factory=lambda: settings.default_candidate_k, ge=1, le=100)
     similarity_threshold: float | None = Field(default=None, ge=0, le=1, description="仅向量路使用的余弦相似度下限")
+    vector_k: int | None = Field(default=None, ge=1, le=100, description="向量路召回条数，默认 candidate_k")
+    keyword_k: int | None = Field(default=None, ge=1, le=100, description="关键词路召回条数，默认 candidate_k")
+    rrf_k: int | None = Field(default=None, ge=1, le=200, description="RRF 常数 k，默认配置 rrf_k")
     rerank: bool = False
 
     @field_validator("strategy")

@@ -88,6 +88,13 @@ def _run_migrations() -> None:
 def _wipe_tables() -> None:
     engine = create_engine(settings.database_url)
     with engine.begin() as connection:
+        connection.execute(text("DELETE FROM evaluation_results"))
+        connection.execute(text("DELETE FROM evaluation_runs"))
+        connection.execute(text("DELETE FROM evaluation_experiments"))
+        connection.execute(text("DELETE FROM evaluation_judgments"))
+        connection.execute(text("DELETE FROM evaluation_cases"))
+        connection.execute(text("DELETE FROM evaluation_dataset_versions"))
+        connection.execute(text("DELETE FROM evaluation_datasets"))
         connection.execute(text("DELETE FROM message_citations"))
         connection.execute(text("DELETE FROM messages"))
         connection.execute(text("DELETE FROM conversations"))

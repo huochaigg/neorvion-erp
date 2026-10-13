@@ -1,6 +1,19 @@
 """ORM 模型。Alembic 通过导入本包收集 metadata。"""
 
 from app.db.base import Base
+from app.models.evaluation import (
+    AnnotationStatus,
+    CaseSource,
+    EvaluationCase,
+    EvaluationDataset,
+    EvaluationDatasetVersion,
+    EvaluationExperiment,
+    EvaluationJudgment,
+    EvaluationResult,
+    EvaluationRun,
+    QuestionType,
+    RunStatus,
+)
 from app.models.knowledge import (
     ChunkStatus,
     ChunkStrategy,
@@ -28,8 +41,19 @@ from app.models.rag import (
 )
 
 __all__ = [
+    "AnnotationStatus",
     "Base",
+    "CaseSource",
     "ChunkEmbedding",
+    "EvaluationCase",
+    "EvaluationDataset",
+    "EvaluationDatasetVersion",
+    "EvaluationExperiment",
+    "EvaluationJudgment",
+    "EvaluationResult",
+    "EvaluationRun",
+    "QuestionType",
+    "RunStatus",
     "ChunkStatus",
     "ChunkStrategy",
     "Conversation",

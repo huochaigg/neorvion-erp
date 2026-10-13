@@ -12,6 +12,10 @@ describe('safeKnowledgePathAfterTenantChange', () => {
     assert.equal(safeKnowledgePathAfterTenantChange('/chat'), null);
     assert.equal(safeKnowledgePathAfterTenantChange('/retrieval-test'), null);
     assert.equal(safeKnowledgePathAfterTenantChange('/models'), null);
+    assert.equal(safeKnowledgePathAfterTenantChange('/datasets'), null);
+    assert.equal(safeKnowledgePathAfterTenantChange('/experiments'), null);
+    assert.equal(safeKnowledgePathAfterTenantChange('/experiments/compare'), null);
+    assert.equal(safeKnowledgePathAfterTenantChange('/stats'), null);
   });
 
   it('带旧租户资源 ID 的路径回到模块首页', () => {
@@ -20,5 +24,7 @@ describe('safeKnowledgePathAfterTenantChange', () => {
     assert.equal(safeKnowledgePathAfterTenantChange('/bases/2/documents/9'), '/workbench');
     assert.equal(safeKnowledgePathAfterTenantChange('/chat/18'), '/chat');
     assert.equal(safeKnowledgePathAfterTenantChange('/tasks/18'), '/tasks');
+    assert.equal(safeKnowledgePathAfterTenantChange('/datasets/9'), '/datasets');
+    assert.equal(safeKnowledgePathAfterTenantChange('/experiments/4'), '/experiments');
   });
 });

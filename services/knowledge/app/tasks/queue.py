@@ -31,7 +31,17 @@ async def enqueue_task(task_id: int) -> bool:
         return False
 
 
-async def pop_task(timeout: int = 2) -> int | None:
+async def enqueue_eval_run(run_id: int) -> bool:
+    """评测运行与文档任务共用 Redis List，前缀 eval: 区分。"""
+    try:
+        await redis_client().lpush(settings.task_queue_key, f"eval:{run_id}")
+        return True
+    except RedisError:
+        logger.warning("knowledge eval enqueue failed run_id=%s", run_id)
+        return False
+
+
+async def pop_queue_item(timeout: int = 2) -> str | None:
     try:
         item = await redis_client().brpop(settings.task_queue_key, timeout=timeout)
     except RedisError:
@@ -40,6 +50,13 @@ async def pop_task(timeout: int = 2) -> int | None:
     if not item:
         return None
     _key, raw = item
+    return str(raw)
+
+
+async def pop_task(timeout: int = 2) -> int | None:
+    raw = await pop_queue_item(timeout=timeout)
+    if raw is None or raw.startswith("eval:"):
+        return None
     try:
         return int(raw)
     except (TypeError, ValueError):

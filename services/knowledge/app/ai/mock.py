@@ -39,10 +39,20 @@ class MockChatClient:
     async def stream(self, messages: list[dict[str, str]]) -> AsyncIterator[ChatDelta]:
         if self.fail:
             raise AppError("模拟聊天服务不可用", code=50201, status_code=502)
+        system = next((item["content"] for item in messages if item.get("role") == "system"), "")
         question = next((item["content"] for item in reversed(messages) if item.get("role") == "user"), "")
-        answer = "根据知识库证据，相关说明如下。证据不足的部分不会编造。"
-        if "无结果" in question:
-            answer = "知识库中没有足够依据回答该问题。"
+        if "评测裁判" in system:
+            if "__INVALID_JSON__" in question:
+                answer = "not-json"
+            else:
+                answer = (
+                    '{"faithfulness": 0.8, "answer_relevancy": 0.7, '
+                    '"answer_correctness": 0.6, "explanation": "mock-judge"}'
+                )
+        else:
+            answer = "根据知识库证据，相关说明如下。证据不足的部分不会编造。"
+            if "无结果" in question:
+                answer = "知识库中没有足够依据回答该问题。"
         for char in answer:
             yield ChatDelta(text=char)
         yield ChatDelta(finished=True, prompt_tokens=12, completion_tokens=len(answer))

@@ -24,7 +24,7 @@ def create_app() -> FastAPI:
     app = FastAPI(
         title=settings.app_name,
         version=settings.app_version,
-        description="多租户 AI 知识库后端。当前里程碑：Knowledge V3 RAG 检索与问答。",
+        description="多租户 AI 知识库后端。当前里程碑：Knowledge V4 RAG 评测与调优。",
         lifespan=lifespan,
         docs_url="/docs" if docs_enabled else None,
         redoc_url="/redoc" if docs_enabled else None,

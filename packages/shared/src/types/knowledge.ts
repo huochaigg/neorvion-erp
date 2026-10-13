@@ -279,6 +279,9 @@ export interface KnowledgeSearchPayload {
   top_k?: number;
   candidate_k?: number;
   similarity_threshold?: number | null;
+  vector_k?: number | null;
+  keyword_k?: number | null;
+  rrf_k?: number | null;
   rerank?: boolean;
 }
 
@@ -381,4 +384,200 @@ export function formatFileSize(bytes: number): string {
     return `${(bytes / 1024).toFixed(1)} KB`;
   }
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+export const KNOWLEDGE_QUESTION_TYPE = {
+  factual: 'FACTUAL',
+  multiCondition: 'MULTI_CONDITION',
+  multiDoc: 'MULTI_DOC',
+  paraphrase: 'PARAPHRASE',
+  mixedLang: 'MIXED_LANG',
+  long: 'LONG',
+  unanswerable: 'UNANSWERABLE',
+  hallucination: 'HALLUCINATION',
+} as const;
+
+export const KNOWLEDGE_QUESTION_TYPE_LABEL: Record<string, string> = {
+  FACTUAL: '事实型',
+  MULTI_CONDITION: '多条件',
+  MULTI_DOC: '多文档综合',
+  PARAPHRASE: '同义/口语',
+  MIXED_LANG: '中英混合',
+  LONG: '长问题',
+  UNANSWERABLE: '无答案',
+  HALLUCINATION: '易幻觉',
+};
+
+export const KNOWLEDGE_ANNOTATION_STATUS_LABEL: Record<string, string> = {
+  PENDING: '待标注',
+  LABELED: '已标注',
+  READY: '可评测',
+};
+
+export const KNOWLEDGE_RUN_STATUS_LABEL: Record<string, string> = {
+  QUEUED: '排队中',
+  RUNNING: '运行中',
+  SUCCESS: '成功',
+  FAILED: '失败',
+  CANCELLED: '已取消',
+};
+
+export function knowledgeQuestionTypeLabel(value: string): string {
+  return KNOWLEDGE_QUESTION_TYPE_LABEL[value] ?? value;
+}
+
+export function knowledgeAnnotationStatusLabel(value: string): string {
+  return KNOWLEDGE_ANNOTATION_STATUS_LABEL[value] ?? value;
+}
+
+export function knowledgeRunStatusLabel(value: string): string {
+  return KNOWLEDGE_RUN_STATUS_LABEL[value] ?? value;
+}
+
+export interface KnowledgeEvalDataset {
+  id: number;
+  tenant_id: number;
+  name: string;
+  description: string | null;
+  knowledge_base_ids: number[];
+  current_version: number;
+  pending_count: number;
+  labeled_count: number;
+  ready_count: number;
+  total_cases: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface KnowledgeEvalDatasetList {
+  items: KnowledgeEvalDataset[];
+  total: number;
+  page: number;
+  page_size: number;
+}
+
+export interface KnowledgeEvalJudgment {
+  id: number;
+  chunk_id: number;
+  document_id: number;
+  relevance: number;
+  source_key: string;
+  chunk_version: number;
+  filename: string;
+  snippet: string;
+  stale: boolean;
+}
+
+export interface KnowledgeEvalCase {
+  id: number;
+  dataset_id: number;
+  question: string;
+  expected_answer: string | null;
+  question_type: string;
+  difficulty: number;
+  tags: string[];
+  is_unanswerable: boolean;
+  annotation_status: string;
+  source: string;
+  judgments: KnowledgeEvalJudgment[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface KnowledgeEvalCaseList {
+  items: KnowledgeEvalCase[];
+  total: number;
+  page: number;
+  page_size: number;
+}
+
+export interface KnowledgeEvalExperimentConfig {
+  strategy?: string;
+  top_k?: number;
+  candidate_k?: number;
+  vector_k?: number | null;
+  keyword_k?: number | null;
+  rrf_k?: number;
+  similarity_threshold?: number | null;
+  rerank?: boolean;
+  evaluate_generation?: boolean;
+  knowledge_base_ids?: number[] | null;
+}
+
+export interface KnowledgeEvalExperiment {
+  id: number;
+  dataset_id: number;
+  name: string;
+  description: string | null;
+  config: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface KnowledgeEvalExperimentList {
+  items: KnowledgeEvalExperiment[];
+  total: number;
+  page: number;
+  page_size: number;
+}
+
+export interface KnowledgeEvalRun {
+  id: number;
+  experiment_id: number;
+  dataset_id: number;
+  dataset_version: number;
+  status: string;
+  progress: number;
+  attempt: number;
+  error_message: string | null;
+  config_snapshot: Record<string, unknown>;
+  dataset_snapshot_meta: Record<string, unknown>;
+  metrics: Record<string, unknown> | null;
+  usage: Record<string, unknown> | null;
+  started_at: string | null;
+  finished_at: string | null;
+  created_at: string;
+}
+
+export interface KnowledgeEvalRunList {
+  items: KnowledgeEvalRun[];
+  total: number;
+  page: number;
+  page_size: number;
+}
+
+export interface KnowledgeEvalResult {
+  id: number;
+  run_id: number;
+  case_id: number;
+  question: string;
+  is_unanswerable: boolean;
+  retrieved: Record<string, unknown>[];
+  retrieval_metrics: Record<string, unknown> | null;
+  answer: string | null;
+  generation_metrics: Record<string, unknown> | null;
+  judge_error: string | null;
+  human_override: Record<string, unknown> | null;
+  latency_ms: number;
+  error_message: string | null;
+}
+
+export interface KnowledgeEvalCompare {
+  runs: KnowledgeEvalRun[];
+  comparable: boolean;
+  incomparable_reason: string | null;
+  metric_deltas: Record<string, Record<string, { base: number; value: number; delta: number; delta_pct: number | null } | null>>;
+}
+
+export interface KnowledgeUsageStats {
+  query_count: number;
+  search_success: number;
+  search_empty: number;
+  latency_p50_ms: number | null;
+  latency_p95_ms: number | null;
+  prompt_tokens: number;
+  completion_tokens: number;
+  estimated_cost_usd: number | null;
+  strategy_counts: Record<string, number>;
+  note: string;
 }

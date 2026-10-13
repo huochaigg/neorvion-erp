@@ -11,5 +11,11 @@ export function safeKnowledgePathAfterTenantChange(pathname: string): string | n
   if (/^\/tasks\/[^/]+\/?$/.test(pathname)) {
     return '/tasks';
   }
+  if (/^\/datasets\/[^/]+\/?$/.test(pathname)) {
+    return '/datasets';
+  }
+  if (/^\/experiments\/\d+\/?$/.test(pathname)) {
+    return '/experiments';
+  }
   return null;
 }

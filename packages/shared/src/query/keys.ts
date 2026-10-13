@@ -470,6 +470,55 @@ export function knowledgeIndexStatusQueryKey(tenantId: number | null, knowledgeB
   return ['tenant', tenantId, 'knowledge-index-status', knowledgeBaseId] as const;
 }
 
+export function knowledgeEvalDatasetsQueryKey(
+  tenantId: number | null,
+  filters?: { q?: string; page?: number; pageSize?: number },
+) {
+  return ['tenant', tenantId, 'knowledge-eval-datasets', filters ?? {}] as const;
+}
+
+export function knowledgeEvalDatasetQueryKey(tenantId: number | null, datasetId: number | null) {
+  return ['tenant', tenantId, 'knowledge-eval-dataset', datasetId] as const;
+}
+
+export function knowledgeEvalCasesQueryKey(
+  tenantId: number | null,
+  datasetId: number | null,
+  filters?: { status?: string; q?: string; page?: number; pageSize?: number },
+) {
+  return ['tenant', tenantId, 'knowledge-eval-cases', datasetId, filters ?? {}] as const;
+}
+
+export function knowledgeEvalExperimentsQueryKey(
+  tenantId: number | null,
+  filters?: { datasetId?: number; page?: number; pageSize?: number },
+) {
+  return ['tenant', tenantId, 'knowledge-eval-experiments', filters ?? {}] as const;
+}
+
+export function knowledgeEvalRunsQueryKey(
+  tenantId: number | null,
+  filters?: { experimentId?: number; page?: number; pageSize?: number },
+) {
+  return ['tenant', tenantId, 'knowledge-eval-runs', filters ?? {}] as const;
+}
+
+export function knowledgeEvalRunQueryKey(tenantId: number | null, runId: number | null) {
+  return ['tenant', tenantId, 'knowledge-eval-run', runId] as const;
+}
+
+export function knowledgeEvalResultsQueryKey(tenantId: number | null, runId: number | null) {
+  return ['tenant', tenantId, 'knowledge-eval-results', runId] as const;
+}
+
+export function knowledgeEvalCompareQueryKey(tenantId: number | null, runIds: string) {
+  return ['tenant', tenantId, 'knowledge-eval-compare', runIds] as const;
+}
+
+export function knowledgeUsageStatsQueryKey(tenantId: number | null, days: number) {
+  return ['tenant', tenantId, 'knowledge-usage-stats', days] as const;
+}
+
 export function knowledgeProcessingTasksQueryKey(
   tenantId: number | null,
   filters?: {

@@ -1,6 +1,6 @@
 # Neorvion Knowledge
 
-独立的 AI 知识库服务。当前里程碑：**Knowledge V1**。
+独立的 AI 知识库服务。当前里程碑：**Knowledge V4**（RAG 评测与召回调优）。
 
 Knowledge 不替代 ERP 登录，也不直连 ERP MySQL。用户仍通过 Shell 登录；Knowledge 后端校验 JWT 签名后，再调用 ERP 内部身份内省确认租户成员与权限。
 

@@ -74,6 +74,9 @@ class RetrievalService:
         strategy: str,
         top_k: int | None = None,
         candidate_k: int | None = None,
+        vector_k: int | None = None,
+        keyword_k: int | None = None,
+        rrf_k: int | None = None,
         similarity_threshold: float | None = None,
         rerank: bool = False,
         persist_log: bool = True,
@@ -93,6 +96,9 @@ class RetrievalService:
             raise AppError("不支持的检索策略", code=40092, status_code=400)
         top_k = top_k or settings.default_top_k
         candidate_k = max(candidate_k or settings.default_candidate_k, top_k)
+        vector_limit = max(vector_k or candidate_k, top_k)
+        keyword_limit = max(keyword_k or candidate_k, top_k)
+        rrf_constant = rrf_k or settings.rrf_k
         allowed = await self._authorized_base_ids(knowledge_base_ids)
         if not allowed:
             latency_ms = int((time.perf_counter() - started) * 1000)
@@ -112,7 +118,7 @@ class RetrievalService:
         if strategy_value in {RetrievalStrategy.VECTOR.value, RetrievalStrategy.HYBRID.value}:
             t0 = time.perf_counter()
             vector_hits = await self._vector_search(
-                text_query, allowed, candidate_k, similarity_threshold
+                text_query, allowed, vector_limit, similarity_threshold
             )
             stages["vector_ms"] = int((time.perf_counter() - t0) * 1000)
             stages["vector_ranks"] = [
@@ -121,7 +127,7 @@ class RetrievalService:
             ]
         if strategy_value in {RetrievalStrategy.KEYWORD.value, RetrievalStrategy.HYBRID.value}:
             t0 = time.perf_counter()
-            keyword_hits = await self._keyword_search(text_query, allowed, candidate_k)
+            keyword_hits = await self._keyword_search(text_query, allowed, keyword_limit)
             stages["keyword_ms"] = int((time.perf_counter() - t0) * 1000)
             stages["keyword_ranks"] = [
                 {"chunk_id": item.chunk_id, "rank": item.keyword_rank, "score": item.keyword_score}
@@ -133,7 +139,7 @@ class RetrievalService:
         elif strategy_value == RetrievalStrategy.KEYWORD.value:
             fused = keyword_hits
         else:
-            fused = self._rrf(vector_hits, keyword_hits)
+            fused = self._rrf(vector_hits, keyword_hits, k=rrf_constant)
             stages["rrf_ranks"] = [
                 {"chunk_id": item.chunk_id, "rrf": item.rrf_score} for item in fused
             ]
@@ -299,8 +305,14 @@ class RetrievalService:
             )
         return hits
 
-    def _rrf(self, vector_hits: list[RetrievedHit], keyword_hits: list[RetrievedHit]) -> list[RetrievedHit]:
-        k = settings.rrf_k
+    def _rrf(
+        self,
+        vector_hits: list[RetrievedHit],
+        keyword_hits: list[RetrievedHit],
+        *,
+        k: int | None = None,
+    ) -> list[RetrievedHit]:
+        k = k or settings.rrf_k
         merged: dict[int, RetrievedHit] = {}
         for hit in vector_hits + keyword_hits:
             current = merged.get(hit.chunk_id)

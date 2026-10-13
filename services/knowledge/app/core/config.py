@@ -19,7 +19,7 @@ class Settings(BaseSettings):
     app_env: str = "development"
     app_host: str = "0.0.0.0"
     app_port: int = 8012
-    app_version: str = "3.0.0"
+    app_version: str = "4.0.0"
     git_sha: str = ""
     enable_api_docs: bool = True
     cors_origins: str = (
@@ -70,6 +70,10 @@ class Settings(BaseSettings):
     rrf_k: int = 60
     chat_history_turns: int = 4
     chat_max_context_chars: int = 6000
+    eval_max_cases: int = 200
+    eval_token_budget: int = 200000
+    eval_prompt_token_usd: float = 0.0
+    eval_completion_token_usd: float = 0.0
 
     @property
     def is_production(self) -> bool:
