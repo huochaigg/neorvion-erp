@@ -82,8 +82,13 @@ pnpm dev
 - 主应用 http://localhost:8015
 - ERP 独立 http://localhost:8016
 - 嵌入 ERP http://localhost:8015/erp
-- Swagger http://localhost:8011/docs
-- 健康检查 http://localhost:8011/api/v1/health
+- Knowledge 独立 http://localhost:8017
+- 嵌入 Knowledge http://localhost:8015/knowledge
+- ERP Swagger http://localhost:8011/docs
+- Knowledge Swagger http://localhost:8012/docs
+- 健康检查 http://localhost:8011/api/v1/health 、http://localhost:8012/api/v1/health
+
+Knowledge 本地启动见 [`docs/knowledge.md`](docs/knowledge.md)。PostgreSQL 与 `uv run python -m app`（端口 **8012**）需单独启动。
 
 演示租户（不会在 API 启动时自动执行）：
 
@@ -109,6 +114,13 @@ uv run ruff check app tests
 pnpm test
 pnpm --filter @neorvion/shell build
 pnpm --filter @neorvion/erp build
+pnpm --filter @neorvion/knowledge test
+```
+
+```bash
+cd services/knowledge
+uv run pytest
+uv run ruff check app tests
 ```
 
 ## 生产部署

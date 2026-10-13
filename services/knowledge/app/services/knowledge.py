@@ -120,16 +120,39 @@ class KnowledgeBaseService:
         return self._to_out(row, count)
 
     async def delete_knowledge_base(self, knowledge_base_id: int) -> None:
-        """软删除知识库。不级联删除文档，留给 V2 清理文件与向量。"""
+        """软删除知识库，并清理下属文档文件与切片。任务记录保留。"""
+        from app.models.knowledge import TaskStatus
+        from app.processing.storage import delete_document_files
+        from app.repositories.documents import ChunkRepository, DocumentRepository, TaskRepository
+
         self.auth.require_all(self.context, (PermissionCode.KNOWLEDGE_DELETE,))
         row = await self._require(knowledge_base_id)
-        row.deleted_at = datetime.now(UTC)
+        documents = DocumentRepository(self.session, self.context.tenant_id)
+        chunks = ChunkRepository(self.session, self.context.tenant_id)
+        tasks = TaskRepository(self.session, self.context.tenant_id)
+        docs, _ = await documents.list_page(
+            knowledge_base_id=row.id, q=None, status=None, page=1, page_size=500
+        )
+        now = datetime.now(UTC)
+        for document in docs:
+            active_parse = await tasks.find_active(document.id, "PARSE")
+            active_chunk = await tasks.find_active(document.id, "CHUNK")
+            for task in (active_parse, active_chunk):
+                if task is not None:
+                    task.status = TaskStatus.FAILED.value
+                    task.error_message = "知识库已删除，任务取消"
+                    task.finished_at = now
+            await chunks.delete_all_for_document(document.id)
+            document.deleted_at = now
+        row.deleted_at = now
         row.updated_by = self.context.user_id
         try:
             await self.session.commit()
         except Exception:
             await self.session.rollback()
             raise
+        for document in docs:
+            delete_document_files(document.tenant_id, document.knowledge_base_id, document.id)
 
     async def _require(self, knowledge_base_id: int) -> KnowledgeBase:
         row = await self.bases.get_in_tenant(knowledge_base_id)

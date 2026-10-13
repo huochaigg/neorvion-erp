@@ -19,7 +19,7 @@ class Settings(BaseSettings):
     app_env: str = "development"
     app_host: str = "0.0.0.0"
     app_port: int = 8012
-    app_version: str = "1.0.0"
+    app_version: str = "2.0.0"
     git_sha: str = ""
     enable_api_docs: bool = True
     cors_origins: str = (
@@ -37,6 +37,18 @@ class Settings(BaseSettings):
     erp_api_base_url: str = "http://127.0.0.1:8011"
     erp_internal_service_key: str = ""
     identity_cache_ttl_seconds: int = 30
+
+    redis_url: str = "redis://127.0.0.1:6379/0"
+    storage_root: str = str(_KNOWLEDGE_DIR / "var" / "storage")
+    task_executor: str = "redis"
+    task_queue_key: str = "knowledge:tasks"
+    worker_concurrency: int = 1
+    max_upload_files: int = 10
+    max_upload_bytes: int = 20 * 1024 * 1024
+    chunk_size_min: int = 100
+    chunk_size_max: int = 8000
+    default_chunk_size: int = 800
+    default_chunk_overlap: int = 120
 
     @property
     def is_production(self) -> bool:

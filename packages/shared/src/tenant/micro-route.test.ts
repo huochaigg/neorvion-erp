@@ -2,17 +2,17 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'vitest';
 import { safeHostPathAfterTenantChange, sanitizeMicroHrefAfterTenantChange } from './micro-route';
 
-const knowledge = { name: 'knowledge', basename: '/knowledge', defaultPath: '/bases' };
+const knowledge = { name: 'knowledge', basename: '/knowledge', defaultPath: '/workbench' };
 const erp = { name: 'erp', basename: '/erp', defaultPath: '/dashboard' };
 
 describe('sanitizeMicroHrefAfterTenantChange', () => {
   it('Knowledge 详情页回到列表，列表保留', () => {
     assert.equal(
-      sanitizeMicroHrefAfterTenantChange('knowledge', '/knowledge', '/bases', '/knowledge/bases/2'),
-      '/knowledge/bases',
+      sanitizeMicroHrefAfterTenantChange('knowledge', '/knowledge', '/workbench', '/knowledge/bases/2'),
+      '/knowledge/workbench',
     );
     assert.equal(
-      sanitizeMicroHrefAfterTenantChange('knowledge', '/knowledge', '/bases', '/knowledge/bases'),
+      sanitizeMicroHrefAfterTenantChange('knowledge', '/knowledge', '/workbench', '/knowledge/bases'),
       '/knowledge/bases',
     );
   });
@@ -29,13 +29,16 @@ describe('sanitizeMicroHrefAfterTenantChange', () => {
   });
 
   it('空 href 落到默认首页', () => {
-    assert.equal(sanitizeMicroHrefAfterTenantChange('knowledge', '/knowledge', '/bases', null), '/knowledge/bases');
+    assert.equal(
+      sanitizeMicroHrefAfterTenantChange('knowledge', '/knowledge', '/workbench', null),
+      '/knowledge/workbench',
+    );
   });
 });
 
 describe('safeHostPathAfterTenantChange', () => {
   it('当前正在看不安全路由时返回模块首页', () => {
-    assert.equal(safeHostPathAfterTenantChange('/knowledge/bases/2', [knowledge, erp]), '/knowledge/bases');
+    assert.equal(safeHostPathAfterTenantChange('/knowledge/bases/2', [knowledge, erp]), '/knowledge/workbench');
     assert.equal(safeHostPathAfterTenantChange('/erp/orders/9', [knowledge, erp]), '/erp/orders/list');
   });
 

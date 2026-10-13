@@ -417,6 +417,54 @@ export function knowledgeBaseQueryKey(tenantId: number | null, knowledgeBaseId: 
   return ['tenant', tenantId, 'knowledge-base', knowledgeBaseId] as const;
 }
 
+export function knowledgeOverviewQueryKey(tenantId: number | null) {
+  return ['tenant', tenantId, 'knowledge-overview'] as const;
+}
+
+export function knowledgeDocumentsQueryKey(
+  tenantId: number | null,
+  filters?: {
+    knowledgeBaseId?: number;
+    q?: string;
+    status?: string;
+    page?: number;
+    pageSize?: number;
+  },
+) {
+  return ['tenant', tenantId, 'knowledge-documents', filters ?? {}] as const;
+}
+
+export function knowledgeDocumentQueryKey(tenantId: number | null, documentId: number | null) {
+  return ['tenant', tenantId, 'knowledge-document', documentId] as const;
+}
+
+export function knowledgeChunksQueryKey(
+  tenantId: number | null,
+  filters?: {
+    knowledgeBaseId?: number;
+    documentId?: number;
+    enabled?: boolean;
+    page?: number;
+    pageSize?: number;
+  },
+) {
+  return ['tenant', tenantId, 'knowledge-chunks', filters ?? {}] as const;
+}
+
+export function knowledgeProcessingTasksQueryKey(
+  tenantId: number | null,
+  filters?: {
+    knowledgeBaseId?: number;
+    documentId?: number;
+    status?: string;
+    taskType?: string;
+    page?: number;
+    pageSize?: number;
+  },
+) {
+  return ['tenant', tenantId, 'knowledge-processing-tasks', filters ?? {}] as const;
+}
+
 export function analyticsQueryKey(
   tenantId: number | null,
   domain: string,

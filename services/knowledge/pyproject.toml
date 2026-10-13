@@ -6,12 +6,17 @@ readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "alembic>=1.16.5",
+    "charset-normalizer>=3.4.0",
     "email-validator>=2.3.0",
     "fastapi[standard]>=0.117.1",
     "httpx>=0.28.1",
+    "langchain-text-splitters>=1.0.0",
     "psycopg[binary]>=3.2.9",
     "pydantic-settings>=2.10.1",
     "pyjwt>=2.10.1",
+    "pypdf>=6.0.0",
+    "python-docx>=1.1.2",
+    "redis>=6.2.0",
     "sqlalchemy[asyncio]>=2.0.43",
     "uvicorn[standard]>=0.35.0",
 ]
@@ -34,6 +39,9 @@ select = ["E", "F", "I", "UP", "B"]
 [tool.ruff.lint.per-file-ignores]
 "tests/conftest.py" = ["E402"]
 "tests/*.py" = ["E501"]
+"app/**/*.py" = ["E501"]
+"alembic/versions/*.py" = ["E501"]
+"app/api/v1/documents.py" = ["B008", "E501"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

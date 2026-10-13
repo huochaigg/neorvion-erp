@@ -46,14 +46,14 @@ describe('resetUnsafeMicroLastLocations', () => {
     setLastMicroHref(KNOWLEDGE_APP_NAME, '/knowledge/bases/2');
     setLastMicroHref(ERP_APP_NAME, '/erp/products/11/edit');
     resetUnsafeMicroLastLocations();
-    assert.equal(getLastMicroHref(KNOWLEDGE_APP_NAME), '/knowledge/bases');
+    assert.equal(getLastMicroHref(KNOWLEDGE_APP_NAME), '/knowledge/workbench');
     assert.equal(getLastMicroHref(ERP_APP_NAME), '/erp/products/list');
   });
 
   it('从未进入过的子应用不会被写成默认首页', () => {
     setLastMicroHref(KNOWLEDGE_APP_NAME, '/knowledge/bases/2');
     resetUnsafeMicroLastLocations();
-    assert.equal(getLastMicroHref(KNOWLEDGE_APP_NAME), '/knowledge/bases');
+    assert.equal(getLastMicroHref(KNOWLEDGE_APP_NAME), '/knowledge/workbench');
     assert.equal(getLastMicroHref(ERP_APP_NAME), null);
   });
 
@@ -68,7 +68,7 @@ describe('resetUnsafeMicroLastLocations', () => {
 
 describe('hostPathToResetAfterTenantChange', () => {
   it('当前正在看旧租户详情时回到模块首页', () => {
-    assert.equal(hostPathToResetAfterTenantChange('/knowledge/bases/2'), '/knowledge/bases');
+    assert.equal(hostPathToResetAfterTenantChange('/knowledge/bases/2'), '/knowledge/workbench');
     assert.equal(hostPathToResetAfterTenantChange('/erp/orders/9'), '/erp/orders/list');
   });
 

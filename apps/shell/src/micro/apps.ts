@@ -8,7 +8,7 @@ import {
   childPathFromHost,
 } from '@neorvion/shared';
 import type { plugin } from 'wujie';
-import { tailwindV4ShadowCssPlugin } from '@/micro/css-plugins';
+import { tailwindV4ShadowCssPlugin, viteDevPublicPathPlugin } from '@/micro/css-plugins';
 
 export interface MicroAppDefinition {
   name: string;
@@ -40,7 +40,12 @@ export const MICRO_APPS: MicroAppDefinition[] = [
     fiber: false,
     degrade: false,
     alive: true,
-    plugins: [tailwindV4ShadowCssPlugin()],
+    plugins: [
+      tailwindV4ShadowCssPlugin(),
+      viteDevPublicPathPlugin(
+        () => (import.meta.env.VITE_KNOWLEDGE_ENTRY || 'http://localhost:8017').replace(/\/$/, ''),
+      ),
+    ],
   },
 ];
 

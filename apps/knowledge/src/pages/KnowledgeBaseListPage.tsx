@@ -170,7 +170,7 @@ export function KnowledgeBaseListPage() {
           <Can permission={PERMISSION_CODE.knowledgeDelete}>
             <Popconfirm
               title="确认删除该知识库？"
-              description="删除后列表不再展示。关联文档会保留，待后续版本清理。"
+              description="删除后将清理下属文档文件与切片，任务记录保留。"
               okText="删除"
               cancelText="取消"
               onConfirm={() => deleteMutation.mutate(record.id)}
@@ -189,7 +189,7 @@ export function KnowledgeBaseListPage() {
     <ListPageContainer>
       <PageHeader
         title="AI 知识库"
-        description="按当前企业隔离管理知识库。文档上传将在 V2 提供。"
+        description="按当前企业隔离管理知识库、文档上传与切片。"
         extra={
           <Can permission={PERMISSION_CODE.knowledgeCreate}>
             <Button type="primary" onClick={() => openEditor({ type: 'create' })}>

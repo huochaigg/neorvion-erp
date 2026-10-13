@@ -68,6 +68,7 @@ class KnowledgeBaseRepository(BaseRepository):
         stmt = select(func.count(KnowledgeDocument.id)).where(
             KnowledgeDocument.tenant_id == tenant_id,
             KnowledgeDocument.knowledge_base_id == knowledge_base_id,
+            KnowledgeDocument.deleted_at.is_(None),
         )
         return int(await self.session.scalar(stmt) or 0)
 
@@ -80,6 +81,7 @@ class KnowledgeBaseRepository(BaseRepository):
             .where(
                 KnowledgeDocument.tenant_id == tenant_id,
                 KnowledgeDocument.knowledge_base_id.in_(knowledge_base_ids),
+                KnowledgeDocument.deleted_at.is_(None),
             )
             .group_by(KnowledgeDocument.knowledge_base_id)
         )

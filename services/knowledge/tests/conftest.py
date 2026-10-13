@@ -29,6 +29,8 @@ os.environ["APP_ENV"] = "test"
 os.environ["ERP_JWT_SECRET"] = "knowledge-test-jwt-secret-32bytes!"
 os.environ["ERP_INTERNAL_SERVICE_KEY"] = "knowledge-test-internal-key"
 os.environ["IDENTITY_CACHE_TTL_SECONDS"] = "30"
+os.environ["TASK_EXECUTOR"] = "inline"
+os.environ.setdefault("STORAGE_ROOT", str(Path(__file__).resolve().parents[1] / "var" / "test-storage"))
 if not os.environ.get("TEST_DATABASE_URL"):
     raise RuntimeError("请在 knowledge/.env 或环境变量中设置 TEST_DATABASE_URL")
 os.environ["DATABASE_URL"] = os.environ["TEST_DATABASE_URL"]
@@ -82,6 +84,8 @@ def _run_migrations() -> None:
 def _wipe_tables() -> None:
     engine = create_engine(settings.database_url)
     with engine.begin() as connection:
+        connection.execute(text("DELETE FROM document_chunks"))
+        connection.execute(text("DELETE FROM document_processing_tasks"))
         connection.execute(text("DELETE FROM knowledge_documents"))
         connection.execute(text("DELETE FROM knowledge_bases"))
     engine.dispose()

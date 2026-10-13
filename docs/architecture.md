@@ -36,7 +36,7 @@ flowchart LR
 
 ### 无界
 
-宿主在 `apps/shell/src/micro`。默认 Shadow DOM。ERP `alive: true`，离开 `/erp/*` 不销毁。租户切换发 `shell:tenant-changed` 并隔离 Query 缓存，不 `destroyApp`。关闭 Wujie 原生 `sync`。
+宿主在 `apps/shell/src/micro`。默认 Shadow DOM。ERP / Knowledge `alive: true`，离开挂载前缀不销毁。租户切换发 `shell:tenant-changed` 并隔离 Query 缓存、重置不安全的子应用详情路由，不 `destroyApp`。关闭 Wujie 原生 `sync`。
 
 ### 状态
 

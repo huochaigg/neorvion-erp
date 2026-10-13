@@ -20,4 +20,4 @@ export const ERP_DEFAULT_PATH = '/dashboard';
 export const KNOWLEDGE_BASENAME = '/knowledge';
 
 /** 主应用打开 Knowledge 时的默认落地页。 */
-export const KNOWLEDGE_DEFAULT_PATH = '/bases';
+export const KNOWLEDGE_DEFAULT_PATH = '/workbench';
