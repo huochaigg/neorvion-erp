@@ -45,6 +45,7 @@ def all_questions() -> list[dict]:
         "03-product-purchase-warehouse.md",
         "04-shipping-aftersale-rbac.md",
         "05-exceptions.md",
+        "07-outbound-pick.md",
     ]
     ecom_docs = ["01-cross-border-ops.md", "02-exceptions-cs.md"]
     gen_docs = [
@@ -63,7 +64,7 @@ def all_questions() -> list[dict]:
             _item("erp-004", "erp", KB_ERP, ["01-sales-order-state.md"], ["PARTIALLY_OUTBOUND", "不能整单取消"], "已经部分出库的销售订单能否整单取消？", "不能。PARTIALLY_OUTBOUND 已经扣过库存，不能整单取消。", "FACTUAL", 2, ["cancel"]),
             _item("erp-005", "erp", KB_ERP, ["02-inventory-reserve.md"], ["可用库存", "quantity - reserved"], "可用库存在数据库里是哪一列？", "没有单独列。可用库存 = quantity - reserved_quantity。", "FACTUAL", 2, ["inventory"]),
             _item("erp-006", "erp", KB_ERP, ["02-inventory-reserve.md"], ["Tenant + Warehouse + SKU"], "库存维度是 SKU 全局一个数字吗？", "不是。维度是 Tenant + Warehouse + SKU。", "PARAPHRASE", 2, ["inventory", "warehouse"]),
-            _item("erp-007", "erp", KB_ERP, ["02-inventory-reserve.md"], ["OUTBOUND", "quantity", "reserved"], "销售出库时 quantity 和 reserved_quantity 怎么变？", "OUTBOUND 同时减少 quantity 和 reserved_quantity。", "FACTUAL", 2, ["outbound"]),
+            _item("erp-007", "erp", KB_ERP, ["02-inventory-reserve.md", "07-outbound-pick.md"], ["OUTBOUND", "quantity", "reserved"], "销售出库时 quantity 和 reserved_quantity 怎么变？", "OUTBOUND 同时减少 quantity 和 reserved_quantity。", "FACTUAL", 2, ["outbound"]),
             _item("erp-008", "erp", KB_ERP, ["02-inventory-reserve.md"], ["INSUFFICIENT_RESERVED_INVENTORY"], "释放预占超过 reserved_quantity 会怎样？", "返回 INSUFFICIENT_RESERVED_INVENTORY。", "FACTUAL", 2, ["exception"]),
             _item("erp-009", "erp", KB_ERP, ["02-inventory-reserve.md"], ["STOCKTAKE_CONFLICT_WITH_RESERVED_INVENTORY"], "盘点调整和预占冲突时错误码是什么？", "STOCKTAKE_CONFLICT_WITH_RESERVED_INVENTORY。", "FACTUAL", 2, ["stocktake"]),
             _item("erp-010", "erp", KB_ERP, ["01-sales-order-state.md"], ["PENDING_CONFIRMATION", "WAITING_OUTBOUND"], "待确认订单确认成功后进入什么状态？", "WAITING_OUTBOUND。", "FACTUAL", 1, ["order"]),
@@ -133,7 +134,7 @@ def all_questions() -> list[dict]:
             _item("gen-004", "general", KB_GEN, ["01-python-fastapi.md"], ["extra=forbid"], "为什么 Pydantic 用 extra=forbid？", "防止客户端改 tenant_id 等不允许字段。", "FACTUAL", 2, ["pydantic"]),
             _item("gen-005", "general", KB_GEN, ["01-python-fastapi.md"], ["Annotated[UploadFile, File()]"], "上传文件为何不用裸 File(...)？", "为避免 B008，使用 Annotated[UploadFile, File()]。", "FACTUAL", 3, ["fastapi"]),
             _item("gen-006", "general", KB_GEN, ["01-python-fastapi.md"], ["422"], "请求体多了不允许字段通常返回什么状态码？", "422。", "FACTUAL", 1, ["http"]),
-            _item("gen-007", "general", KB_GEN, ["02-postgres-redis.md"], ["不是 BM25"], "Knowledge 的关键词检索是 BM25 吗？", "不是。simple FTS + trigram。", "FACTUAL", 2, ["retrieval"]),
+            _item("gen-007", "general", KB_GEN, ["02-postgres-redis.md"], ["不是 BM25"], "Knowledge 的关键词检索是 BM25 吗？", "不是。simple FTS + trigram + 中文片段 ILIKE，不是 BM25。", "FACTUAL", 2, ["retrieval"]),
             _item("gen-008", "general", KB_GEN, ["02-postgres-redis.md"], ["默认 1024", "测试库 8"], "默认向量维度和测试库维度分别是多少？", "默认 1024，测试库 8。", "MULTI_CONDITION", 2, ["embedding"]),
             _item("gen-009", "general", KB_GEN, ["02-postgres-redis.md"], ["更换维度必须重建"], "只改环境变量能否直接换向量维度？", "不能。必须重建迁移或新开库，并全量重建索引。", "FACTUAL", 3, ["embedding"]),
             _item("gen-010", "general", KB_GEN, ["02-postgres-redis.md"], ["数据库是状态真相"], "解析任务的状态以 Redis 为准还是数据库为准？", "数据库是状态真相，Redis 只投递 task id。", "FACTUAL", 2, ["task"]),
@@ -154,7 +155,7 @@ def all_questions() -> list[dict]:
             _item("gen-025", "general", KB_GEN, ["03-ops-faq.md"], ["单题评测"], "不想跑整页实验时，页面上哪里可以只测一道题？", "数据集详情点“单题评测”。", "FACTUAL", 2, ["eval"]),
             _item("gen-026", "general", KB_GEN, ["01-python-fastapi.md"], ["404", "不可访问"], "资源不存在和不属于当前租户对外有何共同点？", "都表现为不可访问（404）。", "PARAPHRASE", 2, ["tenant"]),
             _item("gen-027", "general", KB_GEN, ["02-postgres-redis.md"], ["复合外键", "tenant_id"], "外键为什么始终带 tenant_id？", "保证切片、向量、文档与知识库同属一个企业。", "FACTUAL", 3, ["db"]),
-            _item("gen-028", "general", KB_GEN, gen_docs, ["simple FTS", "RRF", "STALE"], "请说明 KEYWORD、HYBRID 以及改切片后索引失效的关系。", "KEYWORD 是 simple FTS+trigram 不是 BM25；HYBRID 用 RRF；改切片会 STALE 需重建，改切参要重新切片。", "LONG", 4, ["retrieval"]),
+            _item("gen-028", "general", KB_GEN, gen_docs, ["simple FTS", "RRF", "STALE"], "请说明 KEYWORD、HYBRID 以及改切片后索引失效的关系。", "KEYWORD 是 simple FTS+trigram+中文片段 ILIKE，不是 BM25；HYBRID 用 RRF；改切片会 STALE 需重建，改切参要重新切片。", "LONG", 4, ["retrieval"]),
             _item("gen-029", "general", KB_GEN, ["04-troubleshooting.md"], ["授权名单"], "知识库被授权名单排除会导致什么检索现象？", "检索为空或该库不可选。", "FACTUAL", 3, ["acl"]),
             _item("gen-030", "general", KB_GEN, ["03-ops-faq.md"], ["VECTOR / KEYWORD / HYBRID"], "智能搜索支持哪三种策略？", "VECTOR、KEYWORD、HYBRID。", "FACTUAL", 1, ["search"]),
         ]
@@ -239,14 +240,13 @@ def all_questions() -> list[dict]:
                 "adv-007",
                 "advanced",
                 KB_GEN,
-                ["03-ops-faq.md"],
+                ["03-ops-faq.md", "04-troubleshooting.md"],
                 ["当前未实现 OCR"],
                 "现在能不能对扫描件自动 OCR 后入知识库？",
                 "当前未实现 OCR。扫描版 PDF 可能无文本。",
-                "UNANSWERABLE",
+                "FACTUAL",
                 3,
                 ["ocr"],
-                unanswerable=True,
             ),
             _item(
                 "adv-008",

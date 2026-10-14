@@ -21,6 +21,7 @@ import {
   fetchConversation,
   fetchConversations,
   streamConversationMessage,
+  updateConversation,
 } from '@/api/rag';
 import { ChatMarkdown } from '@/components/ChatMarkdown';
 import { abortKnowledgeStreams } from '@/lib/knowledge-stream';
@@ -82,6 +83,24 @@ export function ChatPage() {
     onError: (error: Error) => message.error(error.message),
   });
 
+  const updateBasesMutation = useMutation({
+    mutationFn: ({ id, ids }: { id: number; ids: number[] }) =>
+      updateConversation(id, { knowledge_base_ids: ids }),
+    onSuccess: (row) => {
+      setBaseIds(row.knowledge_base_ids);
+      void queryClient.invalidateQueries({ queryKey: ['tenant', tenantId, 'knowledge-conversations'] });
+      void queryClient.invalidateQueries({
+        queryKey: knowledgeConversationQueryKey(tenantId, row.id),
+      });
+      message.success(
+        row.knowledge_base_ids.length
+          ? '已更新本会话检索范围，请直接再问一次'
+          : '本会话将检索全部可访问知识库',
+      );
+    },
+    onError: (error: Error) => message.error(error.message),
+  });
+
   const deleteMutation = useMutation({
     mutationFn: deleteConversation,
     onSuccess: (_, deletedId) => {
@@ -104,6 +123,31 @@ export function ChatPage() {
     () => (basesQuery.data?.items ?? []).map((item) => ({ value: item.id, label: item.name })),
     [basesQuery.data],
   );
+  const baseNameById = useMemo(() => {
+    const map = new Map<number, string>();
+    for (const item of basesQuery.data?.items ?? []) {
+      map.set(item.id, item.name);
+    }
+    return map;
+  }, [basesQuery.data]);
+
+  useEffect(() => {
+    const bound = detailQuery.data?.knowledge_base_ids;
+    if (bound) {
+      setBaseIds(bound);
+    }
+  }, [detailQuery.data?.id, detailQuery.data?.knowledge_base_ids]);
+
+  const boundLabels = (detailQuery.data?.knowledge_base_ids ?? baseIds)
+    .map((id) => baseNameById.get(id) ?? `#${id}`)
+    .join('、');
+
+  const changeBases = (ids: number[]) => {
+    setBaseIds(ids);
+    if (conversationId) {
+      updateBasesMutation.mutate({ id: conversationId, ids });
+    }
+  };
 
   const ask = async (content: string, regenerateOf?: number) => {
     if (!conversationId || !content.trim() || streaming) {
@@ -189,13 +233,19 @@ export function ChatPage() {
           <Select
             mode="multiple"
             allowClear
-            placeholder="限定知识库（可选）"
+            placeholder={conversationId ? '本会话检索的知识库，空=全部' : '新建会话时限定知识库，空=全部'}
             value={baseIds}
-            onChange={setBaseIds}
+            onChange={changeBases}
             options={baseOptions}
             className="w-full"
             size="small"
+            disabled={updateBasesMutation.isPending}
           />
+          <div className="mt-1 text-[11px] leading-4 text-slate-500">
+            {conversationId
+              ? `当前会话只检索已选知识库。销售订单问题请勾选「ERP业务知识库」。`
+              : '先选知识库再点新建；不选则检索全部可访问库。'}
+          </div>
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto">
           {conversations.length === 0 ? (
@@ -229,6 +279,9 @@ export function ChatPage() {
           </div>
         ) : (
           <>
+            <div className="border-b border-slate-200 px-5 py-2 text-xs text-slate-500">
+              当前检索：{boundLabels || '全部可访问知识库'}
+            </div>
             <div ref={listRef} className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
               {messages.length === 0 && !streaming ? <Empty description="向知识库提问，回答会附带来源引用" /> : null}
               {messages.map((item) => (
@@ -286,7 +339,7 @@ export function ChatPage() {
                   value={input}
                   onChange={(event) => setInput(event.target.value)}
                   autoSize={{ minRows: 1, maxRows: 4 }}
-                  placeholder="输入问题，回答仅基于当前企业知识库"
+                  placeholder="输入问题。回答只来自上方当前会话绑定的知识库"
                   onPressEnter={(event) => {
                     if (!event.shiftKey) {
                       event.preventDefault();

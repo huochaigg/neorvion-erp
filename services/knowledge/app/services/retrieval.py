@@ -7,7 +7,7 @@ import re
 import time
 from dataclasses import dataclass, field
 
-from sqlalchemy import and_, func, or_, select
+from sqlalchemy import and_, case, func, literal, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.ai.factory import get_embedding_client, get_rerank_client
@@ -27,6 +27,41 @@ from app.repositories.knowledge import KnowledgeBaseRepository
 logger = logging.getLogger(__name__)
 
 _LATIN = re.compile(r"[A-Za-z0-9]+")
+_CJK_RUN = re.compile(r"[\u4e00-\u9fff]{2,}")
+_MAX_KEYWORD_TERMS = 16
+
+
+def _escape_like(value: str) -> str:
+    return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+
+def keyword_terms(query: str) -> tuple[str, list[str]]:
+    """抽出 latin 词与中文片段。simple FTS 只吃 latin；中文靠 ILIKE 片段，不是 BM25。"""
+    latin_parts = _LATIN.findall(query)
+    latin_ts = " & ".join(latin_parts)
+    terms: list[str] = []
+    seen: set[str] = set()
+
+    def add(token: str) -> None:
+        text = token.strip()
+        if len(text) < 2 or text.casefold() in seen:
+            return
+        seen.add(text.casefold())
+        terms.append(text)
+
+    for part in latin_parts:
+        add(part)
+    runs = _CJK_RUN.findall(query)
+    for run in runs:
+        add(run)
+    for run in runs:
+        if len(run) < 4:
+            continue
+        for index in range(len(run) - 1):
+            add(run[index : index + 2])
+            if len(terms) >= _MAX_KEYWORD_TERMS:
+                return latin_ts, terms
+    return latin_ts, terms
 
 
 @dataclass
@@ -117,9 +152,15 @@ class RetrievalService:
         stages: dict = {}
         if strategy_value in {RetrievalStrategy.VECTOR.value, RetrievalStrategy.HYBRID.value}:
             t0 = time.perf_counter()
-            vector_hits = await self._vector_search(
-                text_query, allowed, vector_limit, similarity_threshold
-            )
+            ready_n = await self._ready_vector_count(allowed)
+            stages["ready_embeddings"] = ready_n
+            if ready_n == 0:
+                stages["vector_skipped"] = "no_ready_embeddings"
+                vector_hits = []
+            else:
+                vector_hits = await self._vector_search(
+                    text_query, allowed, vector_limit, similarity_threshold
+                )
             stages["vector_ms"] = int((time.perf_counter() - t0) * 1000)
             stages["vector_ranks"] = [
                 {"chunk_id": item.chunk_id, "rank": item.vector_rank, "similarity": item.vector_score}
@@ -225,6 +266,29 @@ class RetrievalService:
             KnowledgeBase.status == KnowledgeBaseStatus.ACTIVE.value,
         ]
 
+    async def _ready_vector_count(self, base_ids: list[int]) -> int:
+        count = await self.session.scalar(
+            select(func.count())
+            .select_from(ChunkEmbedding)
+            .join(
+                DocumentChunk,
+                and_(
+                    ChunkEmbedding.tenant_id == DocumentChunk.tenant_id,
+                    ChunkEmbedding.chunk_id == DocumentChunk.id,
+                ),
+            )
+            .join(KnowledgeDocument, KnowledgeDocument.id == DocumentChunk.document_id)
+            .join(KnowledgeBase, KnowledgeBase.id == DocumentChunk.knowledge_base_id)
+            .where(
+                *self._visible_chunk_filters(base_ids),
+                ChunkEmbedding.tenant_id == self.context.tenant_id,
+                ChunkEmbedding.status == EmbeddingStatus.READY.value,
+                ChunkEmbedding.model_name == settings.embedding_model,
+                ChunkEmbedding.dimensions == settings.embedding_dimensions,
+            )
+        )
+        return int(count or 0)
+
     async def _vector_search(
         self,
         query: str,
@@ -279,16 +343,28 @@ class RetrievalService:
         return hits
 
     async def _keyword_search(self, query: str, base_ids: list[int], limit: int) -> list[RetrievedHit]:
-        """PostgreSQL simple FTS + trigram。这不是 BM25。"""
-        latin = " & ".join(_LATIN.findall(query))
+        """PostgreSQL simple FTS + trigram + 中文片段 ILIKE。这不是 BM25。"""
+        latin, terms = keyword_terms(query)
         tsquery = func.to_tsquery("simple", latin) if latin else None
         fts_rank = func.ts_rank_cd(DocumentChunk.search_tsv, tsquery) if tsquery is not None else 0
         trgm = func.similarity(DocumentChunk.content, query)
-        combined = func.greatest(func.coalesce(fts_rank, 0), func.coalesce(trgm, 0)).label("keyword_score")
+        token_score = literal(0)
+        like_matchers: list = []
+        for term in terms:
+            pattern = f"%{_escape_like(term)}%"
+            matched = DocumentChunk.content.ilike(pattern, escape="\\")
+            like_matchers.append(matched)
+            token_score = token_score + case((matched, 1), else_=0)
+        combined = func.greatest(
+            func.coalesce(fts_rank, 0),
+            func.coalesce(trgm, 0),
+            func.coalesce(token_score, 0),
+        ).label("keyword_score")
         conditions = list(self._visible_chunk_filters(base_ids))
         matchers = [
-            DocumentChunk.content.ilike(f"%{query}%"),
+            DocumentChunk.content.ilike(f"%{_escape_like(query)}%", escape="\\"),
             DocumentChunk.content.op("%")(query),
+            *like_matchers,
         ]
         if tsquery is not None:
             matchers.append(DocumentChunk.search_tsv.op("@@")(tsquery))

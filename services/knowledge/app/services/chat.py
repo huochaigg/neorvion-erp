@@ -6,6 +6,7 @@ import json
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm.attributes import flag_modified
 
@@ -13,6 +14,7 @@ from app.ai.factory import get_chat_client
 from app.core.config import settings
 from app.core.exceptions import AppError
 from app.core.tenant import TenantContext
+from app.models.knowledge import KnowledgeBase
 from app.models.rag import (
     Conversation,
     Message,
@@ -66,6 +68,27 @@ class ChatService:
         row = await self.get_conversation(conversation_id)
         row.deleted_at = datetime.now(UTC)
         await self.session.commit()
+
+    async def update_conversation(
+        self,
+        conversation_id: int,
+        *,
+        title: str | None,
+        knowledge_base_ids: list[int] | None,
+    ) -> Conversation:
+        row = await self.get_conversation(conversation_id)
+        if title is not None:
+            row.title = title.strip() or row.title
+        if knowledge_base_ids is not None:
+            bases = await RetrievalService(self.session, self.context)._authorized_base_ids(
+                knowledge_base_ids or None
+            )
+            row.knowledge_base_ids = bases
+            flag_modified(row, "knowledge_base_ids")
+        row.updated_at = datetime.now(UTC)
+        await self.session.commit()
+        await self.session.refresh(row)
+        return row
 
     async def stream_answer(
         self,
@@ -172,8 +195,9 @@ class ChatService:
             )
 
         if not result.hits:
-            await self._complete_assistant(assistant.id, _REFUSE, [], result.strategy, None, 0)
-            yield _sse("token", {"text": _REFUSE})
+            refuse = await self._refuse_text(result.knowledge_base_ids)
+            await self._complete_assistant(assistant.id, refuse, [], result.strategy, None, 0)
+            yield _sse("token", {"text": refuse})
             yield _sse("done", {"message_id": assistant.id, "usage": None})
             return
 
@@ -210,6 +234,27 @@ class ChatService:
         answer = "".join(chunks).strip() or _REFUSE
         await self._complete_assistant(assistant.id, answer, result.hits, result.strategy, usage, latency)
         yield _sse("done", {"message_id": assistant.id, "usage": usage, "latency_ms": latency})
+
+    async def _refuse_text(self, knowledge_base_ids: list[int]) -> str:
+        if not knowledge_base_ids:
+            return _REFUSE
+        rows = (
+            await self.session.execute(
+                select(KnowledgeBase.id, KnowledgeBase.name).where(
+                    KnowledgeBase.tenant_id == self.context.tenant_id,
+                    KnowledgeBase.id.in_(knowledge_base_ids),
+                    KnowledgeBase.deleted_at.is_(None),
+                )
+            )
+        ).all()
+        names = {int(row.id): str(row.name) for row in rows}
+        ordered = [names[item] for item in knowledge_base_ids if item in names]
+        if not ordered:
+            return _REFUSE
+        return (
+            f"{_REFUSE}\n当前会话检索范围：{'、'.join(ordered)}。"
+            "若答案在其他知识库，请在问答页更换本会话绑定的知识库后再问。"
+        )
 
     async def _history_messages(self, conversation_id: int, *, exclude_id: int) -> list[Message]:
         rows = await self.conversations.list_messages(conversation_id)

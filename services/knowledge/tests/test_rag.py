@@ -106,6 +106,38 @@ def test_embed_search_hybrid_and_chat(client: TestClient, identity: FakeIdentity
     assert any(item["role"] == "ASSISTANT" and item["status"] == "COMPLETED" for item in messages)
 
 
+def test_keyword_terms_extracts_cjk_and_latin() -> None:
+    from app.services.retrieval import keyword_terms
+
+    latin, terms = keyword_terms("销售订单 DRAFT 状态会不会预占库存？")
+    assert "DRAFT" in latin
+    assert "销售订单" in terms
+    assert "预占" in terms
+    assert "库存" in terms
+
+
+def test_keyword_search_matches_chinese_paraphrase(client: TestClient, identity: FakeIdentityClient) -> None:
+    base_id = _create_base(client, identity)
+    headers = auth_header(1, 11)
+    _upload_text(
+        client,
+        base_id,
+        "logistics.txt",
+        "履约手册（模拟）：头程是工厂到海外仓，尾程是海外仓到消费者。在途不可售。",
+    )
+    searched = client.post(
+        "/api/v1/search",
+        json={
+            "query": "模拟物流把头程和尾程分别定义成什么？",
+            "strategy": "KEYWORD",
+            "knowledge_base_ids": [base_id],
+        },
+        headers=headers,
+    )
+    assert searched.status_code == 200, searched.text
+    assert searched.json()["data"]["items"]
+
+
 def test_dimension_mismatch_and_chunk_update_reindex(client: TestClient, identity: FakeIdentityClient) -> None:
     get_embedding_client.cache_clear()
     base_id = _create_base(client, identity)
@@ -182,6 +214,46 @@ def test_rerank_degrade_and_cross_tenant(client: TestClient, identity: FakeIdent
         assert degraded.json()["data"]["rerank_degraded"] is True
     finally:
         retrieval_mod.get_rerank_client = original  # type: ignore[assignment]
+
+
+def test_chat_can_rebind_knowledge_bases(client: TestClient, identity: FakeIdentityClient) -> None:
+    identity.grant(1, 11, permissions=ALL_KNOWLEDGE_PERMS)
+    headers = auth_header(1, 11)
+    erp_id = _create_base(client, identity)
+    other = client.post("/api/v1/knowledge-bases", json={"name": "产品手册"}, headers=headers)
+    assert other.status_code == 200, other.text
+    other_id = int(other.json()["data"]["id"])
+    _upload_text(client, erp_id, "order.md", "销售订单 DRAFT 状态不会预占库存。确认才写 RESERVE。" * 3)
+    created = client.post(
+        "/api/v1/conversations",
+        json={"title": "错库会话", "knowledge_base_ids": [other_id]},
+        headers=headers,
+    )
+    cid = created.json()["data"]["id"]
+    with client.stream(
+        "POST",
+        f"/api/v1/conversations/{cid}/messages",
+        json={"content": "销售订单 DRAFT 状态会不会预占库存？", "strategy": "KEYWORD"},
+        headers=headers,
+    ) as stream:
+        missed = b"".join(stream.iter_bytes()).decode("utf-8")
+    assert "知识库中没有足够依据" in missed
+    assert "产品手册" in missed
+    patched = client.patch(
+        f"/api/v1/conversations/{cid}",
+        json={"knowledge_base_ids": [erp_id]},
+        headers=headers,
+    )
+    assert patched.status_code == 200, patched.text
+    assert patched.json()["data"]["knowledge_base_ids"] == [erp_id]
+    with client.stream(
+        "POST",
+        f"/api/v1/conversations/{cid}/messages",
+        json={"content": "销售订单 DRAFT 状态会不会预占库存？", "strategy": "KEYWORD"},
+        headers=headers,
+    ) as stream:
+        hit = b"".join(stream.iter_bytes()).decode("utf-8")
+    assert "event: citation" in hit
 
 
 def test_no_result_chat_and_models(client: TestClient, identity: FakeIdentityClient) -> None:

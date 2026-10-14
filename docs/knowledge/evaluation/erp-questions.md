@@ -85,7 +85,7 @@
 - 问题：销售出库时 quantity 和 reserved_quantity 怎么变？
 - 标准答案：OUTBOUND 同时减少 quantity 和 reserved_quantity。
 - 知识库：ERP业务知识库
-- 来源文档：02-inventory-reserve.md
+- 来源文档：02-inventory-reserve.md, 07-outbound-pick.md
 - Chunk 线索：OUTBOUND, quantity, reserved（导入后关联真实 Chunk ID）
 - 难度：2　类型：FACTUAL　有答案：是
 - 标签：outbound
@@ -371,7 +371,7 @@
 - 问题：请按顺序说明：提交、确认、出库三步各自对库存做什么？
 - 标准答案：提交到待确认仍不预占；确认 RESERVE；出库 OUTBOUND 扣 quantity 与 reserved。
 - 知识库：ERP业务知识库
-- 来源文档：01-sales-order-state.md, 02-inventory-reserve.md, 03-product-purchase-warehouse.md, 04-shipping-aftersale-rbac.md, 05-exceptions.md
+- 来源文档：01-sales-order-state.md, 02-inventory-reserve.md, 03-product-purchase-warehouse.md, 04-shipping-aftersale-rbac.md, 05-exceptions.md, 07-outbound-pick.md
 - Chunk 线索：RESERVE, WAITING_OUTBOUND, OUTBOUND（导入后关联真实 Chunk ID）
 - 难度：4　类型：LONG　有答案：是
 - 标签：flow

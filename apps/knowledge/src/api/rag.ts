@@ -61,6 +61,13 @@ export function createConversation(payload: { title?: string; knowledge_base_ids
   return unwrapApi(apiClient.post<ApiResponse<KnowledgeConversation>>('/api/v1/conversations', payload));
 }
 
+export function updateConversation(
+  id: number,
+  payload: { title?: string; knowledge_base_ids?: number[] },
+) {
+  return unwrapApi(apiClient.patch<ApiResponse<KnowledgeConversation>>(`/api/v1/conversations/${id}`, payload));
+}
+
 export function deleteConversation(id: number) {
   return unwrapApi(apiClient.delete<ApiResponse<null>>(`/api/v1/conversations/${id}`));
 }

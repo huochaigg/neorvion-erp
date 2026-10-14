@@ -85,9 +85,9 @@
 - 问题：现在能不能对扫描件自动 OCR 后入知识库？
 - 标准答案：当前未实现 OCR。扫描版 PDF 可能无文本。
 - 知识库：通用知识库
-- 来源文档：03-ops-faq.md
+- 来源文档：03-ops-faq.md, 04-troubleshooting.md
 - Chunk 线索：当前未实现 OCR（导入后关联真实 Chunk ID）
-- 难度：3　类型：UNANSWERABLE　有答案：否（expected_no_answer）
+- 难度：3　类型：FACTUAL　有答案：是
 - 标签：ocr
 - 审核：待人工复核
 

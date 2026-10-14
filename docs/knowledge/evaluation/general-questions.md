@@ -83,7 +83,7 @@
 ## gen-007
 
 - 问题：Knowledge 的关键词检索是 BM25 吗？
-- 标准答案：不是。simple FTS + trigram。
+- 标准答案：不是。simple FTS + trigram + 中文片段 ILIKE，不是 BM25。
 - 知识库：通用知识库
 - 来源文档：02-postgres-redis.md
 - Chunk 线索：不是 BM25（导入后关联真实 Chunk ID）
@@ -356,7 +356,7 @@
 ## gen-028
 
 - 问题：请说明 KEYWORD、HYBRID 以及改切片后索引失效的关系。
-- 标准答案：KEYWORD 是 simple FTS+trigram 不是 BM25；HYBRID 用 RRF；改切片会 STALE 需重建，改切参要重新切片。
+- 标准答案：KEYWORD 是 simple FTS+trigram+中文片段 ILIKE，不是 BM25；HYBRID 用 RRF；改切片会 STALE 需重建，改切参要重新切片。
 - 知识库：通用知识库
 - 来源文档：01-python-fastapi.md, 02-postgres-redis.md, 03-ops-faq.md, 04-troubleshooting.md
 - Chunk 线索：simple FTS, RRF, STALE（导入后关联真实 Chunk ID）

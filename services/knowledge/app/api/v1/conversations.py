@@ -14,6 +14,7 @@ from app.schemas.rag import (
     ConversationDetailOut,
     ConversationListOut,
     ConversationOut,
+    ConversationUpdateIn,
     MessageOut,
 )
 from app.services.chat import ChatService
@@ -108,6 +109,21 @@ async def get_conversation(
         out_messages.append(_message_out(message, citations))
     base = _conversation_out(row)
     return ok(ConversationDetailOut(**base.model_dump(), messages=out_messages))
+
+
+@router.patch("/conversations/{conversation_id}", response_model=ApiResponse[ConversationOut], summary="更新会话检索范围")
+async def update_conversation(
+    conversation_id: int,
+    payload: ConversationUpdateIn,
+    context: KnowledgeReadContext,
+    session: DbSession,
+) -> ApiResponse[ConversationOut]:
+    row = await ChatService(session, context).update_conversation(
+        conversation_id,
+        title=payload.title,
+        knowledge_base_ids=payload.knowledge_base_ids,
+    )
+    return ok(_conversation_out(row), "已更新会话")
 
 
 @router.delete("/conversations/{conversation_id}", response_model=ApiResponse[None], summary="删除会话")

@@ -341,6 +341,7 @@ class EvaluationService:
                 await self.session.flush()
             await self._refresh_stale_for_case(row.id)
             await self._refresh_case_status(row)
+            await self.session.refresh(row)
             judgments = await self.repo.list_judgments(row.id)
             results.append(self._case_out(row, judgments))
         await self.session.commit()

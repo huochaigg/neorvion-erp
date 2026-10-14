@@ -75,6 +75,13 @@ class ConversationCreateIn(BaseModel):
     knowledge_base_ids: list[int] | None = None
 
 
+class ConversationUpdateIn(BaseModel):
+    title: str | None = Field(default=None, max_length=128)
+    knowledge_base_ids: list[int] | None = Field(
+        default=None, description="限定知识库；空列表表示当前租户全部有权库"
+    )
+
+
 class ConversationOut(BaseModel):
     id: int
     tenant_id: int
