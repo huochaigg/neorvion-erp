@@ -34,6 +34,8 @@ from app.schemas.evaluation import (
     CaseListOut,
     CaseOut,
     CaseUpdateIn,
+    CaseUpsertBatchIn,
+    CaseUpsertResultOut,
     ChatImportIn,
     DatasetCreateIn,
     DatasetListOut,
@@ -248,6 +250,8 @@ class EvaluationService:
             is_unanswerable=unanswerable,
             annotation_status=AnnotationStatus.READY.value if unanswerable else AnnotationStatus.PENDING.value,
             source=CaseSource.MANUAL.value,
+            external_key=(payload.external_key or "").strip() or None,
+            needs_human_review=payload.needs_human_review,
             created_by=self.context.user_id,
             updated_by=self.context.user_id,
         )
@@ -255,6 +259,98 @@ class EvaluationService:
         await self.session.commit()
         await self.session.refresh(row)
         return self._case_out(row, [])
+
+    async def upsert_cases(self, dataset_id: int, payload: CaseUpsertBatchIn) -> CaseUpsertResultOut:
+        """按 external_key 幂等写入。重复执行更新题目与标注，不新增重复记录。"""
+        self.auth.require_all(self.context, (PermissionCode.KNOWLEDGE_UPDATE,))
+        await self._require_dataset(dataset_id)
+        created = 0
+        updated = 0
+        skipped = 0
+        errors: list[dict] = []
+        results: list[CaseOut] = []
+        for index, item in enumerate(payload.items, start=1):
+            key = (item.external_key or "").strip() or None
+            if not key:
+                errors.append({"row": index, "message": "缺少 external_key，无法幂等导入"})
+                skipped += 1
+                continue
+            qtype = item.question_type if item.question_type in _TYPES else QuestionType.FACTUAL.value
+            unanswerable = item.is_unanswerable or qtype == QuestionType.UNANSWERABLE.value
+            row = await self.repo.get_case_by_external_key(dataset_id, key)
+            if row is None:
+                row = EvaluationCase(
+                    tenant_id=self.context.tenant_id,
+                    dataset_id=dataset_id,
+                    question=item.question.strip(),
+                    expected_answer=(item.expected_answer or "").strip() or None,
+                    question_type=qtype,
+                    difficulty=item.difficulty,
+                    tags=item.tags,
+                    is_unanswerable=unanswerable,
+                    annotation_status=AnnotationStatus.READY.value if unanswerable else AnnotationStatus.PENDING.value,
+                    source=CaseSource.AI_SEED.value if item.needs_human_review else CaseSource.IMPORT.value,
+                    external_key=key,
+                    needs_human_review=item.needs_human_review,
+                    created_by=self.context.user_id,
+                    updated_by=self.context.user_id,
+                )
+                self.session.add(row)
+                await self.session.flush()
+                created += 1
+            else:
+                row.question = item.question.strip()
+                row.expected_answer = (item.expected_answer or "").strip() or None
+                row.question_type = qtype
+                row.difficulty = item.difficulty
+                row.tags = item.tags
+                row.is_unanswerable = unanswerable
+                row.needs_human_review = item.needs_human_review
+                row.updated_by = self.context.user_id
+                updated += 1
+            if item.judgments:
+                existing = await self.repo.list_judgments(row.id)
+                for old in existing:
+                    await self.session.delete(old)
+                await self.session.flush()
+                for judgment in item.judgments:
+                    try:
+                        chunk, document = await self._load_chunk(judgment.chunk_id)
+                    except AppError as exc:
+                        errors.append({"row": index, "message": exc.message, "chunk_id": judgment.chunk_id})
+                        continue
+                    digest = content_sha256(chunk.content)
+                    stale = chunk.status != ChunkStatus.ACTIVE.value or not chunk.enabled
+                    self.session.add(
+                        EvaluationJudgment(
+                            tenant_id=self.context.tenant_id,
+                            dataset_id=dataset_id,
+                            case_id=row.id,
+                            document_id=document.id,
+                            chunk_id=chunk.id,
+                            relevance=judgment.relevance,
+                            source_key=source_key_for(document, chunk),
+                            chunk_version=chunk.version,
+                            content_hash=digest,
+                            filename=document.filename,
+                            snippet=chunk.content[:500],
+                            stale=stale,
+                            created_by=self.context.user_id,
+                        )
+                    )
+                await self.session.flush()
+            await self._refresh_stale_for_case(row.id)
+            await self._refresh_case_status(row)
+            judgments = await self.repo.list_judgments(row.id)
+            results.append(self._case_out(row, judgments))
+        await self.session.commit()
+        return CaseUpsertResultOut(
+            created=created,
+            updated=updated,
+            skipped=skipped,
+            items=results,
+            errors=errors,
+        )
 
     async def update_case(self, case_id: int, payload: CaseUpdateIn) -> CaseOut:
         self.auth.require_all(self.context, (PermissionCode.KNOWLEDGE_UPDATE,))
@@ -271,6 +367,8 @@ class EvaluationService:
             row.tags = payload.tags
         if payload.is_unanswerable is not None:
             row.is_unanswerable = payload.is_unanswerable
+        if payload.needs_human_review is not None:
+            row.needs_human_review = payload.needs_human_review
         if row.question_type == QuestionType.UNANSWERABLE.value:
             row.is_unanswerable = True
         row.updated_by = self.context.user_id
@@ -658,6 +756,8 @@ class EvaluationService:
             is_unanswerable=row.is_unanswerable,
             annotation_status=row.annotation_status,
             source=row.source,
+            external_key=row.external_key,
+            needs_human_review=bool(row.needs_human_review),
             judgments=[
                 JudgmentOut(
                     id=item.id,

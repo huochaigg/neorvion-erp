@@ -26,6 +26,12 @@ from app.models.knowledge import (
     TaskStatus,
     TaskType,
 )
+from app.models.ops import (
+    DocumentRevision,
+    KnowledgeApiKey,
+    KnowledgeAuditLog,
+    KnowledgeBaseGrant,
+)
 from app.models.rag import (
     ChunkEmbedding,
     Conversation,
@@ -58,6 +64,10 @@ __all__ = [
     "ChunkStrategy",
     "Conversation",
     "DocumentChunk",
+    "DocumentRevision",
+    "KnowledgeApiKey",
+    "KnowledgeAuditLog",
+    "KnowledgeBaseGrant",
     "DocumentProcessingTask",
     "EmbeddingStatus",
     "KnowledgeBase",

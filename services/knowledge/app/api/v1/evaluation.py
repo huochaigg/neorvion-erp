@@ -18,6 +18,8 @@ from app.schemas.evaluation import (
     CaseListOut,
     CaseOut,
     CaseUpdateIn,
+    CaseUpsertBatchIn,
+    CaseUpsertResultOut,
     ChatImportIn,
     CompareOut,
     DatasetCreateIn,
@@ -35,6 +37,7 @@ from app.schemas.evaluation import (
     RunListOut,
     RunOut,
 )
+from app.schemas.ops import ProbeIn, ProbeOut
 from app.services.evaluation import EvaluationService
 from app.services.evaluation_run import EvaluationRunService
 
@@ -141,6 +144,20 @@ async def create_case(
     return ok(await EvaluationService(session, context).create_case(dataset_id, payload), "已新增问题")
 
 
+@router.post(
+    "/evaluation/datasets/{dataset_id}/upsert-cases",
+    response_model=ApiResponse[CaseUpsertResultOut],
+    summary="按 external_key 幂等导入问题",
+)
+async def upsert_cases(
+    dataset_id: int,
+    payload: CaseUpsertBatchIn,
+    context: KnowledgeUpdateContext,
+    session: DbSession,
+) -> ApiResponse[CaseUpsertResultOut]:
+    return ok(await EvaluationService(session, context).upsert_cases(dataset_id, payload), "已幂等写入")
+
+
 @router.patch("/evaluation/cases/{case_id}", response_model=ApiResponse[CaseOut])
 async def update_case(
     case_id: int,
@@ -165,6 +182,16 @@ async def replace_judgments(
     session: DbSession,
 ) -> ApiResponse[CaseOut]:
     return ok(await EvaluationService(session, context).replace_judgments(case_id, payload), "已保存标注")
+
+
+@router.post("/evaluation/cases/{case_id}/probe", summary="单题真实检索评测")
+async def probe_case(
+    case_id: int,
+    payload: ProbeIn,
+    context: KnowledgeReadContext,
+    session: DbSession,
+) -> ApiResponse[ProbeOut]:
+    return ok(await EvaluationRunService(session, context).probe(case_id, payload))
 
 
 @router.post("/evaluation/datasets/{dataset_id}/import", response_model=ApiResponse[ImportResultOut])

@@ -1,6 +1,6 @@
-# Neorvion Knowledge V4
+# Neorvion Knowledge V5
 
-独立 AI 知识库：V1 知识库 CRUD → V2 文档解析与切片 → V3 RAG 检索与智能问答 → V4 RAG 评测与召回调优。身份、租户、RBAC 仍以 ERP MySQL 为权威来源。
+独立 AI 知识库：V1 知识库 CRUD → V2 文档解析与切片 → V3 RAG 检索与智能问答 → V4 RAG 评测与召回调优 → V5 企业级管理与评测初始化。身份、租户、RBAC 仍以 ERP MySQL 为权威来源。
 
 ## 与 ERP 的关系
 
@@ -31,8 +31,8 @@ flowchart LR
 | 智能搜索 | `/search` | 真实检索引擎：VECTOR / KEYWORD / HYBRID |
 | 知识问答 | `/chat`、`/chat/:id` | 会话、SSE 流式回答、引用来源 |
 | 知识库 | `/bases` | V1 CRUD |
-| 知识库详情 | `/bases/:id` | 概览、文档、切片、向量索引状态与重建 |
-| 文档详情 | `/bases/:id/documents/:docId` | 解析预览、切片编辑启停、任务与重试 |
+| 知识库详情 | `/bases/:id` | 概览、文档、切片、向量索引、授权 |
+| 文档详情 | `/bases/:id/documents/:docId` | 解析预览、版本历史、切片编辑启停、任务与重试 |
 | 召回调优 | `/retrieval-test` | 与问答共用检索引擎；对比 VECTOR/KEYWORD/HYBRID 与 Rerank 前后 |
 | 处理任务 | `/tasks` | PARSE / CHUNK / EMBED |
 | 模型配置 | `/models` | 平台级 Chat / Embedding / Rerank（无密钥明文） |
@@ -40,6 +40,9 @@ flowchart LR
 | 检索评测 | `/experiments` | 参数方案、异步跑批、单题结果 |
 | 实验对比 | `/experiments/compare` | 多 run 指标、参数差异、低分问题 |
 | 使用统计 | `/stats` | 来自 retrieval_logs / messages 的真实用量 |
+| 回收站 | `/recycle` | 软删除恢复与彻底清理 |
+| API Key | `/api-keys` | 外部检索密钥，明文只显示一次 |
+| 操作日志 | `/audit` | 知识库/文档/授权/Key 审计 |
 
 成员与角色仍在 ERP。评测任务落在 PostgreSQL，切页面或切租户不会删除已排队的评测。
 
@@ -47,7 +50,7 @@ flowchart LR
 
 ## 数据库
 
-迁移：`20261013_0001`（V1）→ `20261013_0002`（V2）→ `20261013_0003`（V3：pgvector + 会话）→ `20261014_0004`（V4 评测）。
+迁移：`20261013_0001`（V1）→ `20261013_0002`（V2）→ `20261013_0003`（V3：pgvector + 会话）→ `20261014_0004`（V4 评测）→ `20261014_0005`（V5：版本/授权/API Key/审计 + 评测幂等键）→ `20261014_0006`（V5 时间戳默认值）。评测题说明见 [evaluation/README.md](./evaluation/README.md)。
 
 V1/V2 表保持不变。V3 增量：
 
@@ -259,7 +262,23 @@ Document 粒度单独计算并标记 `granularity=document`，不得与 Chunk �
 - xlsx 导入只支持简单共享字符串表，复杂 Excel 请改 CSV/JSONL。
 - 评测不会为对比自动创建独立向量索引；切片策略变化需另建知识库或重建后再评。
 
-## V5 建议
+## V5 已实现
+
+企业级管理（增量表，不改 V1–V4 主数据）：
+
+| 能力 | 说明 |
+| --- | --- |
+| 文档版本 | `document_revisions` 快照原文件。更新/恢复先 PARSE，新切片发布前旧 ACTIVE 仍可检索 |
+| 回收站 | 知识库/文档软删除；恢复；彻底清理时同步删任务、切片、向量与文件 |
+| 知识库授权 | `knowledge_base_grants`。无记录回退租户 `knowledge:*`；有记录即白名单。OWNER 绕过。不另建租户体系 |
+| API Key | `nk_` 前缀，服务端只存 SHA256。明文仅创建时返回一次。scopes：search/chat/stats。租户绑定在 Key 上，改 `X-Tenant-ID` 不能跨租户。支持过期、撤销、限流 |
+| 审计 | `knowledge_audit_logs`，敏感字段脱敏 |
+| 任务监控 | 沿用处理任务页：PARSE/CHUNK/EMBED 状态、失败原因、重试 |
+| 评测初始化 | 租户 3 幂等导入 100 题（`external_key`）。AI 生成答案一律 `needs_human_review`。脚本只自动 probe 3 题 |
+
+初始化：`uv run python -m app.scripts.seed_eval_v5`（密码只读 `KNOWLEDGE_SEED_PASSWORD`）。题目与操作说明见 [evaluation/](./evaluation/README.md)。
+
+### 后续建议
 
 - 可选 BM25 / 真正的中文分词检索。
 - 评测用独立索引版本（按 chunk_size 建影子库）做切片策略 A/B。

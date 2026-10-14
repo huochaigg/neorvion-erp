@@ -2,6 +2,7 @@ import type {
   ApiResponse,
   KnowledgeEvalCase,
   KnowledgeEvalCaseList,
+  KnowledgeEvalProbe,
   KnowledgeEvalCompare,
   KnowledgeEvalDataset,
   KnowledgeEvalDatasetList,
@@ -114,6 +115,13 @@ export function deleteEvalCase(caseId: number) {
 
 export function replaceEvalJudgments(caseId: number, items: { chunk_id: number; relevance: number }[]) {
   return unwrapApi(apiClient.put<ApiResponse<KnowledgeEvalCase>>(`/api/v1/evaluation/cases/${caseId}/judgments`, items));
+}
+
+export function probeEvalCase(
+  caseId: number,
+  payload: { strategy: string; top_k: number; rerank: boolean; generate: boolean },
+) {
+  return unwrapApi(apiClient.post<ApiResponse<KnowledgeEvalProbe>>(`/api/v1/evaluation/cases/${caseId}/probe`, payload));
 }
 
 export function importEvalCases(datasetId: number, file: File) {

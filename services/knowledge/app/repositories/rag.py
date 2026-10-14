@@ -50,6 +50,16 @@ class EmbeddingRepository(BaseRepository):
             )
         )
 
+    async def delete_for_document(self, document_id: int) -> None:
+        """清理文档全部向量，避免硬删除切片时残留 FK。"""
+        tenant_id = self.ensure_tenant()
+        await self.session.execute(
+            delete(ChunkEmbedding).where(
+                ChunkEmbedding.tenant_id == tenant_id,
+                ChunkEmbedding.document_id == document_id,
+            )
+        )
+
     async def mark_stale(self, chunk_id: int) -> None:
         tenant_id = self.ensure_tenant()
         await self.session.execute(

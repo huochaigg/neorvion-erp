@@ -7,6 +7,7 @@ requires-python = ">=3.12"
 dependencies = [
     "alembic>=1.16.5",
     "charset-normalizer>=3.4.0",
+    "cryptography>=44.0.0",
     "email-validator>=2.3.0",
     "fastapi[standard]>=0.117.1",
     "httpx>=0.28.1",

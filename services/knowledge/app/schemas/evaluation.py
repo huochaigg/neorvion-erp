@@ -49,6 +49,8 @@ class CaseCreateIn(BaseModel):
     difficulty: int = Field(default=2, ge=1, le=5)
     tags: list[str] = Field(default_factory=list)
     is_unanswerable: bool = False
+    external_key: str | None = Field(default=None, max_length=64, description="导入幂等键")
+    needs_human_review: bool = Field(default=False, description="AI 生成内容需人工复核")
 
     @field_validator("question_type")
     @classmethod
@@ -63,6 +65,7 @@ class CaseUpdateIn(BaseModel):
     difficulty: int | None = Field(default=None, ge=1, le=5)
     tags: list[str] | None = None
     is_unanswerable: bool | None = None
+    needs_human_review: bool | None = None
 
     @field_validator("question_type")
     @classmethod
@@ -98,9 +101,27 @@ class CaseOut(BaseModel):
     is_unanswerable: bool
     annotation_status: str
     source: str
+    external_key: str | None = None
+    needs_human_review: bool = False
     judgments: list[JudgmentOut] = Field(default_factory=list)
     created_at: datetime
     updated_at: datetime
+
+
+class CaseUpsertIn(CaseCreateIn):
+    judgments: list[JudgmentIn] = Field(default_factory=list, description="相关 Chunk 标注")
+
+
+class CaseUpsertBatchIn(BaseModel):
+    items: list[CaseUpsertIn] = Field(min_length=1, max_length=200)
+
+
+class CaseUpsertResultOut(BaseModel):
+    created: int
+    updated: int
+    skipped: int
+    items: list[CaseOut] = Field(default_factory=list)
+    errors: list[dict] = Field(default_factory=list)
 
 
 class CaseListOut(BaseModel):

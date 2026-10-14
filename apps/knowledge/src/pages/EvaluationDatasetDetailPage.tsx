@@ -9,9 +9,10 @@ import {
   KNOWLEDGE_QUESTION_TYPE_LABEL,
   PERMISSION_CODE,
   type KnowledgeEvalCase,
+  type KnowledgeEvalProbe,
 } from '@neorvion/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { App, Button, Drawer, Form, Input, InputNumber, Popconfirm, Select, Space, Switch, Tag } from 'antd';
+import { App, Button, Drawer, Form, Input, InputNumber, Modal, Popconfirm, Select, Space, Switch, Tag } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
@@ -25,6 +26,7 @@ import {
   freezeEvalDataset,
   importEvalFromChat,
   refreshEvalStale,
+  probeEvalCase,
   replaceEvalJudgments,
   updateEvalCase,
 } from '@/api/evaluation';
@@ -48,6 +50,9 @@ export function EvaluationDatasetDetailPage() {
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
   const [editing, setEditing] = useState<KnowledgeEvalCase | null>(null);
   const [creating, setCreating] = useState(false);
+  const [probing, setProbing] = useState<KnowledgeEvalCase | null>(null);
+  const [probeResult, setProbeResult] = useState<KnowledgeEvalProbe | null>(null);
+  const [probeLoading, setProbeLoading] = useState(false);
   const [form] = Form.useForm();
   const [judgmentForm] = Form.useForm();
 
@@ -171,10 +176,19 @@ export function EvaluationDatasetDetailPage() {
       },
     },
     {
+      title: '复核',
+      dataIndex: 'needs_human_review',
+      width: 80,
+      render: (value: boolean) => (value ? <Tag color="orange">待复核</Tag> : '-'),
+    },
+    {
       title: '操作',
-      width: 160,
+      width: 220,
       render: (_, record) => (
         <ActionCell>
+          <Button type="link" size="small" onClick={() => setProbing(record)}>
+            单题评测
+          </Button>
           <Button
             type="link"
             size="small"
@@ -390,6 +404,52 @@ export function EvaluationDatasetDetailPage() {
           保存
         </Button>
       </Drawer>
+      <Modal
+        title={probing ? `单题评测：${probing.question.slice(0, 40)}` : '单题评测'}
+        open={probing != null}
+        onCancel={() => {
+          setProbing(null);
+          setProbeResult(null);
+        }}
+        footer={null}
+        width={720}
+      >
+        <Space className="mb-3" wrap>
+          <Button
+            type="primary"
+            loading={probeLoading}
+            onClick={() => {
+              if (!probing) return;
+              setProbeLoading(true);
+              probeEvalCase(probing.id, { strategy: 'HYBRID', top_k: 8, rerank: false, generate: false })
+                .then((row) => setProbeResult(row))
+                .catch((error: Error) => message.error(error.message))
+                .finally(() => setProbeLoading(false));
+            }}
+          >
+            运行 HYBRID
+          </Button>
+          <span className="text-slate-500">只跑检索指标，默认不调用生成模型。可在实验页批量对比策略。</span>
+        </Space>
+        {probeResult ? (
+          <pre className="max-h-96 overflow-auto rounded bg-slate-50 p-3 text-xs">
+            {JSON.stringify(
+              {
+                strategy: probeResult.strategy,
+                latency_ms: probeResult.latency_ms,
+                stages: probeResult.stages,
+                retrieval_metrics: probeResult.retrieval_metrics,
+                retrieved: probeResult.retrieved,
+                answer: probeResult.answer,
+                usage: probeResult.usage,
+                needs_human_review: probeResult.needs_human_review,
+              },
+              null,
+              2,
+            )}
+          </pre>
+        ) : null}
+      </Modal>
     </ListPageContainer>
   );
 }

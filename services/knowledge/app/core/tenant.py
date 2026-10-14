@@ -15,3 +15,6 @@ class TenantContext:
     role: str
     permission_codes: frozenset[str] = field(default_factory=frozenset)
     token_jti: str = ""
+    api_key_id: int | None = None
+    api_key_scopes: frozenset[str] = field(default_factory=frozenset)
+    api_key_base_ids: frozenset[int] | None = None

@@ -19,6 +19,9 @@ import { RetrievalTestPage } from '@/pages/RetrievalTestPage';
 import { SearchPage } from '@/pages/SearchPage';
 import { TaskListPage } from '@/pages/TaskListPage';
 import { UsageStatsPage } from '@/pages/UsageStatsPage';
+import { RecycleBinPage } from '@/pages/RecycleBinPage';
+import { ApiKeysPage } from '@/pages/ApiKeysPage';
+import { AuditLogsPage } from '@/pages/AuditLogsPage';
 import { WorkbenchPage } from '@/pages/WorkbenchPage';
 import { useKnowledgeTenantStore } from '@/stores/tenant-runtime';
 
@@ -176,6 +179,30 @@ export function AppRouter() {
             element={
               <Suspense fallback={<Fallback />}>
                 <UsageStatsPage />
+              </Suspense>
+            }
+          />
+          <Route
+            path="/recycle"
+            element={
+              <Suspense fallback={<Fallback />}>
+                <RecycleBinPage />
+              </Suspense>
+            }
+          />
+          <Route
+            path="/api-keys"
+            element={
+              <Suspense fallback={<Fallback />}>
+                <ApiKeysPage />
+              </Suspense>
+            }
+          />
+          <Route
+            path="/audit"
+            element={
+              <Suspense fallback={<Fallback />}>
+                <AuditLogsPage />
               </Suspense>
             }
           />

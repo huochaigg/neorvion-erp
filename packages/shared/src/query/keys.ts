@@ -519,6 +519,35 @@ export function knowledgeUsageStatsQueryKey(tenantId: number | null, days: numbe
   return ['tenant', tenantId, 'knowledge-usage-stats', days] as const;
 }
 
+export function knowledgeRecycleQueryKey(
+  tenantId: number | null,
+  filters?: { page?: number; pageSize?: number },
+) {
+  return ['tenant', tenantId, 'knowledge-recycle', filters ?? {}] as const;
+}
+
+export function knowledgeApiKeysQueryKey(
+  tenantId: number | null,
+  filters?: { page?: number; pageSize?: number },
+) {
+  return ['tenant', tenantId, 'knowledge-api-keys', filters ?? {}] as const;
+}
+
+export function knowledgeAuditLogsQueryKey(
+  tenantId: number | null,
+  filters?: { action?: string; resourceType?: string; page?: number; pageSize?: number },
+) {
+  return ['tenant', tenantId, 'knowledge-audit-logs', filters ?? {}] as const;
+}
+
+export function knowledgeGrantsQueryKey(tenantId: number | null, knowledgeBaseId: number | null) {
+  return ['tenant', tenantId, 'knowledge-grants', knowledgeBaseId] as const;
+}
+
+export function knowledgeRevisionsQueryKey(tenantId: number | null, documentId: number | null) {
+  return ['tenant', tenantId, 'knowledge-revisions', documentId] as const;
+}
+
 export function knowledgeProcessingTasksQueryKey(
   tenantId: number | null,
   filters?: {

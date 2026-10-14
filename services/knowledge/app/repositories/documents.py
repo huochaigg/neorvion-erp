@@ -1,6 +1,6 @@
 from datetime import UTC, datetime
 
-from sqlalchemy import func, select, update
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.knowledge import (
@@ -32,10 +32,15 @@ class DocumentRepository(BaseRepository):
         status: str | None,
         page: int,
         page_size: int,
+        knowledge_base_ids: list[int] | None = None,
     ) -> tuple[list[KnowledgeDocument], int]:
         filters = self._base_filters()
         if knowledge_base_id is not None:
             filters.append(KnowledgeDocument.knowledge_base_id == knowledge_base_id)
+        if knowledge_base_ids is not None:
+            if not knowledge_base_ids:
+                return [], 0
+            filters.append(KnowledgeDocument.knowledge_base_id.in_(knowledge_base_ids))
         if status:
             filters.append(KnowledgeDocument.status == status)
         if q:
@@ -58,6 +63,49 @@ class DocumentRepository(BaseRepository):
             KnowledgeDocument.id == document_id,
         )
         return (await self.session.scalars(stmt)).first()
+
+    async def get_deleted(self, document_id: int) -> KnowledgeDocument | None:
+        tenant_id = self.ensure_tenant()
+        stmt = select(KnowledgeDocument).where(
+            KnowledgeDocument.tenant_id == tenant_id,
+            KnowledgeDocument.id == document_id,
+            KnowledgeDocument.deleted_at.is_not(None),
+        )
+        return (await self.session.scalars(stmt)).first()
+
+    async def list_deleted(
+        self,
+        *,
+        knowledge_base_id: int | None,
+        page: int,
+        page_size: int,
+    ) -> tuple[list[KnowledgeDocument], int]:
+        tenant_id = self.ensure_tenant()
+        filters = [
+            KnowledgeDocument.tenant_id == tenant_id,
+            KnowledgeDocument.deleted_at.is_not(None),
+        ]
+        if knowledge_base_id is not None:
+            filters.append(KnowledgeDocument.knowledge_base_id == knowledge_base_id)
+        total = int(
+            await self.session.scalar(select(func.count(KnowledgeDocument.id)).where(*filters)) or 0
+        )
+        stmt = (
+            select(KnowledgeDocument)
+            .where(*filters)
+            .order_by(KnowledgeDocument.deleted_at.desc())
+            .offset((page - 1) * page_size)
+            .limit(page_size)
+        )
+        return list((await self.session.scalars(stmt)).all()), total
+
+    async def list_including_deleted_for_base(self, knowledge_base_id: int) -> list[KnowledgeDocument]:
+        tenant_id = self.ensure_tenant()
+        stmt = select(KnowledgeDocument).where(
+            KnowledgeDocument.tenant_id == tenant_id,
+            KnowledgeDocument.knowledge_base_id == knowledge_base_id,
+        )
+        return list((await self.session.scalars(stmt)).all())
 
     async def get_by_sha256(self, knowledge_base_id: int, sha256: str) -> KnowledgeDocument | None:
         stmt = select(KnowledgeDocument).where(
@@ -262,6 +310,16 @@ class TaskRepository(BaseRepository):
             DocumentProcessingTask.status.in_(statuses),
         )
         return int(await self.session.scalar(stmt) or 0)
+
+    async def delete_for_document(self, document_id: int) -> None:
+        """彻底删除文档前先卸掉处理任务，避免 ORM 把 NOT NULL 的 document_id/tenant_id 置空。"""
+        tenant_id = self.ensure_tenant()
+        await self.session.execute(
+            delete(DocumentProcessingTask).where(
+                DocumentProcessingTask.tenant_id == tenant_id,
+                DocumentProcessingTask.document_id == document_id,
+            )
+        )
 
     async def list_queued(self) -> list[DocumentProcessingTask]:
         stmt = select(DocumentProcessingTask).where(

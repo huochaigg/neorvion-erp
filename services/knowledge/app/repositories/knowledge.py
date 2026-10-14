@@ -9,6 +9,37 @@ class KnowledgeBaseRepository(BaseRepository):
     def __init__(self, session: AsyncSession, tenant_id: int) -> None:
         super().__init__(session, tenant_id)
 
+    async def get_in_tenant(self, knowledge_base_id: int) -> KnowledgeBase | None:
+        tenant_id = self.ensure_tenant()
+        stmt = select(KnowledgeBase).where(
+            KnowledgeBase.tenant_id == tenant_id,
+            KnowledgeBase.id == knowledge_base_id,
+            KnowledgeBase.deleted_at.is_(None),
+        )
+        return (await self.session.scalars(stmt)).first()
+
+    async def get_deleted(self, knowledge_base_id: int) -> KnowledgeBase | None:
+        tenant_id = self.ensure_tenant()
+        stmt = select(KnowledgeBase).where(
+            KnowledgeBase.tenant_id == tenant_id,
+            KnowledgeBase.id == knowledge_base_id,
+            KnowledgeBase.deleted_at.is_not(None),
+        )
+        return (await self.session.scalars(stmt)).first()
+
+    async def list_deleted(self, *, page: int, page_size: int) -> tuple[list[KnowledgeBase], int]:
+        tenant_id = self.ensure_tenant()
+        filters = [KnowledgeBase.tenant_id == tenant_id, KnowledgeBase.deleted_at.is_not(None)]
+        total = int(await self.session.scalar(select(func.count(KnowledgeBase.id)).where(*filters)) or 0)
+        stmt = (
+            select(KnowledgeBase)
+            .where(*filters)
+            .order_by(KnowledgeBase.deleted_at.desc())
+            .offset((page - 1) * page_size)
+            .limit(page_size)
+        )
+        return list((await self.session.scalars(stmt)).all()), total
+
     async def list_page(
         self,
         *,
@@ -16,10 +47,15 @@ class KnowledgeBaseRepository(BaseRepository):
         status: str | None,
         page: int,
         page_size: int,
+        ids: list[int] | None = None,
     ) -> tuple[list[KnowledgeBase], int]:
         """分页列出当前租户未删除的知识库。必须带 tenant_id。"""
         tenant_id = self.ensure_tenant()
         filters = [KnowledgeBase.tenant_id == tenant_id, KnowledgeBase.deleted_at.is_(None)]
+        if ids is not None:
+            if not ids:
+                return [], 0
+            filters.append(KnowledgeBase.id.in_(ids))
         if status:
             filters.append(KnowledgeBase.status == status)
         if q:
@@ -36,15 +72,6 @@ class KnowledgeBaseRepository(BaseRepository):
         )
         rows = list((await self.session.scalars(stmt)).all())
         return rows, total
-
-    async def get_in_tenant(self, knowledge_base_id: int) -> KnowledgeBase | None:
-        tenant_id = self.ensure_tenant()
-        stmt = select(KnowledgeBase).where(
-            KnowledgeBase.tenant_id == tenant_id,
-            KnowledgeBase.id == knowledge_base_id,
-            KnowledgeBase.deleted_at.is_(None),
-        )
-        return (await self.session.scalars(stmt)).first()
 
     async def get_by_name(
         self,

@@ -190,7 +190,16 @@ class RetrievalService:
         return result
 
     async def _authorized_base_ids(self, requested: list[int] | None) -> list[int]:
-        rows, _ = await self.bases.list_page(q=None, status=KnowledgeBaseStatus.ACTIVE.value, page=1, page_size=100)
+        from app.services.access import AccessService
+
+        allowed = set(await AccessService(self.session, self.context).readable_base_ids())
+        rows, _ = await self.bases.list_page(
+            q=None,
+            status=KnowledgeBaseStatus.ACTIVE.value,
+            page=1,
+            page_size=500,
+            ids=sorted(allowed) if allowed else [],
+        )
         allowed = {item.id for item in rows}
         if not requested:
             return sorted(allowed)

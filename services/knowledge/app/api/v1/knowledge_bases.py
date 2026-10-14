@@ -14,6 +14,7 @@ from app.schemas.knowledge import (
     KnowledgeBaseOut,
     KnowledgeBaseUpdate,
 )
+from app.schemas.ops import GrantCreateIn, GrantListOut, GrantOut
 from app.services.knowledge import KnowledgeBaseService
 
 router = APIRouter(prefix="/knowledge-bases", tags=["knowledge-bases"])
@@ -93,4 +94,61 @@ async def delete_knowledge_base(
     session: DbSession,
 ) -> ApiResponse[None]:
     await KnowledgeBaseService(session, context).delete_knowledge_base(knowledge_base_id)
-    return ok(None, "删除成功")
+    return ok(None, "已移入回收站")
+
+
+@router.post(
+    "/{knowledge_base_id}/restore",
+    response_model=ApiResponse[KnowledgeBaseOut],
+    summary="从回收站恢复知识库",
+)
+async def restore_knowledge_base(
+    knowledge_base_id: int,
+    context: KnowledgeUpdateContext,
+    session: DbSession,
+) -> ApiResponse[KnowledgeBaseOut]:
+    return ok(await KnowledgeBaseService(session, context).restore_knowledge_base(knowledge_base_id), "已恢复")
+
+
+@router.delete(
+    "/{knowledge_base_id}/purge",
+    response_model=ApiResponse[None],
+    summary="彻底删除知识库",
+)
+async def purge_knowledge_base(
+    knowledge_base_id: int,
+    context: KnowledgeDeleteContext,
+    session: DbSession,
+) -> ApiResponse[None]:
+    await KnowledgeBaseService(session, context).purge_knowledge_base(knowledge_base_id)
+    return ok(None, "已彻底删除")
+
+
+@router.get("/{knowledge_base_id}/grants", response_model=ApiResponse[GrantListOut], summary="知识库授权")
+async def list_grants(
+    knowledge_base_id: int,
+    context: KnowledgeReadContext,
+    session: DbSession,
+) -> ApiResponse[GrantListOut]:
+    return ok(await KnowledgeBaseService(session, context).list_grants(knowledge_base_id))
+
+
+@router.post("/{knowledge_base_id}/grants", response_model=ApiResponse[GrantOut], summary="授予知识库权限")
+async def upsert_grant(
+    knowledge_base_id: int,
+    payload: GrantCreateIn,
+    context: KnowledgeUpdateContext,
+    session: DbSession,
+) -> ApiResponse[GrantOut]:
+    return ok(await KnowledgeBaseService(session, context).upsert_grant(knowledge_base_id, payload), "已授权")
+
+
+@router.delete("/{knowledge_base_id}/grants/{grant_id}", response_model=ApiResponse[None], summary="撤销知识库授权")
+async def delete_grant(
+    knowledge_base_id: int,
+    grant_id: int,
+    context: KnowledgeUpdateContext,
+    session: DbSession,
+) -> ApiResponse[None]:
+    await KnowledgeBaseService(session, context).delete_grant(knowledge_base_id, grant_id)
+    return ok(None, "已撤销授权")

@@ -58,6 +58,17 @@ def build_storage_key(tenant_id: int, knowledge_base_id: int, document_id: int, 
     return f"{tenant_id}/{knowledge_base_id}/{document_id}/original.{ext}"
 
 
+def build_revision_key(
+    tenant_id: int,
+    knowledge_base_id: int,
+    document_id: int,
+    revision: int,
+    ext: str,
+) -> str:
+    """文档替换前的原文件快照路径，与 original 分离，避免覆盖正在使用的索引文件。"""
+    return f"{tenant_id}/{knowledge_base_id}/{document_id}/revisions/{revision}.{ext}"
+
+
 def resolve_stored_path(storage_key: str) -> Path:
     """把相对键解析为绝对路径，拒绝跳出存储根。"""
     if not storage_key or storage_key.startswith("/") or "\\" in storage_key or ".." in storage_key:

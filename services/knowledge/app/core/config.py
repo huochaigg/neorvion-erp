@@ -19,7 +19,7 @@ class Settings(BaseSettings):
     app_env: str = "development"
     app_host: str = "0.0.0.0"
     app_port: int = 8012
-    app_version: str = "4.0.0"
+    app_version: str = "5.0.0"
     git_sha: str = ""
     enable_api_docs: bool = True
     cors_origins: str = (
@@ -74,6 +74,7 @@ class Settings(BaseSettings):
     eval_token_budget: int = 200000
     eval_prompt_token_usd: float = 0.0
     eval_completion_token_usd: float = 0.0
+    api_key_rate_limit_per_minute: int = 60
 
     @property
     def is_production(self) -> bool:

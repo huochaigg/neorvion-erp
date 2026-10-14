@@ -1,4 +1,6 @@
-from fastapi import APIRouter, File, Query, UploadFile
+from typing import Annotated
+
+from fastapi import APIRouter, File, Form, Query, UploadFile
 from fastapi.responses import FileResponse
 
 from app.api.deps import (
@@ -16,11 +18,13 @@ from app.schemas.documents import (
     ChunkUpdateIn,
     DocumentDetailOut,
     DocumentListOut,
+    DocumentOut,
     OverviewOut,
     TaskListOut,
     TaskOut,
     UploadBatchOut,
 )
+from app.schemas.ops import RevisionListOut
 from app.services.documents import DocumentService
 
 router = APIRouter(tags=["knowledge-documents"])
@@ -61,7 +65,7 @@ async def upload_documents(
     knowledge_base_id: int,
     context: KnowledgeCreateContext,
     session: DbSession,
-    files: list[UploadFile] = File(...),
+    files: Annotated[list[UploadFile], File()],
 ) -> ApiResponse[UploadBatchOut]:
     return ok(await DocumentService(session, context).upload(knowledge_base_id, files), "上传完成")
 
@@ -92,7 +96,60 @@ async def delete_document(
     session: DbSession,
 ) -> ApiResponse[None]:
     await DocumentService(session, context).delete_document(document_id)
-    return ok(None, "删除成功")
+    return ok(None, "已移入回收站")
+
+
+@router.post("/documents/{document_id}/restore", response_model=ApiResponse[DocumentOut], summary="恢复文档")
+async def restore_document(
+    document_id: int,
+    context: KnowledgeUpdateContext,
+    session: DbSession,
+) -> ApiResponse[DocumentOut]:
+    return ok(await DocumentService(session, context).restore_document(document_id), "已恢复")
+
+
+@router.delete("/documents/{document_id}/purge", response_model=ApiResponse[None], summary="彻底删除文档")
+async def purge_document(
+    document_id: int,
+    context: KnowledgeDeleteContext,
+    session: DbSession,
+) -> ApiResponse[None]:
+    await DocumentService(session, context).purge_document(document_id)
+    return ok(None, "已彻底删除")
+
+
+@router.post("/documents/{document_id}/replace", response_model=ApiResponse[DocumentOut], summary="更新文档文件（保留旧索引至新版本发布）")
+async def replace_document(
+    document_id: int,
+    context: KnowledgeUpdateContext,
+    session: DbSession,
+    file: Annotated[UploadFile, File()],
+    note: Annotated[str | None, Form()] = None,
+) -> ApiResponse[DocumentOut]:
+    return ok(await DocumentService(session, context).replace_document(document_id, file, note), "已排队解析新版本")
+
+
+@router.get("/documents/{document_id}/revisions", response_model=ApiResponse[RevisionListOut], summary="文档版本历史")
+async def list_revisions(
+    document_id: int,
+    context: KnowledgeReadContext,
+    session: DbSession,
+) -> ApiResponse[RevisionListOut]:
+    return ok(await DocumentService(session, context).list_revisions(document_id))
+
+
+@router.post(
+    "/documents/{document_id}/revisions/{revision_id}/restore",
+    response_model=ApiResponse[DocumentOut],
+    summary="恢复到指定文件版本",
+)
+async def restore_revision(
+    document_id: int,
+    revision_id: int,
+    context: KnowledgeUpdateContext,
+    session: DbSession,
+) -> ApiResponse[DocumentOut]:
+    return ok(await DocumentService(session, context).restore_revision(document_id, revision_id), "已排队解析恢复版本")
 
 
 @router.post("/documents/{document_id}/parse", response_model=ApiResponse[TaskOut], summary="重新解析")

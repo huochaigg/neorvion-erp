@@ -6,11 +6,13 @@ import {
   knowledgeChunksQueryKey,
   knowledgeDocumentQueryKey,
   knowledgeDocumentStatusLabel,
+  knowledgeRevisionsQueryKey,
   knowledgeProcessingTasksQueryKey,
   knowledgeTaskStatusLabel,
   knowledgeTaskTypeLabel,
   PERMISSION_CODE,
   type KnowledgeChunk,
+  type KnowledgeRevision,
   type KnowledgeTask,
 } from '@neorvion/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -46,6 +48,7 @@ import {
   retryProcessingTask,
   updateChunk,
 } from '@/api/documents';
+import { fetchRevisions, replaceDocument, restoreRevision } from '@/api/ops';
 import { Can } from '@/components/Can';
 import { PageHeader } from '@/components/PageHeader';
 import { usePermissions } from '@/hooks/usePermissions';
@@ -86,6 +89,12 @@ export function DocumentDetailPage() {
     },
   });
 
+  const revisionQuery = useQuery({
+    queryKey: knowledgeRevisionsQueryKey(tenantId, Number.isFinite(documentId) ? documentId : null),
+    queryFn: ({ signal }) => fetchRevisions(documentId, signal),
+    enabled: tenantId != null && Number.isFinite(documentId),
+  });
+
   const taskQuery = useQuery({
     queryKey: knowledgeProcessingTasksQueryKey(tenantId, { documentId, page: 1, pageSize: 10 }),
     queryFn: ({ signal }) => fetchProcessingTasks({ documentId, page: 1, pageSize: 10 }, signal),
@@ -107,6 +116,7 @@ export function DocumentDetailPage() {
     void queryClient.invalidateQueries({ queryKey: ['tenant', tenantId, 'knowledge-chunks'] });
     void queryClient.invalidateQueries({ queryKey: ['tenant', tenantId, 'knowledge-processing-tasks'] });
     void queryClient.invalidateQueries({ queryKey: ['tenant', tenantId, 'knowledge-documents'] });
+    void queryClient.invalidateQueries({ queryKey: ['tenant', tenantId, 'knowledge-revisions'] });
   };
 
   const parseMutation = useMutation({
@@ -191,6 +201,25 @@ export function DocumentDetailPage() {
               <Button onClick={() => void downloadDocument(doc.id, doc.filename)}>下载原文件</Button>
             </Can>
             <Can permission={PERMISSION_CODE.knowledgeUpdate}>
+              <Button
+                onClick={() => {
+                  const input = document.createElement('input');
+                  input.type = 'file';
+                  input.onchange = () => {
+                    const file = input.files?.[0];
+                    if (!file) return;
+                    replaceDocument(documentId, file, '页面更新')
+                      .then(() => {
+                        message.success('已排队解析新版本，旧索引在发布前仍可用');
+                        invalidate();
+                      })
+                      .catch((error: Error) => message.error(error.message));
+                  };
+                  input.click();
+                }}
+              >
+                更新文件
+              </Button>
               <Button loading={parseMutation.isPending} onClick={() => parseMutation.mutate()}>
                 重新解析
               </Button>
@@ -220,6 +249,44 @@ export function DocumentDetailPage() {
           </Descriptions.Item>
           <Descriptions.Item label="上传时间">{formatDateTime(doc.created_at)}</Descriptions.Item>
         </Descriptions>
+      </Card>
+      <Card className="mb-4" title="版本历史">
+        <Table<KnowledgeRevision>
+          rowKey="id"
+          size="small"
+          loading={revisionQuery.isLoading}
+          dataSource={revisionQuery.data?.items ?? []}
+          pagination={false}
+          locale={{ emptyText: '尚无历史版本。更新文件后会保留快照。' }}
+          columns={[
+            { title: '版本', dataIndex: 'revision', width: 70 },
+            { title: '文件名', dataIndex: 'filename' },
+            { title: '说明', dataIndex: 'note', ellipsis: true, render: (value: string | null) => value || '-' },
+            { title: '时间', dataIndex: 'created_at', width: 180, render: (value: string) => formatDateTime(value) },
+            {
+              title: '',
+              width: 90,
+              render: (_, record) => (
+                <Can permission={PERMISSION_CODE.knowledgeUpdate}>
+                  <Button
+                    type="link"
+                    size="small"
+                    onClick={() =>
+                      restoreRevision(documentId, record.id)
+                        .then(() => {
+                          message.success('已排队恢复并重新解析');
+                          invalidate();
+                        })
+                        .catch((error: Error) => message.error(error.message))
+                    }
+                  >
+                    恢复
+                  </Button>
+                </Can>
+              ),
+            },
+          ]}
+        />
       </Card>
       <Card className="mb-4" title="解析预览">
         {doc.extracted_preview ? (

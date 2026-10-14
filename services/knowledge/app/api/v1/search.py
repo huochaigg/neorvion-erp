@@ -1,6 +1,9 @@
-from fastapi import APIRouter
+from typing import Annotated
 
-from app.api.deps import DbSession, KnowledgeReadContext, KnowledgeUpdateContext
+from fastapi import APIRouter, Depends
+
+from app.api.deps import DbSession, KnowledgeReadContext, KnowledgeUpdateContext, require_api_scope
+from app.core.tenant import TenantContext
 from app.schemas.common import ApiResponse, ok
 from app.schemas.rag import IndexStatusOut, SearchHitOut, SearchIn, SearchOut
 from app.services.index_status import IndexService
@@ -42,7 +45,7 @@ def _to_out(result) -> SearchOut:
 @router.post("/search", response_model=ApiResponse[SearchOut], summary="智能搜索")
 async def search(
     payload: SearchIn,
-    context: KnowledgeReadContext,
+    context: Annotated[TenantContext, Depends(require_api_scope("search"))],
     session: DbSession,
 ) -> ApiResponse[SearchOut]:
     result = await RetrievalService(session, context).search(

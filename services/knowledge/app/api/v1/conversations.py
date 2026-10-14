@@ -1,7 +1,10 @@
-from fastapi import APIRouter, Query, Request
+from typing import Annotated
+
+from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import StreamingResponse
 
-from app.api.deps import DbSession, KnowledgeReadContext
+from app.api.deps import DbSession, KnowledgeReadContext, require_api_scope
+from app.core.tenant import TenantContext
 from app.models.rag import Conversation, Message
 from app.schemas.common import ApiResponse, ok
 from app.schemas.rag import (
@@ -122,7 +125,7 @@ async def ask(
     conversation_id: int,
     payload: ChatAskIn,
     request: Request,
-    context: KnowledgeReadContext,
+    context: Annotated[TenantContext, Depends(require_api_scope("chat"))],
     session: DbSession,
 ) -> StreamingResponse:
     service = ChatService(session, context)

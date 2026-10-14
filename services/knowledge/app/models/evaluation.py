@@ -45,6 +45,7 @@ class CaseSource(StrEnum):
     MANUAL = "MANUAL"
     IMPORT = "IMPORT"
     CHAT = "CHAT"
+    AI_SEED = "AI_SEED"
 
 
 class RunStatus(StrEnum):
@@ -167,12 +168,23 @@ class EvaluationCase(TimestampMixin, TenantMixin, Base):
         String(16),
         nullable=False,
         server_default=CaseSource.MANUAL.value,
-        comment="MANUAL / IMPORT / CHAT",
+        comment="MANUAL / IMPORT / CHAT / AI_SEED",
     )
     source_message_id: Mapped[int | None] = mapped_column(
         BigInteger,
         nullable=True,
         comment="从问答导入时的消息 ID，仅作溯源",
+    )
+    external_key: Mapped[str | None] = mapped_column(
+        String(64),
+        nullable=True,
+        comment="导入幂等键，租户+数据集内唯一",
+    )
+    needs_human_review: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        server_default=text("false"),
+        comment="AI 生成的标准答案/标注，不能直接当正式基准",
     )
     created_by: Mapped[int] = mapped_column(BigInteger, nullable=False)
     updated_by: Mapped[int] = mapped_column(BigInteger, nullable=False)

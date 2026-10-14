@@ -33,7 +33,8 @@
 - [本地 Docker 部署](deployment.md)
 - [备份](backup.md)
 - [微前端接入](micro-frontend-integration.md)
-- [AI 知识库 Knowledge V4](knowledge.md)
+- [AI 知识库 Knowledge V5](knowledge.md)
+- [RAG 评测 100 题](knowledge/evaluation/README.md)
 
 ## 面试与 Agent
 

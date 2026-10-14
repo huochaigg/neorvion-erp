@@ -479,9 +479,114 @@ export interface KnowledgeEvalCase {
   is_unanswerable: boolean;
   annotation_status: string;
   source: string;
+  external_key?: string | null;
+  needs_human_review?: boolean;
   judgments: KnowledgeEvalJudgment[];
   created_at: string;
   updated_at: string;
+}
+
+export interface KnowledgeEvalProbe {
+  case_id: number;
+  question: string;
+  is_unanswerable: boolean;
+  strategy: string;
+  rerank_applied: boolean;
+  rerank_degraded: boolean;
+  latency_ms: number;
+  stages: Record<string, unknown>;
+  retrieved: Record<string, unknown>[];
+  retrieval_metrics: Record<string, unknown> | null;
+  answer: string | null;
+  citations: Record<string, unknown>[];
+  usage: Record<string, unknown> | null;
+  needs_human_review: boolean;
+}
+
+export interface KnowledgeGrant {
+  id: number;
+  knowledge_base_id: number;
+  user_id: number;
+  permission: string;
+  created_by: number;
+  created_at: string;
+}
+
+export interface KnowledgeGrantList {
+  items: KnowledgeGrant[];
+  restricted: boolean;
+}
+
+export interface KnowledgeRevision {
+  id: number;
+  document_id: number;
+  revision: number;
+  filename: string;
+  sha256: string;
+  file_size: number;
+  mime_type: string;
+  chunk_version: number;
+  note: string | null;
+  created_by: number;
+  created_at: string;
+}
+
+export interface KnowledgeRecycleItem {
+  resource_type: string;
+  id: number;
+  knowledge_base_id: number | null;
+  name: string;
+  deleted_at: string;
+  deleted_by: number | null;
+}
+
+export interface KnowledgeRecycleList {
+  items: KnowledgeRecycleItem[];
+  total: number;
+  page: number;
+  page_size: number;
+}
+
+export interface KnowledgeApiKey {
+  id: number;
+  tenant_id: number;
+  name: string;
+  prefix: string;
+  scopes: string[];
+  knowledge_base_ids: number[];
+  expires_at: string | null;
+  revoked_at: string | null;
+  last_used_at: string | null;
+  created_by: number;
+  created_at: string;
+  api_key?: string;
+}
+
+export interface KnowledgeApiKeyList {
+  items: KnowledgeApiKey[];
+  total: number;
+  page: number;
+  page_size: number;
+}
+
+export interface KnowledgeAuditLog {
+  id: number;
+  actor_user_id: number | null;
+  actor_key_id: number | null;
+  action: string;
+  resource_type: string;
+  resource_id: number | null;
+  detail: Record<string, unknown> | null;
+  ip_address: string | null;
+  request_id: string | null;
+  created_at: string;
+}
+
+export interface KnowledgeAuditLogList {
+  items: KnowledgeAuditLog[];
+  total: number;
+  page: number;
+  page_size: number;
 }
 
 export interface KnowledgeEvalCaseList {

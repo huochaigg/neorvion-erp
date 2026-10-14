@@ -75,6 +75,16 @@ export type {
   KnowledgeEvalResult,
   KnowledgeEvalCompare,
   KnowledgeUsageStats,
+  KnowledgeEvalProbe,
+  KnowledgeGrant,
+  KnowledgeGrantList,
+  KnowledgeRevision,
+  KnowledgeRecycleItem,
+  KnowledgeRecycleList,
+  KnowledgeApiKey,
+  KnowledgeApiKeyList,
+  KnowledgeAuditLog,
+  KnowledgeAuditLogList,
 } from './types/knowledge';
 export {
   KNOWLEDGE_BASE_STATUS,
@@ -594,6 +604,11 @@ export {
   knowledgeEvalResultsQueryKey,
   knowledgeEvalCompareQueryKey,
   knowledgeUsageStatsQueryKey,
+  knowledgeRecycleQueryKey,
+  knowledgeApiKeysQueryKey,
+  knowledgeAuditLogsQueryKey,
+  knowledgeGrantsQueryKey,
+  knowledgeRevisionsQueryKey,
   isTenantScopedQueryKey,
   tenantIdFromQueryKey,
 } from './query/keys';

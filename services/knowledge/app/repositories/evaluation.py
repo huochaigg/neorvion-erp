@@ -106,6 +106,17 @@ class EvaluationRepository(BaseRepository):
             )
         )
 
+    async def get_case_by_external_key(self, dataset_id: int, external_key: str) -> EvaluationCase | None:
+        tenant_id = self.ensure_tenant()
+        return await self.session.scalar(
+            select(EvaluationCase).where(
+                EvaluationCase.tenant_id == tenant_id,
+                EvaluationCase.dataset_id == dataset_id,
+                EvaluationCase.external_key == external_key,
+                EvaluationCase.deleted_at.is_(None),
+            )
+        )
+
     async def list_judgments(self, case_id: int) -> list[EvaluationJudgment]:
         tenant_id = self.ensure_tenant()
         stmt = select(EvaluationJudgment).where(

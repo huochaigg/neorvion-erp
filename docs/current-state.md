@@ -10,7 +10,7 @@ Shell（8015）+ ERP 微前端（8016）+ Knowledge 微前端（8017）+ ERP Fas
 
 - `apps/shell`：登录、租户、导航、Wujie 宿主
 - `apps/erp`：业务页面
-- `apps/knowledge`：AI 知识库微前端（V4 评测与检索问答）
+- `apps/knowledge`：AI 知识库微前端（V5 企业级管理与评测）
 - `packages/shared`：Query Key、ApiError、租户请求头
 - `services/erp/app/{api,core,models,schemas,repositories,services,tasks}`
 - `services/knowledge/`：Knowledge 独立 FastAPI
@@ -20,7 +20,7 @@ Shell（8015）+ ERP 微前端（8016）+ Knowledge 微前端（8017）+ ERP Fas
 
 Catalog、Warehouse、Inventory、Purchase、Sales、Fulfillment（收货 / 出库）、Shipping、Stocktake、Transfer、After-Sales、Purchase Return、Analytics、Events、Operation Logs、Async Tasks。SaaS 多租户 + RBAC。
 
-独立 Knowledge V4：在 V3 RAG 之上提供评测数据集、Chunk 标注快照、异步实验、Hit/Recall/Precision/MRR/nDCG、可选 LLM Judge、实验对比与使用统计。评测不改写线上切片与向量。身份与 RBAC 仍以 ERP JWT + introspect 为准。
+独立 Knowledge V5：在 V4 评测之上增加文档版本、回收站、知识库授权、API Key、操作审计；并提供租户 3 可重复导入的 100 道 RAG 评测题（AI 生成待复核）。评测不改写线上切片与向量。身份与 RBAC 仍以 ERP JWT + introspect 为准。API Key 不能改绑其他租户。
 
 ## 库存
 

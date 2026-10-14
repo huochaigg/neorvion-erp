@@ -390,6 +390,81 @@ class EvaluationRunService:
             usage,
         )
 
+    async def probe(self, case_id: int, payload) -> dict:
+        """单题真实检索评测。不创建实验 run，不改线上索引。"""
+        from app.schemas.ops import ProbeOut
+
+        assert self.context is not None
+        self.auth.require_all(self.context, (PermissionCode.KNOWLEDGE_READ,))
+        case = await self.repo.get_case(case_id)
+        if case is None:
+            raise AppError("评测问题不存在或不可访问", code=40481, status_code=404)
+        judgments = await self.repo.list_judgments(case.id)
+        dataset = await self.repo.get_dataset(case.dataset_id)
+        snapshot_case = {
+            "id": case.id,
+            "question": case.question,
+            "expected_answer": case.expected_answer,
+            "is_unanswerable": case.is_unanswerable,
+            "judgments": [
+                {
+                    "chunk_id": item.chunk_id,
+                    "document_id": item.document_id,
+                    "relevance": item.relevance,
+                    "stale": item.stale,
+                }
+                for item in judgments
+            ],
+        }
+        config = {
+            "strategy": payload.strategy,
+            "top_k": payload.top_k,
+            "rerank": payload.rerank,
+            "evaluate_generation": payload.generate,
+            "knowledge_base_ids": payload.knowledge_base_ids or list((dataset.knowledge_base_ids if dataset else None) or []),
+        }
+        retrieval = RetrievalService(self.session, self.context)
+        chat = ChatService(self.session, self.context)
+
+        class _Dummy:
+            tenant_id = self.context.tenant_id
+            id = 0
+
+        dummy = _Dummy()
+        result, usage = await self._evaluate_case(dummy, snapshot_case, config, retrieval, chat)  # type: ignore[arg-type]
+        search = await retrieval.search(
+            case.question,
+            knowledge_base_ids=config["knowledge_base_ids"],
+            strategy=config["strategy"],
+            top_k=config["top_k"],
+            rerank=config["rerank"],
+            persist_log=True,
+        )
+        return ProbeOut(
+            case_id=case.id,
+            question=case.question,
+            is_unanswerable=case.is_unanswerable,
+            strategy=search.strategy,
+            rerank_applied=search.rerank_applied,
+            rerank_degraded=search.rerank_degraded,
+            latency_ms=search.latency_ms,
+            stages=search.stages,
+            retrieved=result.retrieved or [],
+            retrieval_metrics=result.retrieval_metrics,
+            answer=result.answer,
+            citations=[
+                {
+                    "chunk_id": hit.chunk_id,
+                    "document_id": hit.document_id,
+                    "filename": hit.filename,
+                    "final_rank": hit.final_rank,
+                }
+                for hit in search.hits
+            ],
+            usage=usage,
+            needs_human_review=bool(case.needs_human_review),
+        ).model_dump()
+
 
 async def _load_run(session: AsyncSession, run_id: int) -> EvaluationRun | None:
     from sqlalchemy import select

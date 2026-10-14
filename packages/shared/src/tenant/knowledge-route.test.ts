@@ -16,6 +16,9 @@ describe('safeKnowledgePathAfterTenantChange', () => {
     assert.equal(safeKnowledgePathAfterTenantChange('/experiments'), null);
     assert.equal(safeKnowledgePathAfterTenantChange('/experiments/compare'), null);
     assert.equal(safeKnowledgePathAfterTenantChange('/stats'), null);
+    assert.equal(safeKnowledgePathAfterTenantChange('/recycle'), null);
+    assert.equal(safeKnowledgePathAfterTenantChange('/api-keys'), null);
+    assert.equal(safeKnowledgePathAfterTenantChange('/audit'), null);
   });
 
   it('带旧租户资源 ID 的路径回到模块首页', () => {

@@ -9,18 +9,21 @@ import {
   knowledgeChunksQueryKey,
   knowledgeDocumentStatusLabel,
   knowledgeDocumentsQueryKey,
+  knowledgeGrantsQueryKey,
   knowledgeIndexStatusQueryKey,
   PERMISSION_CODE,
   type KnowledgeChunk,
   type KnowledgeDocument,
+  type KnowledgeGrant,
 } from '@neorvion/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { App, Button, Card, Descriptions, Empty, Input, Popconfirm, Result, Select, Space, Spin, Switch, Tabs, Tag } from 'antd';
+import { App, Button, Card, Descriptions, Empty, Input, Popconfirm, Result, Select, Space, Spin, Switch, Table, Tabs, Tag } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { deleteDocument, fetchChunks, fetchDocuments, updateChunk } from '@/api/documents';
 import { fetchKnowledgeBase } from '@/api/knowledge-bases';
+import { deleteGrant, fetchGrants, upsertGrant } from '@/api/ops';
 import { fetchIndexStatus, reindexKnowledgeBase } from '@/api/rag';
 import { ActionCell, AppTable, EllipsisCell } from '@/components/AppTable';
 import { Can } from '@/components/Can';
@@ -121,6 +124,11 @@ export function KnowledgeBaseDetailPage() {
             key: 'index',
             label: '向量索引',
             children: <IndexStatusPanel knowledgeBaseId={knowledgeBaseId} />,
+          },
+          {
+            key: 'grants',
+            label: '授权',
+            children: <GrantsPanel knowledgeBaseId={knowledgeBaseId} />,
           },
         ]}
       />
@@ -376,6 +384,83 @@ function IndexStatusPanel({ knowledgeBaseId }: { knowledgeBaseId: number }) {
       ) : (
         <Empty description="暂无索引状态" />
       )}
+    </Card>
+  );
+}
+
+function GrantsPanel({ knowledgeBaseId }: { knowledgeBaseId: number }) {
+  const { message } = App.useApp();
+  const queryClient = useQueryClient();
+  const { tenantId } = usePermissions();
+  const [userId, setUserId] = useState<number | null>(null);
+  const query = useQuery({
+    queryKey: knowledgeGrantsQueryKey(tenantId, knowledgeBaseId),
+    queryFn: ({ signal }) => fetchGrants(knowledgeBaseId, signal),
+    enabled: tenantId != null,
+  });
+  return (
+    <Card>
+      <p className="mb-3 text-slate-500">
+        无授权记录时，租户内具有 knowledge:read 的成员都可以访问。有记录后仅名单内用户可访问。
+      </p>
+      <Space className="mb-3">
+        <Input
+          placeholder="ERP 用户 ID"
+          style={{ width: 160 }}
+          onChange={(event) => setUserId(Number(event.target.value) || null)}
+        />
+        <Can permission={PERMISSION_CODE.knowledgeUpdate}>
+          <Button
+            type="primary"
+            disabled={!userId}
+            onClick={() => {
+              if (!userId) return;
+              upsertGrant(knowledgeBaseId, { user_id: userId, permission: 'READ' })
+                .then(() => {
+                  message.success('已授权');
+                  void queryClient.invalidateQueries({ queryKey: knowledgeGrantsQueryKey(tenantId, knowledgeBaseId) });
+                })
+                .catch((error: Error) => message.error(error.message));
+            }}
+          >
+            授予只读
+          </Button>
+        </Can>
+      </Space>
+      <Table<KnowledgeGrant>
+        rowKey="id"
+        size="small"
+        loading={query.isLoading}
+        dataSource={query.data?.items ?? []}
+        pagination={false}
+        columns={[
+          { title: '用户 ID', dataIndex: 'user_id' },
+          { title: '权限', dataIndex: 'permission' },
+          {
+            title: '',
+            width: 80,
+            render: (_, record) => (
+              <Can permission={PERMISSION_CODE.knowledgeUpdate}>
+                <Popconfirm
+                  title="撤销该授权？"
+                  onConfirm={() =>
+                    deleteGrant(knowledgeBaseId, record.id)
+                      .then(() => {
+                        message.success('已撤销');
+                        void queryClient.invalidateQueries({ queryKey: knowledgeGrantsQueryKey(tenantId, knowledgeBaseId) });
+                      })
+                      .catch((error: Error) => message.error(error.message))
+                  }
+                >
+                  <Button type="link" size="small" danger>
+                    撤销
+                  </Button>
+                </Popconfirm>
+              </Can>
+            ),
+          },
+        ]}
+      />
     </Card>
   );
 }

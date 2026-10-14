@@ -13,7 +13,7 @@ def test_health_response_shape(client: TestClient) -> None:
     body = response.json()
     assert body["code"] == 0
     assert body["data"]["app"] == "ok"
-    assert body["data"]["milestone"] == "Knowledge V4"
+    assert body["data"]["milestone"] == "Knowledge V5"
     assert body["data"]["postgres"] in {"ok", "unavailable"}
     assert body["data"]["pgvector"] in {"ok", "unavailable", "not_installed"}
     assert body["data"]["identity"] in {"ok", "unavailable"}
