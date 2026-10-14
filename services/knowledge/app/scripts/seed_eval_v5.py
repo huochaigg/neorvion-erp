@@ -157,9 +157,23 @@ class KnowledgeClient:
         return self._data(self.client.post(f"/api/v1/evaluation/datasets/{dataset_id}/upsert-cases", json={"items": items}))
 
     def list_cases(self, dataset_id: int) -> list[dict]:
-        return self._data(
-            self.client.get(f"/api/v1/evaluation/datasets/{dataset_id}/cases", params={"page": 1, "page_size": 200})
-        )["items"]
+        # API page_size 上限 100，超过会 422。
+        page = 1
+        page_size = 100
+        items: list[dict] = []
+        while True:
+            data = self._data(
+                self.client.get(
+                    f"/api/v1/evaluation/datasets/{dataset_id}/cases",
+                    params={"page": page, "page_size": page_size},
+                )
+            )
+            batch = data.get("items") or []
+            items.extend(batch)
+            total = int(data.get("total") or 0)
+            if len(items) >= total or not batch:
+                return items
+            page += 1
 
     def probe(self, case_id: int, *, generate: bool) -> dict:
         return self._data(

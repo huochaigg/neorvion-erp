@@ -380,6 +380,10 @@ function IndexStatusPanel({ knowledgeBaseId }: { knowledgeBaseId: number }) {
           <Descriptions.Item label="排队中">{data.pending}</Descriptions.Item>
           <Descriptions.Item label="待更新">{data.stale}</Descriptions.Item>
           <Descriptions.Item label="失败">{data.failed}</Descriptions.Item>
+          <Descriptions.Item label="旧模型向量">{data.incompatible ?? 0}</Descriptions.Item>
+          <Descriptions.Item label="需要重建">
+            {data.needs_reindex ? '是（更换 Embedding 后旧向量不会参与检索）' : '否'}
+          </Descriptions.Item>
         </Descriptions>
       ) : (
         <Empty description="暂无索引状态" />

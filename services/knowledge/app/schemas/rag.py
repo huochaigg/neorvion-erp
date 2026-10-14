@@ -66,6 +66,8 @@ class IndexStatusOut(BaseModel):
     pending: int
     stale: int
     failed: int
+    incompatible: int = 0
+    needs_reindex: bool = False
 
 
 class ConversationCreateIn(BaseModel):

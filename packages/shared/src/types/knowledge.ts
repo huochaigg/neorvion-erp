@@ -294,6 +294,8 @@ export interface KnowledgeIndexStatus {
   pending: number;
   stale: number;
   failed: number;
+  incompatible?: number;
+  needs_reindex?: boolean;
 }
 
 export interface KnowledgeConversation {

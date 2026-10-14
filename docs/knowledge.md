@@ -66,8 +66,10 @@ V1/V2 表保持不变。V3 增量：
 
 ## Embedding 与索引
 
-- 供应商：`MODEL_PROVIDER=openai_compat`（兼容 DashScope / Qwen 等 OpenAI 协议）或测试用 `mock`。
-- 默认建议：`text-embedding-v3`，维度 1024。查询与文档必须同一模型与维度。
+- 供应商按能力拆分：`CHAT_PROVIDER` / `EMBEDDING_PROVIDER` / `RERANK_PROVIDER`。`MODEL_PROVIDER=mock` 仅测试，会覆盖三者。
+- 默认 Chat：DeepSeek `deepseek-flash`（`https://api.deepseek.com`，OpenAI 兼容 `/chat/completions`）。
+- 默认 Embedding：百炼 `text-embedding-v4`，1024 维，走工作空间 OpenAI 兼容 `/embeddings`。查询与文档必须同一模型与维度；更换模型后旧向量不参与检索，需重建索引。
+- 默认 Rerank：百炼 `qwen3-rerank`，DashScope 原生 `.../services/rerank/text-rerank/text-rerank`，**不是** Chat Completions。Base URL 留空时从 Embedding 工作空间 host 推导，不臆造地域。
 - 批量大小 `EMBEDDING_BATCH_SIZE`（默认 16），后台任务 `TaskType.EMBED`，失败可重试。429 / 5xx 可重试，401 / 402 不盲目重试。
 - Chunk 编辑会标记向量 `STALE` 并排队重建；禁用切片不删向量，但检索 SQL 排除 `enabled=false`；删除文档会使进行中 EMBED 失败。
 - 当前数据规模走精确余弦 kNN（`cosine_distance`），**不建 HNSW**。小数据 + 多租户 `WHERE` 过滤时 HNSW 容易降低召回。
@@ -104,18 +106,22 @@ V1/V2 表保持不变。V3 增量：
 
 平台级 Chat / Embedding / Rerank 来自环境变量。API 只返回 `has_api_key` 与 `api_key_env`，永不返回密钥。普通租户管理员不能覆盖平台密钥。连通测试需要 `knowledge:update`。
 
-本地示例（密钥只写 `services/knowledge/.env`）：
+本地示例（密钥只写 `services/knowledge/.env`，完整变量见 `services/knowledge/.env.example`）：
 
 ```env
-MODEL_PROVIDER=openai_compat
-EMBEDDING_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
-EMBEDDING_MODEL=text-embedding-v3
+CHAT_PROVIDER=openai_compat
+CHAT_BASE_URL=https://api.deepseek.com
+CHAT_MODEL=deepseek-flash
+EMBEDDING_PROVIDER=openai_compat
+EMBEDDING_MODEL=text-embedding-v4
 EMBEDDING_DIMENSIONS=1024
-CHAT_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
-CHAT_MODEL=qwen-plus
+RERANK_PROVIDER=dashscope
+RERANK_MODEL=qwen3-rerank
 ```
 
-测试默认 `MODEL_PROVIDER=mock`，不产生计费。
+`CHAT_API_KEY` 可回退 `DEEPSEEK_API_KEY`；`EMBEDDING_API_KEY` / `RERANK_API_KEY` 可回退 `DASHSCOPE_API_KEY`。测试默认 `MODEL_PROVIDER=mock`，不产生计费。
+
+连通测试在「模型配置」页分别打 Chat / Embedding / Rerank。失败原因会区分密钥缺失、URL 错误、模型不存在、余额不足、维度不一致。摘要不含密钥。
 
 ## 解析与切片（V2，仍有效）
 

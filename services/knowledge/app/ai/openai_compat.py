@@ -8,22 +8,12 @@ from typing import Any
 
 import httpx
 
+from app.ai.errors import classify_model_http_error
 from app.ai.types import ChatDelta, RerankHit
 from app.core.config import settings
 from app.core.exceptions import AppError
 
-
-def _classify_http_error(status: int, body: str) -> AppError:
-    snippet = body[:200]
-    if status == 401:
-        return AppError("模型服务认证失败，请检查密钥配置", code=40160, status_code=502)
-    if status == 429:
-        return AppError("模型服务限流，请稍后重试", code=42960, status_code=429)
-    if status in {408, 504}:
-        return AppError("模型服务超时", code=50460, status_code=504)
-    if status == 402:
-        return AppError("模型服务余额不足", code=40260, status_code=502)
-    return AppError(f"模型服务错误（{status}）", code=50260, status_code=502, data={"detail": snippet})
+_classify_http_error = classify_model_http_error
 
 
 class OpenAICompatEmbeddingClient:
@@ -35,6 +25,8 @@ class OpenAICompatEmbeddingClient:
     async def embed(self, texts: list[str]) -> list[list[float]]:
         if not self.api_key:
             raise AppError("未配置 Embedding API Key", code=50360, status_code=503)
+        if not self.base_url:
+            raise AppError("未配置 Embedding Base URL", code=50360, status_code=503)
         payload = {"model": self.model, "input": texts}
         if settings.embedding_dimensions:
             payload["dimensions"] = settings.embedding_dimensions
@@ -43,6 +35,13 @@ class OpenAICompatEmbeddingClient:
         vectors = [list(row.get("embedding") or []) for row in items]
         if len(vectors) != len(texts):
             raise AppError("Embedding 返回条数与输入不一致", code=50261, status_code=502)
+        actual_dim = len(vectors[0]) if vectors else 0
+        if actual_dim != settings.embedding_dimensions:
+            raise AppError(
+                f"向量维度与配置不一致：期望 {settings.embedding_dimensions}，实际 {actual_dim}",
+                code=40090,
+                status_code=400,
+            )
         return vectors
 
     async def _post(self, path: str, payload: dict[str, Any]) -> dict[str, Any]:
@@ -57,7 +56,7 @@ class OpenAICompatEmbeddingClient:
         except httpx.TimeoutException as exc:
             raise AppError("模型服务超时", code=50460, status_code=504) from exc
         except httpx.HTTPError as exc:
-            raise AppError("无法连接模型服务", code=50262, status_code=502) from exc
+            raise AppError("无法连接 Embedding 服务，请检查 Base URL", code=50262, status_code=502) from exc
         if response.status_code >= 400:
             raise _classify_http_error(response.status_code, response.text)
         return response.json()
@@ -74,6 +73,8 @@ class OpenAICompatChatClient:
             raise AppError("未配置 Chat API Key", code=50361, status_code=503)
         url = f"{self.base_url}/chat/completions"
         payload = {"model": self.model, "messages": messages, "stream": True, "stream_options": {"include_usage": True}}
+        if "deepseek.com" in self.base_url or self.model.startswith("deepseek"):
+            payload["thinking"] = {"type": "disabled"}
         try:
             async with httpx.AsyncClient(timeout=settings.model_timeout_seconds) as client:
                 async with client.stream(
@@ -122,7 +123,7 @@ class OpenAICompatChatClient:
         except httpx.TimeoutException as exc:
             raise AppError("模型服务超时", code=50460, status_code=504) from exc
         except httpx.HTTPError as exc:
-            raise AppError("无法连接模型服务", code=50262, status_code=502) from exc
+            raise AppError("无法连接 Chat 服务，请检查 Base URL", code=50262, status_code=502) from exc
 
 
 class OpenAICompatRerankClient:

@@ -50,19 +50,25 @@ class Settings(BaseSettings):
     default_chunk_size: int = 800
     default_chunk_overlap: int = 120
 
-    # 模型供应商：openai_compat 走 OpenAI 兼容 HTTP；mock 仅测试。
+    # 全局开关：mock 仅测试。各能力可再单独指定 provider。
     model_provider: str = "openai_compat"
-    embedding_base_url: str = "https://api.openai.com/v1"
+    chat_provider: str = "openai_compat"
+    embedding_provider: str = "openai_compat"
+    rerank_provider: str = "dashscope"
+
+    embedding_base_url: str = ""
     embedding_api_key: str = ""
-    embedding_model: str = "text-embedding-3-small"
+    embedding_model: str = "text-embedding-v4"
     embedding_dimensions: int = 1024
     embedding_batch_size: int = 16
-    chat_base_url: str = "https://api.openai.com/v1"
+    chat_base_url: str = "https://api.deepseek.com"
     chat_api_key: str = ""
-    chat_model: str = "gpt-4o-mini"
+    chat_model: str = "deepseek-flash"
     rerank_base_url: str = ""
     rerank_api_key: str = ""
-    rerank_model: str = ""
+    rerank_model: str = "qwen3-rerank"
+    dashscope_api_key: str = ""
+    deepseek_api_key: str = ""
     model_timeout_seconds: float = 30.0
     embedding_max_retries: int = 2
     default_top_k: int = 8
@@ -75,6 +81,49 @@ class Settings(BaseSettings):
     eval_prompt_token_usd: float = 0.0
     eval_completion_token_usd: float = 0.0
     api_key_rate_limit_per_minute: int = 60
+
+    def resolved_provider(self, kind: str) -> str:
+        if self.model_provider == "mock":
+            return "mock"
+        mapping = {
+            "chat": self.chat_provider,
+            "embedding": self.embedding_provider,
+            "rerank": self.rerank_provider,
+        }
+        return (mapping.get(kind) or self.model_provider or "openai_compat").strip() or "openai_compat"
+
+    def resolved_chat_api_key(self) -> str:
+        return (self.chat_api_key or self.deepseek_api_key).strip()
+
+    def resolved_embedding_api_key(self) -> str:
+        return (self.embedding_api_key or self.dashscope_api_key).strip()
+
+    def resolved_rerank_api_key(self) -> str:
+        return (self.rerank_api_key or self.dashscope_api_key or self.embedding_api_key).strip()
+
+    def resolved_chat_base_url(self) -> str:
+        return (self.chat_base_url or "https://api.deepseek.com").rstrip("/")
+
+    def resolved_embedding_base_url(self) -> str:
+        return self.embedding_base_url.rstrip("/")
+
+    def resolved_rerank_base_url(self) -> str:
+        if self.rerank_base_url.strip():
+            return self.rerank_base_url.rstrip("/")
+        return self.embedding_base_url.rstrip("/")
+
+    def chat_api_key_env(self) -> str:
+        return "CHAT_API_KEY" if self.chat_api_key.strip() else "DEEPSEEK_API_KEY"
+
+    def embedding_api_key_env(self) -> str:
+        return "EMBEDDING_API_KEY" if self.embedding_api_key.strip() else "DASHSCOPE_API_KEY"
+
+    def rerank_api_key_env(self) -> str:
+        if self.rerank_api_key.strip():
+            return "RERANK_API_KEY"
+        if self.dashscope_api_key.strip():
+            return "DASHSCOPE_API_KEY"
+        return "EMBEDDING_API_KEY"
 
     @property
     def is_production(self) -> bool:

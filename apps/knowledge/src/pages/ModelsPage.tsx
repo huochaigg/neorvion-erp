@@ -27,7 +27,7 @@ export function ModelsPage() {
   const testMutation = useMutation({
     mutationFn: testModel,
     onSuccess: (row) => {
-      message.success(row.last_test_ok ? `${row.kind} 连通正常` : '测试完成');
+      message.success(row.last_test_message || `${KIND_LABEL[row.kind] ?? row.kind} 连通正常`);
       void queryClient.invalidateQueries({ queryKey: knowledgeModelsQueryKey(tenantId) });
     },
     onError: (error: Error) => message.error(error.message),
@@ -52,6 +52,12 @@ export function ModelsPage() {
       width: 180,
       render: (value: string | null, row) =>
         value ? `${formatDateTime(value)} ${row.last_test_ok ? '成功' : '失败'}` : '-',
+    },
+    {
+      title: '测试摘要',
+      dataIndex: 'last_test_message',
+      ellipsis: true,
+      render: (value: string | null) => value || '-',
     },
     {
       title: '操作',

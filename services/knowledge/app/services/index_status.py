@@ -1,4 +1,4 @@
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
@@ -62,15 +62,31 @@ class IndexService:
             )
         ).all()
         counts = {status: int(count) for status, count in rows}
+        incompatible = int(
+            await self.session.scalar(
+                select(func.count(ChunkEmbedding.id)).where(
+                    ChunkEmbedding.tenant_id == tenant_id,
+                    ChunkEmbedding.knowledge_base_id == knowledge_base_id,
+                    or_(
+                        ChunkEmbedding.model_name != settings.embedding_model,
+                        ChunkEmbedding.dimensions != settings.embedding_dimensions,
+                    ),
+                )
+            )
+            or 0
+        )
+        ready = counts.get("READY", 0)
         return IndexStatusOut(
             knowledge_base_id=knowledge_base_id,
             model_name=settings.embedding_model,
             dimensions=settings.embedding_dimensions,
             total_active_chunks=total,
-            ready=counts.get("READY", 0),
+            ready=ready,
             pending=counts.get("PENDING", 0),
             stale=counts.get("STALE", 0),
             failed=counts.get("FAILED", 0),
+            incompatible=incompatible,
+            needs_reindex=incompatible > 0 or (total > 0 and ready == 0),
         )
 
     async def reindex(self, knowledge_base_id: int) -> int:
