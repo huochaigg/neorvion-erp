@@ -6,7 +6,7 @@
 
 ## 架构文档
 
-- [IAM 统一认证与权限架构：学习与面试手册](docs/architecture/iam-authentication-authorization-guide.md)（SSO、JWT、RBAC、多租户、跨服务鉴权；含已实现/部分实现/待实现标记）
+- [IAM 统一认证与权限架构手册](docs/architecture/iam-authentication-authorization-guide.md)：能力实现矩阵、11 条源码调用链、RBAC 实操、面试 60 题。标记为【已实现】【部分实现】【未实现】【未来建议】，不要把 OIDC / Copilot / 高风险实时鉴权当成 V1 能力。
 
 ## 它能做什么
 

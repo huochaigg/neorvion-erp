@@ -4,7 +4,7 @@
 
 ## 架构与开发
 
-- [IAM 统一认证与权限架构学习手册](architecture/iam-authentication-authorization-guide.md)
+- [IAM 统一认证与权限架构手册](architecture/iam-authentication-authorization-guide.md)（能力矩阵 / 调用链 / 面试；区分已实现与未实现）
 - [架构](architecture.md)
 - [核心 ER](er.md)
 - [项目目录](project-structure.md)
