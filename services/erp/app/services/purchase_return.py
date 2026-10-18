@@ -716,7 +716,7 @@ class PurchaseReturnService:
             id=order.id,
             purchase_return_no=order.purchase_return_no or "",
             purchase_order_id=order.purchase_order_id,
-            purchase_order_no=po.order_no if po is not None else "",
+            purchase_order_no=(po.order_no or "") if po is not None else "",
             supplier_id=order.supplier_id,
             supplier_name=order.supplier.name if order.supplier is not None else "",
             warehouse_id=order.warehouse_id,

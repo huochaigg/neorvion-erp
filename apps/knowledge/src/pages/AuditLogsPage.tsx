@@ -29,7 +29,9 @@ export function AuditLogsPage() {
       title: '详情',
       dataIndex: 'detail',
       ellipsis: true,
-      render: (value: Record<string, unknown> | null) => <EllipsisCell>{value ? JSON.stringify(value) : '-'}</EllipsisCell>,
+      render: (value: Record<string, unknown> | null) => (
+        <EllipsisCell value={value ? JSON.stringify(value) : '-'} />
+      ),
     },
   ];
   return (

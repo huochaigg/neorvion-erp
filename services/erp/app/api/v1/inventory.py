@@ -135,7 +135,7 @@ def lookup_availability(
         warehouse_id=warehouse_id,
         sku_ids=parsed[:50],
     )
-    return ok(SkuAvailabilityListOut(items=[SkuAvailabilityOut(**row) for row in rows]))
+    return ok(SkuAvailabilityListOut(items=[SkuAvailabilityOut.model_validate(row) for row in rows]))
 
 
 @router.get("/{inventory_id}", response_model=ApiResponse[InventoryDetailOut], summary="库存详情")

@@ -41,6 +41,23 @@ class Settings(BaseSettings):
     iam_redis_password: str = ""
     iam_redis_db: int = 1
 
+    # 登录、刷新 Cookie 与 RSA 传输仍在 ERP。业务 JWT 校验走 IAM，不使用 secret_key。
+    secret_key: str = "change-me-in-local-dev"
+    jwt_algorithm: str = "HS256"
+    jwt_access_expire_minutes: int = 30
+    jwt_refresh_expire_days: int = 7
+    refresh_cookie_name: str = "neorvion_refresh"
+    refresh_cookie_path: str = "/api/v1/auth"
+    cookie_samesite: str = "lax"
+    cookie_secure: bool = False
+    internal_service_key: str = ""
+    rsa_key_id: str = "v1"
+    rsa_private_key_path: str = "secrets/rsa/v1/private.pem"
+    rsa_public_key_path: str = "secrets/rsa/v1/public.pem"
+    rsa_previous_key_id: str = ""
+    rsa_previous_private_key_path: str = ""
+    rsa_challenge_ttl_seconds: int = 300
+
     mysql_host: str = "127.0.0.1"
     mysql_port: int = 3306
     mysql_user: str = "neorvion"
@@ -54,6 +71,9 @@ class Settings(BaseSettings):
     redis_db: int = 0
 
     export_dir: str = str(_BACKEND_DIR / "var" / "exports")
+
+    def access_token_ttl_seconds(self) -> int:
+        return self.jwt_access_expire_minutes * 60
 
     def require_runtime_secrets(self) -> None:
         """生产环境必须配置 JWKS，禁止用空公钥启动。"""

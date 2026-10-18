@@ -39,7 +39,7 @@ class SystemEventRepository(BaseRepository):
         occurred_from: datetime | None,
         occurred_to: datetime | None,
         keyword: str | None,
-    ) -> Select[tuple[SystemEvent]]:
+    ) -> Select[SystemEvent]:
         stmt = select(SystemEvent)
         if self.tenant_id is not None:
             stmt = stmt.where(SystemEvent.tenant_id == self.tenant_id)
@@ -110,11 +110,11 @@ class SystemEventRepository(BaseRepository):
             self.session.execute(select(func.count()).select_from(filtered.subquery())).scalar_one()
         )
         rows = list(
-            self.session.execute(
+            self.session.scalars(
                 filtered.order_by(SystemEvent.occurred_at.desc(), SystemEvent.id.desc())
                 .offset((page - 1) * page_size)
                 .limit(page_size)
-            ).scalars()
+            ).all()
         )
         return rows, total
 

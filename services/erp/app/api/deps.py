@@ -11,6 +11,7 @@ from app.core.iam import jwt_verifier, snapshot_store
 from app.core.identity_projection import project_display_user
 from app.core.tenant import TENANT_HEADER, TenantContext
 from app.db.session import get_db
+from app.models.user import User
 from neorvion_security import SecurityError
 
 DbSession = Annotated[Session, Depends(get_db)]
@@ -74,5 +75,19 @@ def get_current_tenant(
     return context
 
 
+def get_current_user(request: Request, db: DbSession) -> User:
+    """只校验 Access Token，不要求 X-Tenant-ID。供注册后的 /auth/me 与创建企业使用。"""
+    token = _extract_bearer_token(request)
+    try:
+        claims = jwt_verifier().verify_access(token)
+    except SecurityError as exc:
+        raise from_security_error(exc) from exc
+    user = db.get(User, claims.user_id)
+    if user is None:
+        raise AppError("用户不存在", code=40102, status_code=401)
+    return user
+
+
 TenantContextDep = Annotated[TenantContext, Depends(get_tenant_context)]
 CurrentTenant = Annotated[TenantContext, Depends(get_current_tenant)]
+CurrentUser = Annotated[User, Depends(get_current_user)]

@@ -49,7 +49,7 @@ class AsyncTaskRepository(BaseRepository):
         created_from: datetime | None,
         created_to: datetime | None,
         keyword: str | None,
-    ) -> Select[tuple[AsyncTask]]:
+    ) -> Select[AsyncTask]:
         stmt = select(AsyncTask)
         if self.tenant_id is not None:
             stmt = stmt.where(AsyncTask.tenant_id == self.tenant_id)
@@ -94,11 +94,11 @@ class AsyncTaskRepository(BaseRepository):
             self.session.execute(select(func.count()).select_from(filtered.subquery())).scalar_one()
         )
         rows = list(
-            self.session.execute(
+            self.session.scalars(
                 filtered.order_by(AsyncTask.created_at.desc(), AsyncTask.id.desc())
                 .offset((page - 1) * page_size)
                 .limit(page_size)
-            ).scalars()
+            ).all()
         )
         return rows, total
 

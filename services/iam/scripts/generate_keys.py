@@ -17,9 +17,10 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="生成 IAM RSA 传输密钥与 JWT 签名密钥")
     parser.add_argument("--rsa-key-id", default="v1")
     parser.add_argument("--jwt-key-id", default="jwt-v1")
+    parser.add_argument("--jwt-dir", default="v1", help="相对 secrets/jwt 的目录，需与 JWT_PRIVATE_KEY_PATH 一致")
     args = parser.parse_args()
     rsa_dir = ROOT / "secrets" / "rsa" / args.rsa_key_id
-    jwt_dir = ROOT / "secrets" / "jwt" / args.jwt_key_id
+    jwt_dir = ROOT / "secrets" / "jwt" / args.jwt_dir
     write_rsa_key_pair(rsa_dir / "private.pem", rsa_dir / "public.pem")
     write_rsa_key_pair(jwt_dir / "private.pem", jwt_dir / "public.pem")
     print(f"RSA_KEY_ID={args.rsa_key_id}")

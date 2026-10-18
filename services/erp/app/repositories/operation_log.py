@@ -29,7 +29,7 @@ class OperationLogRepository(BaseRepository):
         occurred_from: datetime | None,
         occurred_to: datetime | None,
         keyword: str | None,
-    ) -> Select[tuple[OperationLog]]:
+    ) -> Select[OperationLog]:
         stmt = select(OperationLog)
         if self.tenant_id is not None:
             stmt = stmt.where(OperationLog.tenant_id == self.tenant_id)
@@ -92,10 +92,10 @@ class OperationLogRepository(BaseRepository):
             self.session.execute(select(func.count()).select_from(filtered.subquery())).scalar_one()
         )
         rows = list(
-            self.session.execute(
+            self.session.scalars(
                 filtered.order_by(OperationLog.occurred_at.desc(), OperationLog.id.desc())
                 .offset((page - 1) * page_size)
                 .limit(page_size)
-            ).scalars()
+            ).all()
         )
         return rows, total

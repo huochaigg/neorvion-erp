@@ -21,6 +21,11 @@ export interface PageProps {
 
 export type PermissionMode = 'any' | 'all';
 
+export interface MatchedRoute {
+  route: AppRoute;
+  parents: AppRoute[];
+}
+
 export interface AppRoute {
   path: string;
   name: string;
