@@ -8,20 +8,33 @@ from sqlalchemy.orm import Session
 
 from app.core.async_tasks import REPORT_EXPORT_KINDS, TaskLogLevel
 from app.core.config import settings
-from app.core.exceptions import AppError
+from app.core.exceptions import AppError, from_security_error
+from app.core.iam import snapshot_store
+from app.core.permissions import PermissionCode
 from app.core.tenant import TenantContext
 from app.models.async_task import AsyncTask, AsyncTaskLog
 from app.services.analytics import AnalyticsService
+from app.services.authorization import AuthorizationService
+from neorvion_security import SecurityError
+
+_EXPORT_PERMISSIONS = {
+    "sales_trend": PermissionCode.ANALYTICS_SALES_READ,
+    "purchase_trend": PermissionCode.ANALYTICS_PURCHASE_READ,
+    "low_stock": PermissionCode.ANALYTICS_INVENTORY_READ,
+}
 
 
 def _context(task: AsyncTask) -> TenantContext:
-    return TenantContext(
-        user_id=task.created_by or 0,
-        tenant_id=int(task.tenant_id or 0),
-        member_id=0,
-        is_owner=False,
-        role="MEMBER",
-    )
+    """后台任务使用创建者当时的授权快照，禁止空身份或隐式高权限。"""
+    if not task.created_by or not task.tenant_id:
+        raise AppError("任务缺少可审计的执行身份", code=40330, status_code=403)
+    try:
+        return snapshot_store().load_for_principal(
+            user_id=int(task.created_by),
+            tenant_id=int(task.tenant_id),
+        )
+    except SecurityError as exc:
+        raise from_security_error(exc) from exc
 
 
 def export_dir_for(tenant_id: int | None, task_id: str) -> Path:
@@ -63,7 +76,11 @@ def handle_report_export(session: Session, task: AsyncTask) -> dict:
     task.progress = 20
     session.flush()
 
-    service = AnalyticsService(session, _context(task))
+    context = _context(task)
+    required = _EXPORT_PERMISSIONS.get(kind)
+    if required:
+        AuthorizationService(session).require_all(context, (required,))
+    service = AnalyticsService(session, context)
     start_date = payload.get("start_date")
     end_date = payload.get("end_date")
     warehouse_id = payload.get("warehouse_id")

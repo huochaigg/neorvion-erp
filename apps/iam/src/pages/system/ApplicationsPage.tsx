@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { App, Button, Form, Input, Modal } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { useState } from 'react';
-import { createApplication, fetchApplications, type IamApplication } from '@/api/catalog';
+import { createApplication, fetchApplications, patchApplication, type IamApplication } from '@/api/catalog';
 import { AppTable } from '@/components/AppTable';
 import { Can } from '@/components/Can';
 import { ListPageContainer, ListTableArea, ListToolbar } from '@/components/PageContainer';
@@ -18,6 +18,13 @@ export function ApplicationsPage(_props: PageProps) {
   const query = useQuery({
     queryKey: ['iam', 'applications'],
     queryFn: ({ signal }) => fetchApplications(signal),
+  });
+  const patchMutation = useMutation({
+    mutationFn: (values: { id: number; status: string }) => patchApplication(values.id, { status: values.status }),
+    onSuccess: async () => {
+      message.success('已更新应用状态');
+      await queryClient.invalidateQueries({ queryKey: ['iam', 'applications'] });
+    },
   });
   const createMutation = useMutation({
     mutationFn: createApplication,
@@ -35,6 +42,27 @@ export function ApplicationsPage(_props: PageProps) {
     { title: 'Audience', dataIndex: 'audience', width: 200 },
     { title: '状态', dataIndex: 'status', width: 120 },
     { title: '说明', dataIndex: 'description' },
+    {
+      title: '操作',
+      key: 'actions',
+      width: 120,
+      render: (_, row) => (
+        <Can permission={PERMISSION_CODE.iamAppsManage}>
+          <Button
+            type="link"
+            size="small"
+            onClick={() =>
+              patchMutation.mutate({
+                id: row.id,
+                status: row.status === 'ACTIVE' ? 'DISABLED' : 'ACTIVE',
+              })
+            }
+          >
+            {row.status === 'ACTIVE' ? '停用' : '启用'}
+          </Button>
+        </Can>
+      ),
+    },
   ];
 
   return (

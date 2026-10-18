@@ -30,6 +30,7 @@ os.environ["REDIS_DB"] = "14"
 os.environ["JWT_ISSUER"] = "neorvion-iam"
 os.environ["JWT_AUDIENCES"] = "neorvion-iam,neorvion-erp,neorvion-knowledge"
 os.environ["PERMISSION_SYNC_KEY"] = "iam-test-sync-key"
+os.environ["INTERNAL_SERVICE_KEY"] = "iam-test-internal-key"
 
 _ROOT = Path(tempfile.mkdtemp(prefix="neorvion-iam-keys-"))
 
@@ -112,12 +113,15 @@ def _wipe() -> None:
         session.execute(text("SET FOREIGN_KEY_CHECKS=0"))
         for table in (
             "audit_logs",
+            "authz_outbox",
+            "authz_revisions",
+            "auth_sessions",
             "menus",
-            "applications",
             "role_permissions",
             "member_roles",
             "roles",
             "permissions",
+            "applications",
             "tenant_members",
             "tenants",
             "users",

@@ -40,23 +40,27 @@ def verify_password(plain_password: str, password_hash: str) -> bool:
         return False
 
 
-def create_access_token(user_id: int, *, token_version: int) -> str:
+def create_access_token(user_id: int, *, token_version: int, session_id: str = "") -> str:
     token, _jti = get_jwt_signer().sign(
         user_id=user_id,
         token_type="access",
         ttl=timedelta(seconds=settings.access_token_ttl_seconds()),
         token_version=token_version,
+        session_id=session_id,
     )
     return token
 
 
-def create_refresh_token(user_id: int, *, token_version: int) -> tuple[str, str, int]:
+def create_refresh_token(
+    user_id: int, *, token_version: int, session_id: str = ""
+) -> tuple[str, str, int]:
     seconds = settings.jwt_refresh_expire_days * 24 * 60 * 60
     token, jti = get_jwt_signer().sign(
         user_id=user_id,
         token_type="refresh",
         ttl=timedelta(seconds=seconds),
         token_version=token_version,
+        session_id=session_id,
     )
     return token, jti, seconds
 

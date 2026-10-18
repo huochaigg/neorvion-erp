@@ -70,6 +70,8 @@ services:
       REDIS_PORT: 6379
       REDIS_PASSWORD: ${REDIS_PASSWORD:-}
       REDIS_DB: 1
+      PERMISSION_SYNC_KEY: ${PERMISSION_SYNC_KEY:-}
+      INTERNAL_SERVICE_KEY: ${IAM_INTERNAL_KEY:-}
     volumes:
       - ./services/iam/secrets:/app/secrets:ro
     ports:
@@ -87,6 +89,8 @@ services:
       retries: 10
     command: >
       sh -c "uv run --no-dev alembic upgrade head &&
+             uv run --no-dev python -m app.scripts.seed_permissions &&
+             uv run --no-dev python -m app.scripts.bootstrap_platform_admin &&
              uv run --no-dev uvicorn app.main:app --host 0.0.0.0 --port 8010"
 
   erp:
@@ -109,6 +113,8 @@ services:
       IAM_JWT_ISSUER: neorvion-iam
       IAM_JWT_AUDIENCE: neorvion-erp
       IAM_JWKS_URL: http://iam:8010/.well-known/jwks.json
+      IAM_AUTHORIZE_URL: http://iam:8010/api/v1/internal/authorize
+      IAM_INTERNAL_KEY: ${IAM_INTERNAL_KEY:-}
       IAM_REDIS_HOST: redis
       IAM_REDIS_PORT: 6379
       IAM_REDIS_DB: 1
@@ -155,6 +161,8 @@ services:
       IAM_JWT_ISSUER: neorvion-iam
       IAM_JWT_AUDIENCE: neorvion-erp
       IAM_JWKS_URL: http://iam:8010/.well-known/jwks.json
+      IAM_AUTHORIZE_URL: http://iam:8010/api/v1/internal/authorize
+      IAM_INTERNAL_KEY: ${IAM_INTERNAL_KEY:-}
       IAM_REDIS_HOST: redis
       IAM_REDIS_PORT: 6379
       IAM_REDIS_DB: 1
@@ -169,6 +177,69 @@ services:
       REDIS_DB: 0
     command: uv run --no-dev python -m app.tasks.worker
 
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: neorvion-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me}
+      POSTGRES_DB: ${POSTGRES_DB:-neorvion_knowledge}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - neorvion_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  knowledge:
+    build:
+      context: .
+      dockerfile: services/knowledge/Dockerfile
+    container_name: neorvion-knowledge
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      iam:
+        condition: service_started
+    environment:
+      APP_ENV: development
+      APP_HOST: 0.0.0.0
+      APP_PORT: 8012
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-change-me}@postgres:5432/${POSTGRES_DB:-neorvion_knowledge}
+      IAM_JWT_ISSUER: neorvion-iam
+      IAM_JWT_AUDIENCE: neorvion-knowledge
+      IAM_JWKS_URL: http://iam:8010/.well-known/jwks.json
+      IAM_AUTHORIZE_URL: http://iam:8010/api/v1/internal/authorize
+      IAM_INTERNAL_KEY: ${IAM_INTERNAL_KEY:-}
+      IAM_REDIS_URL: redis://redis:6379/1
+      REDIS_URL: redis://redis:6379/0
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:8015,http://localhost:8017,http://localhost:8018,http://127.0.0.1:8015,http://127.0.0.1:8017,http://127.0.0.1:8018}
+      MODEL_PROVIDER: mock
+      TASK_EXECUTOR: inline
+    ports:
+      - "8012:8012"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8012/api/v1/health')",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    command: >
+      sh -c "uv run --no-dev alembic upgrade head &&
+             uv run --no-dev uvicorn app.main:app --host 0.0.0.0 --port 8012 --proxy-headers --forwarded-allow-ips=127.0.0.1"
+
   nginx:
     image: nginx:1.27-alpine
     container_name: neorvion-nginx
@@ -176,6 +247,7 @@ services:
     depends_on:
       - iam
       - erp
+      - knowledge
     ports:
       - "8080:80"
     volumes:
@@ -186,3 +258,4 @@ services:
 volumes:
   neorvion_mysql_data:
   neorvion_redis_data:
+  neorvion_postgres_data:

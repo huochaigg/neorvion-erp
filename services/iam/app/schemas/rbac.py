@@ -12,6 +12,8 @@ class PermissionOut(BaseModel):
     module: str
     description: str
     deprecated: bool = False
+    application_id: int | None = None
+    status: str = "ACTIVE"
 
     model_config = {"from_attributes": True}
 
@@ -32,6 +34,7 @@ class RoleOut(BaseModel):
     code: str
     description: str
     is_system: bool
+    status: str = "ACTIVE"
     created_at: datetime
     updated_at: datetime
     permissions: list[PermissionOut] = Field(default_factory=list)
@@ -62,6 +65,7 @@ class RoleUpdate(BaseModel):
 
     name: str | None = Field(default=None, min_length=1, max_length=64)
     description: str | None = Field(default=None, max_length=255)
+    status: str | None = Field(default=None, max_length=16)
 
     @field_validator("name")
     @classmethod

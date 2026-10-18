@@ -1,5 +1,6 @@
 """跨服务共享的身份校验组件。禁止在此包中放入 ERP / Knowledge 业务模型。"""
 
+from neorvion_security.authority import HttpAuthorityClient
 from neorvion_security.errors import SecurityError
 from neorvion_security.jwt import JwtClaims, JwtVerifier, LocalJwtSigner, decode_access_token
 from neorvion_security.snapshot import (
@@ -12,6 +13,7 @@ from neorvion_security.tenant import TENANT_HEADER, TenantContext
 
 __all__ = [
     "AuthzSnapshot",
+    "HttpAuthorityClient",
     "JwtClaims",
     "JwtVerifier",
     "LocalJwtSigner",

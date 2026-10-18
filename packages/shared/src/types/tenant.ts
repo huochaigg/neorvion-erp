@@ -56,6 +56,7 @@ export interface RoleInfo {
   code: string;
   description: string;
   is_system: boolean;
+  status?: string;
   created_at: string;
   updated_at: string;
   permissions: PermissionInfo[];
@@ -127,6 +128,7 @@ export interface RoleCreatePayload {
 export interface RoleUpdatePayload {
   name?: string;
   description?: string;
+  status?: string;
 }
 
 export const PERMISSION_MODULE_LABELS: Record<string, string> = {

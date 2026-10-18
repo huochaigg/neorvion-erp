@@ -1,26 +1,28 @@
 # Neorvion Knowledge V5
 
-独立 AI 知识库：V1 知识库 CRUD → V2 文档解析与切片 → V3 RAG 检索与智能问答 → V4 RAG 评测与召回调优 → V5 企业级管理与评测初始化。身份、租户、RBAC 仍以 ERP MySQL 为权威来源。
+独立 AI 知识库：V1 知识库 CRUD → V2 文档解析与切片 → V3 RAG 检索与智能问答 → V4 RAG 评测与召回调优 → V5 企业级管理与评测初始化。身份、租户、功能 RBAC 以 **IAM** 为权威来源。
 
-## 与 ERP 的关系
+## 与 IAM / ERP 的关系
 
 ```mermaid
 flowchart LR
   Browser --> Shell[Shell 8015]
+  Shell --> IAM[IAM API 8010]
   Shell --> KFE[Knowledge 微前端 8017]
   KFE --> KAPI[Knowledge API 8012]
-  KAPI --> ERPAPI[ERP API 8011]
-  Worker[Knowledge Worker] --> Redis[(Redis)]
+  KAPI --> Redis[(Redis 快照)]
+  KAPI -->|高风险删除| IAM
+  Worker[Knowledge Worker] --> Redis
   Worker --> PG[(PostgreSQL + pgvector)]
   KAPI --> PG
   KAPI --> Disk[本地文件目录]
   KAPI --> Models[OpenAI 兼容模型 API]
 ```
 
-- 登录、Refresh、租户切换仍由 Shell + ERP 负责。
-- Knowledge 先验签 JWT，再调用 ERP `POST /api/v1/internal/identity/introspect`。
+- 登录、Refresh、租户切换由 Shell + IAM 负责。
+- Knowledge 本地校验 IAM RS256 JWT，读 Redis 授权快照。删除知识库回源 IAM `internal/authorize`。
 - 前端传入的 `X-Tenant-ID` 只是意愿，不能单独采信。
-- 权限沿用 `knowledge:read/create/update/delete`。检索与问答需要 read；重建索引与模型连通测试需要 update。
+- 功能权限沿用 `knowledge:read/create/update/delete`。检索与问答需要 read；重建索引与模型连通测试需要 update。文档共享 ACL 由本服务检查。
 - 模型密钥只在 Knowledge 服务端环境变量中，不返回前端，也不写入 Git。
 
 ## 信息架构

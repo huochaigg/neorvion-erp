@@ -4,7 +4,7 @@
 
 ## 项目定位
 
-Neorvion ERP Core V1（V15 收口）。模块化单体，不是微服务。
+Neorvion 已拆独立 **IAM :8010**（V2：会话表、高风险回源、授权版本）。ERP :8011 与 Knowledge :8012 是业务服务，本地校验 RS256 JWT。详见根 README 与 `docs/iam-operations.md`。ERP 业务模块本身已收口到 V15。
 
 下一阶段才是 ERP Copilot / Agent。Agent **不直接写 ERP 数据库**。
 
@@ -23,7 +23,7 @@ Neorvion ERP Core V1（V15 收口）。模块化单体，不是微服务。
 - 伪造生产客户、GMV、QPS、用户量
 - 自动 SSH / 操作腾讯云生产机
 - 把生产 Secret、RSA 私钥、数据库密码写进 Git
-- 公网开放 MySQL 3306 / Redis 6379 / Postgres 5432 / FastAPI 8011
+- 公网开放 MySQL 3306 / Redis 6379 / Postgres 5432 / FastAPI 8010/8011/8012
 - ERP 业务写入走 PostgreSQL；Postgres 只给未来 Agent / RAG
 - 每个 API 容器启动时自动 Alembic；Migration 是独立部署步骤
 

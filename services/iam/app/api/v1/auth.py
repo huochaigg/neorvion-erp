@@ -117,6 +117,7 @@ def register(payload: RegisterRequest, session: DbSession) -> ApiResponse[UserOu
 def login(
     payload: LoginRequest,
     session: DbSession,
+    request: Request,
     response: Response,
 ) -> ApiResponse[TokenResponse]:
     """邮箱密码登录。
@@ -130,6 +131,8 @@ def login(
         encrypted_password=payload.encrypted_password,
         key_id=payload.key_id,
         challenge_id=payload.challenge_id,
+        user_agent=(request.headers.get("user-agent") or "")[:255],
+        ip_address=(request.client.host if request.client else "")[:64],
     )
     _set_refresh_cookie(response, refresh_token, ttl)
     _set_csrf_cookie(response, csrf_token, ttl)

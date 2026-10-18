@@ -1,6 +1,6 @@
 # RBAC 权限模型
 
-V12 起功能 RBAC 的数据所有权在 IAM（`neorvion_iam`）。ERP / Knowledge 只消费 Redis 授权快照，不再维护 `roles` / `permissions` 业务职责。资源级 ACL 仍在各业务服务。
+IAM V2 起功能 RBAC 的数据所有权在 IAM（`neorvion_iam`）。ERP / Knowledge 普通接口消费 Redis 授权快照；高风险接口回源 IAM。资源级 ACL 仍在各业务服务。
 
 历史沿革：
 

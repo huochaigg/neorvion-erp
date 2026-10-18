@@ -48,8 +48,44 @@ export function createApplication(payload: {
   return unwrapApi(apiClient.post<ApiResponse<IamApplication>>('/api/v1/applications', payload));
 }
 
+export function patchApplication(
+  applicationId: number,
+  payload: { name?: string; description?: string; status?: string },
+) {
+  return unwrapApi(
+    apiClient.patch<ApiResponse<IamApplication>>(`/api/v1/applications/${applicationId}`, payload),
+  );
+}
+
 export function fetchMenus(signal?: AbortSignal) {
   return unwrapApi(apiClient.get<ApiResponse<IamMenu[]>>('/api/v1/menus', { signal }));
+}
+
+export function createMenu(payload: {
+  application_id: number;
+  parent_id?: number | null;
+  menu_key: string;
+  title: string;
+  menu_type: string;
+  path?: string;
+  permission_code?: string | null;
+  sort_no?: number;
+  visible?: boolean;
+}) {
+  return unwrapApi(apiClient.post<ApiResponse<IamMenu>>('/api/v1/menus', payload));
+}
+
+export function updateMenu(
+  menuId: number,
+  payload: {
+    title?: string;
+    path?: string;
+    visible?: boolean;
+    sort_no?: number;
+    permission_code?: string | null;
+  },
+) {
+  return unwrapApi(apiClient.patch<ApiResponse<IamMenu>>(`/api/v1/menus/${menuId}`, payload));
 }
 
 export function fetchAuditLogs(signal?: AbortSignal) {

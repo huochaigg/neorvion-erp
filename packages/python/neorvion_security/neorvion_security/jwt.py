@@ -36,6 +36,7 @@ class JwtClaims:
     expires_at: int
     not_before: int
     kid: str
+    session_id: str = ""
 
 
 class JwksCache:
@@ -176,6 +177,7 @@ class JwtVerifier:
             expires_at=int(payload["exp"]),
             not_before=int(payload["nbf"]),
             kid=kid,
+            session_id=str(payload.get("sid") or ""),
         )
 
 
@@ -210,6 +212,7 @@ class LocalJwtSigner:
         ttl: timedelta,
         token_version: int = 0,
         extra_audiences: list[str] | None = None,
+        session_id: str = "",
     ) -> tuple[str, str]:
         now = datetime.now(UTC)
         jti = uuid4().hex
@@ -225,6 +228,8 @@ class LocalJwtSigner:
             "jti": jti,
             "ver": token_version,
         }
+        if session_id:
+            payload["sid"] = session_id
         token = jwt.encode(
             payload,
             self._private,

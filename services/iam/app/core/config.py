@@ -20,7 +20,7 @@ class Settings(BaseSettings):
     app_env: str = "development"
     app_host: str = "0.0.0.0"
     app_port: int = 8010
-    app_version: str = "12.0.0"
+    app_version: str = "2.0.0"
     git_sha: str = ""
     enable_api_docs: bool = True
 
@@ -68,6 +68,9 @@ class Settings(BaseSettings):
     rsa_challenge_ttl_seconds: int = 300
 
     permission_sync_key: str = ""
+    internal_service_key: str = ""
+    bootstrap_admin_email: str = ""
+    bootstrap_admin_password: str = ""
 
     def access_token_ttl_seconds(self) -> int:
         return self.jwt_access_expire_minutes * 60

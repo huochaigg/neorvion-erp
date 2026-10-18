@@ -39,6 +39,8 @@ class Settings(BaseSettings):
     iam_jwt_public_key_path: str = ""
     iam_jwt_private_key_path: str = ""
     iam_snapshot_ttl_seconds: int = 3600
+    iam_authorize_url: str = "http://127.0.0.1:8010/api/v1/internal/authorize"
+    iam_internal_key: str = ""
     iam_redis_url: str = "redis://127.0.0.1:6379/1"
 
     redis_url: str = "redis://127.0.0.1:6379/0"
@@ -134,6 +136,8 @@ class Settings(BaseSettings):
             return
         if not self.iam_jwks_url and not self.iam_jwt_public_key_path:
             raise RuntimeError("生产环境必须配置 IAM_JWKS_URL 或 IAM_JWT_PUBLIC_KEY_PATH")
+        if not self.iam_authorize_url or not self.iam_internal_key:
+            raise RuntimeError("生产环境必须配置 IAM_AUTHORIZE_URL 与 IAM_INTERNAL_KEY")
 
     @property
     def is_production(self) -> bool:

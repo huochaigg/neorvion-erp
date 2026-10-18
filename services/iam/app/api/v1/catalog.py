@@ -33,6 +33,12 @@ class ApplicationIn(BaseModel):
     description: str = ""
 
 
+class ApplicationPatchIn(BaseModel):
+    name: str | None = Field(default=None, max_length=64)
+    description: str | None = None
+    status: str | None = Field(default=None, max_length=16)
+
+
 class MenuOut(BaseModel):
     id: int
     application_id: int
@@ -55,6 +61,20 @@ class MenuUpdateIn(BaseModel):
     visible: bool | None = None
     sort_no: int | None = None
     permission_code: str | None = None
+    menu_type: str | None = None
+    parent_id: int | None = None
+
+
+class MenuCreateIn(BaseModel):
+    application_id: int
+    parent_id: int | None = None
+    menu_key: str = Field(min_length=1, max_length=64)
+    title: str = Field(min_length=1, max_length=64)
+    menu_type: str = Field(min_length=1, max_length=16)
+    path: str = ""
+    permission_code: str | None = None
+    sort_no: int = 0
+    visible: bool = True
 
 
 class PermissionSyncItem(BaseModel):
@@ -131,6 +151,38 @@ def create_application(
     return ok(ApplicationOut.model_validate(row), "已注册应用")
 
 
+@router.patch("/applications/{application_id}", response_model=ApiResponse[ApplicationOut], summary="更新应用")
+def patch_application(
+    application_id: int,
+    payload: ApplicationPatchIn,
+    admin: PlatformAdmin,
+    session: DbSession,
+) -> ApiResponse[ApplicationOut]:
+    row = session.get(Application, application_id)
+    if row is None:
+        raise AppError("应用不存在", code=40430, status_code=404)
+    if payload.name is not None:
+        row.name = payload.name.strip()
+    if payload.description is not None:
+        row.description = payload.description.strip()
+    if payload.status is not None:
+        status = payload.status.strip().upper()
+        if status not in {"ACTIVE", "DISABLED"}:
+            raise AppError("应用状态不合法", code=40035, status_code=400)
+        row.status = status
+    session.commit()
+    session.refresh(row)
+    _write_audit(
+        session,
+        actor_user_id=admin.id,
+        action="application.update",
+        target_type="application",
+        target_id=str(row.id),
+        detail=row.code,
+    )
+    return ok(ApplicationOut.model_validate(row), "已更新应用")
+
+
 @router.get("/menus", response_model=ApiResponse[list[MenuOut]], summary="菜单列表")
 def list_menus(
     context: TenantContextDep,
@@ -147,6 +199,49 @@ def list_menus(
         stmt = stmt.where(Menu.application_id == app.id)
     rows = list(session.scalars(stmt).all())
     return ok([MenuOut.model_validate(row) for row in rows])
+
+
+@router.post("/menus", response_model=ApiResponse[MenuOut], summary="创建菜单")
+def create_menu(
+    payload: MenuCreateIn,
+    admin: PlatformAdmin,
+    session: DbSession,
+) -> ApiResponse[MenuOut]:
+    app = session.get(Application, payload.application_id)
+    if app is None:
+        raise AppError("应用不存在", code=40430, status_code=404)
+    exists = session.scalars(
+        select(Menu).where(
+            Menu.application_id == payload.application_id,
+            Menu.menu_key == payload.menu_key.strip(),
+        )
+    ).first()
+    if exists is not None:
+        raise AppError("菜单编码已存在", code=40930, status_code=409)
+    row = Menu(
+        application_id=payload.application_id,
+        parent_id=payload.parent_id,
+        menu_key=payload.menu_key.strip(),
+        title=payload.title.strip(),
+        menu_type=payload.menu_type.strip().upper(),
+        path=payload.path.strip(),
+        permission_code=(payload.permission_code or "").strip() or None,
+        sort_no=payload.sort_no,
+        visible=payload.visible,
+        locked=True,
+    )
+    session.add(row)
+    session.commit()
+    session.refresh(row)
+    _write_audit(
+        session,
+        actor_user_id=admin.id,
+        action="menu.create",
+        target_type="menu",
+        target_id=str(row.id),
+        detail=row.menu_key,
+    )
+    return ok(MenuOut.model_validate(row), "已创建菜单")
 
 
 @router.patch("/menus/{menu_id}", response_model=ApiResponse[MenuOut], summary="更新菜单")
@@ -216,29 +311,41 @@ def sync_permissions(
     session: DbSession,
     x_permission_sync_key: str | None = Header(default=None, alias="X-Permission-Sync-Key"),
 ) -> ApiResponse[dict]:
-    """只插入尚不存在的权限编码，不覆盖管理员已锁定的目录项，不删除。"""
+    """确定性 UPSERT：已有编码只更新名称/说明/模块，绝不改 role_permissions。"""
     expected = settings.permission_sync_key
     if not expected or not x_permission_sync_key or x_permission_sync_key != expected:
         raise AppError("权限同步密钥无效", code=40331, status_code=403)
+    app = session.scalars(
+        select(Application).where(Application.code == payload.application_code.strip().lower())
+    ).first()
     existing = {row.code: row for row in session.scalars(select(Permission)).all()}
     inserted = 0
+    updated = 0
     skipped = 0
     catalog = {item[0] for item in PERMISSION_CATALOG}
     for item in payload.permissions:
-        if item.code in existing:
-            skipped += 1
-            continue
         if item.code not in catalog and not item.code.startswith(f"{payload.application_code}:"):
             skipped += 1
             continue
-        session.add(
-            Permission(
-                code=item.code,
-                name=item.name,
-                module=item.module,
-                description=item.description,
+        row = existing.get(item.code)
+        if row is None:
+            session.add(
+                Permission(
+                    code=item.code,
+                    name=item.name,
+                    module=item.module,
+                    description=item.description,
+                    application_id=app.id if app is not None else None,
+                    status="ACTIVE",
+                )
             )
-        )
-        inserted += 1
+            inserted += 1
+            continue
+        row.name = item.name
+        row.module = item.module
+        row.description = item.description
+        if row.application_id is None and app is not None:
+            row.application_id = app.id
+        updated += 1
     session.commit()
-    return ok({"inserted": inserted, "skipped": skipped}, "已同步权限目录")
+    return ok({"inserted": inserted, "updated": updated, "skipped": skipped}, "已同步权限目录")

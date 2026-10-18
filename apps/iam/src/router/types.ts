@@ -12,7 +12,8 @@ export type PageKey =
   | 'Permissions'
   | 'Applications'
   | 'Menus'
-  | 'Audit';
+  | 'Audit'
+  | 'Sessions';
 
 export interface PageProps {
   title?: string;

@@ -98,6 +98,16 @@ export const routes: AppRoute[] = [
     permission: PERMISSION_CODE.iamAuditRead,
     component: 'Audit',
   },
+  {
+    path: '/sessions',
+    name: 'Sessions',
+    title: '登录会话',
+    description: '查看当前设备会话并撤销 Refresh Token。',
+    icon: 'SettingOutlined',
+    showInMenu: true,
+    sort: 90,
+    component: 'Sessions',
+  },
 ];
 
 export const DEFAULT_REDIRECT = '/dashboard';

@@ -2,7 +2,7 @@
 
 独立的 AI 知识库服务。当前里程碑：**Knowledge V5**（企业级管理 + RAG 评测初始化）。
 
-Knowledge 不替代 ERP 登录，也不直连 ERP MySQL。用户仍通过 Shell 登录；Knowledge 后端校验 JWT 签名后，再调用 ERP 内部身份内省确认租户成员与权限。
+Knowledge 不替代登录，也不直连 IAM / ERP 业务库。用户通过 Shell 登录 IAM；Knowledge 本地校验 IAM 签发的 RS256 JWT，并从 Redis 读取授权快照。删除知识库等高温操作回源 `POST /api/v1/internal/authorize`。文档共享 ACL 由本服务检查。
 
 ## 本地运行
 
@@ -19,7 +19,7 @@ CREATE DATABASE neorvion_knowledge_test;
 cp services/knowledge/.env.example services/knowledge/.env
 ```
 
-把 `DATABASE_URL` 改成本机 PostgreSQL，把 `ERP_JWT_SECRET` 设成与 `services/erp/.env` 的 `SECRET_KEY` 相同，把 `ERP_INTERNAL_SERVICE_KEY` 设成与 ERP `INTERNAL_SERVICE_KEY` 相同。
+把 `DATABASE_URL` 改成本机 PostgreSQL。`IAM_JWKS_URL` 指向 IAM `:8010`。生产必须配置 `IAM_AUTHORIZE_URL` 与 `IAM_INTERNAL_KEY`。不要再设置已删除的 `ERP_JWT_SECRET` / `ERP_INTERNAL_SERVICE_KEY`。
 
 3. 安装依赖并迁移：
 

@@ -2,7 +2,7 @@ from typing import Annotated
 
 from fastapi import Depends
 
-from app.api.deps import DbSession, TenantContextDep
+from app.api.deps import DbSession, HighRiskTenantContextDep, TenantContextDep
 from app.core.permissions import PermissionCode
 from app.core.tenant import TenantContext
 from app.services.authorization import AuthorizationService
@@ -16,6 +16,16 @@ def require_permission(*codes: str):
     """
 
     def dependency(context: TenantContextDep, session: DbSession) -> TenantContext:
+        AuthorizationService(session).require_all(context, codes)
+        return context
+
+    return dependency
+
+
+def require_high_risk_permission(*codes: str):
+    """敏感操作必须走 IAM 权威授权，不得只信 Redis 快照。"""
+
+    def dependency(context: HighRiskTenantContextDep, session: DbSession) -> TenantContext:
         AuthorizationService(session).require_all(context, codes)
         return context
 
@@ -102,7 +112,7 @@ ProductUpdateContext = Annotated[
 ]
 ProductDeleteContext = Annotated[
     TenantContext,
-    Depends(require_permission(PermissionCode.PRODUCT_DELETE)),
+    Depends(require_high_risk_permission(PermissionCode.PRODUCT_DELETE)),
 ]
 WarehouseReadContext = Annotated[
     TenantContext,
@@ -122,7 +132,7 @@ WarehouseDisableContext = Annotated[
 ]
 WarehouseDeleteContext = Annotated[
     TenantContext,
-    Depends(require_permission(PermissionCode.WAREHOUSE_DELETE)),
+    Depends(require_high_risk_permission(PermissionCode.WAREHOUSE_DELETE)),
 ]
 InventoryReadContext = Annotated[
     TenantContext,
@@ -202,7 +212,7 @@ CustomerDisableContext = Annotated[
 ]
 CustomerDeleteContext = Annotated[
     TenantContext,
-    Depends(require_permission(PermissionCode.CUSTOMER_DELETE)),
+    Depends(require_high_risk_permission(PermissionCode.CUSTOMER_DELETE)),
 ]
 OrderReadContext = Annotated[
     TenantContext,
@@ -410,7 +420,7 @@ RefundCreateContext = Annotated[
 ]
 RefundConfirmContext = Annotated[
     TenantContext,
-    Depends(require_permission(PermissionCode.REFUND_CONFIRM)),
+    Depends(require_high_risk_permission(PermissionCode.REFUND_CONFIRM)),
 ]
 PurchaseReturnReadContext = Annotated[
     TenantContext,
@@ -430,7 +440,7 @@ PurchaseReturnSubmitContext = Annotated[
 ]
 PurchaseReturnApproveContext = Annotated[
     TenantContext,
-    Depends(require_permission(PermissionCode.PURCHASE_RETURN_APPROVE)),
+    Depends(require_high_risk_permission(PermissionCode.PURCHASE_RETURN_APPROVE)),
 ]
 PurchaseReturnRejectContext = Annotated[
     TenantContext,
@@ -454,7 +464,7 @@ SupplierRefundCreateContext = Annotated[
 ]
 SupplierRefundConfirmContext = Annotated[
     TenantContext,
-    Depends(require_permission(PermissionCode.SUPPLIER_REFUND_CONFIRM)),
+    Depends(require_high_risk_permission(PermissionCode.SUPPLIER_REFUND_CONFIRM)),
 ]
 AnalyticsOverviewReadContext = Annotated[
     TenantContext,

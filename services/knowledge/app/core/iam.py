@@ -9,7 +9,7 @@ from cryptography.hazmat.primitives import serialization
 from redis import Redis
 
 from app.core.config import settings
-from neorvion_security import JwtVerifier, LocalJwtSigner, SnapshotStore
+from neorvion_security import HttpAuthorityClient, JwtVerifier, LocalJwtSigner, SnapshotStore
 
 iam_redis_client: Redis = Redis.from_url(settings.iam_redis_url, decode_responses=True)
 
@@ -52,8 +52,16 @@ def test_signer() -> LocalJwtSigner:
     )
 
 
+@lru_cache
+def authority_client() -> HttpAuthorityClient:
+    return HttpAuthorityClient(
+        url=settings.iam_authorize_url,
+        internal_key=settings.iam_internal_key,
+    )
+
+
 def ping_iam_store() -> bool:
-    """快照 Redis 可达即认为身份依赖可用；不访问 IAM HTTP。"""
+    """快照 Redis 可达即认为身份依赖可用；普通请求不访问 IAM HTTP。"""
     try:
         return bool(iam_redis_client.ping())
     except Exception:

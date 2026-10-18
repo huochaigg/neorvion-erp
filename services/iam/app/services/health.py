@@ -21,7 +21,7 @@ class HealthService:
             mysql=self._check_mysql(),
             redis="ok" if ping_redis() else "unavailable",
             worker="unavailable",
-            milestone="V12",
+            milestone="IAM-V2",
             version=settings.app_version,
             git_sha=settings.git_sha,
         )

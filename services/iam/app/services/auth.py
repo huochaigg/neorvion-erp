@@ -1,6 +1,7 @@
 """注册、登录、刷新与注销。JWT 与 Redis 会话由本层发出。"""
 
-from datetime import datetime
+from datetime import datetime, timedelta
+from uuid import uuid4
 
 from sqlalchemy.orm import Session
 
@@ -15,9 +16,12 @@ from app.core.security import (
     hash_password,
     verify_password,
 )
+from app.core.token_hash import hash_token_id
+from app.models.session import AuthSession
 from app.models.user import User, UserStatus
 from app.repositories.user import UserRepository
 from app.schemas.auth import TokenResponse, UserOut
+from app.services.session import SessionService
 from app.services.snapshots import SnapshotService
 
 
@@ -75,6 +79,8 @@ class AuthService:
         encrypted_password: str,
         key_id: str,
         challenge_id: str,
+        user_agent: str = "",
+        ip_address: str = "",
     ) -> tuple[TokenResponse, str, int, str]:
         """解密后校验 Argon2id。失败信息故意保持模糊，避免枚举邮箱。"""
         plain_password = self._unlock_password(
@@ -91,19 +97,43 @@ class AuthService:
         user.last_login_at = datetime.now()
         self.session.commit()
         self.snapshots.refresh_user(user.id)
-        return self._issue_tokens(user.id)
+        return self._issue_tokens(
+            user.id,
+            user_agent=user_agent,
+            ip_address=ip_address,
+        )
 
     def refresh(self, refresh_token: str, *, csrf_token: str | None) -> tuple[TokenResponse, str, int, str]:
+        """Refresh 轮换以数据库会话为准。Redis GETDEL 只加速单飞，重放检测看 family。"""
         claims = decode_token(refresh_token, expected_type="refresh")
-        consumed = token_store.consume_refresh_session(claims.jti)
-        if consumed is None or consumed[0] != claims.user_id:
+        incoming_hash = hash_token_id(claims.jti)
+        sessions = SessionService(self.session)
+        row = sessions.get_by_jti_hash(incoming_hash)
+        if row is None:
+            raced = sessions.get_by_previous_hash(incoming_hash)
+            stolen = raced
+            if stolen is None and claims.session_id:
+                from sqlalchemy import select
+
+                stolen = self.session.scalars(
+                    select(AuthSession).where(AuthSession.public_id == claims.session_id)
+                ).first()
+            if stolen is not None and stolen.user_id == claims.user_id:
+                sessions.revoke_family(stolen.family_id, reason="REPLAY")
+                self.session.commit()
+                self.snapshots.invalidate_sessions(stolen.user_id)
             raise AppError("登录已失效，请重新登录", code=40104, status_code=401)
-        _user_id, stored_csrf = consumed
-        if not csrf_token or not stored_csrf or csrf_token != stored_csrf:
-            raise AppError("刷新请求未通过 CSRF 校验", code=40108, status_code=401)
+        if row.revoked_at is not None or row.user_id != claims.user_id:
+            raise AppError("登录已失效，请重新登录", code=40104, status_code=401)
+        if not csrf_token or hash_token_id(csrf_token) != row.csrf_hash:
+            redis_hit = token_store.consume_refresh_session(claims.jti)
+            if redis_hit is None or redis_hit[1] != (csrf_token or ""):
+                raise AppError("刷新请求未通过 CSRF 校验", code=40108, status_code=401)
+        else:
+            token_store.consume_refresh_session(claims.jti)
         user = self._require_active_user(claims.user_id)
         self.snapshots.refresh_user(user.id)
-        return self._issue_tokens(user.id)
+        return self._rotate_tokens(user.id, row)
 
     def logout(self, refresh_token: str | None) -> None:
         if not refresh_token:
@@ -113,6 +143,18 @@ class AuthService:
         except AppError:
             return
         token_store.revoke_refresh_session(claims.jti)
+        incoming_hash = hash_token_id(claims.jti)
+        row = SessionService(self.session).get_by_jti_hash(incoming_hash)
+        if row is None and claims.session_id:
+            from sqlalchemy import select
+
+            row = self.session.scalars(
+                select(AuthSession).where(AuthSession.public_id == claims.session_id)
+            ).first()
+        if row is not None and row.revoked_at is None:
+            row.revoked_at = datetime.now()
+            row.revoke_reason = "LOGOUT"
+            self.session.commit()
 
     def change_password(
         self,
@@ -148,6 +190,7 @@ class AuthService:
             self.session.rollback()
             raise
         self.snapshots.invalidate_sessions(user.id)
+        SessionService(self.session).revoke_all(user.id, reason="PASSWORD")
         self.snapshots.refresh_user(user.id)
         return UserOut.model_validate(user)
 
@@ -184,11 +227,51 @@ class AuthService:
             raise AppError("账号已被禁用", code=40300, status_code=403)
         return user
 
-    def _issue_tokens(self, user_id: int) -> tuple[TokenResponse, str, int, str]:
+    def _issue_tokens(
+        self,
+        user_id: int,
+        *,
+        user_agent: str = "",
+        ip_address: str = "",
+        session_row: AuthSession | None = None,
+    ) -> tuple[TokenResponse, str, int, str]:
         token_version = self.snapshots.token_version(user_id)
-        access_token = create_access_token(user_id, token_version=token_version)
-        refresh_token, jti, ttl_seconds = create_refresh_token(user_id, token_version=token_version)
+        public_id = session_row.public_id if session_row is not None else uuid4().hex
+        family_id = session_row.family_id if session_row is not None else uuid4().hex
+        access_token = create_access_token(
+            user_id, token_version=token_version, session_id=public_id
+        )
+        refresh_token, jti, ttl_seconds = create_refresh_token(
+            user_id, token_version=token_version, session_id=public_id
+        )
         csrf_token = token_store.new_csrf_token()
+        now = datetime.now()
+        expires_at = now + timedelta(seconds=ttl_seconds)
+        jti_hash = hash_token_id(jti)
+        csrf_hash = hash_token_id(csrf_token)
+        if session_row is None:
+            self.session.add(
+                AuthSession(
+                    public_id=public_id,
+                    user_id=user_id,
+                    family_id=family_id,
+                    refresh_jti_hash=jti_hash,
+                    previous_jti_hash=None,
+                    csrf_hash=csrf_hash,
+                    user_agent=(user_agent or "")[:255],
+                    ip_address=(ip_address or "")[:64],
+                    created_at=now,
+                    last_seen_at=now,
+                    expires_at=expires_at,
+                )
+            )
+        else:
+            session_row.previous_jti_hash = session_row.refresh_jti_hash
+            session_row.refresh_jti_hash = jti_hash
+            session_row.csrf_hash = csrf_hash
+            session_row.last_seen_at = now
+            session_row.expires_at = expires_at
+        self.session.commit()
         token_store.save_refresh_session(
             jti=jti,
             user_id=user_id,
@@ -200,3 +283,6 @@ class AuthService:
             expires_in=settings.access_token_ttl_seconds(),
         )
         return body, refresh_token, ttl_seconds, csrf_token
+
+    def _rotate_tokens(self, user_id: int, session_row: AuthSession) -> tuple[TokenResponse, str, int, str]:
+        return self._issue_tokens(user_id, session_row=session_row)

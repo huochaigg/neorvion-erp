@@ -74,8 +74,12 @@ export function RolesPage(props: PageProps) {
   });
 
   const updateMutation = useMutation({
-    mutationFn: (values: { roleId: number; name: string; description: string }) =>
-      updateRole(values.roleId, { name: values.name, description: values.description }),
+    mutationFn: (values: { roleId: number; name?: string; description?: string; status?: string }) =>
+      updateRole(values.roleId, {
+        name: values.name,
+        description: values.description,
+        status: values.status,
+      }),
     onSuccess: () => {
       message.success('角色已更新');
       setEditor(null);
@@ -130,6 +134,14 @@ export function RolesPage(props: PageProps) {
       render: (value: boolean) => <Tag color={value ? 'blue' : 'default'}>{value ? '系统' : '自定义'}</Tag>,
     },
     {
+      title: '状态',
+      dataIndex: 'status',
+      width: 90,
+      render: (value: string | undefined) => (
+        <Tag color={value === 'DISABLED' ? 'default' : 'success'}>{value === 'DISABLED' ? '停用' : '启用'}</Tag>
+      ),
+    },
+    {
       title: '成员数',
       dataIndex: 'member_count',
       width: 90,
@@ -161,6 +173,27 @@ export function RolesPage(props: PageProps) {
             <Can permission={PERMISSION_CODE.tenantRoleUpdate}>
               <Button type="link" size="small" onClick={() => setEditor({ type: 'edit', role: record })}>
                 编辑
+              </Button>
+            </Can>
+          )}
+          {record.code === 'OWNER' ? null : (
+            <Can permission={PERMISSION_CODE.tenantRoleUpdate}>
+              <Button
+                type="link"
+                size="small"
+                onClick={() => {
+                  const next = record.status === 'DISABLED' ? 'ACTIVE' : 'DISABLED';
+                  modal.confirm({
+                    title: next === 'DISABLED' ? `停用角色 ${record.name}？` : `启用角色 ${record.name}？`,
+                    content:
+                      next === 'DISABLED'
+                        ? '停用后该角色权限不再计入成员并集，已授予该角色的成员不会被自动移除。'
+                        : '启用后成员会重新获得该角色上的权限。',
+                    onOk: () => updateMutation.mutateAsync({ roleId: record.id, status: next }),
+                  });
+                }}
+              >
+                {record.status === 'DISABLED' ? '启用' : '停用'}
               </Button>
             </Can>
           )}
@@ -341,6 +374,7 @@ export function RolesPage(props: PageProps) {
             <p>名称：{viewing.name}</p>
             <p>编码：{viewing.code}</p>
             <p>类型：{viewing.is_system ? '系统' : '自定义'}</p>
+            <p>状态：{viewing.status === 'DISABLED' ? '停用' : '启用'}</p>
             <p>成员数：{viewing.member_count}</p>
             <p>说明：{viewing.description || '-'}</p>
             <p>权限：</p>

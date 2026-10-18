@@ -1,8 +1,8 @@
-# Neorvion IAM V1 统一认证与权限架构手册
+# Neorvion IAM 统一认证与权限架构手册
 
-> 依据仓库 **2026-10-18 源码**（身份拆分后的 IAM V1 / 根 README 所称 V12）。对象：有前端经验、正在建立 FastAPI / SQLAlchemy / 多服务思维的工程师。
+> 依据仓库 **2026-10-18 源码**（IAM V2：会话表、授权版本、高风险回源）。对象：有前端经验、正在建立 FastAPI / SQLAlchemy / 多服务思维的工程师。
 >
-> **铁规则：** 【已实现】必须能指出文件。【部分实现】必须写出断点。【未实现】和【未来建议】绝不能说成当前系统能力。面试时按这张表说话，不要把目标架构讲成生产经验。
+> **铁规则：** 【已实现】必须能指出文件。【部分实现】必须写出断点。【未实现】和【未来建议】绝不能说成当前系统能力。面试时按这张表说话，不要把目标架构讲成生产经验。内部 SSO **不是** OIDC。
 
 状态图例：
 
@@ -11,7 +11,7 @@
 | 【已实现】 | 有可运行代码，通常还有测试 |
 | 【部分实现】 | 有模型、API 或参数，但缺口明确（未接线、未打通、无测试） |
 | 【未实现】 | 仓库中没有对应服务、表或接口 |
-| 【未来建议】 | 值得做，但不是 V1 能力 |
+| 【未来建议】 | 值得做，但不是当前 IAM V2 能力 |
 
 相对路径均以本文件为起点：`docs/architecture/`。例如 IAM 登录服务为 [`../../services/iam/app/services/auth.py`](../../services/iam/app/services/auth.py)。
 
@@ -59,24 +59,24 @@
 | --- | --- | --- | --- | --- | --- |
 | 注册 / 登录 / 退出 | 【已实现】 | [`services/iam/app/api/v1/auth.py`](../../services/iam/app/api/v1/auth.py)、[`services/iam/app/services/auth.py`](../../services/iam/app/services/auth.py) | `POST /register` `/login` `/logout` | 登录失败不区分邮箱是否存在 | [`tests/test_auth.py`](../../services/iam/tests/test_auth.py) |
 | Access Token | 【已实现】 | [`neorvion_security/jwt.py`](../../packages/python/neorvion_security/neorvion_security/jwt.py) `LocalJwtSigner.sign` | RS256，响应体 `access_token` | 内存持有，刷新页面靠 Refresh | 同上 |
-| Refresh Token | 【已实现】 | [`token_store.py`](../../services/iam/app/core/token_store.py) | HttpOnly Cookie `neorvion_refresh`，Redis `iam:refresh:{jti}` | **无 Session 表**，无设备列表 | `test_register_login_me_and_refresh` |
+| Refresh Token | 【已实现】 | [`token_store.py`](../../services/iam/app/core/token_store.py)、[`models/session.py`](../../services/iam/app/models/session.py) | HttpOnly Cookie + Redis GETDEL；`auth_sessions` 存 jti 哈希 | 明文 Refresh 不入库 | `test_refresh_replay_revokes_family` |
 | RSA-OAEP 密码传输 | 【已实现】 | [`rsa_crypto.py`](../../services/iam/app/core/rsa_crypto.py)、[`apps/shell/src/lib/password.ts`](../../apps/shell/src/lib/password.ts) | 与 JWT 密钥分离；challenge GETDEL | 挑战 300s 过期 | 登录相关测试 |
 | Argon2id | 【已实现】 | [`security.py`](../../services/iam/app/core/security.py) `PasswordHasher` | 明文不入库 | — | 登录失败用例 |
 | RS256 + JWKS | 【已实现】 | [`jwt.py`](../../packages/python/neorvion_security/neorvion_security/jwt.py)、[`jwt_keys.py`](../../services/iam/app/core/jwt_keys.py) | `GET /.well-known/jwks.json`；可带上一把公钥 | 业务进程内缓存 300s | `test_alg_none_and_wrong_issuer_are_rejected` |
 | 多微前端 SSO | 【已实现】 | [`apps/shell/src/api/client.ts`](../../apps/shell/src/api/client.ts)、[`ErpMicroApp.tsx`](../../apps/shell/src/micro/ErpMicroApp.tsx) | 同一 Access + Cookie；Wujie props | **不是 OIDC** | 前端以单测/手工为主 |
 | 用户 / 租户 / 成员 | 【已实现】 | [`models/user.py`](../../services/iam/app/models/user.py)、[`tenant.py`](../../services/iam/app/models/tenant.py) | 一人多企业 | 无 OWNER 转移 API | `test_member_cannot_access_other_tenant` |
 | 多应用统一 RBAC | 【部分实现】 | [`permissions.py`](../../services/iam/app/core/permissions.py)、[`seed_permissions.py`](../../services/iam/app/scripts/seed_permissions.py) | 种子应用 iam/erp/knowledge；角色可勾多模块 code | Copilot 仅 UI 占位；编码并非全是 `erp:` 前缀 | IAM 角色测试 |
-| 权限注册与同步 | 【已实现】 | [`catalog.py`](../../services/iam/app/api/v1/catalog.py) `sync_permissions` | 内部接口 insert-only | 管理页**不能**手建任意 code | 无独立 pytest 名，靠同步密钥校验 |
+| 权限注册与同步 | 【已实现】 | [`catalog.py`](../../services/iam/app/api/v1/catalog.py) `sync_permissions` | 确定性 UPSERT 名称/说明，不改 role_permissions | 管理页**不能**手建任意 code | 同步密钥 403 |
 | 菜单权限 | 【部分实现】 | IAM [`menus` 表](../../services/iam/app/models/catalog.py)；ERP [`routes.ts`](../../apps/erp/src/router/routes.ts) | 子应用按 `permission` 过滤菜单 | `menus` 表**未驱动** ERP 运行时菜单；Shell 顶栏不按权限藏入口 | IAM `filterMenuRoutes` 侧 |
 | 按钮权限 | 【部分实现】 | [`Can.tsx`](../../apps/erp/src/components/Can.tsx) | 无权限则 hide/disable | 不是安全边界；无 `buttons` 表 | UI 测试零星 |
 | API 权限 | 【已实现】 | [`rbac_deps.py`](../../services/iam/app/api/rbac_deps.py)；Knowledge [`deps.py`](../../services/knowledge/app/api/deps.py) | FastAPI Depends | IAM 查库；ERP/Knowledge 信快照 | `test_viewer_cannot_upload` 等 |
-| 权限缓存与撤销 | 【部分实现】 | [`snapshot.py`](../../packages/python/neorvion_security/neorvion_security/snapshot.py)、[`snapshots.py`](../../services/iam/app/services/snapshots.py) | Redis 快照 + `tver`/`aver` | **无 Pub/Sub**；DB 已提交但未写 Redis 时最长可到快照 TTL；`high_risk` 未接线 | `test_role_permission_revoke_updates_snapshot` |
+| 权限缓存与撤销 | 【部分实现】 | [`authz_revision.py`](../../services/iam/app/services/authz_revision.py)、[`snapshot.py`](../../packages/python/neorvion_security/neorvion_security/snapshot.py) | 事务内 `authz_revisions` + outbox；Redis 加速 | **普通接口**崩溃窗口仍可达 TTL；无跨库 2PC，**不是强一致** | `test_authorize_uses_database_not_stale_snapshot` |
 | 多租户隔离 | 【已实现】 | [`TenantMixin`](../../services/erp/app/db/mixins.py)；Knowledge Repository | SQL 必带 `tenant_id` | 跨库无 FK | 多份 `*_isolation*` 测试 |
 | 资源级 ACL | 【部分实现】 | [`access.py`](../../services/knowledge/app/services/access.py) | 知识库 grants | ERP 订单主要靠租户隔离+归属字段，不是独立 ACL 引擎；无 ABAC | `test_grants_restrict_non_owner` |
-| Session 持久化 | 【未实现】 | — | Refresh 只在 Redis | 无设备管理、无多端踢除精细列表 | — |
+| Session 持久化 | 【已实现】 | [`api/v1/sessions.py`](../../services/iam/app/api/v1/sessions.py)、[`SessionsPage.tsx`](../../apps/iam/src/pages/system/SessionsPage.tsx) | 列出/撤销/全退；JWT `sid` | Access 短期窗口内普通读接口仍可能成功 | `test_list_and_revoke_session` |
 | OIDC | 【未实现】 | 全仓无 authorize / id_token | 内部 Cookie SSO | 不能对接企业 IdP | — |
 | Agent / Copilot 授权 | 【未实现】 | 无 `services/copilot`；[`agent-readiness.md`](../agent-readiness.md) 仅边界 | 应用注册 UI 可填 audience | Tool 未实现 | `neorvion-copilot` 仅用于错误 aud 测试 |
-| 高风险实时鉴权 | 【未实现】 | `SnapshotStore.load(high_risk=)` 参数存在但**无人传 True**，且与上一行 aver 检查重复 | — | 不得宣称退款会实时打 IAM | — |
+| 高风险实时鉴权 | 【已实现】 | [`internal.py`](../../services/iam/app/api/v1/internal.py) `authorize`；ERP/Knowledge `get_high_risk_context` | 退款确认、删除仓库/知识库等回源 IAM 库 | 生产必须配置 `IAM_AUTHORIZE_URL`；开发无密钥时走快照仅供测试 | `test_authorize_rejects_missing_permission` |
 
 ---
 
@@ -281,7 +281,7 @@ Access 默认 30 分钟。401 → 模块级 `refreshPromise` 单飞 → `POST /a
 
 若已 `INCR aver` 但未 `save` 新 JSON：下一请求 **拒绝**（版本不一致）。这是 fail-closed，不是放行。
 
-`high_risk` **未接线**，退款不会额外实时打 IAM。【未实现】
+高风险路径【已实现】回源 IAM；普通路径仍可能吃到崩溃窗口内的旧快照。【部分实现】立刻生效。
 
 ```mermaid
 sequenceDiagram
@@ -476,20 +476,20 @@ MySQL 示意：`tenant_members` 多一行；`member_roles` 多一行。Redis 示
 
 ### 7.4 必须写进面试的安全边界
 
-**V1 没有高风险操作实时重读。** 不得说「撤权立即、强一致、退款回源 IAM」。
+**普通接口不宣称强一致撤权。** 高风险（退款确认、删除仓库/商品/客户、采购退货审批、删除知识库）回源 IAM 数据库。【已实现】`POST /api/v1/internal/authorize`。
 
 攻击面：
 
-| 风险 | V1 对策 | 剩余 |
+| 风险 | V2 对策 | 剩余 |
 | --- | --- | --- |
 | XSS 偷 Refresh | HttpOnly + Path | Access 仍能被脚本读，有效期内可用 |
 | CSRF 续命 | Double Submit + Origin | SameSite=Lax 开发环境非 HTTPS |
 | alg=none / 错 iss/aud | 硬编码 RS256 | — |
 | IDOR | tenant 谓词 + 404 模糊 | 漏写 tenant 的查询仍是漏洞 |
 | 跨租户 Header | 快照校验 | — |
-| 重放登录密文 | challenge GETDEL | — |
-| 自授 OWNER | API 拒绝 | 平台管理员引导缺失 |
-| JWT 泄露 | 短 Access | 无设备吊销列表 |
+| 重放 Refresh | family 整族撤销 | Access 短期窗口内普通读接口仍可能成功 |
+| 自授 OWNER | API 拒绝 | OWNER 转移 API 仍缺 |
+| JWT 泄露 | 短 Access + 会话表 + 高风险查 sid | 普通读接口不在线校验会话 |
 
 ---
 
@@ -826,16 +826,16 @@ MySQL 示意：`tenant_members` 多一行；`member_roles` 多一行。Redis 示
 **【技术原理】** 控制面下发失败窗口。  
 **【Neorvion】** 场景 11。  
 **【追问】** 高风险呢？  
-**【深入回答】** high_risk 未接线，不能声称实时。  
-**【局限】** 【未实现】强一致回源。
+**【深入回答】** 退款/删除回源 IAM 数据库，不吃旧 Redis 快照；普通接口仍可能有 TTL 窗口。  
+**【局限】** 【未实现】普通接口强一致。
 
 **36.【面试题】** 多容器权限缓存会脏吗？  
 **【30～60秒回答】** 业务每次读 Redis，不脏；脏的是 JWKS 进程缓存。  
 **【技术原理】** 共享存储 vs 本地缓存。  
 **【Neorvion】** deps 每请求 load。  
 **【追问】** Worker？  
-**【深入回答】** ERP handler 手搓空上下文，比 HTTP 弱。  
-**【局限】** 【部分实现】异步任务鉴权。
+**【深入回答】** `_context` 走 `load_for_principal`，缺创建者/租户或快照则拒绝；报表导出按 kind 校验 analytics 权限。  
+**【局限】** Worker 仍不是高风险 HTTP 权威通道。
 
 ### 微服务与故障
 
@@ -952,7 +952,7 @@ MySQL 示意：`tenant_members` 多一行；`member_roles` 多一行。Redis 示
 **【技术原理】** 控制面/数据面。  
 **【Neorvion】** 根 README。  
 **【追问】** 和 Keycloak 差什么？  
-**【深入回答】** 无 OIDC/联邦/设备/Outbox。  
+**【深入回答】** 无 OIDC/联邦；有设备会话表与授权 outbox，但不是完整身份产品。  
 **【局限】** 见第十一章。
 
 ### 系统设计比较（10 题）
@@ -962,8 +962,8 @@ MySQL 示意：`tenant_members` 多一行；`member_roles` 多一行。Redis 示
 **【技术原理】** 一致性与可用性。  
 **【Neorvion】** 从 ErpIdentityClient 迁到 RS256+快照。  
 **【追问】** 混合？  
-**【深入回答】** 读路径本地，删库退款回源 IAM。这正是未接线的 high_risk。  
-**【局限】** 只有本地路径。
+**【深入回答】** 读路径本地验签+快照，删库退款走 IAM `internal/authorize`。开发无密钥时降级为快照仅供测试。  
+**【局限】** 生产必须配置权威通道，否则高风险拒绝。
 
 **52.【面试题】** 权限放 JWT vs Redis 快照 vs 每次查 IAM DB？  
 **【30～60秒回答】** JWT 最快难撤；查库最准最慢；快照折中。  
@@ -1054,7 +1054,7 @@ MySQL 示意：`tenant_members` 多一行；`member_roles` 多一行。Redis 示
 5. 快照键与 tver/aver，诚实讲延迟。  
 6. 微前端单飞与切租户 epoch。  
 7. 上传四段校验。  
-8. **主动讲缺口：** OIDC、Copilot、high_risk、平台管理员、Worker、部署文档滞后。  
+8. **主动讲缺口：** OIDC、Copilot、普通接口撤权窗口、OWNER 转移、菜单表未驱动 ERP 运行时菜单、浏览器级并发 Refresh 未在本轮 E2E。  
 9. 故障矩阵。  
 10. 收尾：实践而非夸大。
 
@@ -1076,8 +1076,8 @@ MySQL 示意：`tenant_members` 多一行；`member_roles` 多一行。Redis 示
 14. Shell 单飞。  
 15. 内部 SSO ≠ OIDC。  
 16. Copilot 未实现。  
-17. high_risk 未接线。  
-18. 无 Session 表。  
+17. 高风险回源 IAM，普通接口仍有快照窗口。  
+18. Session 表已落地，Access 短期窗口内普通读接口不在线校验。  
 19. ERP users 是投影。  
 20. 撤权并非强一致立即。
 
@@ -1137,24 +1137,24 @@ sequenceDiagram
 
 ---
 
-## 十一、V2 及未来优化
+## 十一、V2 落地与未来优化
 
-以下**不是 V1 能力**。不要写进「我们系统已经」。
+IAM V2 **已经落地**的不要再写进「未来」：Session 表、高风险回源、`authz_revisions`+outbox、Worker `load_for_principal`、平台管理员引导脚本。仍须诚实标注限制。
 
-| 项 | 价值 | 难度 | 优先级 | 适用场景 |
-| --- | --- | --- | --- | --- |
-| Session 表 / 设备管理 | 能列设备、踢一端、审计登录地 | 中 | 中 | 真有多端用户 |
-| OIDC / 外部 IdP | 企业微信、Google Workspace 登录 | 高 | 低（仅内部宿主时） | 对外或企业客户 |
-| Copilot 用户委托 + Tool 权限 | Agent 不越权写库存 | 高 | 产品需要时高 | 真做 Agent |
-| 高风险实时鉴权 | 退款/删库不吃过期快照 | 中 | **高** | 任何写资金/库存 |
-| 快照 Outbox / 对账 | 消除 commit 后崩溃窗口 | 中 | 高 | 认真当控制面 |
-| Redis HA + 多实例 IAM | 授权平面可用 | 中 | 上云时高 | 多节点 |
-| 审计监控告警 | 发现提权与跨租户扫描 | 中 | 中 | 有真实用户 |
-| JWKS 自动轮换 Job | 少人工 | 中 | 中 | 密钥合规 |
-| 菜单表驱动微前端 | 配置一处 | 中 | 低 | 菜单常变 |
-| 平台管理员引导 + OWNER 转移 | 堵住运营口子 | 低 | **高** | 现在就缺 |
-| 委托授权 ⊆ 调用者权限 | 防 ADMIN 乱授 | 中 | 中 | 精细分工 |
-| ERP Worker 走 `load_for_principal` | 异步与 HTTP 同权 | 低 | 高 | 已有任务系统 |
+| 项 | 状态 | 说明 |
+| --- | --- | --- |
+| Session 表 / 设备管理 | 【已实现】 | 列出/撤销/全退；Refresh 哈希；重放撤 family。Access 窗口内普通读接口不在线校验 |
+| 高风险实时鉴权 | 【已实现】 | `internal/authorize` 读库；生产必须 `IAM_AUTHORIZE_URL`；开发无密钥走 snapshot-dev |
+| 快照 Outbox | 【部分实现】 | 同事务写 outbox，提交后 drain；普通接口崩溃窗口仍可达 TTL |
+| ERP Worker `load_for_principal` | 【已实现】 | 缺身份或快照拒绝；不是高风险 HTTP 通道 |
+| 平台管理员引导 | 【已实现】 | `bootstrap_platform_admin` 读环境变量，不打印密码 |
+| OWNER 转移 API | 【未实现】 | 仍无转移接口 |
+| OIDC / 外部 IdP | 【未实现】 | 内部 SSO 而已 |
+| Copilot 用户委托 + Tool 权限 | 【未实现】 | 无 `services/copilot` |
+| Redis HA + 多实例 IAM | 【未来建议】 | Compose 单实例 |
+| 菜单表驱动 ERP/Knowledge 运行时菜单 | 【未实现】 | `menus` 表给 IAM 管理页；子应用仍用各自 `routes.ts` |
+| 委托授权 ⊆ 调用者权限 | 【未实现】 | ADMIN 可授自己拥有范围外的目录码，只要角色树允许 |
+| 普通接口强一致撤权 | 【未实现】 | 无跨 Redis/MySQL 2PC |
 
 Agent 安全执行要点（仅建议）：Tool 带**当前用户** JWT；写操作预览+确认；禁止直连 MySQL；禁止把向量库数字当可写真相。见 [`agent-readiness.md`](../agent-readiness.md)。
 
@@ -1162,18 +1162,15 @@ Agent 安全执行要点（仅建议）：Tool 带**当前用户** JWT；写操�
 
 ## 十二、源码与文档不一致问题
 
-以源码为准，记录如下：
+V2 已修复：真实权限码写入 README；高风险回源 IAM；deployment 以 IAM `:8010` 为身份中心；Knowledge `access.py` 改为 IAM 描述；IAM 前端测试改为 IAM 路由。
 
-1. 根 README 举例 `erp:orders:read` / `knowledge:documents:upload`，**实际编码**是 `order:read` / `knowledge:create`。  
-2. README 写「高风险操作每次重读快照」，`high_risk` **从未被调用**。  
-3. [`deployment-production.md`](../deployment-production.md) 仍按 ERP 8011 身份中心描述，**未完整反映 IAM 8010**。  
-4. [`access.py`](../../services/knowledge/app/services/access.py) 文件头仍写「复用 ERP 用户与租户」。  
-5. IAM `apps/iam` 残留未挂路由的 ERP 页面；`access.test.ts` 可能仍断言旧路径。  
-6. Knowledge 开发直连 8012，生产 Nginx 示例主要把剩余 `/api/` 打到 ERP，Knowledge 需单独 location。  
-7. `PUBLIC_ROUTES` 存在，但未见全局中间件强制白名单，靠各路由 Depends。  
-8. ERP 异步任务鉴权弱于 HTTP。
+仍须以源码为准的剩余缺口：
 
-后续文档优先修 1–3；代码优先修 high_risk 接线、Worker 上下文、部署文档。本次**只改文档**。
+1. Nginx `/api/v1/audit-logs` 指向 IAM，Knowledge 同名审计若走网关会打错服务；`/api/v1/tasks` 走 ERP catch-all，Knowledge 任务不经该前缀。  
+2. IAM `menus` 表**未驱动** ERP / Knowledge 运行时菜单。  
+3. `PUBLIC_ROUTES` 存在，但未见全局中间件强制白名单，靠各路由 Depends。  
+4. 网关 profile 下 Knowledge 容器需一并启动，否则 location 会 502。  
+5. 浏览器级多子应用并发 401、会话撤销后各微前端即时刷新：**代码有单飞 Refresh**，本轮未做浏览器 E2E。
 
 ---
 

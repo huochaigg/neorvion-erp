@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any, Protocol
 
@@ -127,6 +128,9 @@ class AuthzSnapshot:
             must_change_password=self.must_change_password,
             display_name=self.display_name,
             email=self.email,
+            session_id="",
+            high_risk_verified=False,
+            authz_source="snapshot",
         )
 
 
@@ -162,6 +166,10 @@ class SnapshotStore:
         """角色、成员权限变更时递增，使旧快照立即失效。"""
         return int(self.redis.incr(authz_version_key(user_id, tenant_id)))
 
+    def set_authz_version(self, user_id: int, tenant_id: int, version: int) -> None:
+        """把数据库事务内递增的授权版本写入 Redis，供普通接口比对。"""
+        self.redis.set(authz_version_key(user_id, tenant_id), str(int(version)), ex=self.ttl_seconds)
+
     def current_token_version(self, user_id: int) -> int:
         raw = self.redis.get(token_version_key(user_id))
         return int(raw) if raw is not None else 0
@@ -172,8 +180,20 @@ class SnapshotStore:
         claims: JwtClaims,
         tenant_id: int,
         high_risk: bool = False,
+        authority: Callable[[], TenantContext] | None = None,
     ) -> TenantContext:
-        """读取并校验快照。Redis 失败、缺失或版本不一致时拒绝，不得放行。"""
+        """读取并校验快照。Redis 失败、缺失或版本不一致时拒绝，不得放行。
+
+        high_risk=True 时必须提供 authority（回源 IAM 数据库）。Pub/Sub 与 Redis
+        只能加速失效，不能作为高风险操作的正确性保证。
+        """
+        if high_risk:
+            if authority is None:
+                raise SecurityError("高风险操作缺少权威授权通道", code=50314, status_code=503)
+            context = authority()
+            if not context.high_risk_verified:
+                raise SecurityError("高风险操作缺少权威授权通道", code=50314, status_code=503)
+            return context
         try:
             stored_ver = self.redis.get(token_version_key(claims.user_id))
             raw = self.redis.get(snapshot_key(claims.user_id, tenant_id))
@@ -189,15 +209,32 @@ class SnapshotStore:
         current_aver = int(aver) if aver is not None else snapshot.authz_version
         if snapshot.authz_version != current_aver:
             raise SecurityError("权限已变更，请重新进入企业", code=40321, status_code=403)
-        if high_risk and snapshot.authz_version != current_aver:
-            raise SecurityError("权限已变更，请重新进入企业", code=40321, status_code=403)
         if snapshot.user_id != claims.user_id or snapshot.tenant_id != tenant_id:
             raise SecurityError("租户不存在或不可访问", code=40410, status_code=404)
         if snapshot.status != "ACTIVE":
             raise SecurityError("无权访问该租户", code=40310, status_code=403)
         if snapshot.tenant_status != "ACTIVE":
             raise SecurityError("无权访问该租户", code=40310, status_code=403)
-        return snapshot.to_context(token_jti=claims.jti)
+        context = snapshot.to_context(token_jti=claims.jti)
+        return TenantContext(
+            user_id=context.user_id,
+            tenant_id=context.tenant_id,
+            member_id=context.member_id,
+            is_owner=context.is_owner,
+            role=context.role,
+            permission_codes=context.permission_codes,
+            role_codes=context.role_codes,
+            token_jti=context.token_jti,
+            token_version=context.token_version,
+            authz_version=context.authz_version,
+            is_platform_admin=context.is_platform_admin,
+            must_change_password=context.must_change_password,
+            display_name=context.display_name,
+            email=context.email,
+            session_id=claims.session_id,
+            high_risk_verified=False,
+            authz_source="snapshot",
+        )
 
     def load_for_principal(self, *, user_id: int, tenant_id: int) -> TenantContext:
         """Worker / 内部任务按 user_id + tenant_id 还原快照，不解析 JWT。

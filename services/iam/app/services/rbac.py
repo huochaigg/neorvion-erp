@@ -45,17 +45,37 @@ class RoleService:
     def seed_permission_catalog(self) -> int:
         """幂等写入权限目录：已有 code 只更新名称/模块/说明，不删行。不 commit。"""
         created = 0
+        from app.models.catalog import Application
+
+        apps = {item.code: item.id for item in self.session.scalars(select(Application)).all()}
+
+        def _app_id(module: str) -> int | None:
+            if module in {"iam", "tenant"}:
+                return apps.get("iam")
+            if module == "knowledge":
+                return apps.get("knowledge")
+            return apps.get("erp")
+
         for code, name, module, description in PERMISSION_CATALOG:
             row = self.permissions.get_by_code(code)
             if row is None:
                 self.permissions.add(
-                    Permission(code=code, name=name, module=module, description=description)
+                    Permission(
+                        code=code,
+                        name=name,
+                        module=module,
+                        description=description,
+                        application_id=_app_id(module),
+                        status="ACTIVE",
+                    )
                 )
                 created += 1
             else:
                 row.name = name
                 row.module = module
                 row.description = description
+                if row.application_id is None:
+                    row.application_id = _app_id(module)
         self.session.flush()
         return created
 
@@ -241,17 +261,35 @@ class RoleService:
         """更新自定义角色名称/描述。系统角色禁止改；不改权限列表。code 创建后只读。"""
         self.auth.require_all(context, (PermissionCode.TENANT_ROLE_UPDATE,))
         role = self._require_role(context.tenant_id, role_id)
-        if role.is_system:
-            raise AppError("系统角色不允许修改", code=40040, status_code=400)
+        if role.is_system and (payload.name is not None or payload.description is not None):
+            raise AppError("系统角色不允许修改名称或说明", code=40040, status_code=400)
         if payload.name is not None:
             role.name = payload.name.strip()
         if payload.description is not None:
             role.description = payload.description.strip()
+        if payload.status is not None:
+            status = payload.status.strip().upper()
+            if status not in {"ACTIVE", "DISABLED"}:
+                raise AppError("角色状态不合法", code=40035, status_code=400)
+            if role.code == SystemRoleCode.OWNER and status == "DISABLED":
+                raise AppError("不能停用所有者角色", code=40040, status_code=400)
+            role.status = status
+            from app.services.authz_revision import bump_role_members
+
+            bump_role_members(self.session, tenant_id=context.tenant_id, role_id=role.id)
         try:
             self.session.commit()
         except Exception:
             self.session.rollback()
             raise
+        if payload.status is not None:
+            from app.services.snapshots import SnapshotService
+
+            SnapshotService(self.session).refresh_role_members(
+                tenant_id=context.tenant_id,
+                role_id=role.id,
+            )
+            SnapshotService(self.session).drain_outbox()
         return self.get_role(context, role.id)
 
     def replace_role_permissions(
@@ -282,6 +320,9 @@ class RoleService:
             )
             # bulk DELETE 不会自动过期已加载的 role_permissions。
             self.session.expire(role, ["role_permissions"])
+            from app.services.authz_revision import bump_role_members
+
+            bump_role_members(self.session, tenant_id=context.tenant_id, role_id=role.id)
             self.session.commit()
         except Exception:
             self.session.rollback()
@@ -292,6 +333,7 @@ class RoleService:
             tenant_id=context.tenant_id,
             role_id=role.id,
         )
+        SnapshotService(self.session).drain_outbox()
         return self.get_role(context, role.id)
 
     def delete_role(self, context: TenantContext, role_id: int) -> None:
@@ -570,6 +612,8 @@ class RoleService:
             module=item.module,
             description=item.description,
             deprecated=is_deprecated_permission(item.code),
+            application_id=item.application_id,
+            status=item.status or "ACTIVE",
         )
 
     @staticmethod
@@ -588,6 +632,7 @@ class RoleService:
             code=role.code,
             description=role.description,
             is_system=role.is_system,
+            status=role.status or "ACTIVE",
             created_at=role.created_at,
             updated_at=role.updated_at,
             permissions=permissions,

@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field, field_validator
 
 
 class GrantCreateIn(BaseModel):
-    user_id: int = Field(gt=0, description="ERP 用户 ID")
+    user_id: int = Field(gt=0, description="IAM 用户 ID")
     permission: str = Field(default="READ", description="READ / WRITE / ADMIN")
 
     @field_validator("permission")

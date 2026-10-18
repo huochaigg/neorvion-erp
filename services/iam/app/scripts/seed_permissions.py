@@ -17,15 +17,16 @@ def main() -> None:
     session = SessionLocal()
     try:
         service = RoleService(session)
-        created = service.seed_permission_catalog()
-        expanded = service.expand_legacy_manage_permissions()
-        tenants = service.backfill_existing_tenants()
         for code, name, audience, description in _APPS:
             exists = session.scalars(select(Application).where(Application.code == code)).first()
             if exists is None:
                 session.add(
                     Application(code=code, name=name, audience=audience, description=description)
                 )
+        session.flush()
+        created = service.seed_permission_catalog()
+        expanded = service.expand_legacy_manage_permissions()
+        tenants = service.backfill_existing_tenants()
         session.commit()
     except Exception:
         session.rollback()

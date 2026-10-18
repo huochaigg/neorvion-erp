@@ -63,7 +63,6 @@ collect_ignore = [
     "test_tenants.py",
     "test_members.py",
     "test_rbac.py",
-    "test_internal_identity.py",
     "test_my_permissions.py",
     "test_v235_rbac.py",
 ]

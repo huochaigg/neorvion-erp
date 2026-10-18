@@ -6,7 +6,11 @@ from sqlalchemy.orm import Session
 
 from app.core.exceptions import AppError, from_security_error
 from app.core.iam import snapshot_store
-from app.core.permissions import LEGACY_MANAGE_EXPANSION, known_permission_codes
+from app.core.permissions import (
+    HIGH_RISK_PERMISSION_CODES,
+    LEGACY_MANAGE_EXPANSION,
+    known_permission_codes,
+)
 from app.core.tenant import TenantContext
 from app.schemas.tenant import MyPermissionsOut
 from neorvion_security import SecurityError
@@ -35,8 +39,10 @@ class AuthorizationService:
 
     def require_all(self, context: TenantContext, codes: Sequence[str]) -> None:
         """当前成员必须具备传入的全部权限，少一个就 403。"""
-        owned = self.permission_codes(context)
         self._assert_known(codes)
+        if any(code in HIGH_RISK_PERMISSION_CODES for code in codes) and not context.high_risk_verified:
+            raise AppError("高风险操作未通过权威授权", code=50314, status_code=503)
+        owned = self.permission_codes(context)
         missing = [code for code in codes if code not in owned]
         if missing:
             raise AppError("缺少权限", code=40320, status_code=403)

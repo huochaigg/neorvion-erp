@@ -26,8 +26,10 @@ export function DashboardPage(_props: PageProps) {
           </Card>
         </Col>
         <Col xs={24} md={8}>
-          <Card title="审计">
+          <Card title="审计与会话">
             <Link to="/audit">查看权限变更</Link>
+            <br />
+            <Link to="/sessions">管理登录会话</Link>
           </Card>
         </Col>
       </Row>

@@ -42,10 +42,21 @@ def get_current_user(request: Request, session: DbSession) -> User:
     """解析 Access Token 并加载当前用户。Refresh 不得依赖本函数。"""
     token = _extract_bearer_token(request)
     claims = decode_token(token, expected_type="access")
-    stored = redis_client.get(token_version_key(claims.user_id))
-    expected = int(stored) if stored is not None else 0
-    if claims.token_version != expected:
-        raise AppError("登录已失效，请重新登录", code=40104, status_code=401)
+    request.state.session_id = claims.session_id
+    if claims.session_id:
+        from app.services.session import SessionService
+
+        SessionService(session).require_active(user_id=claims.user_id, public_id=claims.session_id)
+    try:
+        stored = redis_client.get(token_version_key(claims.user_id))
+        expected = int(stored) if stored is not None else 0
+        if claims.token_version != expected:
+            raise AppError("登录已失效，请重新登录", code=40104, status_code=401)
+    except AppError:
+        raise
+    except Exception:
+        if not claims.session_id:
+            raise AppError("授权状态暂时不可用", code=50313, status_code=503) from None
     user = UserRepository(session).get_by_id(claims.user_id)
     if user is None:
         raise AppError("未登录", code=40100, status_code=401)
@@ -97,6 +108,10 @@ def get_tenant_context(request: Request, user: CurrentUser, session: DbSession) 
             role=member.role,
         )
     )
+    session_id = str(getattr(request.state, "session_id", "") or "")
+    from app.services.snapshots import SnapshotService
+
+    SnapshotService(session).drain_outbox()
     return TenantContext(
         user_id=user.id,
         tenant_id=tenant_id,
@@ -106,6 +121,9 @@ def get_tenant_context(request: Request, user: CurrentUser, session: DbSession) 
         permission_codes=frozenset(codes),
         is_platform_admin=bool(user.is_platform_admin),
         must_change_password=bool(user.must_change_password),
+        session_id=session_id,
+        high_risk_verified=True,
+        authz_source="iam-db",
     )
 
 

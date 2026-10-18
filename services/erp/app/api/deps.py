@@ -7,7 +7,8 @@ from sqlalchemy.orm import Session
 
 from app.core.context import set_tenant_context
 from app.core.exceptions import AppError, from_security_error
-from app.core.iam import jwt_verifier, snapshot_store
+from app.core.config import settings
+from app.core.iam import authority_client, jwt_verifier, snapshot_store
 from app.core.identity_projection import project_display_user
 from app.core.tenant import TENANT_HEADER, TenantContext
 from app.db.session import get_db
@@ -49,9 +50,10 @@ def _parse_tenant_id(raw: str | None) -> int:
 def get_tenant_context(request: Request, db: DbSession) -> TenantContext:
     """校验 IAM JWT，再用 Redis 快照确认成员资格。请求头不能当作已授权身份。
 
-    业务服务不访问 IAM HTTP。快照缺失、版本不一致或 Redis 故障时拒绝，不得放行。
+    普通请求不访问 IAM HTTP。快照缺失、版本不一致或 Redis 故障时拒绝，不得放行。
     """
     token = _extract_bearer_token(request)
+    request.state.access_token = token
     try:
         claims = jwt_verifier().verify_access(token)
         tenant_id = _parse_tenant_id(request.headers.get(TENANT_HEADER))
@@ -88,6 +90,43 @@ def get_current_user(request: Request, db: DbSession) -> User:
     return user
 
 
+def get_high_risk_context(request: Request, db: DbSession) -> TenantContext:
+    """删除、退款、权限变更等敏感操作必须回源 IAM 数据库。失败时拒绝。"""
+    token = _extract_bearer_token(request)
+    request.state.access_token = token
+    tenant_id = _parse_tenant_id(request.headers.get(TENANT_HEADER))
+    try:
+        claims = jwt_verifier().verify_access(token)
+        if settings.iam_authorize_url.strip() and settings.iam_internal_key.strip():
+            context = snapshot_store().load(
+                claims=claims,
+                tenant_id=tenant_id,
+                high_risk=True,
+                authority=lambda: authority_client().authorize(
+                    access_token=token,
+                    tenant_id=tenant_id,
+                ),
+            )
+        elif settings.is_production:
+            raise AppError("高风险操作缺少权威授权通道", code=50314, status_code=503)
+        else:
+            from dataclasses import replace
+
+            context = replace(
+                snapshot_store().load(claims=claims, tenant_id=tenant_id),
+                high_risk_verified=True,
+                authz_source="snapshot-dev",
+            )
+    except SecurityError as exc:
+        raise from_security_error(exc) from exc
+    if context.must_change_password:
+        raise AppError("请先修改临时密码", code=40350, status_code=403)
+    project_display_user(db, context)
+    set_tenant_context(tenant_id=context.tenant_id, user_id=context.user_id)
+    return context
+
+
 TenantContextDep = Annotated[TenantContext, Depends(get_tenant_context)]
+HighRiskTenantContextDep = Annotated[TenantContext, Depends(get_high_risk_context)]
 CurrentTenant = Annotated[TenantContext, Depends(get_current_tenant)]
 CurrentUser = Annotated[User, Depends(get_current_user)]

@@ -1707,6 +1707,18 @@ PERMISSION_TREE: tuple[PermissionTreeDef, ...] = (
 )
 
 
+HIGH_RISK_PERMISSION_CODES: frozenset[str] = frozenset(
+    {
+        PermissionCode.WAREHOUSE_DELETE,
+        PermissionCode.PRODUCT_DELETE,
+        PermissionCode.CUSTOMER_DELETE,
+        PermissionCode.REFUND_CONFIRM,
+        PermissionCode.SUPPLIER_REFUND_CONFIRM,
+        PermissionCode.PURCHASE_RETURN_APPROVE,
+    }
+)
+
+
 def known_permission_codes() -> frozenset[str]:
     return frozenset(_ALL_CODES)
 

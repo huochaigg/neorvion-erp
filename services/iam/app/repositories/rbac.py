@@ -155,10 +155,13 @@ class RoleRepository(BaseRepository):
             select(Permission.code)
             .join(RolePermission, RolePermission.permission_id == Permission.id)
             .join(MemberRoleGrant, MemberRoleGrant.role_id == RolePermission.role_id)
+            .join(Role, Role.id == MemberRoleGrant.role_id)
             .where(
                 MemberRoleGrant.tenant_id == tenant_id,
                 MemberRoleGrant.member_id == member_id,
                 RolePermission.tenant_id == tenant_id,
+                Role.tenant_id == tenant_id,
+                Role.status == "ACTIVE",
             )
         )
         return set(self.session.scalars(stmt).all())

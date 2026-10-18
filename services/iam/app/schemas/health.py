@@ -8,6 +8,6 @@ class HealthCheckData(BaseModel):
     mysql: Literal["ok", "unavailable"]
     redis: Literal["ok", "unavailable"]
     worker: Literal["ok", "unavailable"] = "unavailable"
-    milestone: str = Field(default="V12", description="当前 IAM 里程碑")
-    version: str = Field(default="12.0.0")
+    milestone: str = Field(default="IAM-V2", description="当前 IAM 里程碑")
+    version: str = Field(default="2.0.0")
     git_sha: str = Field(default="")

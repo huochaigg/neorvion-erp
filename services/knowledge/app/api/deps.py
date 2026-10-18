@@ -8,7 +8,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.context import set_tenant_context
 from app.core.exceptions import AppError, from_security_error
-from app.core.iam import jwt_verifier, snapshot_store
+from app.core.config import settings
+from app.core.iam import authority_client, jwt_verifier, snapshot_store
 from app.core.permissions import PermissionCode
 from app.core.tenant import TENANT_HEADER, TenantContext
 from app.db.session import get_db
@@ -117,8 +118,51 @@ TenantContextDep = Annotated[TenantContext, Depends(get_tenant_context)]
 KnowledgeReadContext = Annotated[TenantContext, Depends(get_read_context)]
 
 
+async def get_high_risk_context(request: Request) -> TenantContext:
+    """知识库删除等敏感操作回源 IAM。生产环境 IAM 不可用时拒绝。"""
+    token = _extract_bearer_token(request)
+    tenant_id = _parse_tenant_id(request.headers.get(TENANT_HEADER))
+    try:
+        claims = jwt_verifier().verify_access(token)
+        if settings.iam_authorize_url.strip() and settings.iam_internal_key.strip():
+            context = snapshot_store().load(
+                claims=claims,
+                tenant_id=tenant_id,
+                high_risk=True,
+                authority=lambda: authority_client().authorize(
+                    access_token=token,
+                    tenant_id=tenant_id,
+                ),
+            )
+        elif settings.is_production:
+            raise AppError("高风险操作缺少权威授权通道", code=50314, status_code=503)
+        else:
+            from dataclasses import replace
+
+            context = replace(
+                snapshot_store().load(claims=claims, tenant_id=tenant_id),
+                high_risk_verified=True,
+                authz_source="snapshot-dev",
+            )
+    except SecurityError as exc:
+        raise from_security_error(exc) from exc
+    set_tenant_context(tenant_id=context.tenant_id, user_id=context.user_id)
+    return context
+
+
+HighRiskTenantContextDep = Annotated[TenantContext, Depends(get_high_risk_context)]
+
+
 def require_permission(*codes: str):
     def dependency(context: TenantContextDep) -> TenantContext:
+        AuthorizationService().require_all(context, codes)
+        return context
+
+    return dependency
+
+
+def require_high_risk_permission(*codes: str):
+    def dependency(context: HighRiskTenantContextDep) -> TenantContext:
         AuthorizationService().require_all(context, codes)
         return context
 
@@ -135,5 +179,5 @@ KnowledgeUpdateContext = Annotated[
 ]
 KnowledgeDeleteContext = Annotated[
     TenantContext,
-    Depends(require_permission(PermissionCode.KNOWLEDGE_DELETE)),
+    Depends(require_high_risk_permission(PermissionCode.KNOWLEDGE_DELETE)),
 ]

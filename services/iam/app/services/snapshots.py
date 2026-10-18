@@ -1,15 +1,20 @@
 """把 IAM 数据库中的成员授权写成 Redis 快照，供 ERP / Knowledge 本地校验。"""
 
+from datetime import datetime
+
 from neorvion_security.snapshot import AuthzSnapshot, SnapshotStore
 from neorvion_security.tenant import TenantContext
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.redis import redis_client
+from app.models.authz import AuthzOutbox
 from app.models.tenant import MemberRole, MemberStatus, TenantStatus
 from app.models.user import UserStatus
 from app.repositories.tenant import TenantMemberRepository
 from app.repositories.user import UserRepository
+from app.services.authz_revision import current_revision
 from app.services.authorization import AuthorizationService
 
 
@@ -72,7 +77,9 @@ class SnapshotService:
         codes = tuple(sorted(self.authz.permission_codes(context)))
         grants = self.authz.roles.list_grants_for_member(tenant_id=tenant.id, member_id=member.id)
         role_codes = tuple(sorted({grant.role.code for grant in grants if grant.role is not None}))
-        version = self.store.bump_authz_version(user_id, tenant.id)
+        version = current_revision(self.session, user_id=user_id, tenant_id=tenant.id)
+        if version <= 0:
+            version = self.store.bump_authz_version(user_id, tenant.id)
         user = self.users.get_by_id(user_id)
         member_status = member.status if member.status else MemberStatus.ACTIVE.value
         if user is not None and user.status != UserStatus.ACTIVE.value:
@@ -95,3 +102,21 @@ class SnapshotService:
             email=(user.email if user else "") or "",
         )
         self.store.save(snapshot)
+        self.store.set_authz_version(user_id, tenant.id, version)
+
+    def drain_outbox(self, *, limit: int = 200) -> int:
+        """把事务内登记的授权变更刷进 Redis。崩溃后下次 IAM 请求会补刷。"""
+        rows = list(
+            self.session.scalars(
+                select(AuthzOutbox)
+                .where(AuthzOutbox.processed_at.is_(None))
+                .order_by(AuthzOutbox.id.asc())
+                .limit(limit)
+            ).all()
+        )
+        for row in rows:
+            self.refresh_member(user_id=row.user_id, tenant_id=row.tenant_id)
+            row.processed_at = datetime.now()
+        if rows:
+            self.session.commit()
+        return len(rows)

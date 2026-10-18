@@ -14,7 +14,7 @@ router = APIRouter()
     summary="健康检查",
 )
 async def health_check(session: DbSession) -> ApiResponse[HealthCheckData]:
-    """探活 FastAPI、PostgreSQL、pgvector 与 ERP 身份服务。
+    """探活 FastAPI、PostgreSQL、pgvector 与 IAM JWKS / 快照 Redis。
 
     依赖不可用时仍返回 HTTP 200，由字段标记 unavailable / not_installed。
     """

@@ -9,7 +9,7 @@ from cryptography.hazmat.primitives import serialization
 from redis import Redis
 
 from app.core.config import settings
-from neorvion_security import JwtVerifier, LocalJwtSigner, SnapshotStore
+from neorvion_security import HttpAuthorityClient, JwtVerifier, LocalJwtSigner, SnapshotStore
 
 iam_redis_client: Redis = Redis.from_url(settings.iam_redis_url, decode_responses=True)
 
@@ -51,4 +51,13 @@ def test_signer() -> LocalJwtSigner:
         kid=settings.iam_jwt_key_id,
         issuer=settings.iam_jwt_issuer,
         audiences=[settings.iam_jwt_audience],
+    )
+
+
+@lru_cache
+def authority_client() -> HttpAuthorityClient:
+    """高风险操作回源 IAM 数据库。普通请求仍只读 Redis 快照。"""
+    return HttpAuthorityClient(
+        url=settings.iam_authorize_url,
+        internal_key=settings.iam_internal_key,
     )

@@ -1,6 +1,6 @@
 # 架构说明
 
-当前定义：**Neorvion V12 统一 IAM**。有效范围见 `docs/current-state.md`。
+当前定义：**Neorvion IAM V2 统一身份与权限中心**。有效范围见 `docs/current-state.md`。
 
 ## 目标
 

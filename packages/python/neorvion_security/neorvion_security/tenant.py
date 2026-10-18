@@ -31,6 +31,9 @@ class TenantContext:
     api_key_id: int | None = None
     api_key_scopes: frozenset[str] = field(default_factory=frozenset)
     api_key_base_ids: frozenset[int] | None = None
+    session_id: str = ""
+    high_risk_verified: bool = False
+    authz_source: str = "snapshot"
 
     def has_all(self, *codes: str) -> bool:
         """当前快照是否具备全部功能权限。"""

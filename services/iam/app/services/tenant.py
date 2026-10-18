@@ -181,6 +181,9 @@ class TenantService:
                 member_id=member.id,
                 role_ids=assigned_ids,
             )
+            from app.services.authz_revision import bump_member_revision
+
+            bump_member_revision(self.session, user_id=target.id, tenant_id=context.tenant_id)
             self.session.commit()
             self.session.refresh(member)
         except IntegrityError:
@@ -246,6 +249,9 @@ class TenantService:
                 member_id=member.id,
                 role_ids=assigned_ids,
             )
+            from app.services.authz_revision import bump_member_revision
+
+            bump_member_revision(self.session, user_id=user.id, tenant_id=context.tenant_id)
             self.session.commit()
             self.session.refresh(member)
         except IntegrityError:
@@ -295,6 +301,9 @@ class TenantService:
             # 行锁加载过旧的 member_roles；过期后再查，
             # 避免 expire_on_commit=False 把 VIEWER 带回响应。
             self.session.expire(member, ["member_roles"])
+            from app.services.authz_revision import bump_member_revision
+
+            bump_member_revision(self.session, user_id=member.user_id, tenant_id=context.tenant_id)
             self.session.commit()
         except AppError:
             self.session.rollback()
@@ -361,6 +370,9 @@ class TenantService:
                 raise AppError("请提供要修改的字段", code=40035, status_code=400)
             member.status = status
         try:
+            from app.services.authz_revision import bump_member_revision
+
+            bump_member_revision(self.session, user_id=member.user_id, tenant_id=context.tenant_id)
             self.session.commit()
             self.session.refresh(member)
         except Exception:
@@ -399,6 +411,9 @@ class TenantService:
                 member_id=member.id,
             )
             self.members.delete(member)
+            from app.services.authz_revision import bump_member_revision
+
+            bump_member_revision(self.session, user_id=user_id, tenant_id=context.tenant_id)
             self.session.commit()
             self._refresh_snapshot(user_id=user_id, tenant_id=context.tenant_id)
         except AppError:
@@ -422,7 +437,9 @@ class TenantService:
         """成员或角色变更后重写 Redis 快照。业务服务靠版本号失效旧授权。"""
         from app.services.snapshots import SnapshotService
 
-        SnapshotService(self.session).refresh_member(user_id=user_id, tenant_id=tenant_id)
+        snapshots = SnapshotService(self.session)
+        snapshots.refresh_member(user_id=user_id, tenant_id=tenant_id)
+        snapshots.drain_outbox()
 
     def _require_membership(self, *, user_id: int, tenant_id: int) -> TenantMember:
         member = self.members.get_by_tenant_user(tenant_id, user_id)

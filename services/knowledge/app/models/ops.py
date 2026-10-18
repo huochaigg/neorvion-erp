@@ -70,7 +70,7 @@ class KnowledgeBaseGrant(TimestampMixin, TenantMixin, Base):
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     knowledge_base_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
-    user_id: Mapped[int] = mapped_column(BigInteger, nullable=False, comment="ERP 用户 ID")
+    user_id: Mapped[int] = mapped_column(BigInteger, nullable=False, comment="IAM 用户 ID")
     permission: Mapped[str] = mapped_column(
         String(16),
         nullable=False,

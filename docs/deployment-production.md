@@ -6,11 +6,11 @@
 
 系统是 **OpenCloudOS 9.2**，安装用 `dnf`，不要用 `apt`。
 
-真实 API 端口是 **8011**（`APP_PORT`），不是网上常见的 8001。Nginx 反代 `http://127.0.0.1:8011`。
+身份中心是 **IAM :8010**，不是 ERP。ERP 业务 API 仍是 **8011**，Knowledge API 是 **8012**。公网只经 Nginx：登录/刷新/租户/角色/会话/JWKS 反代 IAM；Knowledge 专用前缀反代 8012；其余 `/api/` 反代 ERP。**禁止**把 Knowledge API 一并打到 8011。
 
-ERP 数据库是 **MySQL**。PostgreSQL + pgvector 只给未来 Agent，ERP 不连接它。
+ERP 数据库是 **MySQL `neorvion_erp`**。IAM 数据库是 **MySQL `neorvion_iam`**。PostgreSQL + pgvector 给 Knowledge。JWT / RSA 私钥只挂到 IAM 容器，不要打进镜像或提交 Git。
 
-生产 **不要**在服务器装 Node.js。前端在本地或 GitHub Actions 构建。宿主机 Python 3.11 **不用于**跑 ERP。
+生产 **不要**在服务器装 Node.js。前端在本地或 GitHub Actions 构建。宿主机 Python **不用于**跑业务进程。
 
 ---
 
@@ -510,10 +510,13 @@ Wujie：Shell 的 `VITE_ERP_ENTRY` 必须是 **生产 ERP 静态 Origin + `/erp`
 
 要点：
 
-- `/api/` → `127.0.0.1:8011`，**禁止** try_files 到 index.html
+- `/api/v1/auth/`、`/api/v1/sessions`、`/api/v1/tenants`、`/api/v1/roles`、`/api/v1/permissions`、`/api/v1/users`、`/api/v1/applications`、`/api/v1/menus`、`/api/v1/audit-logs`、`/.well-known/`、`/api/crypto/` → `127.0.0.1:8010`（IAM）
+- `/api/v1/knowledge-bases`、`/api/v1/documents`、`/api/v1/conversations`、`/api/v1/evaluation`、`/api/v1/search` 等 Knowledge 前缀 → `127.0.0.1:8012`
+- 其余 `/api/` → `127.0.0.1:8011`（ERP），**禁止** try_files 到 index.html
 - `/erp/` → ERP 静态，刷新不 404
 - `/` → Shell History fallback
 - 现在 **不要**加 `/api/agent/`（会 502）
+- 参考仓库 `nginx/nginx.conf`，不要把整段 `/api/` 只指到 ERP
 
 日志：宝塔网站 → 日志，或 `/www/wwwlogs/`。
 

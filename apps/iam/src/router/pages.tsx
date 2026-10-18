@@ -38,4 +38,8 @@ export const PAGE_COMPONENTS: Record<PageKey, LazyExoticComponent<ComponentType<
     const module = await import('@/pages/system/AuditPage');
     return { default: module.AuditPage };
   }),
+  Sessions: lazy(async () => {
+    const module = await import('@/pages/system/SessionsPage');
+    return { default: module.SessionsPage };
+  }),
 };

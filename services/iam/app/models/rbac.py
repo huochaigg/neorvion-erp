@@ -41,6 +41,14 @@ class Permission(Base):
     name: Mapped[str] = mapped_column(String(64), nullable=False)
     module: Mapped[str] = mapped_column(String(32), nullable=False)
     description: Mapped[str] = mapped_column(String(255), nullable=False, server_default="")
+    # 权限归属的应用。code 全局唯一，不随应用停用而改名，避免历史角色授权失效。
+    application_id: Mapped[int | None] = mapped_column(
+        BigInteger,
+        ForeignKey("applications.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    status: Mapped[str] = mapped_column(String(16), nullable=False, server_default="ACTIVE")
     created_at: Mapped[datetime] = mapped_column(
         DateTime,
         nullable=False,
@@ -70,6 +78,7 @@ class Role(TimestampMixin, Base):
     code: Mapped[str] = mapped_column(String(32), nullable=False)
     description: Mapped[str] = mapped_column(String(255), nullable=False, server_default="")
     is_system: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=false())
+    status: Mapped[str] = mapped_column(String(16), nullable=False, server_default="ACTIVE")
 
     tenant: Mapped["Tenant"] = relationship(back_populates="roles")
     member_roles: Mapped[list["MemberRoleGrant"]] = relationship(

@@ -21,11 +21,11 @@ class TimestampMixin:
 
 
 class TenantMixin:
-    """Knowledge 与 ERP 共用租户 ID 语义，但不建跨库外键。"""
+    """Knowledge 与 IAM 共用租户 ID 语义，但不建跨库外键。"""
 
     tenant_id: Mapped[int] = mapped_column(
         BigInteger,
         nullable=False,
         index=True,
-        comment="所属企业 ID，来自 ERP 已校验的租户上下文",
+        comment="所属企业 ID，来自 IAM 已校验的租户上下文",
     )

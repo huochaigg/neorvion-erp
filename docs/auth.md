@@ -1,4 +1,4 @@
-# 认证说明（V12 IAM）
+# 认证说明（IAM V2）
 
 身份、会话与 Refresh Cookie 由 `services/iam` 签发。JWT 为 RS256，公钥经 JWKS 分发。RSA-OAEP 仍只用于登录密码传输，与 JWT 签名密钥独立。ERP / Knowledge 不再签发 Token。
 
