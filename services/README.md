@@ -5,16 +5,23 @@
 ```text
 services/
 ├── erp/                  # FastAPI + MySQL（当前）
-├── knowledge/            # FastAPI + PostgreSQL + RAG 预留（当前）
+├── knowledge/            # FastAPI + PostgreSQL + RAG（当前）
 ├── copilot/              # FastAPI + LangGraph（未来，尚未创建）
 └── customer-service/     # FastAPI + WebSocket（未来，尚未创建）
 ```
 
-本地启动：
+在仓库根目录分别启动（host / port 读各自 `.env`）：
 
 ```bash
-cd services/erp && uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 8011
-cd services/knowledge && uv run python -m app
+uv run --directory services/erp python -m app
+uv run --directory services/knowledge python -m app
 ```
 
-本机 ERP API 端口是 **8011**（不是 8001）。Knowledge API 是 **8012**。
+Worker：
+
+```bash
+uv run --directory services/erp python -m app.tasks.worker
+uv run --directory services/knowledge python -m app.tasks.worker
+```
+
+本机 ERP API 端口是 **8011**。Knowledge API 是 **8012**。

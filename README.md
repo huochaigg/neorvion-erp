@@ -59,19 +59,19 @@ cp apps/erp/.env.example apps/erp/.env
 docker compose up -d mysql redis
 ```
 
+后端可在仓库根目录启动（`uv run --directory` 使用对应服务的 venv 与 `.env`；端口见 `APP_PORT`）：
+
 ```bash
-cd services/erp
-uv sync
-uv run alembic upgrade head
-uv run python -m app.scripts.seed_permissions
-uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 8011
+uv sync --directory services/erp
+uv run --directory services/erp alembic upgrade head
+uv run --directory services/erp python -m app.scripts.seed_permissions
+uv run --directory services/erp python -m app
 ```
 
 另开终端启动 Worker：
 
 ```bash
-cd services/erp
-uv run python -m app.tasks.worker
+uv run --directory services/erp python -m app.tasks.worker
 ```
 
 ```bash
@@ -88,7 +88,13 @@ pnpm dev
 - Knowledge Swagger http://localhost:8012/docs
 - 健康检查 http://localhost:8011/api/v1/health 、http://localhost:8012/api/v1/health
 
-Knowledge 本地启动见 [`docs/knowledge.md`](docs/knowledge.md)。PostgreSQL 与 `uv run python -m app`（端口 **8012**）需单独启动。
+Knowledge 本地启动见 [`docs/knowledge.md`](docs/knowledge.md) 与 [`services/knowledge/README.md`](services/knowledge/README.md)。PostgreSQL 需单独准备，然后：
+
+```bash
+uv run --directory services/knowledge python -m app
+```
+
+端口 **8012**，Windows 必须用 `python -m app`，不要直接 `uvicorn`。
 
 演示租户（不会在 API 启动时自动执行）：
 
@@ -96,8 +102,7 @@ Knowledge 本地启动见 [`docs/knowledge.md`](docs/knowledge.md)。PostgreSQL 
 # 用环境变量提供账号，不要把真实密码写进 Git
 export DEMO_EMAIL=...
 export DEMO_PASSWORD=...
-cd services/erp
-uv run python -m app.scripts.seed_demo
+uv run --directory services/erp python -m app.scripts.seed_demo
 ```
 
 已存在 `code=neorvion-demo` 时直接跳过，不会重复插入。
@@ -105,9 +110,8 @@ uv run python -m app.scripts.seed_demo
 ## 测试
 
 ```bash
-cd services/erp
-uv run pytest
-uv run ruff check app tests
+uv run --directory services/erp pytest
+uv run --directory services/erp ruff check app tests
 ```
 
 ```bash
@@ -118,9 +122,8 @@ pnpm --filter @neorvion/knowledge test
 ```
 
 ```bash
-cd services/knowledge
-uv run pytest
-uv run ruff check app tests
+uv run --directory services/knowledge pytest
+uv run --directory services/knowledge ruff check app tests
 ```
 
 ## 生产部署

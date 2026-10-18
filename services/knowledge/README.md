@@ -30,11 +30,19 @@ uv run alembic upgrade head
 uv run python -m app
 ```
 
-Windows 必须使用 `python -m app`（内部指定 Selector 事件循环）。不要直接 `uvicorn app.main:app`，否则 psycopg 异步驱动无法连接 PostgreSQL。Linux / CI 可继续使用：
+在仓库根目录（monorepo，不必先 `cd`）：
 
 ```bash
-uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 8012
+uv run --directory services/knowledge python -m app
 ```
+
+Worker：
+
+```bash
+uv run --directory services/knowledge python -m app.tasks.worker
+```
+
+`python -m app` 会读取 `.env` 的 `APP_HOST` / `APP_PORT`（默认 `0.0.0.0:8012`）。Windows 必须使用该入口（内部指定 Selector 事件循环）。不要直接 `uvicorn app.main:app`，否则 psycopg 异步驱动无法连接 PostgreSQL。
 
 4. 前端：
 

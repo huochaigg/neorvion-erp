@@ -33,9 +33,8 @@ pnpm dev:knowledge
 安装并启动后端：
 
 ```bash
-cd services/erp
-uv sync
-uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 8011
+uv sync --directory services/erp
+uv run --directory services/erp python -m app
 ```
 
 数据库迁移：
