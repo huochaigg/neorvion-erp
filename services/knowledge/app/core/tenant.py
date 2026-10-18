@@ -1,20 +1,7 @@
-"""当前请求的租户身份。X-Tenant-ID 只是意愿，必须经 ERP 身份内省确认。"""
+"""当前请求的租户身份。X-Tenant-ID 只是意愿，必须经 IAM 快照确认。"""
 
-from dataclasses import dataclass, field
+from neorvion_security.tenant import TENANT_HEADER, TenantContext
 
-TENANT_HEADER = "X-Tenant-ID"
 INTERNAL_SERVICE_HEADER = "X-Internal-Service-Key"
 
-
-@dataclass(frozen=True, slots=True)
-class TenantContext:
-    user_id: int
-    tenant_id: int
-    member_id: int
-    is_owner: bool
-    role: str
-    permission_codes: frozenset[str] = field(default_factory=frozenset)
-    token_jti: str = ""
-    api_key_id: int | None = None
-    api_key_scopes: frozenset[str] = field(default_factory=frozenset)
-    api_key_base_ids: frozenset[int] | None = None
+__all__ = ["INTERNAL_SERVICE_HEADER", "TENANT_HEADER", "TenantContext"]

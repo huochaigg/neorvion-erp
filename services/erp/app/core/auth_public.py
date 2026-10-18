@@ -7,11 +7,6 @@ from fastapi import Request
 # Refresh 只校验 Cookie 里的 Refresh Token，不能要求 Access Token。
 PUBLIC_ROUTES: frozenset[tuple[str, str]] = frozenset(
     {
-        ("POST", "/api/v1/auth/register"),
-        ("POST", "/api/v1/auth/login"),
-        ("GET", "/api/crypto/public-key"),
-        ("POST", "/api/v1/auth/refresh"),
-        ("POST", "/api/v1/auth/logout"),
         ("GET", "/api/v1/health"),
     }
 )

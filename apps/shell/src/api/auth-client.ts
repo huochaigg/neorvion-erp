@@ -8,9 +8,21 @@ export const authClient = axios.create({
   withCredentials: true,
 });
 
+function readCookie(name: string): string {
+  const match = document.cookie.match(new RegExp(`(?:^|; )${name}=([^;]*)`));
+  return match ? decodeURIComponent(match[1]) : '';
+}
+
 authClient.interceptors.request.use((config) => {
   config.skipAuthRefresh = true;
   delete config.headers.Authorization;
+  const url = config.url ?? '';
+  if (url.includes('/api/v1/auth/refresh') || url.includes('/api/v1/auth/logout')) {
+    const csrf = readCookie('neorvion_csrf');
+    if (csrf) {
+      config.headers['X-CSRF-Token'] = csrf;
+    }
+  }
   return config;
 });
 

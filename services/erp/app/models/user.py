@@ -18,7 +18,7 @@ class UserStatus(StrEnum):
 
 
 class User(TimestampMixin, Base):
-    """全局用户身份。不含 tenant_id，一个用户后续可加入多个租户。"""
+    """展示名投影。身份所有权在 IAM；本表仅供业务单据 JOIN 操作人姓名，不用于认证。"""
 
     __tablename__ = "users"
 

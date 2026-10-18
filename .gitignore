@@ -57,8 +57,10 @@ services/erp/var/exports/
 services/knowledge/var/
 backend/var/exports/
 
-# RSA 私钥与本地密钥目录，禁止提交
+# RSA / JWT 私钥与本地密钥目录，禁止提交
 services/erp/secrets/
+services/iam/secrets/
+services/knowledge/secrets/
 backend/secrets/
 *.pem
 

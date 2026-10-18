@@ -138,18 +138,15 @@ class AfterSaleOrder(TimestampMixin, TenantMixin, Base):
     )
     requested_by: Mapped[int] = mapped_column(
         BigInteger,
-        ForeignKey("users.id", ondelete="RESTRICT"),
         nullable=False,
     )
     approved_by: Mapped[int | None] = mapped_column(
         BigInteger,
-        ForeignKey("users.id", ondelete="SET NULL"),
         nullable=True,
     )
     approved_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     rejected_by: Mapped[int | None] = mapped_column(
         BigInteger,
-        ForeignKey("users.id", ondelete="SET NULL"),
         nullable=True,
     )
     rejected_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
@@ -158,7 +155,6 @@ class AfterSaleOrder(TimestampMixin, TenantMixin, Base):
     cancelled_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     cancelled_by: Mapped[int | None] = mapped_column(
         BigInteger,
-        ForeignKey("users.id", ondelete="SET NULL"),
         nullable=True,
     )
 

@@ -692,6 +692,7 @@ dependencies = [
     { name = "cryptography" },
     { name = "email-validator" },
     { name = "fastapi", extra = ["standard"] },
+    { name = "neorvion-security" },
     { name = "pydantic-settings" },
     { name = "pyjwt" },
     { name = "pymysql" },
@@ -714,6 +715,7 @@ requires-dist = [
     { name = "cryptography", specifier = ">=45.0.7" },
     { name = "email-validator", specifier = ">=2.3.0" },
     { name = "fastapi", extras = ["standard"], specifier = ">=0.117.1" },
+    { name = "neorvion-security", editable = "../../packages/python/neorvion_security" },
     { name = "pydantic-settings", specifier = ">=2.10.1" },
     { name = "pyjwt", specifier = ">=2.10.1" },
     { name = "pymysql", specifier = ">=1.1.2" },
@@ -727,6 +729,23 @@ dev = [
     { name = "httpx", specifier = ">=0.28.1" },
     { name = "pytest", specifier = ">=8.4.2" },
     { name = "ruff", specifier = ">=0.13.1" },
+]
+
+[[package]]
+name = "neorvion-security"
+version = "0.1.0"
+source = { editable = "../../packages/python/neorvion_security" }
+dependencies = [
+    { name = "cryptography" },
+    { name = "pyjwt" },
+    { name = "redis" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "cryptography", specifier = ">=45.0.7" },
+    { name = "pyjwt", specifier = ">=2.10.1" },
+    { name = "redis", specifier = ">=6.4.0" },
 ]
 
 [[package]]

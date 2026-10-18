@@ -1,0 +1,38 @@
+.wrap {
+  min-width: 0;
+  width: 100%;
+}
+
+.chrome {
+  height: 42px;
+  padding: 6px 8px 0 4px;
+  border-radius: 0;
+  background: var(--erp-theme-menu-item-selected-bg);
+  font-size: 13px;
+
+  :global {
+    .chrome-tabs-toolbar-right {
+      display: none;
+    }
+
+    .chrome-tab {
+      height: 36px;
+    }
+
+    .chrome-tab .chrome-tab-title {
+      color: #475569;
+    }
+
+    .chrome-tab[active] .chrome-tab-title {
+      color: #0f2744;
+    }
+
+    .chrome-tab .chrome-tab-background > svg .chrome-tab-geometry {
+      fill: #e8edf2;
+    }
+
+    .chrome-tab .chrome-tab-close:hover {
+      background-color: #e2e8f0;
+    }
+  }
+}

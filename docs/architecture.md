@@ -1,26 +1,30 @@
 # 架构说明
 
-当前定义：**Neorvion ERP Core V1**。有效范围见 `docs/current-state.md`。
+当前定义：**Neorvion V12 统一 IAM**。有效范围见 `docs/current-state.md`。
 
 ## 目标
 
-模块化单体支撑 Catalog 到售后全链路，以及后续 ERP Copilot。不拆微服务，不上 Kafka / Kubernetes / GraphQL。
+IAM 统一身份与功能 RBAC。ERP / Knowledge 作为业务服务本地校验 JWT。后续 Copilot 通过 IAM 应用注册扩展，不硬编码应用列表。
 
 ```mermaid
 flowchart LR
   User[Browser] --> BT[BaoTa Nginx 80/443]
   BT --> Shell[Shell static]
+  BT --> IAMFE[IAM static /iam]
   BT --> ERP[ERP static /erp]
+  BT --> IAM[iam-api 127.0.0.1:8010]
   BT --> API[erp-api 127.0.0.1:8011]
-  API --> MySQL[(MySQL 8.4 Docker)]
-  API --> Redis[(Redis 7 Docker)]
+  IAM --> IAMDB[(MySQL neorvion_iam)]
+  IAM --> Redis[(Redis 7)]
+  API --> MySQL[(MySQL neorvion_erp)]
+  API --> Redis
   Worker[Worker] --> Redis
   Worker --> MySQL
-  AgentFuture[Future Agent] -.-> PG[(Postgres pgvector)]
-  AgentFuture -.-> API
+  Knowledge[knowledge-api 8012] --> PG[(Postgres pgvector)]
+  Knowledge --> Redis
 ```
 
-开发机仍是 Shell 8015 / ERP 8016 / API 8011。生产静态资源由宝塔 Nginx 同域提供；API 不映射到 0.0.0.0。后端代码在 `services/erp` 与 `services/knowledge`，未来 Copilot / 客服放在同级目录，但尚未创建。
+开发机：Shell 8015 / ERP 8016 / Knowledge 8017 / IAM 8018 / IAM API 8010 / ERP API 8011 / Knowledge API 8012。
 
 后续 Copilot：`Agent → Tool → ERP API → TenantContext / RBAC → Service → DB`。Agent 不直连 MySQL。
 
@@ -30,6 +34,7 @@ flowchart LR
 
 - `apps/shell`：登录、注册、当前用户、当前租户、工作空间、顶部导航、Wujie 宿主
 - `apps/erp`：业务菜单与页面，可独立启动
+- `apps/iam`：用户、租户成员、角色、应用注册、审计
 - `packages/shared`：路由常量、API 类型、Query Key、`ApiError`、租户请求头。ERP 业务菜单不放这里
 
 主应用不得读取 ERP 内部 store。ERP 只通过 `window.$wujie.props` 与 bus 接收显式状态。

@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import BigInteger, DateTime, ForeignKey, func
+from sqlalchemy import BigInteger, DateTime, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 
@@ -27,7 +27,7 @@ class TenantMixin:
 
     tenant_id: Mapped[int] = mapped_column(
         BigInteger,
-        ForeignKey("tenants.id", ondelete="RESTRICT"),
         nullable=False,
         index=True,
+        comment="IAM 租户 ID，跨服务无外键",
     )

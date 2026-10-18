@@ -15,6 +15,7 @@ dependencies = [
     "langchain-openai>=1.7.1",
     "langchain-postgres>=0.0.19",
     "langchain-text-splitters>=1.0.0",
+    "neorvion-security",
     "pgvector>=0.3.6",
     "psycopg[binary]>=3.2.9",
     "pydantic-settings>=2.10.1",
@@ -25,6 +26,9 @@ dependencies = [
     "sqlalchemy[asyncio]>=2.0.43",
     "uvicorn[standard]>=0.35.0",
 ]
+
+[tool.uv.sources]
+neorvion-security = { path = "../../packages/python/neorvion_security", editable = true }
 
 [dependency-groups]
 dev = [

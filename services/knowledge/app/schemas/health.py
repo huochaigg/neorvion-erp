@@ -10,7 +10,7 @@ class HealthCheckData(BaseModel):
         description="V3 检索依赖 pgvector；未安装时标记 not_installed",
     )
     identity: Literal["ok", "unavailable"] = Field(
-        description="ERP 身份内省可达性；失败不把 Knowledge 标为整体 down",
+        description="IAM 授权快照 Redis 可达性；失败不把 Knowledge 标为整体 down",
     )
     milestone: str = Field(default="Knowledge V5", description="当前 Knowledge 里程碑")
     version: str = Field(default="5.0.0", description="应用版本号，不含密钥")

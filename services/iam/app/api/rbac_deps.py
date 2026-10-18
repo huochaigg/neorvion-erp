@@ -1,0 +1,502 @@
+from typing import Annotated
+
+from fastapi import Depends
+
+from app.api.deps import DbSession, TenantContextDep
+from app.core.permissions import PermissionCode
+from app.core.tenant import TenantContext
+from app.services.authorization import AuthorizationService
+
+
+def require_permission(*codes: str):
+    """当前成员必须拥有列出的全部权限。
+
+    FastAPI 会先走 TenantContextDep（登录 + X-Tenant-ID + 成员有效），
+    再查库汇总角色权限。不要把 JWT 或请求体里的角色列表当成授权依据。
+    """
+
+    def dependency(context: TenantContextDep, session: DbSession) -> TenantContext:
+        AuthorizationService(session).require_all(context, codes)
+        return context
+
+    return dependency
+
+
+def require_all_permissions(*codes: str):
+    return require_permission(*codes)
+
+
+def require_any_permission(*codes: str):
+    def dependency(context: TenantContextDep, session: DbSession) -> TenantContext:
+        AuthorizationService(session).require_any(context, codes)
+        return context
+
+    return dependency
+
+
+RoleReadContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.TENANT_ROLE_READ)),
+]
+RoleCreateContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.TENANT_ROLE_CREATE)),
+]
+RoleUpdateContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.TENANT_ROLE_UPDATE)),
+]
+RoleDeleteContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.TENANT_ROLE_DELETE)),
+]
+RolePermissionUpdateContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.TENANT_ROLE_PERMISSION_UPDATE)),
+]
+PermissionCatalogContext = Annotated[
+    TenantContext,
+    Depends(
+        require_any_permission(
+            PermissionCode.TENANT_PERMISSION_READ,
+            PermissionCode.TENANT_ROLE_READ,
+            PermissionCode.TENANT_ROLE_PERMISSION_UPDATE,
+        )
+    ),
+]
+MemberReadContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.TENANT_MEMBER_READ)),
+]
+MemberCreateContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.TENANT_MEMBER_CREATE)),
+]
+MemberUpdateContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.TENANT_MEMBER_UPDATE)),
+]
+MemberRoleUpdateContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.TENANT_MEMBER_ROLE_UPDATE)),
+]
+MemberDisableContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.TENANT_MEMBER_DISABLE)),
+]
+MemberRemoveContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.TENANT_MEMBER_REMOVE)),
+]
+ProductReadContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.PRODUCT_READ)),
+]
+ProductCreateContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.PRODUCT_CREATE)),
+]
+ProductUpdateContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.PRODUCT_UPDATE)),
+]
+ProductDeleteContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.PRODUCT_DELETE)),
+]
+WarehouseReadContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.WAREHOUSE_READ)),
+]
+WarehouseCreateContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.WAREHOUSE_CREATE)),
+]
+WarehouseUpdateContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.WAREHOUSE_UPDATE)),
+]
+WarehouseDisableContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.WAREHOUSE_DISABLE)),
+]
+WarehouseDeleteContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.WAREHOUSE_DELETE)),
+]
+InventoryReadContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.INVENTORY_READ)),
+]
+InventoryInitializeContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.INVENTORY_INITIALIZE)),
+]
+InventoryAdjustContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.INVENTORY_ADJUST)),
+]
+InventoryTransactionReadContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.INVENTORY_TRANSACTION_READ)),
+]
+SupplierReadContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.SUPPLIER_READ)),
+]
+SupplierCreateContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.SUPPLIER_CREATE)),
+]
+SupplierUpdateContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.SUPPLIER_UPDATE)),
+]
+SupplierDisableContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.SUPPLIER_DISABLE)),
+]
+SupplierDeleteContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.SUPPLIER_DELETE)),
+]
+PurchaseReadContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.PURCHASE_READ)),
+]
+PurchaseCreateContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.PURCHASE_CREATE)),
+]
+PurchaseUpdateContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.PURCHASE_UPDATE)),
+]
+PurchaseSubmitContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.PURCHASE_SUBMIT)),
+]
+PurchaseAuditContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.PURCHASE_AUDIT)),
+]
+PurchaseCancelContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.PURCHASE_CANCEL)),
+]
+CustomerReadContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.CUSTOMER_READ)),
+]
+CustomerCreateContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.CUSTOMER_CREATE)),
+]
+CustomerUpdateContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.CUSTOMER_UPDATE)),
+]
+CustomerDisableContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.CUSTOMER_DISABLE)),
+]
+CustomerDeleteContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.CUSTOMER_DELETE)),
+]
+OrderReadContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.ORDER_READ)),
+]
+OrderCreateContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.ORDER_CREATE)),
+]
+OrderUpdateContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.ORDER_UPDATE)),
+]
+OrderSubmitContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.ORDER_SUBMIT)),
+]
+OrderAuditContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.ORDER_AUDIT)),
+]
+OrderCancelContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.ORDER_CANCEL)),
+]
+PurchaseReceiptReadContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.PURCHASE_RECEIPT_READ)),
+]
+PurchaseReceiptCreateContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.PURCHASE_RECEIPT_CREATE)),
+]
+PurchaseReceiptUpdateContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.PURCHASE_RECEIPT_UPDATE)),
+]
+PurchaseReceiptConfirmContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.PURCHASE_RECEIPT_CONFIRM)),
+]
+PurchaseReceiptCancelContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.PURCHASE_RECEIPT_CANCEL)),
+]
+OutboundReadContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.OUTBOUND_READ)),
+]
+OutboundCreateContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.OUTBOUND_CREATE)),
+]
+OutboundPickContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.OUTBOUND_PICK)),
+]
+OutboundConfirmContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.OUTBOUND_CONFIRM)),
+]
+OutboundCancelContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.OUTBOUND_CANCEL)),
+]
+CarrierReadContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.CARRIER_READ)),
+]
+CarrierCreateContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.CARRIER_CREATE)),
+]
+CarrierUpdateContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.CARRIER_UPDATE)),
+]
+CarrierDisableContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.CARRIER_DISABLE)),
+]
+CarrierDeleteContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.CARRIER_DELETE)),
+]
+ShipmentReadContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.SHIPMENT_READ)),
+]
+ShipmentCreateContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.SHIPMENT_CREATE)),
+]
+ShipmentUpdateContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.SHIPMENT_UPDATE)),
+]
+ShipmentConfirmContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.SHIPMENT_CONFIRM)),
+]
+ShipmentTrackingContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.SHIPMENT_TRACKING_UPDATE)),
+]
+ShipmentDeliverContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.SHIPMENT_DELIVER)),
+]
+ShipmentCancelContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.SHIPMENT_CANCEL)),
+]
+StocktakeReadContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.STOCKTAKE_READ)),
+]
+StocktakeCreateContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.STOCKTAKE_CREATE)),
+]
+StocktakeUpdateContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.STOCKTAKE_UPDATE)),
+]
+StocktakeSubmitContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.STOCKTAKE_SUBMIT)),
+]
+StocktakeConfirmContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.STOCKTAKE_CONFIRM)),
+]
+StocktakeCancelContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.STOCKTAKE_CANCEL)),
+]
+StockTransferReadContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.STOCK_TRANSFER_READ)),
+]
+StockTransferCreateContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.STOCK_TRANSFER_CREATE)),
+]
+StockTransferUpdateContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.STOCK_TRANSFER_UPDATE)),
+]
+StockTransferSubmitContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.STOCK_TRANSFER_SUBMIT)),
+]
+StockTransferOutboundContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.STOCK_TRANSFER_OUTBOUND)),
+]
+StockTransferReceiveContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.STOCK_TRANSFER_RECEIVE)),
+]
+StockTransferCancelContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.STOCK_TRANSFER_CANCEL)),
+]
+AfterSaleReadContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.AFTER_SALE_READ)),
+]
+AfterSaleCreateContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.AFTER_SALE_CREATE)),
+]
+AfterSaleApproveContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.AFTER_SALE_APPROVE)),
+]
+AfterSaleRejectContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.AFTER_SALE_REJECT)),
+]
+AfterSaleCancelContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.AFTER_SALE_CANCEL)),
+]
+ReturnOrderReadContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.RETURN_ORDER_READ)),
+]
+ReturnOrderReceiveContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.RETURN_ORDER_RECEIVE)),
+]
+ReturnOrderInboundContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.RETURN_ORDER_INBOUND)),
+]
+RefundReadContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.REFUND_READ)),
+]
+RefundCreateContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.REFUND_CREATE)),
+]
+RefundConfirmContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.REFUND_CONFIRM)),
+]
+PurchaseReturnReadContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.PURCHASE_RETURN_READ)),
+]
+PurchaseReturnCreateContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.PURCHASE_RETURN_CREATE)),
+]
+PurchaseReturnUpdateContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.PURCHASE_RETURN_UPDATE)),
+]
+PurchaseReturnSubmitContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.PURCHASE_RETURN_SUBMIT)),
+]
+PurchaseReturnApproveContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.PURCHASE_RETURN_APPROVE)),
+]
+PurchaseReturnRejectContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.PURCHASE_RETURN_REJECT)),
+]
+PurchaseReturnCancelContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.PURCHASE_RETURN_CANCEL)),
+]
+PurchaseReturnOutboundContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.PURCHASE_RETURN_OUTBOUND)),
+]
+SupplierRefundReadContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.SUPPLIER_REFUND_READ)),
+]
+SupplierRefundCreateContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.SUPPLIER_REFUND_CREATE)),
+]
+SupplierRefundConfirmContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.SUPPLIER_REFUND_CONFIRM)),
+]
+AnalyticsOverviewReadContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.ANALYTICS_OVERVIEW_READ)),
+]
+AnalyticsSalesReadContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.ANALYTICS_SALES_READ)),
+]
+AnalyticsPurchaseReadContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.ANALYTICS_PURCHASE_READ)),
+]
+AnalyticsInventoryReadContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.ANALYTICS_INVENTORY_READ)),
+]
+AnalyticsAfterSaleReadContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.ANALYTICS_AFTER_SALE_READ)),
+]
+EventReadContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.EVENT_READ)),
+]
+OperationLogReadContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.OPERATION_LOG_READ)),
+]
+TaskReadContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.TASK_READ)),
+]
+TaskRetryContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.TASK_RETRY)),
+]
+TaskCancelContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.TASK_CANCEL)),
+]
+TaskDownloadContext = Annotated[
+    TenantContext,
+    Depends(require_permission(PermissionCode.TASK_DOWNLOAD)),
+]

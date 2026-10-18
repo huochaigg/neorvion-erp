@@ -8,6 +8,7 @@ export const SHELL_ROUTES = {
   workspaceCreate: '/workspaces/create',
   erp: '/erp',
   knowledge: '/knowledge',
+  iam: '/iam',
 } as const;
 
 /** 主应用里的子应用挂载前缀。ERP 内部业务路径不放在本文件。 */
@@ -21,3 +22,9 @@ export const KNOWLEDGE_BASENAME = '/knowledge';
 
 /** 主应用打开 Knowledge 时的默认落地页。 */
 export const KNOWLEDGE_DEFAULT_PATH = '/workbench';
+
+/** 主应用里 IAM 子应用挂载前缀。 */
+export const IAM_BASENAME = '/iam';
+
+/** 主应用打开 IAM 时的默认落地页。 */
+export const IAM_DEFAULT_PATH = '/dashboard';

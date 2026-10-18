@@ -16,6 +16,7 @@ services:
       --innodb-lock-wait-timeout=5
     volumes:
       - neorvion_mysql_data:/var/lib/mysql
+      - ./docker/mysql/init.sql:/docker-entrypoint-initdb.d/01-iam.sql:ro
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uneorvion", "-pneorvion_dev"]
       interval: 5s
@@ -37,10 +38,11 @@ services:
       timeout: 3s
       retries: 20
 
-  erp:
+  iam:
     build:
-      context: ./services/erp
-    container_name: neorvion-erp
+      context: .
+      dockerfile: services/iam/Dockerfile
+    container_name: neorvion-iam
     restart: unless-stopped
     depends_on:
       mysql:
@@ -50,15 +52,67 @@ services:
     environment:
       APP_ENV: development
       APP_HOST: 0.0.0.0
-      APP_PORT: 8011
-      SECRET_KEY: ${SECRET_KEY:-change-me-in-local-dev}
+      APP_PORT: 8010
+      JWT_ISSUER: neorvion-iam
+      JWT_AUDIENCES: neorvion-iam,neorvion-erp,neorvion-knowledge
+      JWT_KEY_ID: jwt-v1
+      JWT_PRIVATE_KEY_PATH: secrets/jwt/v1/private.pem
+      JWT_PUBLIC_KEY_PATH: secrets/jwt/v1/public.pem
       JWT_ACCESS_EXPIRE_MINUTES: 30
       JWT_REFRESH_EXPIRE_DAYS: 7
-      REFRESH_COOKIE_NAME: neorvion_refresh
-      REFRESH_COOKIE_PATH: /api/v1/auth
-      REFRESH_COOKIE_SAMESITE: lax
-      REFRESH_COOKIE_SECURE: "false"
-      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:8015,http://localhost:8016,http://127.0.0.1:8015,http://127.0.0.1:8016}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:8015,http://localhost:8016,http://localhost:8017,http://localhost:8018,http://127.0.0.1:8015,http://127.0.0.1:8016,http://127.0.0.1:8017,http://127.0.0.1:8018}
+      MYSQL_HOST: mysql
+      MYSQL_PORT: 3306
+      MYSQL_USER: ${MYSQL_USER:-neorvion}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-neorvion_dev}
+      MYSQL_DATABASE: neorvion_iam
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      REDIS_DB: 1
+    volumes:
+      - ./services/iam/secrets:/app/secrets:ro
+    ports:
+      - "8010:8010"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8010/api/v1/health')",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    command: >
+      sh -c "uv run --no-dev alembic upgrade head &&
+             uv run --no-dev uvicorn app.main:app --host 0.0.0.0 --port 8010"
+
+  erp:
+    build:
+      context: .
+      dockerfile: services/erp/Dockerfile
+    container_name: neorvion-erp
+    restart: unless-stopped
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      iam:
+        condition: service_started
+    environment:
+      APP_ENV: development
+      APP_HOST: 0.0.0.0
+      APP_PORT: 8011
+      IAM_JWT_ISSUER: neorvion-iam
+      IAM_JWT_AUDIENCE: neorvion-erp
+      IAM_JWKS_URL: http://iam:8010/.well-known/jwks.json
+      IAM_REDIS_HOST: redis
+      IAM_REDIS_PORT: 6379
+      IAM_REDIS_DB: 1
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:8015,http://localhost:8016,http://localhost:8018,http://127.0.0.1:8015,http://127.0.0.1:8016,http://127.0.0.1:8018}
       MYSQL_HOST: mysql
       MYSQL_PORT: 3306
       MYSQL_USER: ${MYSQL_USER:-neorvion}
@@ -87,7 +141,8 @@ services:
 
   worker:
     build:
-      context: ./services/erp
+      context: .
+      dockerfile: services/erp/Dockerfile
     container_name: neorvion-worker
     restart: unless-stopped
     depends_on:
@@ -97,7 +152,12 @@ services:
         condition: service_healthy
     environment:
       APP_ENV: development
-      SECRET_KEY: ${SECRET_KEY:-change-me-in-local-dev}
+      IAM_JWT_ISSUER: neorvion-iam
+      IAM_JWT_AUDIENCE: neorvion-erp
+      IAM_JWKS_URL: http://iam:8010/.well-known/jwks.json
+      IAM_REDIS_HOST: redis
+      IAM_REDIS_PORT: 6379
+      IAM_REDIS_DB: 1
       MYSQL_HOST: mysql
       MYSQL_PORT: 3306
       MYSQL_USER: ${MYSQL_USER:-neorvion}
@@ -114,6 +174,7 @@ services:
     container_name: neorvion-nginx
     restart: unless-stopped
     depends_on:
+      - iam
       - erp
     ports:
       - "8080:80"

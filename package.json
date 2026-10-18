@@ -4,13 +4,14 @@
   "version": "0.1.0",
   "packageManager": "pnpm@12.3.4",
   "scripts": {
-    "dev": "pnpm --filter @neorvion/shell --filter @neorvion/erp --filter @neorvion/knowledge --parallel run dev",
+    "dev": "pnpm --filter @neorvion/shell --filter @neorvion/erp --filter @neorvion/knowledge --filter @neorvion/iam --parallel run dev",
     "dev:shell": "pnpm --filter @neorvion/shell dev",
     "dev:erp": "pnpm --filter @neorvion/erp dev",
     "dev:knowledge": "pnpm --filter @neorvion/knowledge dev",
-    "build": "pnpm --filter @neorvion/shell --filter @neorvion/erp --filter @neorvion/knowledge run build",
-    "lint": "pnpm --filter @neorvion/shell --filter @neorvion/erp --filter @neorvion/knowledge run lint",
-    "test": "pnpm --filter @neorvion/shell test && pnpm --filter @neorvion/erp test && pnpm --filter @neorvion/knowledge test",
+    "dev:iam": "pnpm --filter @neorvion/iam dev",
+    "build": "pnpm --filter @neorvion/shell --filter @neorvion/erp --filter @neorvion/knowledge --filter @neorvion/iam run build",
+    "lint": "pnpm --filter @neorvion/shell --filter @neorvion/erp --filter @neorvion/knowledge --filter @neorvion/iam run lint",
+    "test": "pnpm --filter @neorvion/shell test && pnpm --filter @neorvion/erp test && pnpm --filter @neorvion/knowledge test && pnpm --filter @neorvion/iam test",
     "format": "prettier --write ."
   },
   "devDependencies": {

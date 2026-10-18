@@ -1,4 +1,4 @@
-import { ERP_APP_NAME, KNOWLEDGE_APP_NAME } from '@neorvion/shared';
+import { ERP_APP_NAME, IAM_APP_NAME, KNOWLEDGE_APP_NAME } from '@neorvion/shared';
 import { Navigate } from 'react-router-dom';
 import { getMicroApp, getMicroAppEntryHref } from '@/micro/apps';
 import { getLastMicroHref } from '@/micro/last-location';
@@ -14,4 +14,8 @@ export function ErpIndexRedirect() {
 
 export function KnowledgeIndexRedirect() {
   return <MicroAppIndexRedirect name={KNOWLEDGE_APP_NAME} />;
+}
+
+export function IamIndexRedirect() {
+  return <MicroAppIndexRedirect name={IAM_APP_NAME} />;
 }

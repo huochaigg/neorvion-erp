@@ -1,4 +1,4 @@
-"""HTTP 依赖。JWT 验签 + ERP 身份内省写在这里，业务 Router 不要重复实现。"""
+"""HTTP 依赖。JWT 验签 + Redis 快照写在这里，业务 Router 不要重复实现。"""
 
 from datetime import UTC, datetime
 from typing import Annotated
@@ -7,24 +7,17 @@ from fastapi import Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.context import set_tenant_context
-from app.core.exceptions import AppError
+from app.core.exceptions import AppError, from_security_error
+from app.core.iam import jwt_verifier, snapshot_store
 from app.core.permissions import PermissionCode
-from app.core.security import decode_access_token
 from app.core.tenant import TENANT_HEADER, TenantContext
 from app.db.session import get_db
 from app.repositories.ops import ApiKeyRepository
 from app.services.api_keys import enforce_rate_limit, hash_api_key
 from app.services.authorization import AuthorizationService
-from app.services.identity import ErpIdentityClient, identity_client
+from neorvion_security import SecurityError
 
 DbSession = Annotated[AsyncSession, Depends(get_db)]
-
-
-def get_identity_client() -> ErpIdentityClient:
-    return identity_client
-
-
-IdentityClientDep = Annotated[ErpIdentityClient, Depends(get_identity_client)]
 
 
 def _extract_bearer_token(request: Request) -> str:
@@ -49,22 +42,15 @@ def _parse_tenant_id(raw: str | None) -> int:
     return tenant_id
 
 
-async def get_tenant_context(
-    request: Request,
-    client: IdentityClientDep,
-) -> TenantContext:
-    """先验签 JWT，再向 ERP 确认租户成员与权限。前端传入的 tenant_id 不能单独采信。"""
+async def get_tenant_context(request: Request) -> TenantContext:
+    """先验签 IAM JWT，再读 Redis 快照。前端传入的 tenant_id 不能单独采信。"""
     token = _extract_bearer_token(request)
-    payload = decode_access_token(token)
     tenant_id = _parse_tenant_id(request.headers.get(TENANT_HEADER))
-    user_id = int(payload["sub"])
-    context = await client.resolve(
-        access_token=token,
-        tenant_id=tenant_id,
-        jti=str(payload["jti"]),
-    )
-    if context.user_id != user_id:
-        raise AppError("无效的登录凭证", code=40102, status_code=401)
+    try:
+        claims = jwt_verifier().verify_access(token)
+        context = snapshot_store().load(claims=claims, tenant_id=tenant_id)
+    except SecurityError as exc:
+        raise from_security_error(exc) from exc
     set_tenant_context(tenant_id=context.tenant_id, user_id=context.user_id)
     return context
 
@@ -104,11 +90,7 @@ async def _resolve_api_key(request: Request, session: AsyncSession, token: str) 
     return context
 
 
-async def get_read_context(
-    request: Request,
-    client: IdentityClientDep,
-    session: DbSession,
-) -> TenantContext:
+async def get_read_context(request: Request, session: DbSession) -> TenantContext:
     header = request.headers.get("Authorization") or ""
     token = ""
     if header.startswith("Bearer "):
@@ -117,7 +99,7 @@ async def get_read_context(
         token = header.removeprefix("ApiKey ").strip()
     if token.startswith("nk_"):
         return await _resolve_api_key(request, session, token)
-    context = await get_tenant_context(request, client)
+    context = await get_tenant_context(request)
     AuthorizationService().require_all(context, (PermissionCode.KNOWLEDGE_READ,))
     return context
 

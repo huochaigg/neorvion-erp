@@ -24,19 +24,22 @@ class Settings(BaseSettings):
     app_version: str = "1.0.0"
     git_sha: str = ""
     enable_api_docs: bool = True
-    secret_key: str = "change-me-in-local-dev"
-    jwt_algorithm: str = "HS256"
-    jwt_access_expire_minutes: int = 30
-    jwt_refresh_expire_days: int = 7
     cors_origins: str = (
-        "http://localhost:8015,http://localhost:8016,"
-        "http://127.0.0.1:8015,http://127.0.0.1:8016"
+        "http://localhost:8015,http://localhost:8016,http://localhost:8018,"
+        "http://127.0.0.1:8015,http://127.0.0.1:8016,http://127.0.0.1:8018"
     )
 
-    refresh_cookie_name: str = "neorvion_refresh"
-    refresh_cookie_path: str = "/api/v1/auth"
-    refresh_cookie_samesite: str = "lax"
-    refresh_cookie_secure: bool = False
+    iam_jwt_issuer: str = "neorvion-iam"
+    iam_jwt_audience: str = "neorvion-erp"
+    iam_jwks_url: str = "http://127.0.0.1:8010/.well-known/jwks.json"
+    iam_jwt_key_id: str = "jwt-v1"
+    iam_jwt_public_key_path: str = ""
+    iam_jwt_private_key_path: str = ""
+    iam_snapshot_ttl_seconds: int = 3600
+    iam_redis_host: str = "127.0.0.1"
+    iam_redis_port: int = 6379
+    iam_redis_password: str = ""
+    iam_redis_db: int = 1
 
     mysql_host: str = "127.0.0.1"
     mysql_port: int = 3306
@@ -50,18 +53,14 @@ class Settings(BaseSettings):
     redis_password: str = ""
     redis_db: int = 0
 
-    rsa_key_id: str = "v1"
-    rsa_private_key_path: str = "secrets/rsa/v1/private.pem"
-    rsa_public_key_path: str = "secrets/rsa/v1/public.pem"
-    rsa_previous_key_id: str = ""
-    rsa_previous_private_key_path: str = ""
-    rsa_challenge_ttl_seconds: int = 300
     export_dir: str = str(_BACKEND_DIR / "var" / "exports")
-    # Knowledge 等内部服务调用身份内省接口。空值表示拒绝所有内部调用。
-    internal_service_key: str = ""
 
-    def access_token_ttl_seconds(self) -> int:
-        return self.jwt_access_expire_minutes * 60
+    def require_runtime_secrets(self) -> None:
+        """生产环境必须配置 JWKS，禁止用空公钥启动。"""
+        if not self.is_production:
+            return
+        if not self.iam_jwks_url and not self.iam_jwt_public_key_path:
+            raise RuntimeError("生产环境必须配置 IAM_JWKS_URL 或 IAM_JWT_PUBLIC_KEY_PATH")
 
     @property
     def is_production(self) -> bool:
@@ -79,17 +78,15 @@ class Settings(BaseSettings):
         return r"https?://(localhost|127\.0\.0\.1)(:\d+)?"
 
     @property
-    def cookie_secure(self) -> bool:
-        if self.is_production:
-            return True
-        return self.refresh_cookie_secure
-
-    @property
-    def cookie_samesite(self) -> str:
-        value = self.refresh_cookie_samesite.lower()
-        if self.cookie_secure is False and value == "none":
-            return "lax"
-        return value
+    def iam_redis_url(self) -> str:
+        """IAM 授权快照所在 Redis，与 ERP 任务队列库隔离。"""
+        if self.iam_redis_password:
+            password = quote_plus(self.iam_redis_password)
+            return (
+                f"redis://:{password}@{self.iam_redis_host}:"
+                f"{self.iam_redis_port}/{self.iam_redis_db}"
+            )
+        return f"redis://{self.iam_redis_host}:{self.iam_redis_port}/{self.iam_redis_db}"
 
     @property
     def database_url(self) -> str:

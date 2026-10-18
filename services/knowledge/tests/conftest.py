@@ -6,10 +6,13 @@ import asyncio
 import os
 import sys
 from collections.abc import Iterator
-from datetime import UTC, datetime, timedelta
+from datetime import timedelta
 from pathlib import Path
 from urllib.parse import urlparse, urlunparse
-from uuid import uuid4
+import tempfile
+
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric import rsa
 
 
 def _load_dotenv() -> None:
@@ -24,11 +27,31 @@ def _load_dotenv() -> None:
         os.environ.setdefault(key.strip(), value.strip().strip('"').strip("'"))
 
 
+_JWT_ROOT = Path(tempfile.mkdtemp(prefix="neorvion-knowledge-jwt-"))
+_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+(_JWT_ROOT / "private.pem").write_bytes(
+    _key.private_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PrivateFormat.PKCS8,
+        encryption_algorithm=serialization.NoEncryption(),
+    )
+)
+(_JWT_ROOT / "public.pem").write_bytes(
+    _key.public_key().public_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PublicFormat.SubjectPublicKeyInfo,
+    )
+)
+
 _load_dotenv()
 os.environ["APP_ENV"] = "test"
-os.environ["ERP_JWT_SECRET"] = "knowledge-test-jwt-secret-32bytes!"
-os.environ["ERP_INTERNAL_SERVICE_KEY"] = "knowledge-test-internal-key"
-os.environ["IDENTITY_CACHE_TTL_SECONDS"] = "30"
+os.environ["IAM_JWT_ISSUER"] = "neorvion-iam"
+os.environ["IAM_JWT_AUDIENCE"] = "neorvion-knowledge"
+os.environ["IAM_JWKS_URL"] = ""
+os.environ["IAM_JWT_KEY_ID"] = "jwt-v1"
+os.environ["IAM_JWT_PRIVATE_KEY_PATH"] = str(_JWT_ROOT / "private.pem")
+os.environ["IAM_JWT_PUBLIC_KEY_PATH"] = str(_JWT_ROOT / "public.pem")
+os.environ["IAM_REDIS_URL"] = os.environ.get("IAM_REDIS_URL", "redis://127.0.0.1:6379/13")
 os.environ["TASK_EXECUTOR"] = "inline"
 os.environ["MODEL_PROVIDER"] = "mock"
 os.environ["EMBEDDING_DIMENSIONS"] = "8"
@@ -39,24 +62,26 @@ if not os.environ.get("TEST_DATABASE_URL"):
     raise RuntimeError("请在 knowledge/.env 或环境变量中设置 TEST_DATABASE_URL")
 os.environ["DATABASE_URL"] = os.environ["TEST_DATABASE_URL"]
 
-import jwt
 import pytest
 from alembic import command
 from alembic.config import Config
-from app.api.deps import get_identity_client
 from app.core.config import get_settings, settings
+from app.core.iam import iam_redis_client, jwt_verifier, snapshot_store, test_signer
 from app.core.permissions import PermissionCode
 from app.core.tenant import TenantContext
 from app.db.session import SessionLocal, get_db
 from app.main import app
-from app.services.identity import ErpIdentityClient, IdentityCache
 from fastapi.testclient import TestClient
+from neorvion_security import AuthzSnapshot
 from sqlalchemy import create_engine, text
 
 ALL_KNOWLEDGE_PERMS = frozenset(item.value for item in PermissionCode)
 READ_ONLY_PERMS = frozenset({PermissionCode.KNOWLEDGE_READ.value})
 
 get_settings.cache_clear()
+jwt_verifier.cache_clear()
+snapshot_store.cache_clear()
+test_signer.cache_clear()
 
 
 def _admin_database_url(url: str) -> str:
@@ -122,18 +147,14 @@ def setup_test_database() -> Iterator[None]:
 @pytest.fixture(autouse=True)
 def clean_state() -> Iterator[None]:
     _wipe_tables()
+    iam_redis_client.flushdb()
     yield
+    iam_redis_client.flushdb()
     _wipe_tables()
 
 
-class FakeIdentityClient(ErpIdentityClient):
-    """测试用身份源。按 JWT sub + tenant_id 返回预设身份，不访问 ERP。"""
-
-    def __init__(self) -> None:
-        super().__init__(cache=IdentityCache())
-        self.identities: dict[tuple[int, int], TenantContext] = {}
-        self.forbidden: set[tuple[int, int]] = set()
-        self.missing: set[tuple[int, int]] = set()
+class FakeIdentityClient:
+    """测试用身份源。把 grant 写入 IAM Redis 快照，供 JwtVerifier 本地校验。"""
 
     def grant(
         self,
@@ -145,44 +166,23 @@ class FakeIdentityClient(ErpIdentityClient):
         is_owner: bool = True,
         member_id: int | None = None,
     ) -> TenantContext:
-        context = TenantContext(
+        snapshot = AuthzSnapshot(
             user_id=user_id,
             tenant_id=tenant_id,
             member_id=member_id or user_id * 10 + tenant_id,
             is_owner=is_owner,
             role=role,
-            permission_codes=permissions,
-            token_jti="test",
+            status="ACTIVE",
+            tenant_status="ACTIVE",
+            permission_codes=tuple(sorted(permissions)),
+            role_codes=(role,),
+            authz_version=1,
+            token_version=0,
+            display_name=f"User{user_id}",
+            email=f"user{user_id}@test.local",
         )
-        self.identities[(user_id, tenant_id)] = context
-        return context
-
-    async def resolve(self, *, access_token: str, tenant_id: int, jti: str) -> TenantContext:
-        from app.core.exceptions import AppError
-
-        payload = jwt.decode(
-            access_token,
-            settings.erp_jwt_secret,
-            algorithms=[settings.erp_jwt_algorithm],
-        )
-        user_id = int(payload["sub"])
-        key = (user_id, tenant_id)
-        if key in self.forbidden:
-            raise AppError("无权访问该租户", code=40310, status_code=403)
-        if key in self.missing:
-            raise AppError("租户不存在或不可访问", code=40410, status_code=404)
-        context = self.identities.get(key)
-        if context is None:
-            raise AppError("租户不存在或不可访问", code=40410, status_code=404)
-        return TenantContext(
-            user_id=context.user_id,
-            tenant_id=context.tenant_id,
-            member_id=context.member_id,
-            is_owner=context.is_owner,
-            role=context.role,
-            permission_codes=context.permission_codes,
-            token_jti=jti,
-        )
+        snapshot_store().save(snapshot)
+        return snapshot.to_context(token_jti="test")
 
 
 @pytest.fixture
@@ -203,23 +203,21 @@ def client(identity: FakeIdentityClient) -> Iterator[TestClient]:
         async with SessionLocal() as session:
             yield session
 
-    app.dependency_overrides[get_identity_client] = lambda: identity
     app.dependency_overrides[get_db] = _override_db
     with TestClient(app, backend_options=_testclient_backend_options() or {}) as test_client:
         yield test_client
     app.dependency_overrides.clear()
+    iam_redis_client.flushdb()
 
 
 def make_token(user_id: int) -> str:
-    now = datetime.now(UTC)
-    payload = {
-        "sub": str(user_id),
-        "type": "access",
-        "iat": now,
-        "exp": now + timedelta(minutes=30),
-        "jti": uuid4().hex,
-    }
-    return jwt.encode(payload, settings.erp_jwt_secret, algorithm=settings.erp_jwt_algorithm)
+    token, _jti = test_signer().sign(
+        user_id=user_id,
+        token_type="access",
+        ttl=timedelta(minutes=30),
+        token_version=0,
+    )
+    return token
 
 
 def auth_header(user_id: int, tenant_id: int | None = None) -> dict[str, str]:

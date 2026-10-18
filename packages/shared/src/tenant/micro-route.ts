@@ -1,4 +1,4 @@
-import { ERP_APP_NAME, KNOWLEDGE_APP_NAME } from '../constants/app';
+import { ERP_APP_NAME, IAM_APP_NAME, KNOWLEDGE_APP_NAME } from '../constants/app';
 import { childPathFromHost, hostPathFromChild } from '../micro/location';
 import { safePathAfterTenantChange } from './erp-route';
 import { safeKnowledgePathAfterTenantChange } from './knowledge-route';
@@ -9,6 +9,12 @@ export function safeChildPathAfterTenantChange(appName: string, childPathname: s
   }
   if (appName === KNOWLEDGE_APP_NAME) {
     return safeKnowledgePathAfterTenantChange(childPathname);
+  }
+  if (appName === IAM_APP_NAME) {
+    if (childPathname.includes('/members/')) {
+      return '/members';
+    }
+    return null;
   }
   return null;
 }

@@ -23,8 +23,8 @@ class Settings(BaseSettings):
     git_sha: str = ""
     enable_api_docs: bool = True
     cors_origins: str = (
-        "http://localhost:8015,http://localhost:8017,"
-        "http://127.0.0.1:8015,http://127.0.0.1:8017"
+        "http://localhost:8015,http://localhost:8017,http://localhost:8018,"
+        "http://127.0.0.1:8015,http://127.0.0.1:8017,http://127.0.0.1:8018"
     )
 
     database_url: str = "postgresql+psycopg://postgres:change-me@127.0.0.1:5432/neorvion_knowledge"
@@ -32,11 +32,14 @@ class Settings(BaseSettings):
         "postgresql+psycopg://postgres:change-me@127.0.0.1:5432/neorvion_knowledge_test"
     )
 
-    erp_jwt_secret: str = "change-me-in-local-dev"
-    erp_jwt_algorithm: str = "HS256"
-    erp_api_base_url: str = "http://127.0.0.1:8011"
-    erp_internal_service_key: str = ""
-    identity_cache_ttl_seconds: int = 30
+    iam_jwt_issuer: str = "neorvion-iam"
+    iam_jwt_audience: str = "neorvion-knowledge"
+    iam_jwks_url: str = "http://127.0.0.1:8010/.well-known/jwks.json"
+    iam_jwt_key_id: str = "jwt-v1"
+    iam_jwt_public_key_path: str = ""
+    iam_jwt_private_key_path: str = ""
+    iam_snapshot_ttl_seconds: int = 3600
+    iam_redis_url: str = "redis://127.0.0.1:6379/1"
 
     redis_url: str = "redis://127.0.0.1:6379/0"
     storage_root: str = str(_KNOWLEDGE_DIR / "var" / "storage")
@@ -124,6 +127,13 @@ class Settings(BaseSettings):
         if self.dashscope_api_key.strip():
             return "DASHSCOPE_API_KEY"
         return "EMBEDDING_API_KEY"
+
+    def require_runtime_secrets(self) -> None:
+        """生产环境必须配置 JWKS，禁止用空公钥启动。"""
+        if not self.is_production:
+            return
+        if not self.iam_jwks_url and not self.iam_jwt_public_key_path:
+            raise RuntimeError("生产环境必须配置 IAM_JWKS_URL 或 IAM_JWT_PUBLIC_KEY_PATH")
 
     @property
     def is_production(self) -> bool:

@@ -15,6 +15,7 @@ from app.db.session import engine
 @asynccontextmanager
 async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     setup_logging()
+    settings.require_runtime_secrets()
     yield
     await engine.dispose()
 
@@ -24,7 +25,7 @@ def create_app() -> FastAPI:
     app = FastAPI(
         title=settings.app_name,
         version=settings.app_version,
-        description="多租户 AI 知识库后端。当前里程碑：Knowledge V5 企业级管理与评测初始化。",
+        description="多租户 AI 知识库后端。身份由 IAM 签发，本服务只校验 JWT 与授权快照。",
         lifespan=lifespan,
         docs_url="/docs" if docs_enabled else None,
         redoc_url="/redoc" if docs_enabled else None,

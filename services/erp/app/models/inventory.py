@@ -143,7 +143,6 @@ class InventoryTransaction(TenantMixin, Base):
     remark: Mapped[str | None] = mapped_column(String(255), nullable=True)
     operator_user_id: Mapped[int | None] = mapped_column(
         BigInteger,
-        ForeignKey("users.id", ondelete="SET NULL"),
         nullable=True,
     )
     created_at: Mapped[datetime] = mapped_column(

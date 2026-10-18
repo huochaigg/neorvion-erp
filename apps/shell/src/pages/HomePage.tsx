@@ -3,6 +3,8 @@ import {
   ERP_BASENAME,
   ERP_DEFAULT_PATH,
   healthQueryKey,
+  IAM_BASENAME,
+  IAM_DEFAULT_PATH,
   KNOWLEDGE_BASENAME,
   KNOWLEDGE_DEFAULT_PATH,
   listUsableTenants,
@@ -70,6 +72,9 @@ export function HomePage() {
         </Link>
         <Link to={`${KNOWLEDGE_BASENAME}${KNOWLEDGE_DEFAULT_PATH}`}>
           <Button>打开 AI 知识库</Button>
+        </Link>
+        <Link to={`${IAM_BASENAME}${IAM_DEFAULT_PATH}`}>
+          <Button>打开权限中心</Button>
         </Link>
       </Space>
 

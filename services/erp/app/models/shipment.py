@@ -109,13 +109,11 @@ class Shipment(TimestampMixin, TenantMixin, Base):
     delivered_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     shipped_by: Mapped[int | None] = mapped_column(
         BigInteger,
-        ForeignKey("users.id", ondelete="SET NULL"),
         nullable=True,
     )
     remark: Mapped[str | None] = mapped_column(String(255), nullable=True)
     created_by: Mapped[int] = mapped_column(
         BigInteger,
-        ForeignKey("users.id", ondelete="RESTRICT"),
         nullable=False,
     )
 
@@ -231,7 +229,6 @@ class ShipmentTrackingEvent(TenantMixin, Base):
     occurred_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
     created_by: Mapped[int | None] = mapped_column(
         BigInteger,
-        ForeignKey("users.id", ondelete="SET NULL"),
         nullable=True,
     )
     created_at: Mapped[datetime] = mapped_column(

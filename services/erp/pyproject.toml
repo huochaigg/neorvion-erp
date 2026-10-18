@@ -10,6 +10,7 @@ dependencies = [
     "cryptography>=45.0.7",
     "email-validator>=2.3.0",
     "fastapi[standard]>=0.117.1",
+    "neorvion-security",
     "pydantic-settings>=2.10.1",
     "pyjwt>=2.10.1",
     "pymysql>=1.1.2",
@@ -17,6 +18,9 @@ dependencies = [
     "sqlalchemy>=2.0.43",
     "uvicorn[standard]>=0.35.0",
 ]
+
+[tool.uv.sources]
+neorvion-security = { path = "../../packages/python/neorvion_security", editable = true }
 
 [dependency-groups]
 dev = [

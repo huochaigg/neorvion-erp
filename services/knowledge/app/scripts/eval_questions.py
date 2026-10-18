@@ -118,7 +118,7 @@ def all_questions() -> list[dict]:
             _item("ecom-023", "ecommerce", KB_ECOM, ["01-cross-border-ops.md"], ["教学用模拟规则"], "这份跨境手册能不能当成某平台现行政策？", "不能。明确是教学用模拟规则。", "FACTUAL", 1, ["simulate"]),
             _item("ecom-024", "ecommerce", KB_ECOM, ["02-exceptions-cs.md"], ["照片和订单号"], "质量争议模拟流程要求买家提供什么？", "照片和订单号。", "FACTUAL", 1, ["cs"]),
             _item("ecom-025", "ecommerce", KB_ECOM, ["01-cross-border-ops.md"], ["申报中文名、英文名"], "模拟商品要同时维护哪些名称类字段？", "申报中文名、英文名，以及 HS 编码、原产国、净重、材质。", "MULTI_CONDITION", 3, ["product"]),
-            _item("ecom-026", "ecommerce", KB_ECOM, ["01-cross-border-ops.md"], ["支付手续费"], "模拟成本项是否包含支付手续费？", "包含。", "FACTUAL", 1, ["cost"]),
+            _item("ecom-026", "ecommerce", KB_ECOM, ["01-cross-border-ops.md"], ["不是实时牌价"], "根据知识库，今日美元兑人民币中间价是多少？", "知识库不含实时汇率，不能编造。", "UNANSWERABLE", 2, ["no-answer"], unanswerable=True),
             _item("ecom-027", "ecommerce", KB_ECOM, ["02-exceptions-cs.md"], ["库存恢复以质检结果为准"], "如何向买家解释退款成功但库存未恢复？", "退款成功不代表海外仓已上架，库存恢复以质检结果为准。", "PARAPHRASE", 2, ["cs"]),
             _item("ecom-028", "ecommerce", KB_ECOM, ecom_docs, ["头程", "海外仓", "尾程", "清关"], "用自己的话串一下模拟履约链路：从工厂到消费者经过哪些库存节点？", "工厂/国内仓头程到海外仓（在途不可售），海外仓可售后尾程给消费者；清关发生在跨境段，时效不承诺。", "LONG", 4, ["flow"]),
             _item("ecom-029", "ecommerce", KB_ECOM, ["01-cross-border-ops.md"], ["不是 Neorvion ERP 已实现功能"], "海外仓补货建议是否已经在 ERP 代码里自动生成采购单？", "没有。手册写明不是 ERP 已实现功能。", "HALLUCINATION", 3, ["erp-boundary"]),

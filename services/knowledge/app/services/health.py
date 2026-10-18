@@ -2,8 +2,8 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
+from app.core.iam import ping_iam_store
 from app.schemas.health import HealthCheckData
-from app.services.identity import identity_client
 
 
 class HealthService:
@@ -27,7 +27,7 @@ class HealthService:
             except Exception:
                 pgvector = "unavailable"
 
-        identity = "ok" if await identity_client.ping() else "unavailable"
+        identity = "ok" if ping_iam_store() else "unavailable"
         return HealthCheckData(
             postgres=postgres,  # type: ignore[arg-type]
             pgvector=pgvector,  # type: ignore[arg-type]

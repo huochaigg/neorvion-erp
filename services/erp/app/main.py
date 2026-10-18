@@ -4,7 +4,6 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.crypto import router as crypto_router
 from app.api.v1.router import api_router
 from app.core.config import settings
 from app.core.exceptions import register_exception_handlers
@@ -18,6 +17,7 @@ from app.tasks import queue as _task_queue  # noqa: F401  注册 after_commit Ou
 @asynccontextmanager
 async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     setup_logging()
+    settings.require_runtime_secrets()
     yield
     redis_client.close()
     engine.dispose()
@@ -28,7 +28,7 @@ def create_app() -> FastAPI:
     app = FastAPI(
         title=settings.app_name,
         version=settings.app_version,
-        description="多租户跨境电商 ERP 后端。当前里程碑：ERP Core V1（V16 生产部署）。",
+        description="多租户跨境电商 ERP 后端。身份由 IAM 签发，本服务只校验 JWT 与授权快照。",
         lifespan=lifespan,
         docs_url="/docs" if docs_enabled else None,
         redoc_url="/redoc" if docs_enabled else None,
@@ -45,7 +45,6 @@ def create_app() -> FastAPI:
         expose_headers=[REQUEST_ID_HEADER],
     )
     register_exception_handlers(app)
-    app.include_router(crypto_router)
     app.include_router(api_router)
     return app
 

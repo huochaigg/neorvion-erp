@@ -1,0 +1,57 @@
+[project]
+name = "neorvion-iam-backend"
+version = "0.1.0"
+description = "Neorvion IAM FastAPI backend"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "alembic>=1.16.5",
+    "argon2-cffi>=25.1.0",
+    "cryptography>=45.0.7",
+    "email-validator>=2.3.0",
+    "fastapi[standard]>=0.117.1",
+    "neorvion-security",
+    "pydantic-settings>=2.10.1",
+    "pyjwt>=2.10.1",
+    "pymysql>=1.1.2",
+    "redis>=6.4.0",
+    "sqlalchemy>=2.0.43",
+    "uvicorn[standard]>=0.35.0",
+]
+
+[tool.uv.sources]
+neorvion-security = { path = "../../packages/python/neorvion_security", editable = true }
+
+[dependency-groups]
+dev = [
+    "httpx>=0.28.1",
+    "pytest>=8.4.2",
+    "ruff>=0.13.1",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["app", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/conftest.py" = ["E402"]
+"app/core/permissions.py" = ["E501"]
+"app/api/v1/catalog.py" = ["E501"]
+"app/models/catalog.py" = ["E501"]
+"app/services/*.py" = ["E501"]
+"alembic/versions/*.py" = ["E501"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+
+[tool.pyright]
+venvPath = "."
+venv = ".venv"
+pythonVersion = "3.12"
+pythonPlatform = "All"
+extraPaths = ["."]

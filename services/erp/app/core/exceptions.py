@@ -5,6 +5,8 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
+from neorvion_security import SecurityError
+
 
 class AppError(Exception):
     """业务异常。API 层统一转换为标准 JSON。"""
@@ -30,7 +32,19 @@ class ErrorBody(BaseModel):
     data: Any = None
 
 
+def from_security_error(exc: SecurityError) -> AppError:
+    """把共享安全异常映射为 ERP AppError，失败时不得放行。"""
+    return AppError(exc.message, code=exc.code, status_code=exc.status_code)
+
+
 def register_exception_handlers(app: FastAPI) -> None:
+    @app.exception_handler(SecurityError)
+    async def handle_security_error(_request: Request, exc: SecurityError) -> JSONResponse:
+        return JSONResponse(
+            status_code=exc.status_code,
+            content=ErrorBody(code=exc.code, message=exc.message).model_dump(),
+        )
+
     @app.exception_handler(AppError)
     async def handle_app_error(_request: Request, exc: AppError) -> JSONResponse:
         return JSONResponse(

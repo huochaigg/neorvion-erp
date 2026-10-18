@@ -76,7 +76,6 @@ class RefundRecord(TimestampMixin, TenantMixin, Base):
     refunded_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     created_by: Mapped[int] = mapped_column(
         BigInteger,
-        ForeignKey("users.id", ondelete="RESTRICT"),
         nullable=False,
     )
 

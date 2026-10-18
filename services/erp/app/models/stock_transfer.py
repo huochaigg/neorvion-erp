@@ -79,26 +79,22 @@ class StockTransfer(TimestampMixin, TenantMixin, Base):
     remark: Mapped[str | None] = mapped_column(String(255), nullable=True)
     created_by: Mapped[int] = mapped_column(
         BigInteger,
-        ForeignKey("users.id", ondelete="RESTRICT"),
         nullable=False,
     )
     submitted_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     outbound_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     outbound_by: Mapped[int | None] = mapped_column(
         BigInteger,
-        ForeignKey("users.id", ondelete="SET NULL"),
         nullable=True,
     )
     received_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     received_by: Mapped[int | None] = mapped_column(
         BigInteger,
-        ForeignKey("users.id", ondelete="SET NULL"),
         nullable=True,
     )
     cancelled_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     cancelled_by: Mapped[int | None] = mapped_column(
         BigInteger,
-        ForeignKey("users.id", ondelete="SET NULL"),
         nullable=True,
     )
 

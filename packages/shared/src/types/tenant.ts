@@ -293,6 +293,14 @@ export const PERMISSION_CODE = {
   knowledgeCreate: 'knowledge:create',
   knowledgeUpdate: 'knowledge:update',
   knowledgeDelete: 'knowledge:delete',
+  iamUsersRead: 'iam:users:read',
+  iamUsersUpdate: 'iam:users:update',
+  iamUsersDisable: 'iam:users:disable',
+  iamAppsRead: 'iam:apps:read',
+  iamAppsManage: 'iam:apps:manage',
+  iamMenusRead: 'iam:menus:read',
+  iamMenusManage: 'iam:menus:manage',
+  iamAuditRead: 'iam:audit:read',
 } as const;
 
 export type PermissionMode = 'any' | 'all';

@@ -102,13 +102,11 @@ class ReturnOrder(TimestampMixin, TenantMixin, Base):
     received_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     received_by: Mapped[int | None] = mapped_column(
         BigInteger,
-        ForeignKey("users.id", ondelete="SET NULL"),
         nullable=True,
     )
     confirmed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     confirmed_by: Mapped[int | None] = mapped_column(
         BigInteger,
-        ForeignKey("users.id", ondelete="SET NULL"),
         nullable=True,
     )
 

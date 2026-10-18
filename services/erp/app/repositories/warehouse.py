@@ -1,7 +1,6 @@
-from sqlalchemy import func, or_, select
+from sqlalchemy import func, or_, select, text
 from sqlalchemy.orm import Session
 
-from app.models.tenant import Tenant
 from app.models.warehouse import Warehouse
 from app.repositories.base import BaseRepository
 
@@ -72,11 +71,14 @@ class WarehouseRepository(BaseRepository):
         )
         return list(self.session.scalars(stmt).all())
 
-    def lock_tenant(self) -> Tenant | None:
-        """锁当前租户行。第一个仓库创建时表里还没有仓库行可锁，用租户行串行化。"""
+    def lock_tenant(self) -> bool:
+        """用 MySQL GET_LOCK 串行化「是否第一个仓库」。IAM 租户表不在本库，不能锁 tenants 行。"""
         tenant_id = self.ensure_tenant()
-        stmt = select(Tenant).where(Tenant.id == tenant_id).with_for_update()
-        return self.session.scalars(stmt).first()
+        result = self.session.execute(
+            text("SELECT GET_LOCK(:name, 5)"),
+            {"name": f"erp:tenant:{tenant_id}"},
+        ).scalar()
+        return bool(result)
 
     def add(self, warehouse: Warehouse) -> Warehouse:
         self.session.add(warehouse)

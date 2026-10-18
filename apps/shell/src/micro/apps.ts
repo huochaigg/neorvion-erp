@@ -2,6 +2,9 @@ import {
   ERP_APP_NAME,
   ERP_BASENAME,
   ERP_DEFAULT_PATH,
+  IAM_APP_NAME,
+  IAM_BASENAME,
+  IAM_DEFAULT_PATH,
   KNOWLEDGE_APP_NAME,
   KNOWLEDGE_BASENAME,
   KNOWLEDGE_DEFAULT_PATH,
@@ -46,6 +49,16 @@ export const MICRO_APPS: MicroAppDefinition[] = [
         () => (import.meta.env.VITE_KNOWLEDGE_ENTRY || 'http://localhost:8017').replace(/\/$/, ''),
       ),
     ],
+  },
+  {
+    name: IAM_APP_NAME,
+    basename: IAM_BASENAME,
+    defaultPath: IAM_DEFAULT_PATH,
+    getEntry: () => (import.meta.env.VITE_IAM_ENTRY || 'http://localhost:8018').replace(/\/$/, ''),
+    fiber: false,
+    degrade: false,
+    alive: true,
+    plugins: [tailwindV4ShadowCssPlugin()],
   },
 ];
 

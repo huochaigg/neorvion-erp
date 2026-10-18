@@ -80,7 +80,6 @@ class SupplierRefundRecord(TimestampMixin, TenantMixin, Base):
     )
     created_by: Mapped[int] = mapped_column(
         BigInteger,
-        ForeignKey("users.id", ondelete="RESTRICT"),
         nullable=False,
     )
 

@@ -9,14 +9,15 @@ ENV UV_LINK_MODE=copy
 ARG GIT_SHA=
 ENV GIT_SHA=${GIT_SHA}
 
-COPY pyproject.toml uv.lock ./
-RUN uv sync --frozen --no-dev
+COPY packages/python/neorvion_security /opt/neorvion_security
+COPY services/knowledge/pyproject.toml services/knowledge/uv.lock ./
+RUN python -c "from pathlib import Path; p=Path('pyproject.toml'); p.write_text(p.read_text().replace('../../packages/python/neorvion_security', '/opt/neorvion_security'))"
+RUN uv sync --no-dev
 
-COPY alembic.ini ./
-COPY alembic ./alembic
-COPY app ./app
+COPY services/knowledge/alembic.ini ./
+COPY services/knowledge/alembic ./alembic
+COPY services/knowledge/app ./app
 
 EXPOSE 8012
 
-# V1 仅准备镜像，不要求部署。Migration 不在容器启动时自动执行。
 CMD ["uv", "run", "--no-dev", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8012", "--proxy-headers", "--forwarded-allow-ips=127.0.0.1"]

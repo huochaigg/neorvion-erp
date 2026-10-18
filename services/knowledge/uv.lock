@@ -1407,6 +1407,7 @@ dependencies = [
     { name = "langchain-openai" },
     { name = "langchain-postgres" },
     { name = "langchain-text-splitters" },
+    { name = "neorvion-security" },
     { name = "pgvector" },
     { name = "psycopg", extra = ["binary"] },
     { name = "pydantic-settings" },
@@ -1437,6 +1438,7 @@ requires-dist = [
     { name = "langchain-openai", specifier = ">=1.7.1" },
     { name = "langchain-postgres", specifier = ">=0.0.19" },
     { name = "langchain-text-splitters", specifier = ">=1.0.0" },
+    { name = "neorvion-security", editable = "../../packages/python/neorvion_security" },
     { name = "pgvector", specifier = ">=0.3.6" },
     { name = "psycopg", extras = ["binary"], specifier = ">=3.2.9" },
     { name = "pydantic-settings", specifier = ">=2.10.1" },
@@ -1453,6 +1455,23 @@ dev = [
     { name = "pytest", specifier = ">=8.4.2" },
     { name = "pytest-asyncio", specifier = ">=0.25.3" },
     { name = "ruff", specifier = ">=0.13.1" },
+]
+
+[[package]]
+name = "neorvion-security"
+version = "0.1.0"
+source = { editable = "../../packages/python/neorvion_security" }
+dependencies = [
+    { name = "cryptography" },
+    { name = "pyjwt" },
+    { name = "redis" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "cryptography", specifier = ">=45.0.7" },
+    { name = "pyjwt", specifier = ">=2.10.1" },
+    { name = "redis", specifier = ">=6.4.0" },
 ]
 
 [[package]]

@@ -12,39 +12,29 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 os.environ["APP_ENV"] = "test"
 os.environ["MYSQL_DATABASE"] = "neorvion_erp_test"
 os.environ["REDIS_DB"] = "15"
+os.environ["IAM_REDIS_DB"] = "15"
+os.environ["IAM_JWT_ISSUER"] = "neorvion-iam"
+os.environ["IAM_JWT_AUDIENCE"] = "neorvion-erp"
+os.environ["IAM_JWKS_URL"] = ""
+os.environ["IAM_JWT_KEY_ID"] = "jwt-v1"
 
-_RSA_ROOT = Path(tempfile.mkdtemp(prefix="neorvion-rsa-"))
-
-
-def _write_rsa_pair(directory: Path) -> None:
-    key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
-    directory.mkdir(parents=True, exist_ok=True)
-    (directory / "private.pem").write_bytes(
-        key.private_bytes(
-            encoding=serialization.Encoding.PEM,
-            format=serialization.PrivateFormat.PKCS8,
-            encryption_algorithm=serialization.NoEncryption(),
-        )
+_JWT_ROOT = Path(tempfile.mkdtemp(prefix="neorvion-erp-jwt-"))
+_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+(_JWT_ROOT / "private.pem").write_bytes(
+    _key.private_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PrivateFormat.PKCS8,
+        encryption_algorithm=serialization.NoEncryption(),
     )
-    (directory / "public.pem").write_bytes(
-        key.public_key().public_bytes(
-            encoding=serialization.Encoding.PEM,
-            format=serialization.PublicFormat.SubjectPublicKeyInfo,
-        )
+)
+(_JWT_ROOT / "public.pem").write_bytes(
+    _key.public_key().public_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PublicFormat.SubjectPublicKeyInfo,
     )
-
-
-_CURRENT = _RSA_ROOT / "v1"
-_PREVIOUS = _RSA_ROOT / "v0"
-_write_rsa_pair(_CURRENT)
-_write_rsa_pair(_PREVIOUS)
-
-os.environ["RSA_KEY_ID"] = "v1"
-os.environ["RSA_PRIVATE_KEY_PATH"] = str(_CURRENT / "private.pem")
-os.environ["RSA_PUBLIC_KEY_PATH"] = str(_CURRENT / "public.pem")
-os.environ["RSA_PREVIOUS_KEY_ID"] = "v0"
-os.environ["RSA_PREVIOUS_PRIVATE_KEY_PATH"] = str(_PREVIOUS / "private.pem")
-os.environ["RSA_CHALLENGE_TTL_SECONDS"] = "300"
+)
+os.environ["IAM_JWT_PRIVATE_KEY_PATH"] = str(_JWT_ROOT / "private.pem")
+os.environ["IAM_JWT_PUBLIC_KEY_PATH"] = str(_JWT_ROOT / "public.pem")
 
 from collections.abc import Iterator
 
@@ -52,13 +42,31 @@ import pytest
 from alembic import command
 from alembic.config import Config
 from app.core.config import get_settings
+from app.core.iam import iam_redis_client, jwt_verifier, snapshot_store, test_signer
 from app.core.redis import redis_client
 from app.db.session import SessionLocal
 from app.main import app
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, text
+from tests.helpers.identity_stub import install_identity_stub, reset_identity_stub
 
 get_settings.cache_clear()
+jwt_verifier.cache_clear()
+snapshot_store.cache_clear()
+test_signer.cache_clear()
+install_identity_stub(app)
+
+# 身份中心测试已迁到 services/iam。此处忽略避免双套身份断言。
+collect_ignore = [
+    "test_auth.py",
+    "test_rsa.py",
+    "test_tenants.py",
+    "test_members.py",
+    "test_rbac.py",
+    "test_internal_identity.py",
+    "test_my_permissions.py",
+    "test_v235_rbac.py",
+]
 
 
 def _ensure_test_database() -> None:
@@ -85,12 +93,12 @@ def setup_test_database() -> Iterator[None]:
     _run_migrations()
     yield
     redis_client.flushdb()
+    iam_redis_client.flushdb()
 
 
 def _wipe_business_tables() -> None:
     session = SessionLocal()
     try:
-        # 类目 parent_id 自关联，关外键后才能整表清空。
         session.execute(text("SET FOREIGN_KEY_CHECKS=0"))
         session.execute(text("DELETE FROM async_task_logs"))
         session.execute(text("DELETE FROM async_tasks"))
@@ -102,11 +110,24 @@ def _wipe_business_tables() -> None:
         session.execute(text("DELETE FROM purchase_return_outbounds"))
         session.execute(text("DELETE FROM purchase_return_items"))
         session.execute(text("DELETE FROM purchase_returns"))
+        session.execute(text("DELETE FROM purchase_receipt_items"))
+        session.execute(text("DELETE FROM purchase_receipts"))
         session.execute(text("DELETE FROM refund_records"))
         session.execute(text("DELETE FROM return_order_items"))
         session.execute(text("DELETE FROM return_orders"))
         session.execute(text("DELETE FROM after_sale_items"))
         session.execute(text("DELETE FROM after_sale_orders"))
+        session.execute(text("DELETE FROM sales_order_items"))
+        session.execute(text("DELETE FROM sales_orders"))
+        session.execute(text("DELETE FROM customers"))
+        session.execute(text("DELETE FROM outbound_pick_lines"))
+        session.execute(text("DELETE FROM outbound_picks"))
+        session.execute(text("DELETE FROM outbound_order_items"))
+        session.execute(text("DELETE FROM outbound_orders"))
+        session.execute(text("DELETE FROM shipment_tracking_events"))
+        session.execute(text("DELETE FROM shipment_items"))
+        session.execute(text("DELETE FROM shipments"))
+        session.execute(text("DELETE FROM carriers"))
         session.execute(text("DELETE FROM stocktake_items"))
         session.execute(text("DELETE FROM stocktake_orders"))
         session.execute(text("DELETE FROM stock_transfer_items"))
@@ -138,8 +159,11 @@ def _wipe_business_tables() -> None:
 @pytest.fixture(autouse=True)
 def clean_state() -> Iterator[None]:
     _wipe_business_tables()
+    reset_identity_stub()
     yield
     redis_client.flushdb()
+    iam_redis_client.flushdb()
+    reset_identity_stub()
     _wipe_business_tables()
 
 

@@ -1,14 +1,5 @@
-"""当前请求的租户身份。X-Tenant-ID 只是意愿，必须再查 tenant_members。"""
+"""当前请求的租户身份。X-Tenant-ID 只是意愿，必须再校验 IAM 快照。"""
 
-from dataclasses import dataclass
+from neorvion_security.tenant import TENANT_HEADER, TenantContext
 
-TENANT_HEADER = "X-Tenant-ID"
-
-
-@dataclass(frozen=True, slots=True)
-class TenantContext:
-    user_id: int
-    tenant_id: int
-    member_id: int
-    is_owner: bool
-    role: str
+__all__ = ["TENANT_HEADER", "TenantContext"]

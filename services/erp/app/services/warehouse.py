@@ -92,8 +92,8 @@ class WarehouseService:
 
         try:
             # 锁本租户行，串行化「是否第一个仓库」的判断，避免并发插入两个默认仓。
-            if self.warehouses.lock_tenant() is None:
-                raise AppError(_UNAVAILABLE, code=40440, status_code=404)
+            if not self.warehouses.lock_tenant():
+                raise AppError("租户锁定超时，请重试", code=40941, status_code=409)
             is_first = self.warehouses.count_in_tenant() == 0
             if is_first and status != WarehouseStatus.ACTIVE.value:
                 raise AppError(

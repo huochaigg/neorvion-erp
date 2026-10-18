@@ -36,7 +36,6 @@ class AsyncTask(TimestampMixin, Base):
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     tenant_id: Mapped[int | None] = mapped_column(
         BigInteger,
-        ForeignKey("tenants.id", ondelete="RESTRICT"),
         nullable=True,
         index=True,
     )
@@ -95,7 +94,6 @@ class AsyncTaskLog(Base):
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     tenant_id: Mapped[int | None] = mapped_column(
         BigInteger,
-        ForeignKey("tenants.id", ondelete="RESTRICT"),
         nullable=True,
         index=True,
     )

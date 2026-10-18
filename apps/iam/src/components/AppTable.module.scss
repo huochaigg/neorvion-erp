@@ -1,0 +1,73 @@
+.tableFill {
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.tableFill :global(.ant-table-wrapper),
+.tableFill :global(.ant-spin-nested-loading),
+.tableFill :global(.ant-spin-container) {
+  height: 100%;
+  min-height: 0;
+}
+
+.tableFill :global(.ant-spin-container) {
+  display: flex;
+  flex-direction: column;
+}
+
+.tableFill :global(.ant-table) {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.tableFill :global(.ant-table-container) {
+  height: 100%;
+}
+
+.tableFill :global(.ant-table-pagination) {
+  flex-shrink: 0;
+  margin-bottom: 0 !important;
+}
+
+.table :global(.ant-table-thead > tr > th) {
+  white-space: nowrap;
+}
+
+.table :global(.ant-table-cell) {
+  word-break: normal;
+  overflow-wrap: normal;
+}
+
+.table :global(.ant-table-tbody > tr > td) {
+  overflow: hidden;
+}
+
+.nowrap {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.code {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.actions {
+  display: inline-flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  white-space: nowrap;
+}
+
+.actions :global(.ant-btn) {
+  white-space: nowrap;
+}
