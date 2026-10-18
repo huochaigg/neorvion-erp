@@ -21,7 +21,7 @@ from app.models.knowledge import (
 )
 from app.models.rag import ChunkEmbedding, EmbeddingStatus
 from app.processing.hashing import content_sha256
-from app.repositories.documents import TaskRepository
+from app.repositories.documents import TaskRepository, get_live_document
 from app.tasks.queue import enqueue_task
 
 logger = logging.getLogger(__name__)
@@ -34,15 +34,9 @@ class EmbeddingService:
 
     async def execute(self, task: DocumentProcessingTask) -> None:
         """执行文档级 EMBED 任务：只处理当前 ACTIVE 切片。"""
-        document = await self.session.scalar(
-            select(KnowledgeDocument).where(
-                KnowledgeDocument.tenant_id == task.tenant_id,
-                KnowledgeDocument.id == task.document_id,
-                KnowledgeDocument.deleted_at.is_(None),
-            )
-        )
+        document = await get_live_document(self.session, task.tenant_id, task.document_id)
         if document is None:
-            raise AppError("文档不存在或已删除", code=40451, status_code=404)
+            raise AppError("文档或知识库已删除，任务取消", code=40451, status_code=404)
         chunks = list(
             (
                 await self.session.scalars(
@@ -66,6 +60,8 @@ class EmbeddingService:
         batch_size = max(1, settings.embedding_batch_size)
         client = get_embedding_client()
         for start in range(0, total, batch_size):
+            if await get_live_document(self.session, document.tenant_id, document.id) is None:
+                raise AppError("文档或知识库已删除，任务取消", code=40451, status_code=404)
             batch = chunks[start : start + batch_size]
             await self._embed_batch(document, batch, client)
             task.progress = min(99, int((start + len(batch)) / total * 100))
@@ -164,7 +160,9 @@ async def enqueue_embed_task(
     document: KnowledgeDocument,
     user_id: int,
 ) -> DocumentProcessingTask | None:
-    """为文档创建 EMBED 任务。已有进行中任务则跳过。"""
+    """为文档创建 EMBED 任务。已有进行中任务则跳过。已删除文档不再入队。"""
+    if await get_live_document(session, document.tenant_id, document.id) is None:
+        return None
     tasks = TaskRepository(session, document.tenant_id)
     existed = await tasks.find_active(document.id, TaskType.EMBED.value)
     if existed is not None:

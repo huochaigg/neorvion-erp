@@ -52,7 +52,11 @@ import { fetchRevisions, replaceDocument, restoreRevision } from '@/api/ops';
 import { Can } from '@/components/Can';
 import { PageHeader } from '@/components/PageHeader';
 import { usePermissions } from '@/hooks/usePermissions';
+import { FormLabelHelp } from '@/components/FormLabelHelp';
 import { formatDateTime } from '@/lib/datetime';
+import { goBackOr } from '@/lib/navigation';
+import { chunkOverlapHelp, chunkSizeHelp } from '@/lib/retrievalHelp';
+import { fetchRetrievalDefaults } from '@/api/rag';
 
 export function DocumentDetailPage() {
   const { id, docId } = useParams();
@@ -163,8 +167,24 @@ export function DocumentDetailPage() {
     onError: (error: Error) => message.error(error.message),
   });
 
+  const defaultsQuery = useQuery({
+    queryKey: ['tenant', tenantId, 'knowledge-retrieval-defaults'],
+    queryFn: ({ signal }) => fetchRetrievalDefaults(signal),
+    enabled: tenantId != null,
+  });
+  const fallbackPath = Number.isFinite(knowledgeBaseId) ? `/bases/${knowledgeBaseId}` : '/bases';
+  const unavailableActions = (
+    <Space>
+      <Button onClick={() => goBackOr(navigate, fallbackPath)}>返回上一页</Button>
+      <Button type="primary" onClick={() => navigate(fallbackPath)}>
+        {Number.isFinite(knowledgeBaseId) ? '返回知识库' : '返回知识库列表'}
+      </Button>
+      <Button onClick={() => navigate('/bases')}>返回知识库列表</Button>
+    </Space>
+  );
+
   if (!Number.isFinite(documentId) || !Number.isFinite(knowledgeBaseId)) {
-    return <Result status="404" title="文档不存在" extra={<Button onClick={() => navigate('/bases')}>返回</Button>} />;
+    return <Result status="404" title="文档不存在" extra={unavailableActions} />;
   }
   if (detailQuery.isLoading) {
     return (
@@ -175,12 +195,12 @@ export function DocumentDetailPage() {
   }
   if (detailQuery.isError) {
     const error = detailQuery.error;
-    const missing = error instanceof ApiError && error.status === 404;
+    const unavailable = error instanceof ApiError && (error.status === 404 || error.status === 403);
     return (
       <Result
-        status={missing ? '404' : 'error'}
-        title={missing ? '文档不存在或不可访问' : '加载失败'}
-        extra={<Button onClick={() => navigate(`/bases/${knowledgeBaseId}`)}>返回知识库</Button>}
+        status={unavailable ? '404' : 'error'}
+        title={unavailable ? '文档不存在或不可访问' : '加载失败'}
+        extra={unavailableActions}
       />
     );
   }
@@ -398,8 +418,8 @@ export function DocumentDetailPage() {
           layout="vertical"
           initialValues={{
             strategy: doc.chunk_strategy || KNOWLEDGE_CHUNK_STRATEGY.recursive,
-            chunk_size: doc.chunk_size || 800,
-            chunk_overlap: doc.chunk_overlap || 120,
+            chunk_size: doc.chunk_size || defaultsQuery.data?.default_chunk_size || 800,
+            chunk_overlap: doc.chunk_overlap || defaultsQuery.data?.default_chunk_overlap || 120,
           }}
           onFinish={(values) => chunkMutation.mutate(values)}
         >
@@ -411,10 +431,30 @@ export function DocumentDetailPage() {
               ]}
             />
           </Form.Item>
-          <Form.Item name="chunk_size" label="切片长度（字符）" rules={[{ required: true }]}>
+          <Form.Item
+            name="chunk_size"
+            label={
+              defaultsQuery.data ? (
+                <FormLabelHelp label="切片长度（字符）">{chunkSizeHelp(defaultsQuery.data)}</FormLabelHelp>
+              ) : (
+                '切片长度（字符）'
+              )
+            }
+            rules={[{ required: true }]}
+          >
             <InputNumber min={100} max={8000} className="w-full" />
           </Form.Item>
-          <Form.Item name="chunk_overlap" label="重叠（字符，须小于长度）" rules={[{ required: true }]}>
+          <Form.Item
+            name="chunk_overlap"
+            label={
+              defaultsQuery.data ? (
+                <FormLabelHelp label="重叠（字符，须小于长度）">{chunkOverlapHelp(defaultsQuery.data)}</FormLabelHelp>
+              ) : (
+                '重叠（字符，须小于长度）'
+              )
+            }
+            rules={[{ required: true }]}
+          >
             <InputNumber min={0} max={7999} className="w-full" />
           </Form.Item>
         </Form>

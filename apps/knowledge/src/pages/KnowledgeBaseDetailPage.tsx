@@ -31,6 +31,7 @@ import { PageHeader } from '@/components/PageHeader';
 import { UploadDocumentsDrawer } from '@/components/UploadDocumentsDrawer';
 import { usePermissions } from '@/hooks/usePermissions';
 import { formatDateTime } from '@/lib/datetime';
+import { goBackOr } from '@/lib/navigation';
 
 export function KnowledgeBaseDetailPage() {
   const { id } = useParams();
@@ -46,8 +47,17 @@ export function KnowledgeBaseDetailPage() {
     enabled: tenantId != null && Number.isFinite(knowledgeBaseId),
   });
 
+  const unavailableActions = (
+    <Space>
+      <Button onClick={() => goBackOr(navigate, '/bases')}>返回上一页</Button>
+      <Button type="primary" onClick={() => navigate('/bases')}>
+        返回知识库列表
+      </Button>
+    </Space>
+  );
+
   if (!Number.isFinite(knowledgeBaseId)) {
-    return <Result status="404" title="知识库不存在" extra={<Button onClick={() => navigate('/bases')}>返回列表</Button>} />;
+    return <Result status="404" title="知识库不存在" extra={unavailableActions} />;
   }
   if (detailQuery.isLoading) {
     return (
@@ -58,13 +68,12 @@ export function KnowledgeBaseDetailPage() {
   }
   if (detailQuery.isError) {
     const error = detailQuery.error;
-    const forbidden = error instanceof ApiError && error.status === 403;
-    const missing = error instanceof ApiError && error.status === 404;
+    const unavailable = error instanceof ApiError && (error.status === 403 || error.status === 404);
     return (
       <Result
-        status={forbidden ? '403' : missing ? '404' : 'error'}
-        title={forbidden ? '无权限' : missing ? '知识库不存在或不可访问' : '加载失败'}
-        extra={<Button onClick={() => navigate('/bases')}>返回列表</Button>}
+        status={unavailable ? '404' : 'error'}
+        title={unavailable ? '知识库不存在或不可访问' : '加载失败'}
+        extra={unavailableActions}
       />
     );
   }
@@ -207,7 +216,7 @@ function DocumentTable({ knowledgeBaseId }: { knowledgeBaseId: number }) {
             详情
           </Button>
           <Can permission={PERMISSION_CODE.knowledgeDelete}>
-            <Popconfirm title="删除后将清理原文件和切片，确认？" onConfirm={() => deleteMutation.mutate(record.id)}>
+            <Popconfirm title="移入回收站后该文档的切片将从列表和检索中隐藏，可恢复。" onConfirm={() => deleteMutation.mutate(record.id)}>
               <Button type="link" size="small" danger>
                 删除
               </Button>

@@ -10,7 +10,7 @@ from app.api.deps import (
     KnowledgeReadContext,
     KnowledgeUpdateContext,
 )
-from app.models.evaluation import EvaluationRun
+from app.models.evaluation import EvaluationResult, EvaluationRun
 from app.repositories.evaluation import EvaluationRepository
 from app.schemas.common import ApiResponse, ok
 from app.schemas.evaluation import (
@@ -61,6 +61,26 @@ def _run_out(row: EvaluationRun) -> RunOut:
         started_at=row.started_at,
         finished_at=row.finished_at,
         created_at=row.created_at,
+    )
+
+
+def _result_out(item: EvaluationResult, expected_answer: str | None = None) -> ResultOut:
+    return ResultOut(
+        id=item.id,
+        run_id=item.run_id,
+        case_id=item.case_id,
+        question=item.question,
+        expected_answer=expected_answer,
+        is_unanswerable=item.is_unanswerable,
+        retrieved=list(item.retrieved or []),
+        retrieval_metrics=item.retrieval_metrics,
+        answer=item.answer,
+        generation_metrics=item.generation_metrics,
+        judge_error=item.judge_error,
+        human_override=item.human_override,
+        latency_ms=item.latency_ms,
+        usage=item.usage,
+        error_message=item.error_message,
     )
 
 
@@ -317,26 +337,14 @@ async def list_results(run_id: int, context: KnowledgeReadContext, session: DbSe
 
         raise AppError("评测任务不存在或不可访问", code=40483, status_code=404)
     rows = await repo.list_results(run.id)
-    return ok(
-        [
-            ResultOut(
-                id=item.id,
-                run_id=item.run_id,
-                case_id=item.case_id,
-                question=item.question,
-                is_unanswerable=item.is_unanswerable,
-                retrieved=list(item.retrieved or []),
-                retrieval_metrics=item.retrieval_metrics,
-                answer=item.answer,
-                generation_metrics=item.generation_metrics,
-                judge_error=item.judge_error,
-                human_override=item.human_override,
-                latency_ms=item.latency_ms,
-                error_message=item.error_message,
-            )
-            for item in rows
-        ]
-    )
+    version = await repo.get_version(run.dataset_id, run.dataset_version)
+    expected_by_id: dict[int, str | None] = {}
+    for case in ((version.snapshot or {}).get("cases") or []) if version is not None else []:
+        try:
+            expected_by_id[int(case["id"])] = case.get("expected_answer")
+        except (KeyError, TypeError, ValueError):
+            continue
+    return ok([_result_out(item, expected_by_id.get(item.case_id)) for item in rows])
 
 
 @router.post("/evaluation/runs/{run_id}/cancel", response_model=ApiResponse[RunOut])
@@ -365,23 +373,7 @@ async def human_override(
     row.human_override = payload.model_dump()
     await session.commit()
     await session.refresh(row)
-    return ok(
-        ResultOut(
-            id=row.id,
-            run_id=row.run_id,
-            case_id=row.case_id,
-            question=row.question,
-            is_unanswerable=row.is_unanswerable,
-            retrieved=list(row.retrieved or []),
-            retrieval_metrics=row.retrieval_metrics,
-            answer=row.answer,
-            generation_metrics=row.generation_metrics,
-            judge_error=row.judge_error,
-            human_override=row.human_override,
-            latency_ms=row.latency_ms,
-            error_message=row.error_message,
-        )
-    )
+    return ok(_result_out(row))
 
 
 @router.get("/evaluation/compare", response_model=ApiResponse[CompareOut])

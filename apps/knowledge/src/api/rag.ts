@@ -9,6 +9,7 @@ import {
   type KnowledgeIndexStatus,
   type KnowledgeModelProfile,
   type KnowledgeSearchPayload,
+  type KnowledgeRetrievalDefaults,
   type KnowledgeSearchResult,
 } from '@neorvion/shared';
 import { apiClient, unwrapApi } from './client';
@@ -19,6 +20,10 @@ import { useKnowledgeTenantStore } from '@/stores/tenant-runtime';
 
 export function searchKnowledge(payload: KnowledgeSearchPayload, signal?: AbortSignal) {
   return unwrapApi(apiClient.post<ApiResponse<KnowledgeSearchResult>>('/api/v1/search', payload, { signal }));
+}
+
+export function fetchRetrievalDefaults(signal?: AbortSignal) {
+  return unwrapApi(apiClient.get<ApiResponse<KnowledgeRetrievalDefaults>>('/api/v1/retrieval/defaults', { signal }));
 }
 
 export function testRetrieval(payload: KnowledgeSearchPayload, signal?: AbortSignal) {

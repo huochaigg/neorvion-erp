@@ -66,6 +66,36 @@ class RecycleListOut(BaseModel):
     page_size: int
 
 
+class RecycleTargetIn(BaseModel):
+    resource_type: str = Field(description="knowledge_base / document")
+    id: int = Field(gt=0)
+
+    @field_validator("resource_type")
+    @classmethod
+    def normalize_resource_type(cls, value: str) -> str:
+        normalized = value.strip()
+        if normalized not in {"knowledge_base", "document"}:
+            raise ValueError("resource_type 只能是 knowledge_base 或 document")
+        return normalized
+
+
+class RecycleBatchIn(BaseModel):
+    items: list[RecycleTargetIn] = Field(min_length=1, max_length=100)
+
+
+class RecycleEmptyIn(BaseModel):
+    confirm: bool = Field(description="必须为 true，表示已知不可恢复")
+    expected_count: int = Field(ge=0, description="当前回收站条数，用于防止页面过期误清空")
+
+
+class RecycleBatchOut(BaseModel):
+    succeeded: int = 0
+    skipped: int = 0
+    failed: int = 0
+    remaining: int = 0
+    errors: list[dict] = Field(default_factory=list)
+
+
 class ApiKeyCreateIn(BaseModel):
     name: str = Field(min_length=1, max_length=128, description="用途名称")
     scopes: list[str] = Field(default_factory=lambda: ["search"], description="search / chat / stats")
@@ -137,6 +167,7 @@ class ProbeIn(BaseModel):
 class ProbeOut(BaseModel):
     case_id: int
     question: str
+    expected_answer: str | None = None
     is_unanswerable: bool
     strategy: str
     rerank_applied: bool

@@ -277,7 +277,24 @@ Document 粒度单独计算并标记 `granularity=document`，不得与 Chunk �
 | 能力 | 说明 |
 | --- | --- |
 | 文档版本 | `document_revisions` 快照原文件。更新/恢复先 PARSE，新切片发布前旧 ACTIVE 仍可检索 |
-| 回收站 | 知识库/文档软删除；恢复；彻底清理时同步删任务、切片、向量与文件 |
+| 回收站 | 知识库/文档软删除；支持批量恢复、批量彻底删除、二次确认清空。切片表不加 `deleted_at`，业务列表/统计/检索通过父文档与知识库 `deleted_at` 过滤 |
+
+### 删除与恢复生命周期
+
+只在 `knowledge_bases.deleted_at` 与 `knowledge_documents.deleted_at` 上做软删除，不为 Chunk / Embedding 增加 `deleted_at`。
+
+| 操作 | 立刻从列表/统计/检索消失 | 物理数据 | 恢复规则 |
+| --- | --- | --- | --- |
+| 软删除文档 | 该文档的 Chunk、Embedding、解析预览、索引统计、RAG/问答/评测新请求 | 文件、切片、向量保留，供还原 | 若当前版本切片与向量仍匹配则重用，否则进入待重新索引 |
+| 软删除知识库 | 库及其**当时仍有效**的文档、下属切片与向量 | 同上 | 只恢复删除库时一并盖戳的文档。删除库之前就已单独删除的文档保持删除 |
+| 彻底删除 | 数据库行、向量、存储文件 | 先提交数据库再删文件；文件失败写入 `*.purge_files_pending` 审计，可重试 | 不可恢复 |
+| 历史任务 / 评测 / 引用快照 / 审计 | 保留 | 不级联删除 | 任务列表用 `document_available` 表示文档是否仍可打开，不新增“文档已删除”状态列 |
+
+PARSE / CHUNK / EMBED 在软删除时取消；Worker 写入 DRAFT→ACTIVE 或向量前会再次检查文档与知识库是否仍有效。覆盖该库的排队/运行中评测会 `cancel_requested`。已启动的短请求以检索当时的 SQL 过滤为准，不会把已删除内容作为新证据。
+
+回收站接口：`GET /api/v1/recycle`、`POST /api/v1/recycle/restore-batch`、`POST /api/v1/recycle/purge-batch`、`POST /api/v1/recycle/empty`（必须 `confirm=true` 且 `expected_count` 与当前条数一致）。知识库删除后，其下属文档不再作为独立回收站行出现，避免与库级联重复。
+
+检索/切片默认值以 `GET /api/v1/retrieval/defaults` 为准，前端帮助文案不得写死冒充系统配置。评测列表的 Vector/Keyword Top-K、RRF k 等列读取实验 `config` 快照；缺 key 显示「未记录」。
 | 知识库授权 | `knowledge_base_grants`。无记录回退租户 `knowledge:*`；有记录即白名单。OWNER 绕过。不另建租户体系 |
 | API Key | `nk_` 前缀，服务端只存 SHA256。明文仅创建时返回一次。scopes：search/chat/stats。租户绑定在 Key 上，改 `X-Tenant-ID` 不能跨租户。支持过期、撤销、限流 |
 | 审计 | `knowledge_audit_logs`，敏感字段脱敏 |

@@ -274,6 +274,35 @@ class EvaluationRepository(BaseRepository):
         stmt = select(EvaluationRun).where(EvaluationRun.status == RunStatus.QUEUED.value)
         return list((await self.session.scalars(stmt)).all())
 
+    async def request_cancel_for_knowledge_base(self, knowledge_base_id: int) -> int:
+        """知识库删除后取消仍覆盖该库的排队/运行中评测。历史结果与快照保留。"""
+        tenant_id = self.ensure_tenant()
+        rows = list(
+            (
+                await self.session.scalars(
+                    select(EvaluationRun).where(
+                        EvaluationRun.tenant_id == tenant_id,
+                        EvaluationRun.status.in_((RunStatus.QUEUED.value, RunStatus.RUNNING.value)),
+                    )
+                )
+            ).all()
+        )
+        now = datetime.now(UTC)
+        count = 0
+        for run in rows:
+            ids = list((run.config_snapshot or {}).get("knowledge_base_ids") or [])
+            if ids and knowledge_base_id not in ids:
+                continue
+            if not ids:
+                continue
+            run.cancel_requested = True
+            run.error_message = "知识库已删除，评测取消"
+            if run.status == RunStatus.QUEUED.value:
+                run.status = RunStatus.CANCELLED.value
+                run.finished_at = now
+            count += 1
+        return count
+
     async def find_active_run(self, experiment_id: int) -> EvaluationRun | None:
         tenant_id = self.ensure_tenant()
         return await self.session.scalar(

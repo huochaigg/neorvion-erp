@@ -5,6 +5,7 @@ import type {
   KnowledgeAuditLogList,
   KnowledgeGrant,
   KnowledgeGrantList,
+  KnowledgeRecycleBatch,
   KnowledgeRecycleList,
   KnowledgeRevision,
 } from '@neorvion/shared';
@@ -17,6 +18,18 @@ export function fetchRecycle(params: { page: number; pageSize: number }, signal?
       signal,
     }),
   );
+}
+
+export function restoreRecycleBatch(items: { resource_type: string; id: number }[]) {
+  return unwrapApi(apiClient.post<ApiResponse<KnowledgeRecycleBatch>>('/api/v1/recycle/restore-batch', { items }));
+}
+
+export function purgeRecycleBatch(items: { resource_type: string; id: number }[]) {
+  return unwrapApi(apiClient.post<ApiResponse<KnowledgeRecycleBatch>>('/api/v1/recycle/purge-batch', { items }));
+}
+
+export function emptyRecycle(payload: { confirm: boolean; expected_count: number }) {
+  return unwrapApi(apiClient.post<ApiResponse<KnowledgeRecycleBatch>>('/api/v1/recycle/empty', payload));
 }
 
 export function restoreKnowledgeBase(id: number) {

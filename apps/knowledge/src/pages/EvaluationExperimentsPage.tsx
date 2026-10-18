@@ -28,13 +28,26 @@ import {
   retryEvalRun,
   startEvalRun,
 } from '@/api/evaluation';
+import { fetchRetrievalDefaults } from '@/api/rag';
 import { ActionCell, AppTable, EllipsisCell } from '@/components/AppTable';
 import { Can } from '@/components/Can';
+import { EvalCaseResultPanel } from '@/components/EvalCaseResultPanel';
+import { FormLabelHelp } from '@/components/FormLabelHelp';
 import { MetricBars } from '@/components/MetricBars';
 import { ListPageContainer, ListTableArea, ListToolbar } from '@/components/PageContainer';
 import { PageHeader } from '@/components/PageHeader';
 import { usePermissions } from '@/hooks/usePermissions';
 import { formatDateTime } from '@/lib/datetime';
+import {
+  candidateKHelp,
+  keywordTopKHelp,
+  rerankHelp,
+  rrfKHelp,
+  similarityThresholdHelp,
+  topKHelp,
+  vectorTopKHelp,
+} from '@/lib/retrievalHelp';
+import { snapshotParam } from '@/lib/snapshotParam';
 
 function metricNumber(metrics: Record<string, unknown> | null | undefined, key: string): number | null {
   const value = metrics?.[key];
@@ -50,14 +63,22 @@ export function EvaluationExperimentsPage() {
   const [page, setPage] = useState(1);
   const [creating, setCreating] = useState(false);
   const [activeRun, setActiveRun] = useState<KnowledgeEvalRun | null>(null);
+  const [activeResult, setActiveResult] = useState<KnowledgeEvalResult | null>(null);
   const [form] = Form.useForm();
 
   useEffect(() => {
     setDatasetId(undefined);
     setPage(1);
     setActiveRun(null);
+    setActiveResult(null);
   }, [tenantId]);
 
+  const defaultsQuery = useQuery({
+    queryKey: ['tenant', tenantId, 'knowledge-retrieval-defaults'],
+    queryFn: ({ signal }) => fetchRetrievalDefaults(signal),
+    enabled: tenantId != null,
+  });
+  const defaults = defaultsQuery.data;
   const datasetsQuery = useQuery({
     queryKey: knowledgeEvalDatasetsQueryKey(tenantId, { page: 1, pageSize: 100 }),
     queryFn: ({ signal }) => fetchEvalDatasets({ page: 1, pageSize: 100 }, signal),
@@ -103,15 +124,27 @@ export function EvaluationExperimentsPage() {
   });
 
   const experimentColumns: ColumnsType<KnowledgeEvalExperiment> = [
-    { title: '实验', dataIndex: 'name', ellipsis: true },
+    { title: '实验', dataIndex: 'name', ellipsis: true, width: 180 },
     {
       title: '策略',
-      width: 110,
-      render: (_, record) => knowledgeRetrievalStrategyLabel(String(record.config.strategy ?? 'HYBRID')),
+      width: 100,
+      render: (_, record) =>
+        'strategy' in record.config
+          ? knowledgeRetrievalStrategyLabel(String(record.config.strategy ?? ''))
+          : '未记录',
     },
-    { title: 'Top-K', width: 80, render: (_, record) => String(record.config.top_k ?? '-') },
-    { title: 'Rerank', width: 80, render: (_, record) => (record.config.rerank ? '开' : '关') },
-    { title: '生成评测', width: 90, render: (_, record) => (record.config.evaluate_generation ? '是' : '否') },
+    { title: '最终 Top-K', width: 100, render: (_, record) => snapshotParam(record.config, 'top_k') },
+    { title: 'Vector Top-K', width: 110, render: (_, record) => snapshotParam(record.config, 'vector_k') },
+    { title: 'Keyword Top-K', width: 120, render: (_, record) => snapshotParam(record.config, 'keyword_k') },
+    { title: 'RRF k', width: 80, render: (_, record) => snapshotParam(record.config, 'rrf_k') },
+    { title: '候选召回', width: 90, render: (_, record) => snapshotParam(record.config, 'candidate_k') },
+    { title: 'Rerank', width: 80, render: (_, record) => snapshotParam(record.config, 'rerank') },
+    {
+      title: '模型',
+      width: 140,
+      ellipsis: true,
+      render: (_, record) => snapshotParam(record.config, 'embedding_model'),
+    },
     {
       title: '操作',
       width: 220,
@@ -218,6 +251,15 @@ export function EvaluationExperimentsPage() {
       onCell: () => ({ style: { maxWidth: 240 } }),
       render: (_, record) => <EllipsisCell value={record.error_message || record.judge_error || '-'} />,
     },
+    {
+      title: '明细',
+      width: 80,
+      render: (_, record) => (
+        <Button type="link" size="small" onClick={() => setActiveResult(record)}>
+          查看
+        </Button>
+      ),
+    },
   ];
 
   return (
@@ -272,7 +314,14 @@ export function EvaluationExperimentsPage() {
         <Form
           form={form}
           layout="vertical"
-          initialValues={{ strategy: 'HYBRID', top_k: 8, candidate_k: 24, rrf_k: 60, rerank: false, evaluate_generation: false }}
+          initialValues={{
+            strategy: 'HYBRID',
+            top_k: defaults?.default_top_k ?? 8,
+            candidate_k: defaults?.default_candidate_k ?? 24,
+            rrf_k: defaults?.rrf_k ?? 60,
+            rerank: false,
+            evaluate_generation: false,
+          }}
           onFinish={(values) =>
             createMutation.mutate({
               dataset_id: values.dataset_id,
@@ -301,19 +350,28 @@ export function EvaluationExperimentsPage() {
           <Form.Item name="strategy" label="检索策略">
             <Select options={Object.values(KNOWLEDGE_RETRIEVAL_STRATEGY).map((value) => ({ value, label: knowledgeRetrievalStrategyLabel(value) }))} />
           </Form.Item>
-          <Form.Item name="top_k" label="最终 Top-K">
+          <Form.Item name="top_k" label={defaults ? <FormLabelHelp label="最终 Top-K">{topKHelp(defaults)}</FormLabelHelp> : '最终 Top-K'}>
             <InputNumber min={1} max={50} className="w-full" />
           </Form.Item>
-          <Form.Item name="vector_k" label="Vector Top-K">
+          <Form.Item name="vector_k" label={defaults ? <FormLabelHelp label="Vector Top-K">{vectorTopKHelp(defaults)}</FormLabelHelp> : 'Vector Top-K'}>
             <InputNumber min={1} max={100} className="w-full" />
           </Form.Item>
-          <Form.Item name="keyword_k" label="Keyword Top-K">
+          <Form.Item name="keyword_k" label={defaults ? <FormLabelHelp label="Keyword Top-K">{keywordTopKHelp(defaults)}</FormLabelHelp> : 'Keyword Top-K'}>
             <InputNumber min={1} max={100} className="w-full" />
           </Form.Item>
-          <Form.Item name="rrf_k" label="RRF k">
+          <Form.Item name="rrf_k" label={defaults ? <FormLabelHelp label="RRF k">{rrfKHelp(defaults)}</FormLabelHelp> : 'RRF k'}>
             <InputNumber min={1} max={200} className="w-full" />
           </Form.Item>
-          <Form.Item name="rerank" label="Rerank" valuePropName="checked">
+          <Form.Item name="candidate_k" label={defaults ? <FormLabelHelp label="候选召回数">{candidateKHelp(defaults)}</FormLabelHelp> : '候选召回数'}>
+            <InputNumber min={1} max={100} className="w-full" />
+          </Form.Item>
+          <Form.Item
+            name="similarity_threshold"
+            label={defaults ? <FormLabelHelp label="向量相似度阈值">{similarityThresholdHelp(defaults)}</FormLabelHelp> : '向量相似度阈值'}
+          >
+            <InputNumber min={0} max={1} step={0.05} className="w-full" />
+          </Form.Item>
+          <Form.Item name="rerank" label={defaults ? <FormLabelHelp label="Rerank">{rerankHelp(defaults)}</FormLabelHelp> : 'Rerank'} valuePropName="checked">
             <Switch />
           </Form.Item>
           <Form.Item name="evaluate_generation" label="生成质量评测（产生模型费用）" valuePropName="checked">
@@ -332,6 +390,12 @@ export function EvaluationExperimentsPage() {
               <Tag>数据集版本 {activeRun.dataset_version}</Tag>
               <Tag>{knowledgeRetrievalStrategyLabel(String(activeRun.config_snapshot.strategy ?? ''))}</Tag>
               {activeRun.dataset_snapshot_meta.comparable === false ? <Tag color="warning">含失效标注，非严格可比</Tag> : null}
+              <Tag>最终 Top-K {snapshotParam(activeRun.config_snapshot, 'top_k')}</Tag>
+              <Tag>Vector {snapshotParam(activeRun.config_snapshot, 'vector_k')}</Tag>
+              <Tag>Keyword {snapshotParam(activeRun.config_snapshot, 'keyword_k')}</Tag>
+              <Tag>RRF k {snapshotParam(activeRun.config_snapshot, 'rrf_k')}</Tag>
+              <Tag>候选 {snapshotParam(activeRun.config_snapshot, 'candidate_k')}</Tag>
+              <Tag>Rerank {snapshotParam(activeRun.config_snapshot, 'rerank')}</Tag>
             </Space>
             {activeRun.error_message ? <div className="text-sm text-red-500">{activeRun.error_message}</div> : null}
             <MetricBars
@@ -351,18 +415,28 @@ export function EvaluationExperimentsPage() {
               dataSource={resultsQuery.data ?? []}
               pagination={false}
             />
-            {(resultsQuery.data ?? [])
-              .filter((item) => item.generation_metrics || item.judge_error || item.human_override)
-              .slice(0, 8)
-              .map((item) => (
-                <div key={item.id} className="rounded border border-slate-200 p-2 text-xs">
-                  <div className="mb-1 font-medium">{item.question}</div>
-                  {item.judge_error ? <div className="text-amber-600">Judge 失败：{item.judge_error}（未伪造分数）</div> : null}
-                  {item.generation_metrics ? <div>{JSON.stringify(item.generation_metrics)}</div> : null}
-                  {item.human_override ? <div>人工复核：{JSON.stringify(item.human_override)}</div> : null}
-                </div>
-              ))}
           </div>
+        ) : null}
+      </Drawer>
+      <Drawer title="单题评测结果" open={activeResult != null} width={880} onClose={() => setActiveResult(null)}>
+        {activeResult ? (
+          <EvalCaseResultPanel
+            view={{
+              question: activeResult.question,
+              expected_answer: activeResult.expected_answer,
+              answer: activeResult.answer,
+              is_unanswerable: activeResult.is_unanswerable,
+              error_message: activeResult.error_message,
+              judge_error: activeResult.judge_error,
+              retrieval_metrics: activeResult.retrieval_metrics,
+              generation_metrics: activeResult.generation_metrics,
+              retrieved: activeResult.retrieved,
+              latency_ms: activeResult.latency_ms,
+              usage: activeResult.usage,
+              strategy: activeRun ? String(activeRun.config_snapshot.strategy ?? '') : null,
+              raw: activeResult,
+            }}
+          />
         ) : null}
       </Drawer>
     </ListPageContainer>

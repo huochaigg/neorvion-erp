@@ -31,6 +31,7 @@ import {
   updateEvalCase,
 } from '@/api/evaluation';
 import { ActionCell, AppTable } from '@/components/AppTable';
+import { EvalCaseResultPanel } from '@/components/EvalCaseResultPanel';
 import { Can } from '@/components/Can';
 import { ListPageContainer, ListTableArea, ListToolbar } from '@/components/PageContainer';
 import { PageHeader } from '@/components/PageHeader';
@@ -414,7 +415,7 @@ export function EvaluationDatasetDetailPage() {
           setProbeResult(null);
         }}
         footer={null}
-        width={720}
+        width={880}
       >
         <Space className="mb-3" wrap>
           <Button
@@ -434,22 +435,21 @@ export function EvaluationDatasetDetailPage() {
           <span className="text-slate-500">只跑检索指标，默认不调用生成模型。可在实验页批量对比策略。</span>
         </Space>
         {probeResult ? (
-          <pre className="max-h-96 overflow-auto rounded bg-slate-50 p-3 text-xs">
-            {JSON.stringify(
-              {
-                strategy: probeResult.strategy,
-                latency_ms: probeResult.latency_ms,
-                stages: probeResult.stages,
-                retrieval_metrics: probeResult.retrieval_metrics,
-                retrieved: probeResult.retrieved,
-                answer: probeResult.answer,
-                usage: probeResult.usage,
-                needs_human_review: probeResult.needs_human_review,
-              },
-              null,
-              2,
-            )}
-          </pre>
+          <EvalCaseResultPanel
+            view={{
+              question: probeResult.question,
+              expected_answer: probeResult.expected_answer ?? probing?.expected_answer,
+              answer: probeResult.answer,
+              is_unanswerable: probeResult.is_unanswerable,
+              retrieval_metrics: probeResult.retrieval_metrics,
+              retrieved: probeResult.retrieved,
+              latency_ms: probeResult.latency_ms,
+              usage: probeResult.usage,
+              stages: probeResult.stages,
+              strategy: probeResult.strategy,
+              raw: probeResult,
+            }}
+          />
         ) : null}
       </Modal>
     </ListPageContainer>

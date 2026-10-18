@@ -10,9 +10,19 @@ import { Button, Card, Descriptions, Drawer, Form, Input, InputNumber, Select, S
 import type { ColumnsType } from 'antd/es/table';
 import { useEffect, useState } from 'react';
 import { fetchKnowledgeBases } from '@/api/knowledge-bases';
-import { testRetrieval } from '@/api/rag';
+import { fetchRetrievalDefaults, testRetrieval } from '@/api/rag';
+import { FormLabelHelp } from '@/components/FormLabelHelp';
 import { PageHeader } from '@/components/PageHeader';
 import { usePermissions } from '@/hooks/usePermissions';
+import {
+  candidateKHelp,
+  keywordTopKHelp,
+  rerankHelp,
+  rrfKHelp,
+  similarityThresholdHelp,
+  topKHelp,
+  vectorTopKHelp,
+} from '@/lib/retrievalHelp';
 
 type CompareMap = Partial<Record<string, KnowledgeSearchResult>>;
 
@@ -33,6 +43,12 @@ export function RetrievalTestPage() {
     setError(null);
   }, [tenantId]);
 
+  const defaultsQuery = useQuery({
+    queryKey: ['tenant', tenantId, 'knowledge-retrieval-defaults'],
+    queryFn: ({ signal }) => fetchRetrievalDefaults(signal),
+    enabled: tenantId != null,
+  });
+  const defaults = defaultsQuery.data;
   const basesQuery = useQuery({
     queryKey: knowledgeBasesQueryKey(tenantId, { page: 1, pageSize: 100, status: 'ACTIVE' }),
     queryFn: ({ signal }) => fetchKnowledgeBases({ page: 1, pageSize: 100, status: 'ACTIVE' }, signal),
@@ -131,7 +147,17 @@ export function RetrievalTestPage() {
       <PageHeader title="召回调优" description="与知识问答共用同一检索引擎。可对比 VECTOR / KEYWORD / HYBRID、Rerank 前后，并查看各阶段耗时与 Chunk 排名。" />
       <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 overflow-hidden lg:grid-cols-[320px_1fr]">
         <Card size="small" className="overflow-y-auto" title="参数">
-          <Form form={form} layout="vertical" initialValues={{ strategy: 'HYBRID', top_k: 8, candidate_k: 24, rrf_k: 60, rerank: true }}>
+          <Form
+            form={form}
+            layout="vertical"
+            initialValues={{
+              strategy: 'HYBRID',
+              top_k: defaults?.default_top_k ?? 8,
+              candidate_k: defaults?.default_candidate_k ?? 24,
+              rrf_k: defaults?.rrf_k ?? 60,
+              rerank: true,
+            }}
+          >
             <Form.Item name="query" label="测试问题" rules={[{ required: true, message: '请输入问题' }]}>
               <Input.TextArea rows={3} />
             </Form.Item>
@@ -150,25 +176,28 @@ export function RetrievalTestPage() {
                 }))}
               />
             </Form.Item>
-            <Form.Item name="top_k" label="最终 Top-K">
+            <Form.Item name="top_k" label={defaults ? <FormLabelHelp label="最终 Top-K">{topKHelp(defaults)}</FormLabelHelp> : '最终 Top-K'}>
               <InputNumber min={1} max={50} className="w-full" />
             </Form.Item>
-            <Form.Item name="vector_k" label="Vector Top-K">
+            <Form.Item name="vector_k" label={defaults ? <FormLabelHelp label="Vector Top-K">{vectorTopKHelp(defaults)}</FormLabelHelp> : 'Vector Top-K'}>
               <InputNumber min={1} max={100} className="w-full" />
             </Form.Item>
-            <Form.Item name="keyword_k" label="Keyword Top-K">
+            <Form.Item name="keyword_k" label={defaults ? <FormLabelHelp label="Keyword Top-K">{keywordTopKHelp(defaults)}</FormLabelHelp> : 'Keyword Top-K'}>
               <InputNumber min={1} max={100} className="w-full" />
             </Form.Item>
-            <Form.Item name="rrf_k" label="RRF k">
+            <Form.Item name="rrf_k" label={defaults ? <FormLabelHelp label="RRF k">{rrfKHelp(defaults)}</FormLabelHelp> : 'RRF k'}>
               <InputNumber min={1} max={200} className="w-full" />
             </Form.Item>
-            <Form.Item name="candidate_k" label="候选召回数">
+            <Form.Item name="candidate_k" label={defaults ? <FormLabelHelp label="候选召回数">{candidateKHelp(defaults)}</FormLabelHelp> : '候选召回数'}>
               <InputNumber min={1} max={100} className="w-full" />
             </Form.Item>
-            <Form.Item name="similarity_threshold" label="向量相似度阈值">
+            <Form.Item
+              name="similarity_threshold"
+              label={defaults ? <FormLabelHelp label="向量相似度阈值">{similarityThresholdHelp(defaults)}</FormLabelHelp> : '向量相似度阈值'}
+            >
               <InputNumber min={0} max={1} step={0.05} className="w-full" />
             </Form.Item>
-            <Form.Item name="rerank" label="启用 Rerank" valuePropName="checked">
+            <Form.Item name="rerank" label={defaults ? <FormLabelHelp label="启用 Rerank">{rerankHelp(defaults)}</FormLabelHelp> : '启用 Rerank'} valuePropName="checked">
               <Switch />
             </Form.Item>
             <Space wrap>

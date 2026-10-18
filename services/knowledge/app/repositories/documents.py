@@ -1,16 +1,49 @@
 from datetime import UTC, datetime
 
-from sqlalchemy import delete, func, select, update
+from sqlalchemy import and_, delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.knowledge import (
     ChunkStatus,
     DocumentChunk,
     DocumentProcessingTask,
+    KnowledgeBase,
     KnowledgeDocument,
     TaskStatus,
 )
 from app.repositories.base import BaseRepository
+
+
+def live_chunk_parent_filters():
+    """业务列表/统计/检索共用：父文档与知识库均未软删除。不给切片表加 deleted_at。"""
+    return (
+        KnowledgeDocument.tenant_id == DocumentChunk.tenant_id,
+        KnowledgeDocument.id == DocumentChunk.document_id,
+        KnowledgeDocument.deleted_at.is_(None),
+        KnowledgeBase.tenant_id == DocumentChunk.tenant_id,
+        KnowledgeBase.id == DocumentChunk.knowledge_base_id,
+        KnowledgeBase.deleted_at.is_(None),
+    )
+
+
+async def get_live_document(session: AsyncSession, tenant_id: int, document_id: int) -> KnowledgeDocument | None:
+    """文档与所属知识库均未软删除时返回文档。Worker 写入切片/向量前必须再查一次。"""
+    return await session.scalar(
+        select(KnowledgeDocument)
+        .join(
+            KnowledgeBase,
+            and_(
+                KnowledgeBase.tenant_id == KnowledgeDocument.tenant_id,
+                KnowledgeBase.id == KnowledgeDocument.knowledge_base_id,
+            ),
+        )
+        .where(
+            KnowledgeDocument.tenant_id == tenant_id,
+            KnowledgeDocument.id == document_id,
+            KnowledgeDocument.deleted_at.is_(None),
+            KnowledgeBase.deleted_at.is_(None),
+        )
+    )
 
 
 class DocumentRepository(BaseRepository):
@@ -81,23 +114,47 @@ class DocumentRepository(BaseRepository):
         page_size: int,
     ) -> tuple[list[KnowledgeDocument], int]:
         tenant_id = self.ensure_tenant()
+        join_base = and_(
+            KnowledgeBase.tenant_id == KnowledgeDocument.tenant_id,
+            KnowledgeBase.id == KnowledgeDocument.knowledge_base_id,
+        )
         filters = [
             KnowledgeDocument.tenant_id == tenant_id,
             KnowledgeDocument.deleted_at.is_not(None),
+            KnowledgeBase.deleted_at.is_(None),
         ]
         if knowledge_base_id is not None:
             filters.append(KnowledgeDocument.knowledge_base_id == knowledge_base_id)
         total = int(
-            await self.session.scalar(select(func.count(KnowledgeDocument.id)).where(*filters)) or 0
+            await self.session.scalar(
+                select(func.count(KnowledgeDocument.id))
+                .select_from(KnowledgeDocument)
+                .join(KnowledgeBase, join_base)
+                .where(*filters)
+            )
+            or 0
         )
         stmt = (
             select(KnowledgeDocument)
+            .join(KnowledgeBase, join_base)
             .where(*filters)
             .order_by(KnowledgeDocument.deleted_at.desc())
             .offset((page - 1) * page_size)
             .limit(page_size)
         )
         return list((await self.session.scalars(stmt)).all()), total
+
+    async def list_cascade_deleted_for_base(
+        self, knowledge_base_id: int, *, cascade_at: datetime
+    ) -> list[KnowledgeDocument]:
+        """知识库软删除时一并盖戳的文档。时间戳与库的 deleted_at 相同，不含事先单独删除的文档。"""
+        tenant_id = self.ensure_tenant()
+        stmt = select(KnowledgeDocument).where(
+            KnowledgeDocument.tenant_id == tenant_id,
+            KnowledgeDocument.knowledge_base_id == knowledge_base_id,
+            KnowledgeDocument.deleted_at == cascade_at,
+        )
+        return list((await self.session.scalars(stmt)).all())
 
     async def list_including_deleted_for_base(self, knowledge_base_id: int) -> list[KnowledgeDocument]:
         tenant_id = self.ensure_tenant()
@@ -106,6 +163,27 @@ class DocumentRepository(BaseRepository):
             KnowledgeDocument.knowledge_base_id == knowledge_base_id,
         )
         return list((await self.session.scalars(stmt)).all())
+
+    async def live_ids(self, document_ids: list[int]) -> set[int]:
+        """返回仍可打开详情的文档 ID（文档与所属知识库均未软删除）。"""
+        if not document_ids:
+            return set()
+        tenant_id = self.ensure_tenant()
+        stmt = (
+            select(KnowledgeDocument.id)
+            .join(
+                KnowledgeBase,
+                (KnowledgeBase.tenant_id == KnowledgeDocument.tenant_id)
+                & (KnowledgeBase.id == KnowledgeDocument.knowledge_base_id),
+            )
+            .where(
+                KnowledgeDocument.tenant_id == tenant_id,
+                KnowledgeDocument.id.in_(document_ids),
+                KnowledgeDocument.deleted_at.is_(None),
+                KnowledgeBase.deleted_at.is_(None),
+            )
+        )
+        return set((await self.session.scalars(stmt)).all())
 
     async def get_by_sha256(self, knowledge_base_id: int, sha256: str) -> KnowledgeDocument | None:
         stmt = select(KnowledgeDocument).where(
@@ -155,6 +233,7 @@ class ChunkRepository(BaseRepository):
         filters = [
             DocumentChunk.tenant_id == tenant_id,
             DocumentChunk.status == ChunkStatus.ACTIVE.value,
+            *live_chunk_parent_filters(),
         ]
         if document_id is not None:
             filters.append(DocumentChunk.document_id == document_id)
@@ -162,9 +241,20 @@ class ChunkRepository(BaseRepository):
             filters.append(DocumentChunk.knowledge_base_id == knowledge_base_id)
         if enabled is not None:
             filters.append(DocumentChunk.enabled.is_(enabled))
-        total = int(await self.session.scalar(select(func.count(DocumentChunk.id)).where(*filters)) or 0)
+        total = int(
+            await self.session.scalar(
+                select(func.count(DocumentChunk.id))
+                .select_from(DocumentChunk)
+                .join(KnowledgeDocument, KnowledgeDocument.id == DocumentChunk.document_id)
+                .join(KnowledgeBase, KnowledgeBase.id == DocumentChunk.knowledge_base_id)
+                .where(*filters)
+            )
+            or 0
+        )
         stmt = (
             select(DocumentChunk)
+            .join(KnowledgeDocument, KnowledgeDocument.id == DocumentChunk.document_id)
+            .join(KnowledgeBase, KnowledgeBase.id == DocumentChunk.knowledge_base_id)
             .where(*filters)
             .order_by(DocumentChunk.document_id.asc(), DocumentChunk.chunk_index.asc())
             .offset((page - 1) * page_size)
@@ -174,17 +264,30 @@ class ChunkRepository(BaseRepository):
 
     async def get_in_tenant(self, chunk_id: int) -> DocumentChunk | None:
         tenant_id = self.ensure_tenant()
-        stmt = select(DocumentChunk).where(
-            DocumentChunk.tenant_id == tenant_id,
-            DocumentChunk.id == chunk_id,
+        stmt = (
+            select(DocumentChunk)
+            .join(KnowledgeDocument, KnowledgeDocument.id == DocumentChunk.document_id)
+            .join(KnowledgeBase, KnowledgeBase.id == DocumentChunk.knowledge_base_id)
+            .where(
+                DocumentChunk.tenant_id == tenant_id,
+                DocumentChunk.id == chunk_id,
+                *live_chunk_parent_filters(),
+            )
         )
         return (await self.session.scalars(stmt)).first()
 
     async def count_active(self) -> int:
         tenant_id = self.ensure_tenant()
-        stmt = select(func.count(DocumentChunk.id)).where(
-            DocumentChunk.tenant_id == tenant_id,
-            DocumentChunk.status == ChunkStatus.ACTIVE.value,
+        stmt = (
+            select(func.count(DocumentChunk.id))
+            .select_from(DocumentChunk)
+            .join(KnowledgeDocument, KnowledgeDocument.id == DocumentChunk.document_id)
+            .join(KnowledgeBase, KnowledgeBase.id == DocumentChunk.knowledge_base_id)
+            .where(
+                DocumentChunk.tenant_id == tenant_id,
+                DocumentChunk.status == ChunkStatus.ACTIVE.value,
+                *live_chunk_parent_filters(),
+            )
         )
         return int(await self.session.scalar(stmt) or 0)
 

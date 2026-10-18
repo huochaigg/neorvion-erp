@@ -326,6 +326,11 @@ class EvaluationRunService:
         else:
             metrics = {"skipped": "no_relevant_labels", "granularity": "chunk"}
 
+        label_map = {
+            int(item["chunk_id"]): int(item["relevance"])
+            for item in case.get("judgments") or []
+            if not item.get("stale")
+        }
         retrieved = [
             {
                 "chunk_id": hit.chunk_id,
@@ -337,6 +342,7 @@ class EvaluationRunService:
                 "keyword_score": hit.keyword_score,
                 "rrf_score": hit.rrf_score,
                 "rerank_score": hit.rerank_score,
+                "relevance": label_map.get(hit.chunk_id),
             }
             for hit in search.hits
         ]
@@ -443,6 +449,7 @@ class EvaluationRunService:
         return ProbeOut(
             case_id=case.id,
             question=case.question,
+            expected_answer=case.expected_answer,
             is_unanswerable=case.is_unanswerable,
             strategy=search.strategy,
             rerank_applied=search.rerank_applied,

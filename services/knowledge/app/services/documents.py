@@ -50,7 +50,7 @@ from app.schemas.documents import (
     UploadBatchOut,
     UploadItemOut,
 )
-from app.schemas.ops import RecycleItemOut, RecycleListOut, RevisionListOut, RevisionOut
+from app.schemas.ops import RecycleBatchOut, RecycleItemOut, RecycleListOut, RevisionListOut, RevisionOut
 from app.services.access import AccessService
 from app.services.audit import write_audit
 from app.services.authorization import AuthorizationService
@@ -366,8 +366,9 @@ class DocumentService:
             page=page,
             page_size=page_size,
         )
+        live_ids = await self.documents.live_ids([item.document_id for item in rows])
         return TaskListOut(
-            items=[self._task_out(item) for item in rows],
+            items=[self._task_out(item, document_available=item.document_id in live_ids) for item in rows],
             total=total,
             page=page,
             page_size=page_size,
@@ -448,17 +449,63 @@ class DocumentService:
             raise AppError("相同内容的文件已存在，无法恢复", code=40951, status_code=409)
         row.deleted_at = None
         row.updated_by = self.context.user_id
+        await self.refresh_index_after_restore(row)
         await write_audit(
             self.session,
             self.context,
             action="document.restore",
             resource_type="document",
             resource_id=row.id,
-            detail={"filename": row.filename},
+            detail={"filename": row.filename, "status": row.status},
         )
         await self.session.commit()
         await self.session.refresh(row)
         return self._document_out(row)
+
+    async def refresh_index_after_restore(self, row: KnowledgeDocument) -> None:
+        """恢复后核对 ACTIVE Chunk 与 READY 向量。匹配则可检索，否则进入待重新索引。"""
+        from sqlalchemy import func, select
+
+        from app.models.knowledge import ChunkStatus, DocumentChunk
+        from app.models.rag import ChunkEmbedding, EmbeddingStatus
+        from app.services.embedding import enqueue_embed_task
+
+        live_chunks = int(
+            await self.session.scalar(
+                select(func.count(DocumentChunk.id)).where(
+                    DocumentChunk.tenant_id == row.tenant_id,
+                    DocumentChunk.document_id == row.id,
+                    DocumentChunk.status == ChunkStatus.ACTIVE.value,
+                    DocumentChunk.version == row.active_chunk_version,
+                    DocumentChunk.enabled.is_(True),
+                )
+            )
+            or 0
+        )
+        if live_chunks == 0:
+            row.status = KnowledgeDocumentStatus.PENDING.value
+            row.error_message = "恢复后缺少有效切片，请重新解析或切片"
+            return
+        ready = int(
+            await self.session.scalar(
+                select(func.count(ChunkEmbedding.id)).where(
+                    ChunkEmbedding.tenant_id == row.tenant_id,
+                    ChunkEmbedding.document_id == row.id,
+                    ChunkEmbedding.status == EmbeddingStatus.READY.value,
+                    ChunkEmbedding.chunk_version == row.active_chunk_version,
+                    ChunkEmbedding.model_name == settings.embedding_model,
+                    ChunkEmbedding.dimensions == settings.embedding_dimensions,
+                )
+            )
+            or 0
+        )
+        if ready >= live_chunks:
+            row.status = KnowledgeDocumentStatus.COMPLETED.value
+            row.error_message = None
+            return
+        row.status = KnowledgeDocumentStatus.PROCESSING.value
+        row.error_message = "恢复后索引不完整，已排队重建向量"
+        await enqueue_embed_task(self.session, row, self.context.user_id)
 
     async def purge_document(self, document_id: int) -> None:
         """彻底删除文档文件、版本快照、切片和向量。"""
@@ -483,13 +530,24 @@ class DocumentService:
         )
         await self.session.delete(row)
         await self.session.commit()
-        delete_document_files(row.tenant_id, row.knowledge_base_id, row.id)
+        try:
+            delete_document_files(row.tenant_id, row.knowledge_base_id, row.id)
+        except Exception:
+            await write_audit(
+                self.session,
+                self.context,
+                action="document.purge_files_pending",
+                resource_type="document",
+                resource_id=row.id,
+                detail={"storage_key": row.storage_key, "retry": True},
+            )
+            await self.session.commit()
 
     async def list_recycle(self, *, page: int, page_size: int) -> RecycleListOut:
         self.auth.require_all(self.context, (PermissionCode.KNOWLEDGE_READ,))
-        bases, base_total = await self.bases.list_deleted(page=page, page_size=page_size)
+        bases, base_total = await self.bases.list_deleted(page=1, page_size=500)
         docs, doc_total = await self.documents.list_deleted(
-            knowledge_base_id=None, page=page, page_size=page_size
+            knowledge_base_id=None, page=1, page_size=500
         )
         items = [
             RecycleItemOut(
@@ -516,12 +574,104 @@ class DocumentService:
             if item.deleted_at is not None
         )
         items.sort(key=lambda item: item.deleted_at, reverse=True)
+        start = (page - 1) * page_size
         return RecycleListOut(
-            items=items[:page_size],
+            items=items[start : start + page_size],
             total=base_total + doc_total,
             page=page,
             page_size=page_size,
         )
+
+    async def _all_recycle_items(self) -> list[RecycleItemOut]:
+        listed = await self.list_recycle(page=1, page_size=100)
+        return list(listed.items)
+
+    async def restore_recycle_batch(self, targets: list[tuple[str, int]]) -> RecycleBatchOut:
+        """批量恢复。知识库优先，以便随后恢复其下文档。单项失败不回滚已成功项。"""
+        from app.services.knowledge import KnowledgeBaseService
+
+        self.auth.require_all(self.context, (PermissionCode.KNOWLEDGE_UPDATE,))
+        unique = _unique_recycle_targets(targets)
+        unique.sort(key=lambda item: 0 if item[0] == "knowledge_base" else 1)
+        result = RecycleBatchOut()
+        kb = KnowledgeBaseService(self.session, self.context)
+        for resource_type, resource_id in unique:
+            try:
+                if resource_type == "knowledge_base":
+                    await kb.restore_knowledge_base(resource_id)
+                elif resource_type == "document":
+                    await self.restore_document(resource_id)
+                else:
+                    raise AppError("不支持的回收站类型", code=40065, status_code=400)
+                result.succeeded += 1
+            except AppError as exc:
+                if exc.status_code == 404:
+                    result.skipped += 1
+                    continue
+                result.failed += 1
+                result.errors.append(
+                    {"resource_type": resource_type, "id": resource_id, "message": exc.message}
+                )
+            except Exception:
+                result.failed += 1
+                result.errors.append(
+                    {"resource_type": resource_type, "id": resource_id, "message": "恢复失败"}
+                )
+        remaining = await self.list_recycle(page=1, page_size=1)
+        result.remaining = remaining.total
+        return result
+
+    async def purge_recycle_batch(self, targets: list[tuple[str, int]]) -> RecycleBatchOut:
+        """批量彻底删除。先删文档再删知识库，避免库先删导致文档路径丢失。"""
+        from app.services.knowledge import KnowledgeBaseService
+
+        self.auth.require_all(self.context, (PermissionCode.KNOWLEDGE_DELETE,))
+        unique = _unique_recycle_targets(targets)
+        unique.sort(key=lambda item: 0 if item[0] == "document" else 1)
+        result = RecycleBatchOut()
+        kb = KnowledgeBaseService(self.session, self.context)
+        for resource_type, resource_id in unique:
+            try:
+                if resource_type == "knowledge_base":
+                    await kb.purge_knowledge_base(resource_id)
+                elif resource_type == "document":
+                    await self.purge_document(resource_id)
+                else:
+                    raise AppError("不支持的回收站类型", code=40065, status_code=400)
+                result.succeeded += 1
+            except AppError as exc:
+                if exc.status_code == 404 or exc.code in {40062, 40064}:
+                    result.skipped += 1
+                    continue
+                result.failed += 1
+                result.errors.append(
+                    {"resource_type": resource_type, "id": resource_id, "message": exc.message}
+                )
+            except Exception:
+                result.failed += 1
+                result.errors.append(
+                    {"resource_type": resource_type, "id": resource_id, "message": "彻底删除失败"}
+                )
+        remaining = await self.list_recycle(page=1, page_size=1)
+        result.remaining = remaining.total
+        return result
+
+    async def empty_recycle(self, *, confirm: bool, expected_count: int) -> RecycleBatchOut:
+        """清空回收站。必须二次确认，且 expected_count 与当前条数一致，防止页面过期误删。"""
+        self.auth.require_all(self.context, (PermissionCode.KNOWLEDGE_DELETE,))
+        if not confirm:
+            raise AppError("请确认清空回收站", code=40066, status_code=400)
+        listed = await self.list_recycle(page=1, page_size=500)
+        if listed.total != expected_count:
+            raise AppError(
+                f"回收站条数已变化（当前 {listed.total}），请刷新后再清空",
+                code=40960,
+                status_code=409,
+            )
+        if listed.total > 500:
+            raise AppError("单次最多清空 500 条，请分批清理", code=40067, status_code=400)
+        targets = [(item.resource_type, item.id) for item in listed.items]
+        return await self.purge_recycle_batch(targets)
 
     async def replace_document(self, document_id: int, upload: UploadFile, note: str | None) -> DocumentOut:
         """替换文档文件：先快照当前 original，再排队解析。成功前旧 ACTIVE 切片仍可检索。"""
@@ -722,7 +872,7 @@ class DocumentService:
         )
 
     @staticmethod
-    def _task_out(row: DocumentProcessingTask) -> TaskOut:
+    def _task_out(row: DocumentProcessingTask, *, document_available: bool = True) -> TaskOut:
         return TaskOut(
             id=row.id,
             tenant_id=row.tenant_id,
@@ -737,4 +887,17 @@ class DocumentService:
             started_at=row.started_at,
             finished_at=row.finished_at,
             created_at=row.created_at,
+            document_available=document_available,
         )
+
+
+def _unique_recycle_targets(targets: list[tuple[str, int]]) -> list[tuple[str, int]]:
+    seen: set[tuple[str, int]] = set()
+    unique: list[tuple[str, int]] = []
+    for resource_type, resource_id in targets:
+        key = (resource_type, resource_id)
+        if key in seen:
+            continue
+        seen.add(key)
+        unique.append(key)
+    return unique

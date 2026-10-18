@@ -57,6 +57,24 @@ class RetrievalTestOut(SearchOut):
     pass
 
 
+class RetrievalDefaultsOut(BaseModel):
+    """召回调优/评测表单帮助文案使用的真实配置，禁止前端写死默认值冒充系统配置。"""
+
+    default_top_k: int = Field(description="最终返回条数默认值")
+    default_candidate_k: int = Field(description="各路召回候选条数默认值，也是 Vector/Keyword Top-K 未填时的回退")
+    rrf_k: int = Field(description="RRF 排名融合平滑常数，不是 Top-K")
+    default_chunk_size: int = Field(description="切片长度默认值，单位字符")
+    default_chunk_overlap: int = Field(description="切片重叠默认值，单位字符")
+    embedding_model: str
+    embedding_dimensions: int = Field(description="向量维度，须与索引列一致")
+    worker_concurrency: int = Field(description="异步 Worker 并发")
+    similarity_threshold: float | None = Field(
+        default=None,
+        description="默认不设阈值；取值是余弦相似度 0-1，不是距离",
+    )
+    rerank_model: str
+
+
 class IndexStatusOut(BaseModel):
     knowledge_base_id: int
     model_name: str

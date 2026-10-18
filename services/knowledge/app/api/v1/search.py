@@ -5,7 +5,8 @@ from fastapi import APIRouter, Depends
 from app.api.deps import DbSession, KnowledgeReadContext, KnowledgeUpdateContext, require_api_scope
 from app.core.tenant import TenantContext
 from app.schemas.common import ApiResponse, ok
-from app.schemas.rag import IndexStatusOut, SearchHitOut, SearchIn, SearchOut
+from app.core.config import settings
+from app.schemas.rag import IndexStatusOut, RetrievalDefaultsOut, SearchHitOut, SearchIn, SearchOut
 from app.services.index_status import IndexService
 from app.services.retrieval import RetrievalService
 
@@ -39,6 +40,25 @@ def _to_out(result) -> SearchOut:
         stages=result.stages,
         latency_ms=result.latency_ms,
         knowledge_base_ids=result.knowledge_base_ids,
+    )
+
+
+@router.get("/retrieval/defaults", response_model=ApiResponse[RetrievalDefaultsOut], summary="检索与切片默认配置")
+async def retrieval_defaults(context: KnowledgeReadContext) -> ApiResponse[RetrievalDefaultsOut]:
+    del context
+    return ok(
+        RetrievalDefaultsOut(
+            default_top_k=settings.default_top_k,
+            default_candidate_k=settings.default_candidate_k,
+            rrf_k=settings.rrf_k,
+            default_chunk_size=settings.default_chunk_size,
+            default_chunk_overlap=settings.default_chunk_overlap,
+            embedding_model=settings.embedding_model,
+            embedding_dimensions=settings.embedding_dimensions,
+            worker_concurrency=settings.worker_concurrency,
+            similarity_threshold=None,
+            rerank_model=settings.rerank_model,
+        )
     )
 
 

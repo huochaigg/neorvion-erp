@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Query
 
-from app.api.deps import DbSession, KnowledgeReadContext, KnowledgeUpdateContext
+from app.api.deps import DbSession, KnowledgeDeleteContext, KnowledgeReadContext, KnowledgeUpdateContext
 from app.repositories.ops import AuditRepository
 from app.schemas.common import ApiResponse, ok
 from app.schemas.ops import (
@@ -10,6 +10,9 @@ from app.schemas.ops import (
     ApiKeyOut,
     AuditLogListOut,
     AuditLogOut,
+    RecycleBatchIn,
+    RecycleBatchOut,
+    RecycleEmptyIn,
     RecycleListOut,
 )
 from app.services.api_keys import ApiKeyService
@@ -26,6 +29,41 @@ async def list_recycle(
     page_size: int = Query(default=20, ge=1, le=100),
 ) -> ApiResponse[RecycleListOut]:
     return ok(await DocumentService(session, context).list_recycle(page=page, page_size=page_size))
+
+
+@router.post("/recycle/restore-batch", response_model=ApiResponse[RecycleBatchOut], summary="批量恢复回收站")
+async def restore_recycle_batch(
+    payload: RecycleBatchIn,
+    context: KnowledgeUpdateContext,
+    session: DbSession,
+) -> ApiResponse[RecycleBatchOut]:
+    targets = [(item.resource_type, item.id) for item in payload.items]
+    return ok(await DocumentService(session, context).restore_recycle_batch(targets), "批量恢复完成")
+
+
+@router.post("/recycle/purge-batch", response_model=ApiResponse[RecycleBatchOut], summary="批量彻底删除")
+async def purge_recycle_batch(
+    payload: RecycleBatchIn,
+    context: KnowledgeDeleteContext,
+    session: DbSession,
+) -> ApiResponse[RecycleBatchOut]:
+    targets = [(item.resource_type, item.id) for item in payload.items]
+    return ok(await DocumentService(session, context).purge_recycle_batch(targets), "批量彻底删除完成")
+
+
+@router.post("/recycle/empty", response_model=ApiResponse[RecycleBatchOut], summary="清空回收站")
+async def empty_recycle(
+    payload: RecycleEmptyIn,
+    context: KnowledgeDeleteContext,
+    session: DbSession,
+) -> ApiResponse[RecycleBatchOut]:
+    return ok(
+        await DocumentService(session, context).empty_recycle(
+            confirm=payload.confirm,
+            expected_count=payload.expected_count,
+        ),
+        "回收站已清空",
+    )
 
 
 @router.get("/api-keys", response_model=ApiResponse[ApiKeyListOut], summary="API Key 列表")

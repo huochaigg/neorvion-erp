@@ -1,6 +1,7 @@
 import { knowledgeModelsQueryKey, PERMISSION_CODE, type KnowledgeModelProfile } from '@neorvion/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { App, Button, Card, Table, Tag } from 'antd';
+import { App, Button, Card, Table, Tag, Tooltip } from 'antd';
+import { QuestionCircleOutlined } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import { fetchModels, testModel } from '@/api/rag';
 import { Can } from '@/components/Can';
@@ -38,7 +39,19 @@ export function ModelsPage() {
     { title: '名称', dataIndex: 'name' },
     { title: '供应商', dataIndex: 'provider', width: 140 },
     { title: '模型', dataIndex: 'model_name' },
-    { title: '维度', dataIndex: 'dimensions', width: 80, render: (value: number | null) => value ?? '-' },
+    {
+      title: (
+        <span className="inline-flex items-center gap-1">
+          维度
+          <Tooltip title="Embedding 向量维度必须与索引列一致。更换维度需要重建向量列并全量重建索引，查询与文档须同一模型。">
+            <QuestionCircleOutlined className="text-slate-400" />
+          </Tooltip>
+        </span>
+      ),
+      dataIndex: 'dimensions',
+      width: 80,
+      render: (value: number | null) => value ?? '-',
+    },
     { title: '密钥环境变量', dataIndex: 'api_key_env', width: 180 },
     {
       title: '已配置密钥',

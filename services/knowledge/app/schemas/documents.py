@@ -131,6 +131,10 @@ class TaskOut(BaseModel):
     started_at: datetime | None
     finished_at: datetime | None
     created_at: datetime
+    document_available: bool = Field(
+        default=True,
+        description="关联文档是否仍可打开；历史任务在文档回收后仍保留，此字段为 false",
+    )
 
 
 class TaskListOut(BaseModel):

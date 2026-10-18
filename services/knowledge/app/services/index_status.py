@@ -8,6 +8,7 @@ from app.core.tenant import TenantContext
 from app.models.knowledge import (
     ChunkStatus,
     DocumentChunk,
+    KnowledgeBase,
     KnowledgeDocument,
     KnowledgeDocumentStatus,
 )
@@ -37,6 +38,7 @@ class IndexService:
             await self.session.scalar(
                 select(func.count(DocumentChunk.id))
                 .join(KnowledgeDocument, KnowledgeDocument.id == DocumentChunk.document_id)
+                .join(KnowledgeBase, KnowledgeBase.id == DocumentChunk.knowledge_base_id)
                 .where(
                     DocumentChunk.tenant_id == tenant_id,
                     DocumentChunk.knowledge_base_id == knowledge_base_id,
@@ -45,6 +47,9 @@ class IndexService:
                     KnowledgeDocument.tenant_id == tenant_id,
                     KnowledgeDocument.deleted_at.is_(None),
                     KnowledgeDocument.active_chunk_version == DocumentChunk.version,
+                    KnowledgeBase.tenant_id == tenant_id,
+                    KnowledgeBase.id == DocumentChunk.knowledge_base_id,
+                    KnowledgeBase.deleted_at.is_(None),
                 )
             )
             or 0
@@ -52,11 +57,14 @@ class IndexService:
         rows = (
             await self.session.execute(
                 select(ChunkEmbedding.status, func.count())
+                .join(KnowledgeDocument, KnowledgeDocument.id == ChunkEmbedding.document_id)
                 .where(
                     ChunkEmbedding.tenant_id == tenant_id,
                     ChunkEmbedding.knowledge_base_id == knowledge_base_id,
                     ChunkEmbedding.model_name == settings.embedding_model,
                     ChunkEmbedding.dimensions == settings.embedding_dimensions,
+                    KnowledgeDocument.tenant_id == tenant_id,
+                    KnowledgeDocument.deleted_at.is_(None),
                 )
                 .group_by(ChunkEmbedding.status)
             )
@@ -64,9 +72,13 @@ class IndexService:
         counts = {status: int(count) for status, count in rows}
         incompatible = int(
             await self.session.scalar(
-                select(func.count(ChunkEmbedding.id)).where(
+                select(func.count(ChunkEmbedding.id))
+                .join(KnowledgeDocument, KnowledgeDocument.id == ChunkEmbedding.document_id)
+                .where(
                     ChunkEmbedding.tenant_id == tenant_id,
                     ChunkEmbedding.knowledge_base_id == knowledge_base_id,
+                    KnowledgeDocument.tenant_id == tenant_id,
+                    KnowledgeDocument.deleted_at.is_(None),
                     or_(
                         ChunkEmbedding.model_name != settings.embedding_model,
                         ChunkEmbedding.dimensions != settings.embedding_dimensions,

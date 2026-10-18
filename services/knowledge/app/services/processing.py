@@ -23,7 +23,7 @@ from app.models.knowledge import (
 from app.processing.extract import extract_document
 from app.processing.split import split_text, validate_chunk_params
 from app.processing.storage import read_bytes
-from app.repositories.documents import ChunkRepository, TaskRepository
+from app.repositories.documents import ChunkRepository, TaskRepository, get_live_document
 
 logger = logging.getLogger(__name__)
 
@@ -46,16 +46,10 @@ class ProcessingService:
         task.progress = 5
         task.started_at = datetime.now(UTC)
         task.error_message = None
-        document = await self.session.scalar(
-            select(KnowledgeDocument).where(
-                KnowledgeDocument.tenant_id == task.tenant_id,
-                KnowledgeDocument.id == task.document_id,
-                KnowledgeDocument.deleted_at.is_(None),
-            )
-        )
+        document = await get_live_document(self.session, task.tenant_id, task.document_id)
         if document is None:
             task.status = TaskStatus.FAILED.value
-            task.error_message = "文档不存在或已删除"
+            task.error_message = "文档或知识库已删除，任务取消"
             task.finished_at = datetime.now(UTC)
             await self.session.commit()
             return
@@ -101,6 +95,8 @@ class ProcessingService:
         document.error_message = None
         task.progress = 70
         await self.session.commit()
+        if await get_live_document(self.session, document.tenant_id, document.id) is None:
+            raise AppError("文档或知识库已删除，任务取消", code=40970, status_code=409)
         chunk_task = await self._enqueue_followup_chunk(document, task.created_by)
         document.status = KnowledgeDocumentStatus.PROCESSING.value
         task.status = TaskStatus.SUCCESS.value
@@ -170,6 +166,8 @@ class ProcessingService:
         )
         next_version = int(document.active_chunk_version or 0) + 1
         chunks = ChunkRepository(self.session, document.tenant_id)
+        if await get_live_document(self.session, document.tenant_id, document.id) is None:
+            raise AppError("文档或知识库已删除，任务取消", code=40970, status_code=409)
         await chunks.delete_version(document.id, next_version)
         for draft in drafts:
             self.session.add(
@@ -192,6 +190,9 @@ class ProcessingService:
                 )
             )
         await self.session.flush()
+        if await get_live_document(self.session, document.tenant_id, document.id) is None:
+            await chunks.delete_version(document.id, next_version)
+            raise AppError("文档或知识库已删除，任务取消", code=40970, status_code=409)
         await chunks.supersede_active(document.id)
         rows = list(
             (
@@ -218,6 +219,8 @@ class ProcessingService:
         task.progress = 100
         task.finished_at = datetime.now(UTC)
         await self.session.commit()
+        if await get_live_document(self.session, document.tenant_id, document.id) is None:
+            return
         embed_task = await self._enqueue_followup_embed(document, task.created_by)
         if embed_task is not None and settings.task_executor != "redis":
             await ProcessingService(self.session).execute(embed_task.id)

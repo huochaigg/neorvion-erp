@@ -93,13 +93,17 @@ def read_bytes(storage_key: str) -> bytes:
 
 
 def delete_document_files(tenant_id: int, knowledge_base_id: int, document_id: int) -> None:
-    directory = document_dir(tenant_id, knowledge_base_id, document_id)
-    if not directory.exists():
+    """删除文档目录（含 revisions）。可重复执行；目录不存在视为已清理。
+
+    文件系统与数据库不在同一事务。调用方应先提交库记录删除，再调本函数；
+    失败时留下孤儿文件，下次彻底删除或运维扫描可再删。
+    """
+    import shutil
+
+    path = storage_root() / str(tenant_id) / str(knowledge_base_id) / str(document_id)
+    resolved = path.resolve()
+    if not resolved.is_relative_to(storage_root()):
+        raise AppError("非法存储路径", code=40072, status_code=400)
+    if not resolved.exists():
         return
-    for child in directory.iterdir():
-        if child.is_file():
-            child.unlink()
-    try:
-        directory.rmdir()
-    except OSError:
-        pass
+    shutil.rmtree(resolved, ignore_errors=True)

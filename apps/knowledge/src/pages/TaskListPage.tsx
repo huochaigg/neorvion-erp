@@ -9,7 +9,7 @@ import {
   type KnowledgeTask,
 } from '@neorvion/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { App, Button, Select, Space, Tag } from 'antd';
+import { App, Button, Select, Space, Tag, Tooltip } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -85,13 +85,19 @@ export function TaskListPage() {
       width: 160,
       render: (_, record) => (
         <ActionCell>
-          <Button
-            type="link"
-            size="small"
-            onClick={() => navigate(`/bases/${record.knowledge_base_id}/documents/${record.document_id}`)}
-          >
-            文档
-          </Button>
+          {record.document_available === false ? (
+            <Tooltip title="关联文档已删除或不可访问。历史任务仍保留，不会恢复已删除数据。">
+              <span className="px-2 text-slate-400">文档</span>
+            </Tooltip>
+          ) : (
+            <Button
+              type="link"
+              size="small"
+              onClick={() => navigate(`/bases/${record.knowledge_base_id}/documents/${record.document_id}`)}
+            >
+              文档
+            </Button>
+          )}
           {record.status === 'FAILED' ? (
             <Can permission={PERMISSION_CODE.knowledgeUpdate}>
               <Button type="link" size="small" onClick={() => retryMutation.mutate(record.id)}>

@@ -169,8 +169,8 @@ export function KnowledgeBaseListPage() {
           </Can>
           <Can permission={PERMISSION_CODE.knowledgeDelete}>
             <Popconfirm
-              title="确认删除该知识库？"
-              description="删除后将清理下属文档文件与切片，任务记录保留。"
+              title="确认将该知识库移入回收站？"
+              description="下属当时仍有效的文档会一并隐藏，不可检索。删除库之前就已单独删除的文档保持删除。可在回收站恢复。"
               okText="删除"
               cancelText="取消"
               onConfirm={() => deleteMutation.mutate(record.id)}

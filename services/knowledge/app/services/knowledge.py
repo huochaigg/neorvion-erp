@@ -159,6 +159,9 @@ class KnowledgeBaseService:
                     found.finished_at = now
             document.deleted_at = now
             document.updated_by = self.context.user_id
+        from app.repositories.evaluation import EvaluationRepository
+
+        await EvaluationRepository(self.session, self.context.tenant_id).request_cancel_for_knowledge_base(row.id)
         row.deleted_at = now
         row.updated_by = self.context.user_id
         await write_audit(
@@ -176,7 +179,10 @@ class KnowledgeBaseService:
             raise
 
     async def restore_knowledge_base(self, knowledge_base_id: int) -> KnowledgeBaseOut:
-        """从回收站恢复知识库及其下属文档。"""
+        """从回收站恢复知识库，以及删除该库时一并带入回收站的文档。
+
+        删除知识库之前就已经单独软删除的文档保持 deleted_at，不会被错误恢复。
+        """
         self.auth.require_all(self.context, (PermissionCode.KNOWLEDGE_UPDATE,))
         row = await self.bases.get_deleted(knowledge_base_id)
         if row is None:
@@ -186,10 +192,15 @@ class KnowledgeBaseService:
         from app.repositories.documents import DocumentRepository
 
         documents = DocumentRepository(self.session, self.context.tenant_id)
-        docs = await documents.list_including_deleted_for_base(row.id)
+        cascade_at = row.deleted_at
+        cascade_docs = (
+            await documents.list_cascade_deleted_for_base(row.id, cascade_at=cascade_at)
+            if cascade_at is not None
+            else []
+        )
         row.deleted_at = None
         row.updated_by = self.context.user_id
-        for document in docs:
+        for document in cascade_docs:
             document.deleted_at = None
             document.updated_by = self.context.user_id
         await write_audit(
@@ -198,8 +209,14 @@ class KnowledgeBaseService:
             action="knowledge_base.restore",
             resource_type="knowledge_base",
             resource_id=row.id,
-            detail={"name": row.name},
+            detail={"name": row.name, "restored_documents": len(cascade_docs)},
         )
+        await self.session.commit()
+        from app.services.documents import DocumentService
+
+        doc_service = DocumentService(self.session, self.context)
+        for document in cascade_docs:
+            await doc_service.refresh_index_after_restore(document)
         await self.session.commit()
         await self.session.refresh(row)
         return self._to_out(row, await self.bases.count_documents(row.id))
@@ -241,8 +258,22 @@ class KnowledgeBaseService:
         )
         await self.session.delete(row)
         await self.session.commit()
+        pending_ids: list[int] = []
         for document in docs:
-            delete_document_files(document.tenant_id, document.knowledge_base_id, document.id)
+            try:
+                delete_document_files(document.tenant_id, document.knowledge_base_id, document.id)
+            except Exception:
+                pending_ids.append(document.id)
+        if pending_ids:
+            await write_audit(
+                self.session,
+                self.context,
+                action="knowledge_base.purge_files_pending",
+                resource_type="knowledge_base",
+                resource_id=knowledge_base_id,
+                detail={"pending_document_ids": pending_ids, "retry": True},
+            )
+            await self.session.commit()
 
     async def list_grants(self, knowledge_base_id: int) -> GrantListOut:
         self.auth.require_all(self.context, (PermissionCode.KNOWLEDGE_READ,))

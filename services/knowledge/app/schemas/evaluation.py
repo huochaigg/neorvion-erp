@@ -220,6 +220,7 @@ class ResultOut(BaseModel):
     run_id: int
     case_id: int
     question: str
+    expected_answer: str | None = Field(default=None, description="快照中的标准答案，缺失则为空")
     is_unanswerable: bool
     retrieved: list[Any]
     retrieval_metrics: dict[str, Any] | None
@@ -228,6 +229,7 @@ class ResultOut(BaseModel):
     judge_error: str | None
     human_override: dict[str, Any] | None
     latency_ms: int
+    usage: dict[str, Any] | None = Field(default=None, description="本题 Token 与费用；未生成时为空")
     error_message: str | None
 
 

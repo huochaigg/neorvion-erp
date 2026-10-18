@@ -208,6 +208,7 @@ export interface KnowledgeTask {
   started_at: string | null;
   finished_at: string | null;
   created_at: string;
+  document_available?: boolean;
 }
 
 export interface KnowledgeTaskList {
@@ -283,6 +284,19 @@ export interface KnowledgeSearchPayload {
   keyword_k?: number | null;
   rrf_k?: number | null;
   rerank?: boolean;
+}
+
+export interface KnowledgeRetrievalDefaults {
+  default_top_k: number;
+  default_candidate_k: number;
+  rrf_k: number;
+  default_chunk_size: number;
+  default_chunk_overlap: number;
+  embedding_model: string;
+  embedding_dimensions: number;
+  worker_concurrency: number;
+  similarity_threshold: number | null;
+  rerank_model: string;
 }
 
 export interface KnowledgeIndexStatus {
@@ -491,6 +505,7 @@ export interface KnowledgeEvalCase {
 export interface KnowledgeEvalProbe {
   case_id: number;
   question: string;
+  expected_answer?: string | null;
   is_unanswerable: boolean;
   strategy: string;
   rerank_applied: boolean;
@@ -547,6 +562,14 @@ export interface KnowledgeRecycleList {
   total: number;
   page: number;
   page_size: number;
+}
+
+export interface KnowledgeRecycleBatch {
+  succeeded: number;
+  skipped: number;
+  failed: number;
+  remaining: number;
+  errors: { resource_type?: string; id?: number; message?: string }[];
 }
 
 export interface KnowledgeApiKey {
@@ -658,6 +681,7 @@ export interface KnowledgeEvalResult {
   run_id: number;
   case_id: number;
   question: string;
+  expected_answer?: string | null;
   is_unanswerable: boolean;
   retrieved: Record<string, unknown>[];
   retrieval_metrics: Record<string, unknown> | null;
@@ -666,6 +690,7 @@ export interface KnowledgeEvalResult {
   judge_error: string | null;
   human_override: Record<string, unknown> | null;
   latency_ms: number;
+  usage?: Record<string, unknown> | null;
   error_message: string | null;
 }
 
