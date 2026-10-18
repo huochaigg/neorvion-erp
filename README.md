@@ -4,6 +4,10 @@
 
 当前有效状态：[`docs/current-state.md`](docs/current-state.md)。新会话先读 [`AI_CONTEXT.md`](AI_CONTEXT.md)。文档导航：[`docs/README.md`](docs/README.md)。
 
+## 架构文档
+
+- [IAM 统一认证与权限架构：学习与面试手册](docs/architecture/iam-authentication-authorization-guide.md)（SSO、JWT、RBAC、多租户、跨服务鉴权；含已实现/部分实现/待实现标记）
+
 ## 它能做什么
 
 - **IAM**：注册/登录/登出、Access + Refresh、租户与成员、平台角色、权限目录、菜单、应用注册、审计
