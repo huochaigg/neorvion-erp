@@ -1,9 +1,12 @@
 {
-  "python.defaultInterpreterPath": "${workspaceFolder}/services/erp/.venv/bin/python",
+  "python.defaultInterpreterPath": "${workspaceFolder}/services/erp/.venv/Scripts/python.exe",
+  "python.analysis.stubPath": "${workspaceFolder}/typings",
   "python.analysis.extraPaths": [
     "${workspaceFolder}/services/erp",
-    "${workspaceFolder}/services/knowledge"
+    "${workspaceFolder}/services/knowledge",
+    "${workspaceFolder}/services/knowledge/.venv/Lib/site-packages",
+    "${workspaceFolder}/services/erp/.venv/Lib/site-packages",
+    "${workspaceFolder}/typings"
   ],
-  "python.analysis.venvPath": "${workspaceFolder}/services/erp",
   "python.analysis.diagnosticMode": "workspace"
 }

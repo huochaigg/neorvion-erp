@@ -88,7 +88,9 @@ class RetrievedHit:
 class RetrievalResult:
     hits: list[RetrievedHit]
     strategy: str
+    # True：Rerank 模型已成功重排候选；False：未跑重排或重排失败
     rerank_applied: bool
+    # True：请求了重排但降级（未配置客户端 / 调用异常），仍用融合后的原顺序
     rerank_degraded: bool
     stages: dict = field(default_factory=dict)
     latency_ms: int = 0
@@ -150,6 +152,7 @@ class RetrievalService:
         vector_hits: list[RetrievedHit] = []
         keyword_hits: list[RetrievedHit] = []
         stages: dict = {}
+        # TODO: HYBRID 目前是顺序执行。先 VECTOR，再 KEYWORD；以后可以研究并发优化，但必须正确管理 SQLAlchemy AsyncSession。
         if strategy_value in {RetrievalStrategy.VECTOR.value, RetrievalStrategy.HYBRID.value}:
             t0 = time.perf_counter()
             ready_n = await self._ready_vector_count(allowed)
@@ -185,6 +188,7 @@ class RetrievalService:
                 {"chunk_id": item.chunk_id, "rrf": item.rrf_score} for item in fused
             ]
 
+        # rerank_applied：是否真正完成了模型重排；rerank_degraded：是否因失败回退到融合顺序
         rerank_applied = False
         rerank_degraded = False
         if rerank and fused:
@@ -327,6 +331,7 @@ class RetrievalService:
             .order_by(distance.asc())
             .limit(limit)
         )
+        # TODO: similarity_threshold 当前只用于 VECTOR 路径。在 HYBRID 中，即使某 Chunk 被向量相似度阈值过滤，它仍可能通过 KEYWORD 进入融合结果。
         if similarity_threshold is not None:
             stmt = stmt.where(similarity >= similarity_threshold)
         rows = (await self.session.execute(stmt)).all()
@@ -344,6 +349,7 @@ class RetrievalService:
 
     async def _keyword_search(self, query: str, base_ids: list[int], limit: int) -> list[RetrievedHit]:
         """PostgreSQL simple FTS + trigram + 中文片段 ILIKE。这不是 BM25。"""
+        # TODO: 中文关键词检索还比较基础。当前采用 simple FTS + pg_trgm + ILIKE，没有专业中文分词和 BM25。
         latin, terms = keyword_terms(query)
         tsquery = func.to_tsquery("simple", latin) if latin else None
         fts_rank = func.ts_rank_cd(DocumentChunk.search_tsv, tsquery) if tsquery is not None else 0
@@ -397,6 +403,7 @@ class RetrievalService:
         *,
         k: int | None = None,
     ) -> list[RetrievedHit]:
+        # TODO: RRF 未必保证正确答案排第一。它融合的是检索排名，真正的检索质量还要通过评测集验证。
         k = k or settings.rrf_k
         merged: dict[int, RetrievedHit] = {}
         for hit in vector_hits + keyword_hits:

@@ -89,7 +89,7 @@ class ConversationRepository(BaseRepository):
     def __init__(self, session: AsyncSession, tenant_id: int | None = None) -> None:
         super().__init__(session, tenant_id)
 
-    def _owned(self) -> Select[tuple[Conversation]]:
+    def _owned(self) -> Select[Conversation]:
         tenant_id = self.ensure_tenant()
         return select(Conversation).where(
             Conversation.tenant_id == tenant_id,

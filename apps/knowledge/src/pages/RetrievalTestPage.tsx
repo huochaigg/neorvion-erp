@@ -198,7 +198,7 @@ export function RetrievalTestPage() {
                 {result.rerank_degraded ? <Tag color="warning">Rerank 已降级</Tag> : null}
               </Space>
               <Table rowKey={(row) => `${row.chunk_id}-${row.version}`} size="small" pagination={false} columns={columns} dataSource={result.items} />
-              <Descriptions size="small" className="mt-3" column={1} title="阶段明细">
+              <Descriptions size="small" className="mt-3!" column={1} title="阶段明细">
                 <Descriptions.Item label="vector_ranks">{JSON.stringify(stages.vector_ranks ?? [])}</Descriptions.Item>
                 <Descriptions.Item label="keyword_ranks">{JSON.stringify(stages.keyword_ranks ?? [])}</Descriptions.Item>
                 <Descriptions.Item label="rrf_ranks">{JSON.stringify(stages.rrf_ranks ?? [])}</Descriptions.Item>

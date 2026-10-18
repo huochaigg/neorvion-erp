@@ -306,16 +306,21 @@ class ChatService:
         usage: dict | None,
         latency_ms: int,
     ) -> None:
+        """流式生成结束后落库：补全 assistant 正文，并写入本次检索引用。"""
         row = await self.session.get(Message, message_id)
+        # 消息不存在或不属于当前租户时直接放弃，避免串写
         if row is None or row.tenant_id != self.context.tenant_id:
             return
+        # 开始时 content 为空、status=STREAMING；这里改成完整答案并标记完成
         row.content = content
         row.status = MessageStatus.COMPLETED.value
         row.retrieval_strategy = strategy
         row.usage = usage
         row.latency_ms = latency_ms
+        # usage 是 JSON 字段，原地改 dict 时需显式标记，否则 SQLAlchemy 可能不更新
         if usage is not None:
             flag_modified(row, "usage")
+        # 每条命中存一条引用：chunk_id 对正文，rank 对前端展示序号 / prompt 里的 [n]
         for hit in hits:
             self.session.add(
                 MessageCitation(

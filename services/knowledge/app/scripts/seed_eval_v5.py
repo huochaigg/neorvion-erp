@@ -586,7 +586,11 @@ def main() -> int:
             f"upsert created={result.get('created')} updated={result.get('updated')} "
             f"skipped={result.get('skipped')} missing_chunks={pending_review}"
         )
-        cases = {item.get("external_key"): item for item in api.list_cases(dataset["id"])}
+        cases: dict[str, dict] = {
+            str(item["external_key"]): item
+            for item in api.list_cases(dataset["id"])
+            if item.get("external_key") is not None
+        }
         reports = []
         generate = os.environ.get("KNOWLEDGE_SEED_GENERATE", "").lower() in {"1", "true", "yes"}
         erp_question = next(item["question"] for item in questions if item["question_id"] == "erp-001")

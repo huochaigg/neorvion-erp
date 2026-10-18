@@ -241,23 +241,25 @@ export function EvaluationDatasetDetailPage() {
           <Space>
             <Button onClick={() => navigate('/datasets')}>返回列表</Button>
             <Can permission={PERMISSION_CODE.knowledgeUpdate}>
-              <Button onClick={() => refreshEvalStale(datasetId).then(() => { message.success('已刷新失效标注'); invalidate(); }).catch((error: Error) => message.error(error.message))}>
-                刷新失效标注
-              </Button>
-              <Button onClick={() => freezeEvalDataset(datasetId).then((row) => { message.success(`已冻结 v${row.version}`); invalidate(); }).catch((error: Error) => message.error(error.message))}>
-                冻结版本
-              </Button>
-              <Button
-                type="primary"
-                onClick={() => {
-                  setCreating(true);
-                  setEditing(null);
-                  form.resetFields();
-                  judgmentForm.resetFields();
-                }}
-              >
-                新增问题
-              </Button>
+              <Space>
+                <Button onClick={() => refreshEvalStale(datasetId).then(() => { message.success('已刷新失效标注'); invalidate(); }).catch((error: Error) => message.error(error.message))}>
+                  刷新失效标注
+                </Button>
+                <Button onClick={() => freezeEvalDataset(datasetId).then((row) => { message.success(`已冻结 v${row.version}`); invalidate(); }).catch((error: Error) => message.error(error.message))}>
+                  冻结版本
+                </Button>
+                <Button
+                  type="primary"
+                  onClick={() => {
+                    setCreating(true);
+                    setEditing(null);
+                    form.resetFields();
+                    judgmentForm.resetFields();
+                  }}
+                >
+                  新增问题
+                </Button>
+              </Space>
             </Can>
           </Space>
         }

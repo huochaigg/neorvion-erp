@@ -40,6 +40,7 @@ class ProcessingService:
         if task is None:
             return
         if task.status not in {TaskStatus.QUEUED.value, TaskStatus.RUNNING.value}:
+            """TODO 这里需要考虑是否需要RUNNING状态，同时判断两个状态可能会遇到问题，后续调整可能会调整多个地方，改为只判断QUEUED状态"""
             return
         task.status = TaskStatus.RUNNING.value
         task.progress = 5

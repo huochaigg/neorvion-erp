@@ -1,19 +1,26 @@
 {
-  "python": "services/erp/.venv/bin/python",
-  "venvPath": "services/erp",
-  "venv": ".venv",
+  "pythonVersion": "3.12",
+  "pythonPlatform": "All",
+  "stubPath": "typings",
   "executionEnvironments": [
     {
       "root": "services/erp",
       "pythonVersion": "3.12",
       "pythonPlatform": "All",
-      "extraPaths": ["."]
+      "extraPaths": [
+        "services/erp",
+        "services/erp/.venv/Lib/site-packages"
+      ]
     },
     {
       "root": "services/knowledge",
       "pythonVersion": "3.12",
       "pythonPlatform": "All",
-      "extraPaths": ["."]
+      "extraPaths": [
+        "services/knowledge",
+        "services/knowledge/.venv/Lib/site-packages",
+        "typings"
+      ]
     }
   ]
 }

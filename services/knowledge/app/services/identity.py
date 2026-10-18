@@ -21,6 +21,8 @@ class _CacheEntry:
 
 class IdentityCache:
     """按 JWT jti + tenant_id 缓存身份，默认 30 秒，权限变更最多延迟一个 TTL。"""
+    """TODO 缓存到 Redis，并定期异步刷新。"""
+    """TODO 后续还有考虑多项目怎么办，如果都调用erp项目来获取身份，架构上不合理，需要考虑其他方案"""
 
     def __init__(self) -> None:
         self._items: dict[tuple[str, int], _CacheEntry] = {}

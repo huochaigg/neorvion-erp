@@ -201,38 +201,40 @@ export function DocumentDetailPage() {
               <Button onClick={() => void downloadDocument(doc.id, doc.filename)}>下载原文件</Button>
             </Can>
             <Can permission={PERMISSION_CODE.knowledgeUpdate}>
-              <Button
-                onClick={() => {
-                  const input = document.createElement('input');
-                  input.type = 'file';
-                  input.onchange = () => {
-                    const file = input.files?.[0];
-                    if (!file) return;
-                    replaceDocument(documentId, file, '页面更新')
-                      .then(() => {
-                        message.success('已排队解析新版本，旧索引在发布前仍可用');
-                        invalidate();
-                      })
-                      .catch((error: Error) => message.error(error.message));
-                  };
-                  input.click();
-                }}
-              >
-                更新文件
-              </Button>
-              <Button loading={parseMutation.isPending} onClick={() => parseMutation.mutate()}>
-                重新解析
-              </Button>
-              <Button type="primary" onClick={() => setChunkOpen(true)}>
-                重新切片
-              </Button>
+              <Space>
+                <Button
+                  onClick={() => {
+                    const input = document.createElement('input');
+                    input.type = 'file';
+                    input.onchange = () => {
+                      const file = input.files?.[0];
+                      if (!file) return;
+                      replaceDocument(documentId, file, '页面更新')
+                        .then(() => {
+                          message.success('已排队解析新版本，旧索引在发布前仍可用');
+                          invalidate();
+                        })
+                        .catch((error: Error) => message.error(error.message));
+                    };
+                    input.click();
+                  }}
+                >
+                  更新文件
+                </Button>
+                <Button loading={parseMutation.isPending} onClick={() => parseMutation.mutate()}>
+                  重新解析
+                </Button>
+                <Button type="primary" onClick={() => setChunkOpen(true)}>
+                  重新切片
+                </Button>
+              </Space>
             </Can>
           </Space>
         }
       />
       {doc.warning_message ? <Alert className="mb-3" type="warning" showIcon message={doc.warning_message} /> : null}
       {doc.error_message ? <Alert className="mb-3" type="error" showIcon message={doc.error_message} /> : null}
-      <Card className="mb-4">
+      <Card className="mb-4!">
         <Descriptions column={2} bordered size="small">
           <Descriptions.Item label="状态">
             <Tag>{knowledgeDocumentStatusLabel(doc.status)}</Tag>
@@ -250,7 +252,7 @@ export function DocumentDetailPage() {
           <Descriptions.Item label="上传时间">{formatDateTime(doc.created_at)}</Descriptions.Item>
         </Descriptions>
       </Card>
-      <Card className="mb-4" title="版本历史">
+      <Card className="mb-4!" title="版本历史">
         <Table<KnowledgeRevision>
           rowKey="id"
           size="small"
@@ -288,14 +290,14 @@ export function DocumentDetailPage() {
           ]}
         />
       </Card>
-      <Card className="mb-4" title="解析预览">
+      <Card className="mb-4!" title="解析预览">
         {doc.extracted_preview ? (
           <pre className="max-h-80 overflow-auto whitespace-pre-wrap text-sm text-slate-700">{doc.extracted_preview}</pre>
         ) : (
           <Empty description="暂无抽取文本" />
         )}
       </Card>
-      <Card className="mb-4" title="切片">
+      <Card className="mb-4!" title="切片">
         <Table<KnowledgeChunk>
           rowKey="id"
           size="small"
