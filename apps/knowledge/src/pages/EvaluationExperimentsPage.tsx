@@ -28,7 +28,7 @@ import {
   retryEvalRun,
   startEvalRun,
 } from '@/api/evaluation';
-import { ActionCell, AppTable } from '@/components/AppTable';
+import { ActionCell, AppTable, EllipsisCell } from '@/components/AppTable';
 import { Can } from '@/components/Can';
 import { MetricBars } from '@/components/MetricBars';
 import { ListPageContainer, ListTableArea, ListToolbar } from '@/components/PageContainer';
@@ -118,7 +118,24 @@ export function EvaluationExperimentsPage() {
       render: (_, record) => (
         <ActionCell>
           <Can permission={PERMISSION_CODE.knowledgeCreate}>
-            <Button type="link" size="small" onClick={() => startEvalRun(record.id).then((run) => { message.success('已开始评测'); setActiveRun(run); invalidate(); }).catch((error: Error) => message.error(error.message))}>
+            <Button
+              type="link"
+              size="small"
+              onClick={() => {
+                // 立刻刷新，便于轮询到 QUEUED/RUNNING；不要等长时间 inline 响应结束
+                invalidate();
+                void startEvalRun(record.id)
+                  .then((run) => {
+                    message.success(run.status === 'SUCCESS' ? '评测完成' : '已开始评测');
+                    setActiveRun(run);
+                    invalidate();
+                  })
+                  .catch((error: Error) => {
+                    invalidate();
+                    message.error(error.message);
+                  });
+              }}
+            >
               运行
             </Button>
             <Button type="link" size="small" onClick={() => copyEvalExperiment(record.id).then(() => { message.success('已复制'); invalidate(); }).catch((error: Error) => message.error(error.message))}>
@@ -175,7 +192,15 @@ export function EvaluationExperimentsPage() {
   ];
 
   const resultColumns: ColumnsType<KnowledgeEvalResult> = [
-    { title: '问题', dataIndex: 'question', ellipsis: true },
+    {
+      title: '问题',
+      dataIndex: 'question',
+      width: 300,
+      ellipsis: true,
+      // AppTable 使用 scroll.x=max-content，仅设 width 会被长文本撑开；用 maxWidth + EllipsisCell 固定可视宽度
+      onCell: () => ({ style: { maxWidth: 300 } }),
+      render: (value: string) => <EllipsisCell value={value} />,
+    },
     { title: '耗时', dataIndex: 'latency_ms', width: 80, render: (value: number) => `${value}ms` },
     {
       title: 'Recall',
@@ -190,7 +215,8 @@ export function EvaluationExperimentsPage() {
     {
       title: '错误',
       ellipsis: true,
-      render: (_, record) => record.error_message || record.judge_error || '-',
+      onCell: () => ({ style: { maxWidth: 240 } }),
+      render: (_, record) => <EllipsisCell value={record.error_message || record.judge_error || '-'} />,
     },
   ];
 

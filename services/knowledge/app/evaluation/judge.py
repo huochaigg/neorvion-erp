@@ -115,6 +115,8 @@ def _extract_json(text: str) -> dict | None:
 def _score(value: object) -> float:
     if value is None:
         raise ValueError("Judge 缺少分数")
+    if not isinstance(value, (int, float, str)):
+        raise ValueError("Judge 分数无法解析")
     try:
         number = float(value)
     except (TypeError, ValueError) as exc:

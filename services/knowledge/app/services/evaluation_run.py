@@ -30,6 +30,7 @@ from app.models.evaluation import (
     RunStatus,
 )
 from app.repositories.evaluation import EvaluationRepository
+from app.schemas.ops import ProbeOut
 from app.services.authorization import AuthorizationService
 from app.services.chat import ChatService
 from app.services.evaluation import EvaluationService
@@ -266,12 +267,13 @@ class EvaluationRunService:
             run.progress = int(index / max(len(cases), 1) * 100)
             await self.session.commit()
 
-        run.metrics = aggregate_retrieval(supervised, unanswerable_rows=unanswerable_stats)
+        metrics = aggregate_retrieval(supervised, unanswerable_rows=unanswerable_stats)
         if unanswerable_total:
-            run.metrics["unanswerable_refuse_rate"] = refuse_hits / unanswerable_total
+            metrics["unanswerable_refuse_rate"] = refuse_hits / unanswerable_total
         if gen_scores:
-            run.metrics["generation"] = _avg_generation(gen_scores)
-            run.metrics["generation"]["subjective"] = True
+            metrics["generation"] = _avg_generation(gen_scores)
+            metrics["generation"]["subjective"] = True
+        run.metrics = metrics
         run.usage = {
             "prompt_tokens": prompt_tokens,
             "completion_tokens": completion_tokens,
@@ -390,10 +392,8 @@ class EvaluationRunService:
             usage,
         )
 
-    async def probe(self, case_id: int, payload) -> dict:
+    async def probe(self, case_id: int, payload) -> ProbeOut:
         """单题真实检索评测。不创建实验 run，不改线上索引。"""
-        from app.schemas.ops import ProbeOut
-
         assert self.context is not None
         self.auth.require_all(self.context, (PermissionCode.KNOWLEDGE_READ,))
         case = await self.repo.get_case(case_id)
@@ -463,7 +463,7 @@ class EvaluationRunService:
             ],
             usage=usage,
             needs_human_review=bool(case.needs_human_review),
-        ).model_dump()
+        )
 
 
 async def _load_run(session: AsyncSession, run_id: int) -> EvaluationRun | None:

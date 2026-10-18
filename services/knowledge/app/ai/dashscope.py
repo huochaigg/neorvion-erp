@@ -74,8 +74,10 @@ class DashScopeRerankClient:
         for row in results:
             if not isinstance(row, dict):
                 continue
-            index = int(row.get("index") if row.get("index") is not None else 0)
-            score = float(row.get("relevance_score") if row.get("relevance_score") is not None else 0)
+            raw_index = row.get("index")
+            raw_score = row.get("relevance_score")
+            index = int(raw_index if raw_index is not None else 0)
+            score = float(raw_score if raw_score is not None else 0)
             hits.append(RerankHit(index=index, score=score))
         hits.sort(key=lambda item: item.score, reverse=True)
         return hits

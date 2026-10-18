@@ -24,7 +24,8 @@ def classify_model_http_error(status: int, body: str) -> AppError:
     except json.JSONDecodeError:
         payload = None
     if isinstance(payload, dict):
-        error = payload.get("error") if isinstance(payload.get("error"), dict) else {}
+        raw_error = payload.get("error")
+        error = raw_error if isinstance(raw_error, dict) else {}
         code_name = str(payload.get("code") or error.get("code") or error.get("type") or "")
         message = str(payload.get("message") or error.get("message") or "")
     combined = f"{code_name} {message} {raw}".lower()
