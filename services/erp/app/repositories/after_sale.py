@@ -8,9 +8,9 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.models.after_sale import AfterSaleItem, AfterSaleOrder, AfterSaleStatus
 from app.models.customer import Customer
+from app.models.identity import IdentityNameSnapshot
 from app.models.product import ProductSku
 from app.models.sales_order import SalesOrder
-from app.models.user import User
 from app.repositories.base import BaseRepository
 
 # 未拒绝、未取消的售后占用可退数量，避免两张单同时把同一批货退走。
@@ -193,9 +193,17 @@ class AfterSaleRepository(BaseRepository):
             .join(SalesOrder, SalesOrder.id == AfterSaleOrder.sales_order_id)
             .join(Customer, Customer.id == AfterSaleOrder.customer_id)
             .outerjoin(AfterSaleItem, AfterSaleItem.after_sale_order_id == AfterSaleOrder.id)
-            .outerjoin(User, User.id == AfterSaleOrder.requested_by)
+            .outerjoin(
+                IdentityNameSnapshot,
+                IdentityNameSnapshot.user_id == AfterSaleOrder.requested_by,
+            )
             .where(*filters)
-            .group_by(AfterSaleOrder.id, SalesOrder.id, Customer.id, User.id)
+            .group_by(
+                AfterSaleOrder.id,
+                SalesOrder.id,
+                Customer.id,
+                IdentityNameSnapshot.user_id,
+            )
         )
         count_stmt = select(func.count()).select_from(base.subquery())
         total = int(self.session.scalar(count_stmt) or 0)
@@ -204,15 +212,23 @@ class AfterSaleRepository(BaseRepository):
                 AfterSaleOrder,
                 SalesOrder.order_no,
                 Customer.name,
-                User.display_name,
+                IdentityNameSnapshot.display_name,
                 return_qty,
             )
             .join(SalesOrder, SalesOrder.id == AfterSaleOrder.sales_order_id)
             .join(Customer, Customer.id == AfterSaleOrder.customer_id)
             .outerjoin(AfterSaleItem, AfterSaleItem.after_sale_order_id == AfterSaleOrder.id)
-            .outerjoin(User, User.id == AfterSaleOrder.requested_by)
+            .outerjoin(
+                IdentityNameSnapshot,
+                IdentityNameSnapshot.user_id == AfterSaleOrder.requested_by,
+            )
             .where(*filters)
-            .group_by(AfterSaleOrder.id, SalesOrder.id, Customer.id, User.id)
+            .group_by(
+                AfterSaleOrder.id,
+                SalesOrder.id,
+                Customer.id,
+                IdentityNameSnapshot.user_id,
+            )
             .order_by(AfterSaleOrder.created_at.desc(), AfterSaleOrder.id.desc())
             .offset((page - 1) * page_size)
             .limit(page_size)

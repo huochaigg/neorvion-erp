@@ -11,8 +11,8 @@ from app.services.authorization import AuthorizationService
 def require_permission(*codes: str):
     """当前成员必须拥有列出的全部权限。
 
-    FastAPI 会先走 TenantContextDep（登录 + X-Tenant-ID + 成员有效），
-    再查库汇总角色权限。不要把 JWT 或请求体里的角色列表当成授权依据。
+    FastAPI 会先走 TenantContextDep（JWT + X-Tenant-ID + IAM 快照），
+    再用快照里的 permission_codes 判定。不要把 JWT 或请求体里的角色列表当成授权依据。
     """
 
     def dependency(context: TenantContextDep, session: DbSession) -> TenantContext:

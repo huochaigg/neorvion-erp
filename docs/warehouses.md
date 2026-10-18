@@ -109,9 +109,9 @@ MySQL 不便实现「每个租户最多一个 `is_default = true`」的部分唯
 | `warehouse:disable` | 启用 / 禁用 |
 | `warehouse:delete` | 删除 |
 
-不单独增加 `warehouse:set-default`。接口不按角色名称硬编码，只看 `role_permissions`。
+不单独增加 `warehouse:set-default`。接口不按角色名称硬编码，只看 IAM 写入当前请求快照的权限编码。
 
-默认模板：OWNER / ADMIN 全部；OPERATOR / VIEWER 只读；WAREHOUSE 角色可读、新增、编辑，默认不能停用或删除。历史租户在 `seed_permissions` 时 `backfill_existing_tenants`（系统角色只增不删）。
+默认模板：OWNER / ADMIN 全部；OPERATOR / VIEWER 只读；WAREHOUSE 角色可读、新增、编辑，默认不能停用或删除。历史租户由 IAM `seed_permissions` 的 `backfill_existing_tenants` 补齐（系统角色只增不删）。
 
 ## API
 

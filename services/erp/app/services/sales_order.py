@@ -5,12 +5,12 @@ from __future__ import annotations
 import re
 from datetime import datetime
 
-from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.events import AggregateType, EventType
 from app.core.exceptions import AppError
+from app.core.identity_names import identity_display_name
 from app.core.operations import OperationAction, OperationModule
 from app.core.permissions import PermissionCode
 from app.core.tenant import TenantContext
@@ -24,7 +24,6 @@ from app.models.sales_order import (
     SalesOrderSource,
     SalesOrderStatus,
 )
-from app.models.user import User
 from app.models.warehouse import WarehouseStatus
 from app.repositories.customer import CustomerRepository
 from app.repositories.inventory import InventoryRepository
@@ -742,9 +741,7 @@ class SalesOrderService:
         return {row.sku_id: row for row in rows}
 
     def _user_name(self, user_id: int | None) -> str | None:
-        if user_id is None:
-            return None
-        return self.session.scalar(select(User.display_name).where(User.id == user_id))
+        return identity_display_name(self.session, user_id)
 
     @staticmethod
     def _list_item(

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from neorvion_security import SecurityError
 from sqlalchemy.orm import Session
 
 from app.core.async_tasks import REPORT_EXPORT_KINDS, TaskLogLevel
@@ -15,7 +16,6 @@ from app.core.tenant import TenantContext
 from app.models.async_task import AsyncTask, AsyncTaskLog
 from app.services.analytics import AnalyticsService
 from app.services.authorization import AuthorizationService
-from neorvion_security import SecurityError
 
 _EXPORT_PERMISSIONS = {
     "sales_trend": PermissionCode.ANALYTICS_SALES_READ,

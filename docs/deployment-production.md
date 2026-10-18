@@ -428,15 +428,15 @@ docker compose --env-file /opt/neorvion/env/.env.production \
   run --rm --no-deps erp-api uv run --no-dev alembic current
 ```
 
-权限目录（幂等，可重复）：
+权限目录（幂等，可重复，必须打 IAM）：
 
 ```bash
 docker compose --env-file /opt/neorvion/env/.env.production \
   -f deploy/compose/docker-compose.production.yml \
-  run --rm --no-deps erp-api uv run --no-dev python -m app.scripts.seed_permissions
+  run --rm --no-deps iam-api uv run --no-dev python -m app.scripts.seed_permissions
 ```
 
-**不要**自动 `seed_demo`。若这是作品演示机，你本人决定后再跑，并自备 `DEMO_EMAIL` / `DEMO_PASSWORD`。
+**不要**自动 `seed_demo`。若这是作品演示机，先在 IAM 建用户与租户，再带 `DEMO_TENANT_ID` / `DEMO_USER_ID` / `DEMO_MEMBER_ID` 跑 ERP seed。
 
 **【检查点：Backend】**
 

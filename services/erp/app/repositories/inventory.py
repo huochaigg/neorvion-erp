@@ -5,9 +5,9 @@ from sqlalchemy import Update, and_, func, or_, select, update
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.orm import Session, selectinload
 
+from app.models.identity import IdentityNameSnapshot
 from app.models.inventory import Inventory, InventoryTransaction
 from app.models.product import Product, ProductSku
-from app.models.user import User
 from app.models.warehouse import Warehouse
 from app.repositories.base import BaseRepository
 from app.repositories.product import ProductSkuRepository
@@ -398,8 +398,11 @@ class InventoryTransactionRepository(BaseRepository):
         """详情最近流水。OUTER JOIN 操作人姓名，避免详情页操作人一直为空。"""
         tenant_id = self.ensure_tenant()
         stmt = (
-            select(InventoryTransaction, User.display_name)
-            .outerjoin(User, User.id == InventoryTransaction.operator_user_id)
+            select(InventoryTransaction, IdentityNameSnapshot.display_name)
+            .outerjoin(
+                IdentityNameSnapshot,
+                IdentityNameSnapshot.user_id == InventoryTransaction.operator_user_id,
+            )
             .where(
                 InventoryTransaction.tenant_id == tenant_id,
                 InventoryTransaction.inventory_id == inventory_id,
@@ -440,7 +443,13 @@ class InventoryTransactionRepository(BaseRepository):
         count_stmt = select(func.count(InventoryTransaction.id)).where(*filters)
         total = int(self.session.scalar(count_stmt) or 0)
         stmt = (
-            select(InventoryTransaction, Warehouse, ProductSku, Product, User.display_name)
+            select(
+                InventoryTransaction,
+                Warehouse,
+                ProductSku,
+                Product,
+                IdentityNameSnapshot.display_name,
+            )
             .join(
                 Warehouse,
                 and_(
@@ -462,7 +471,10 @@ class InventoryTransactionRepository(BaseRepository):
                     Product.id == ProductSku.product_id,
                 ),
             )
-            .outerjoin(User, User.id == InventoryTransaction.operator_user_id)
+            .outerjoin(
+                IdentityNameSnapshot,
+                IdentityNameSnapshot.user_id == InventoryTransaction.operator_user_id,
+            )
             .where(*filters)
             .order_by(
                 InventoryTransaction.created_at.desc(),

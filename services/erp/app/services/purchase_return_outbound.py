@@ -4,11 +4,11 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.events import AggregateType, EventType
 from app.core.exceptions import AppError
+from app.core.identity_names import identity_display_name
 from app.core.permissions import PermissionCode
 from app.core.tenant import TenantContext
 from app.models.inventory import InventoryTransactionType
@@ -24,7 +24,6 @@ from app.models.purchase_return_outbound import (
     PurchaseReturnOutboundItem,
     PurchaseReturnOutboundStatus,
 )
-from app.models.user import User
 from app.repositories.inventory import InventoryRepository
 from app.repositories.purchase_return import PurchaseReturnRepository
 from app.repositories.purchase_return_outbound import PurchaseReturnOutboundRepository
@@ -404,6 +403,4 @@ class PurchaseReturnOutboundService:
         )
 
     def _user_name(self, user_id: int | None) -> str | None:
-        if user_id is None:
-            return None
-        return self.session.scalar(select(User.display_name).where(User.id == user_id))
+        return identity_display_name(self.session, user_id)

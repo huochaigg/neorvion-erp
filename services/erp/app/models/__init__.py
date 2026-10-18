@@ -12,6 +12,7 @@ from app.models.after_sale import (
 from app.models.async_task import AsyncTask, AsyncTaskLog
 from app.models.carrier import Carrier, CarrierStatus, CarrierType
 from app.models.customer import Customer, CustomerStatus
+from app.models.identity import IdentityNameSnapshot
 from app.models.inventory import Inventory, InventoryTransaction, InventoryTransactionType
 from app.models.operation_log import OperationLog
 from app.models.outbound import (
@@ -38,7 +39,6 @@ from app.models.purchase_return_outbound import (
     PurchaseReturnOutboundItem,
     PurchaseReturnOutboundStatus,
 )
-from app.models.rbac import MemberRoleGrant, Permission, Role, RolePermission
 from app.models.refund import REFUND_REFERENCE, RefundRecord, RefundRecordStatus
 from app.models.return_order import (
     RETURN_ORDER_REFERENCE,
@@ -81,8 +81,7 @@ from app.models.supplier_refund import (
     SupplierRefundRecordStatus,
 )
 from app.models.system_event import SystemEvent
-from app.models.tenant import MemberRole, MemberStatus, Tenant, TenantMember, TenantStatus
-from app.models.user import User, UserStatus
+from app.models.tenant import MemberRole, MemberStatus, TenantStatus
 from app.models.warehouse import Warehouse, WarehouseStatus, WarehouseType
 
 __all__ = [
@@ -103,8 +102,8 @@ __all__ = [
     "Inventory",
     "InventoryTransaction",
     "InventoryTransactionType",
+    "IdentityNameSnapshot",
     "MemberRole",
-    "MemberRoleGrant",
     "MemberStatus",
     "OutboundOrder",
     "OutboundOrderItem",
@@ -112,7 +111,6 @@ __all__ = [
     "OutboundPick",
     "OutboundPickLine",
     "OperationLog",
-    "Permission",
     "Product",
     "ProductCategory",
     "ProductSku",
@@ -144,8 +142,6 @@ __all__ = [
     "ReturnOrder",
     "ReturnOrderItem",
     "ReturnOrderStatus",
-    "Role",
-    "RolePermission",
     "SALES_ORDER_REFERENCE",
     "SalesOrder",
     "SalesOrderItem",
@@ -168,11 +164,7 @@ __all__ = [
     "Supplier",
     "SupplierStatus",
     "SystemEvent",
-    "Tenant",
-    "TenantMember",
     "TenantStatus",
-    "User",
-    "UserStatus",
     "Warehouse",
     "WarehouseStatus",
     "WarehouseType",

@@ -44,9 +44,11 @@ Neorvion 已拆独立 **IAM :8010**（V2：会话表、高风险回源、授权�
 
 ## 租户 / RBAC
 
-- `users` 没有 `tenant_id`。成员关系在 `tenant_members`
-- `X-Tenant-ID` 只是意愿，必须再查成员
+- 身份表只在 IAM（`neorvion_iam`）。ERP 已 DROP `users` / `tenants` / RBAC 表
+- `users` 没有 `tenant_id`。成员关系在 IAM `tenant_members`
+- `X-Tenant-ID` 只是意愿，必须再校验 IAM 授权快照
 - Permission 全局目录；Role 租户内
+- ERP 单据姓名走 `identity_name_snapshots`，禁止跨库 JOIN、禁止双写密码/角色
 - 跨租户资源统一 **404**，不泄露存在性
 - 关键写操作后端 `require_permission`，前端隐藏按钮不是安全边界
 

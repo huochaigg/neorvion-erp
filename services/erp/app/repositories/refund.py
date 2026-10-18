@@ -8,9 +8,9 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.models.after_sale import AfterSaleOrder
 from app.models.customer import Customer
+from app.models.identity import IdentityNameSnapshot
 from app.models.refund import RefundRecord, RefundRecordStatus
 from app.models.sales_order import SalesOrder
-from app.models.user import User
 from app.repositories.base import BaseRepository
 
 
@@ -129,12 +129,15 @@ class RefundRepository(BaseRepository):
                 SalesOrder.order_no,
                 AfterSaleOrder.customer_id,
                 Customer.name,
-                User.display_name,
+                IdentityNameSnapshot.display_name,
             )
             .join(AfterSaleOrder, AfterSaleOrder.id == RefundRecord.after_sale_order_id)
             .join(SalesOrder, SalesOrder.id == AfterSaleOrder.sales_order_id)
             .join(Customer, Customer.id == AfterSaleOrder.customer_id)
-            .outerjoin(User, User.id == RefundRecord.created_by)
+            .outerjoin(
+                IdentityNameSnapshot,
+                IdentityNameSnapshot.user_id == RefundRecord.created_by,
+            )
             .where(*filters)
             .order_by(RefundRecord.created_at.desc(), RefundRecord.id.desc())
             .offset((page - 1) * page_size)

@@ -170,13 +170,13 @@ OWNER 转移是独立业务流程，本版本不做。
 
 添加已有账号请传已注册用户的 `email` 和可选 `role_ids`。代建账号请传 `display_name`、`email`、可选 `role_ids`，响应中的 `temporary_password` 只出现一次。不能授予 OWNER。默认角色为 VIEWER。禁用保留成员行；移除删除 TenantMember 与 MemberRoleGrant，不删 User。
 
-ERP 系统管理页：成员管理、角色管理、权限目录（只读）。角色权限用 Ant Design Tree 勾选菜单与按钮，提交 `permission_ids`。
+成员、角色、权限目录在 **IAM** 微前端与 `services/iam`。ERP 只执行 JWT + 快照里的权限编码，不再提供 `/api/v1/roles` 或成员 CRUD。
 
 幂等灌入权限目录（不删已有行，并展开旧 manage）：
 
 ```bash
-cd services/erp
+cd services/iam
 uv run python -m app.scripts.seed_permissions
 ```
 
-不要在应用启动时建表。建表只走 Alembic：`20260926_0004`（RBAC 表）、`20260928_0005`（`users.must_change_password`）、`20260928_0006`（`tenant_members.display_name` 与细粒度权限 seed）。
+不要在应用启动时建表。IAM 建表只走 Alembic。ERP `20261018_0022` 已删除遗留 RBAC 表。

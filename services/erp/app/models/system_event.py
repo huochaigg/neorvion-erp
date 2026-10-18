@@ -8,7 +8,6 @@ from sqlalchemy import (
     JSON,
     BigInteger,
     DateTime,
-    ForeignKey,
     Index,
     Integer,
     String,

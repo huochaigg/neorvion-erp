@@ -3,9 +3,8 @@ from typing import Any
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel
-
 from neorvion_security import SecurityError
+from pydantic import BaseModel
 
 
 class AppError(Exception):

@@ -67,11 +67,12 @@ Tailwind CSS 4 + 必要 SCSS Modules。Ant Design 只走 ConfigProvider Token。
 
 ## 认证与授权
 
-- Access Token：Authorization Bearer
-- Refresh：HttpOnly Cookie，Redis `GETDEL` 轮换。ERP 不轮换 Refresh
-- 密码传输：RSA-OAEP，与 JWT `SECRET_KEY` 分开
-- `X-Tenant-ID` 必须再查 `tenant_members`
-- `require_permission`；OWNER 不是未知权限后门
+- Access Token：IAM 签发的 RS256 JWT，业务服务本地验签
+- Refresh：IAM HttpOnly Cookie，Redis `GETDEL` 轮换。ERP 不轮换 Refresh
+- 密码传输：IAM RSA-OAEP，与 JWT 密钥分开
+- `X-Tenant-ID` 必须再校验 IAM 授权快照，不能当成成员证明
+- `require_permission` 读快照编码；OWNER 不是未知权限后门
+- ERP 数据库无 `users` / `tenant_members`；单据姓名走 `identity_name_snapshots`
 
 ## 事件与任务
 

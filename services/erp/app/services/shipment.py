@@ -4,12 +4,12 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.events import AggregateType, EventType
 from app.core.exceptions import AppError
+from app.core.identity_names import identity_display_name
 from app.core.operations import OperationAction, OperationModule
 from app.core.permissions import PermissionCode
 from app.core.tenant import TenantContext
@@ -23,7 +23,6 @@ from app.models.shipment import (
     ShipmentTrackingEvent,
     TrackingEventStatus,
 )
-from app.models.user import User
 from app.repositories.carrier import CarrierRepository
 from app.repositories.outbound import OutboundOrderRepository
 from app.repositories.sales_order import SalesOrderRepository
@@ -703,6 +702,4 @@ class ShipmentService:
         )
 
     def _user_name(self, user_id: int | None) -> str | None:
-        if user_id is None:
-            return None
-        return self.session.scalar(select(User.display_name).where(User.id == user_id))
+        return identity_display_name(self.session, user_id)

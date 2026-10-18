@@ -6,11 +6,11 @@ from decimal import Decimal
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session, selectinload
 
+from app.models.identity import IdentityNameSnapshot
 from app.models.purchase import PurchaseOrder
 from app.models.purchase_return import PurchaseReturn
 from app.models.supplier import Supplier
 from app.models.supplier_refund import SupplierRefundRecord, SupplierRefundRecordStatus
-from app.models.user import User
 from app.repositories.base import BaseRepository
 
 
@@ -128,7 +128,10 @@ class SupplierRefundRepository(BaseRepository):
             .join(PurchaseReturn, PurchaseReturn.id == SupplierRefundRecord.purchase_return_id)
             .join(PurchaseOrder, PurchaseOrder.id == PurchaseReturn.purchase_order_id)
             .join(Supplier, Supplier.id == PurchaseReturn.supplier_id)
-            .outerjoin(User, User.id == SupplierRefundRecord.created_by)
+            .outerjoin(
+                IdentityNameSnapshot,
+                IdentityNameSnapshot.user_id == SupplierRefundRecord.created_by,
+            )
             .where(*filters)
         )
         total = int(self.session.scalar(select(func.count()).select_from(base.subquery())) or 0)
@@ -140,12 +143,15 @@ class SupplierRefundRepository(BaseRepository):
                 PurchaseOrder.order_no,
                 PurchaseReturn.supplier_id,
                 Supplier.name,
-                User.display_name,
+                IdentityNameSnapshot.display_name,
             )
             .join(PurchaseReturn, PurchaseReturn.id == SupplierRefundRecord.purchase_return_id)
             .join(PurchaseOrder, PurchaseOrder.id == PurchaseReturn.purchase_order_id)
             .join(Supplier, Supplier.id == PurchaseReturn.supplier_id)
-            .outerjoin(User, User.id == SupplierRefundRecord.created_by)
+            .outerjoin(
+                IdentityNameSnapshot,
+                IdentityNameSnapshot.user_id == SupplierRefundRecord.created_by,
+            )
             .where(*filters)
             .order_by(SupplierRefundRecord.created_at.desc(), SupplierRefundRecord.id.desc())
             .offset((page - 1) * page_size)

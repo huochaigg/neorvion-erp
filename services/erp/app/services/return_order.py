@@ -4,11 +4,11 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.events import AggregateType, EventType
 from app.core.exceptions import AppError
+from app.core.identity_names import identity_display_name
 from app.core.permissions import PermissionCode
 from app.core.tenant import TenantContext
 from app.models.after_sale import AfterSaleStatus, AfterSaleType, RefundStatus
@@ -20,7 +20,6 @@ from app.models.return_order import (
     ReturnOrderItem,
     ReturnOrderStatus,
 )
-from app.models.user import User
 from app.repositories.after_sale import AfterSaleRepository
 from app.repositories.return_order import ReturnOrderRepository
 from app.schemas.return_order import (
@@ -353,9 +352,7 @@ class ReturnOrderService:
         return ReturnOrderStatus.WAITING_RETURN.value
 
     def _user_name(self, user_id: int | None) -> str | None:
-        if user_id is None:
-            return None
-        return self.session.scalar(select(User.display_name).where(User.id == user_id))
+        return identity_display_name(self.session, user_id)
 
     def _out(self, order: ReturnOrder) -> ReturnOrderOut:
         items = sorted(order.items, key=lambda row: (row.sku_id, row.id))

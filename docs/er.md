@@ -2,7 +2,9 @@
 
 不是全库 45+ 张表。只帮助建立心智模型。
 
-## 租户 / RBAC
+## IAM 身份 / RBAC（`neorvion_iam`）
+
+ERP 不再持有这些表。跨服务只引用整数 ID。
 
 ```mermaid
 erDiagram
@@ -13,7 +15,21 @@ erDiagram
   roles ||--o{ member_roles : grants
   roles ||--o{ role_permissions : has
   permissions ||--o{ role_permissions : catalog
+  users ||--o{ auth_sessions : sessions
 ```
+
+## ERP 展示名快照（`neorvion_erp`）
+
+```mermaid
+erDiagram
+  identity_name_snapshots {
+    bigint user_id PK
+    varchar display_name
+  }
+  sales_orders }o--|| identity_name_snapshots : created_by
+```
+
+`sales_orders.created_by` 等列**没有**外键，JOIN 快照只为展示。
 
 ## 商品 / 库存
 
@@ -43,6 +59,16 @@ erDiagram
   sales_orders ||--o{ after_sale_orders : reverse
   after_sale_orders ||--o{ return_orders : returns
   after_sale_orders ||--o{ refund_records : refunds
-  tenants ||--o{ system_events : outbox
-  tenants ||--o{ async_tasks : jobs
+```
+
+`system_events` / `async_tasks` 带 `tenant_id` 整数，不指向 IAM `tenants` 表。
+
+```mermaid
+erDiagram
+  system_events {
+    bigint tenant_id
+  }
+  async_tasks {
+    bigint tenant_id
+  }
 ```

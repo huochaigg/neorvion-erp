@@ -5,10 +5,10 @@ from __future__ import annotations
 from datetime import datetime
 from decimal import Decimal
 
-from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.exceptions import AppError
+from app.core.identity_names import identity_display_name
 from app.core.permissions import PermissionCode
 from app.core.tenant import TenantContext
 from app.models.purchase import PurchaseOrderItem, PurchaseOrderStatus
@@ -19,7 +19,6 @@ from app.models.purchase_return import (
     PurchaseReturnSettlementType,
     PurchaseReturnStatus,
 )
-from app.models.user import User
 from app.models.warehouse import WarehouseStatus
 from app.repositories.inventory import InventoryRepository
 from app.repositories.purchase import PurchaseOrderRepository
@@ -788,6 +787,4 @@ class PurchaseReturnService:
         )
 
     def _user_name(self, user_id: int | None) -> str | None:
-        if user_id is None:
-            return None
-        return self.session.scalar(select(User.display_name).where(User.id == user_id))
+        return identity_display_name(self.session, user_id)

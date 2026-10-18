@@ -5,11 +5,11 @@ from __future__ import annotations
 from datetime import datetime
 from decimal import Decimal
 
-from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.events import AggregateType, EventType
 from app.core.exceptions import AppError
+from app.core.identity_names import identity_display_name
 from app.core.operations import OperationAction, OperationModule
 from app.core.permissions import PermissionCode
 from app.core.tenant import TenantContext
@@ -22,7 +22,6 @@ from app.models.after_sale import (
 )
 from app.models.return_order import ReturnCondition, ReturnOrder, ReturnOrderItem, ReturnOrderStatus
 from app.models.sales_order import SalesOrderItem, SalesOrderStatus
-from app.models.user import User
 from app.models.warehouse import WarehouseStatus
 from app.repositories.after_sale import AfterSaleRepository
 from app.repositories.customer import CustomerRepository
@@ -629,9 +628,7 @@ class AfterSaleService:
             raise AppError("只能退回到启用中的仓库", code=40097, status_code=400)
 
     def _user_name(self, user_id: int | None) -> str | None:
-        if user_id is None:
-            return None
-        return self.session.scalar(select(User.display_name).where(User.id == user_id))
+        return identity_display_name(self.session, user_id)
 
     def _out(self, order: AfterSaleOrder) -> AfterSaleOut:
         items = sorted(order.items, key=lambda row: (row.sku_id, row.id))

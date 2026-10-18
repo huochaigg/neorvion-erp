@@ -60,10 +60,11 @@ Worker 与 API 共用同一镜像，命令为 `python -m app.tasks.worker`。健
 ## 迁移与 Seed
 
 ```bash
-uv run alembic upgrade head
-uv run python -m app.scripts.seed_permissions
-# 仅开发/演示：DEMO_EMAIL + DEMO_PASSWORD 后
-uv run python -m app.scripts.seed_demo
+uv run --directory services/iam alembic upgrade head
+uv run --directory services/iam python -m app.scripts.seed_permissions
+uv run --directory services/erp alembic upgrade head
+# 仅开发/演示：IAM 已有成员后带 DEMO_TENANT_ID / DEMO_USER_ID / DEMO_MEMBER_ID
+uv run --directory services/erp python -m app.scripts.seed_demo
 ```
 
 生产禁止启动时自动灌演示数据。

@@ -6,10 +6,10 @@ from functools import lru_cache
 from pathlib import Path
 
 from cryptography.hazmat.primitives import serialization
+from neorvion_security import HttpAuthorityClient, JwtVerifier, LocalJwtSigner, SnapshotStore
 from redis import Redis
 
 from app.core.config import settings
-from neorvion_security import HttpAuthorityClient, JwtVerifier, LocalJwtSigner, SnapshotStore
 
 iam_redis_client: Redis = Redis.from_url(settings.iam_redis_url, decode_responses=True)
 

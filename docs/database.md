@@ -1,25 +1,34 @@
 # 数据库说明
 
-使用 **共享 MySQL + 共享业务表 + tenant_id**，不用每租户独立库。
+身份与业务分库。IAM 用 MySQL `neorvion_iam`，ERP 用 MySQL `neorvion_erp`。禁止跨库外键，禁止 ERP 再写 users / roles。
 
-当前里程碑 V2.3.1 已创建：
+| 归属 | 库 | 表 | 说明 |
+| --- | --- | --- | --- |
+| IAM 独占 | `neorvion_iam` | `users` `tenants` `tenant_members` `roles` `permissions` `member_roles` `role_permissions` `auth_sessions` `applications` `menus` `authz_revisions` `authz_outbox` | 登录、成员、RBAC、会话 |
+| ERP 必要快照 | `neorvion_erp` | `identity_name_snapshots` | `user_id` PK，只存展示名；JWT 请求 upsert |
+| ERP 业务 | `neorvion_erp` | 订单 / 库存 / 采购 / 售后等 | 行上保留整数 `user_id` / `tenant_id` / `member_id`，无身份 FK |
+| 已删除（ERP `20261018_0022`） | 曾在 `neorvion_erp` | `users` `tenants` `tenant_members` `roles` `permissions` `member_roles` `role_permissions` | 回填快照后 DROP；备份见下方 |
 
-- `users`：全局用户身份，**没有** `tenant_id`
-- `tenants`：企业；`code` 唯一，不用名称当唯一键
-- `tenant_members`：用户与企业的多对多；`UNIQUE(tenant_id, user_id)`；另有 `UNIQUE(tenant_id, id)` 供 RBAC 复合外键
-- `permissions`：平台权限目录；`UNIQUE(code)`
-- `roles`：租户角色；`UNIQUE(tenant_id, code)`
-- `member_roles`：成员与角色；复合外键保证同一租户
-- `role_permissions`：角色与权限
+ERP 业务仍用 **共享库 + `tenant_id` 行隔离**，不用每租户独立库。
 
-当前里程碑 V2.3.4 增加：
+### ERP 身份表删除：升级与回滚
 
-- `users.must_change_password`：管理员代建账号后必须改密
+升级前（有数据必须先备份）。本次改动未对本地 `neorvion_erp` 执行 DROP。注意 `docker compose up erp` 仍会 `alembic upgrade head`：
 
-当前里程碑 V2.3.5 增加：
+```bash
+mysqldump -uroot -p --single-transaction neorvion_erp \
+  users tenants tenant_members roles permissions member_roles role_permissions \
+  > services/erp/var/exports/legacy_identity.sql
+uv run --directory services/erp alembic upgrade head
+```
 
-- `tenant_members.display_name`：企业内展示名，可空
-- 细粒度权限 seed 与旧 `*:manage` 展开（不删旧 code）
+回滚不能靠 Alembic downgrade 重建身份库。恢复备份：
+
+```bash
+mysql -uroot -p neorvion_erp < services/erp/var/exports/legacy_identity.sql
+```
+
+本地真实库请人工执行 upgrade。测试库 `neorvion_erp_test` 可重建。
 
 当前里程碑 V3 增加：
 

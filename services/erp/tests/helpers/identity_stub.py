@@ -8,9 +8,6 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 from itertools import count
 
-from fastapi import APIRouter, FastAPI, Query, Request
-from pydantic import BaseModel, EmailStr, Field
-
 from app.api.deps import TenantContextDep
 from app.core.iam import jwt_verifier, snapshot_store, test_signer
 from app.core.permissions import (
@@ -22,8 +19,10 @@ from app.core.permissions import (
 )
 from app.schemas.common import ApiResponse, ok
 from app.services.authorization import AuthorizationService
+from fastapi import APIRouter, FastAPI, Query, Request
 from neorvion_security import AuthzSnapshot
 from neorvion_security.snapshot import authz_version_key
+from pydantic import BaseModel, EmailStr, Field
 
 _user_ids = count(1)
 _tenant_ids = count(1)

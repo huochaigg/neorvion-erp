@@ -333,15 +333,13 @@ erDiagram
 
 权限目录全局；角色实例租户私有（`uq_roles_tenant_code`）。`TenantMember.role` 只有 OWNER / MEMBER；ADMIN 是 `roles.code`，不是成员列。
 
-### 4.3 ERP 旧身份表怎么处理【已实现迁移策略】
+### 4.3 ERP 旧身份表怎么处理【已实现】
 
-- IAM：身份唯一真相。一次性 [`migrate_from_erp`](../../services/iam/app/scripts/migrate_from_erp.py)，禁止长期双写。
-- ERP：[`20261018_0021_drop_identity_fks`](../../services/erp/alembic/versions/20261018_0021_drop_identity_fks.py) 去掉业务表对 `users`/`tenants` 的 FK，**列还在**。
-- ERP `users` 降级为展示名投影：[`project_display_user`](../../services/erp/app/core/identity_projection.py) 按快照 upsert，`password_hash="!"`，不能登录。
+- IAM：身份唯一真相。一次性 [`migrate_from_erp`](../../services/iam/app/scripts/migrate_from_erp.py)，禁止长期双写。`20261018_0022` 之后 ERP 已无源表，该脚本不可再跑。
+- ERP：[`20261018_0021`](../../services/erp/alembic/versions/20261018_0021_drop_identity_fks.py) 去掉业务表对 `users`/`tenants` 的 FK；[`20261018_0022`](../../services/erp/alembic/versions/20261018_0022_drop_legacy_identity_tables.py) 回填后 **DROP** `users` `tenants` `tenant_members` `roles` `permissions` `member_roles` `role_permissions`。
+- 单据姓名：[`identity_name_snapshots`](../../services/erp/app/models/identity.py) + [`project_display_user`](../../services/erp/app/core/identity_projection.py) 只 upsert 展示名，不写密码、成员、角色。
 
-不一致风险：投影邮箱与 IAM 邮箱短暂不同步；订单 `created_by` 只是整数，IAM 删用户不会级联 ERP。这是有意的所有权切割。
-
-测试里 ERP [`identity_stub.py`](../../services/erp/tests/helpers/identity_stub.py) 把旧认证 API 映射为 JWT+快照，**不是生产双写**。
+订单 `created_by` 只是整数，IAM 删用户不会级联 ERP。这是有意的所有权切割。测试 [`identity_stub.py`](../../services/erp/tests/helpers/identity_stub.py) 把旧认证 API 映射为 JWT+快照，**不是生产双写**。
 
 ---
 
@@ -771,13 +769,13 @@ MySQL 示意：`tenant_members` 多一行；`member_roles` 多一行。Redis 示
 **【深入回答】** 不泄露资源是否存在时用 404。  
 **【局限】** 漏写条件仍会出事。
 
-**29.【面试题】** ERP users 表还能登录吗？  
-**【30～60秒回答】** 不能，只是姓名投影。  
-**【技术原理】** 消除身份双写。  
-**【Neorvion】** `identity_projection.py`。  
+**29.【面试题】** ERP 还有 users 表吗？还能登录吗？  
+**【30～60秒回答】** 没有 users 表了。ERP 只留 `identity_name_snapshots` 展示名，登录只走 IAM。  
+**【技术原理】** 身份所有权切割，避免双写。  
+**【Neorvion】** `20261018_0022`、`identity_projection.py`。  
 **【追问】** 测试 stub？  
 **【深入回答】** 仅测试把旧 API 映射到 JWT，不是生产双写。  
-**【局限】** 投影可能短暂落后。
+**【局限】** 展示名可能短暂落后于 IAM。
 
 **30.【面试题】** 复合外键防什么？  
 **【30～60秒回答】** 把 A 租户角色 ID 写到 B 租户成员。  
@@ -1078,7 +1076,7 @@ MySQL 示意：`tenant_members` 多一行；`member_roles` 多一行。Redis 示
 16. Copilot 未实现。  
 17. 高风险回源 IAM，普通接口仍有快照窗口。  
 18. Session 表已落地，Access 短期窗口内普通读接口不在线校验。  
-19. ERP users 是投影。  
+19. ERP 已无 users 表，只有展示名快照。  
 20. 撤权并非强一致立即。
 
 ### 10.4 十道源码追踪练习

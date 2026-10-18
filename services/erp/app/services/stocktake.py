@@ -4,10 +4,10 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.exceptions import AppError
+from app.core.identity_names import identity_display_name
 from app.core.permissions import PermissionCode
 from app.core.tenant import TenantContext
 from app.models.inventory import InventoryTransactionType
@@ -18,7 +18,6 @@ from app.models.stocktake import (
     StocktakeOrderStatus,
     StocktakeScope,
 )
-from app.models.user import User
 from app.models.warehouse import Warehouse, WarehouseStatus
 from app.repositories.inventory import InventoryRepository
 from app.repositories.product import ProductSkuRepository
@@ -462,9 +461,7 @@ class StocktakeService:
             item.remark = row.remark
 
     def _user_name(self, user_id: int | None) -> str | None:
-        if user_id is None:
-            return None
-        return self.session.scalar(select(User.display_name).where(User.id == user_id))
+        return identity_display_name(self.session, user_id)
 
     def _out(self, order: StocktakeOrder) -> StocktakeOut:
         items = sorted(order.items, key=lambda row: (row.sku_id, row.id))

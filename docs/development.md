@@ -40,11 +40,14 @@ uv run --directory services/erp python -m app
 数据库迁移：
 
 ```bash
-cd services/erp
-uv run alembic current
+cd services/iam
 uv run alembic upgrade head
 uv run python -m app.scripts.seed_permissions
-# 演示数据（需 DEMO_EMAIL / DEMO_PASSWORD，幂等，不在启动时自动执行）
+
+cd ../erp
+uv run alembic current
+uv run alembic upgrade head
+# 演示业务单（需 IAM 已有成员：DEMO_TENANT_ID / DEMO_USER_ID / DEMO_MEMBER_ID）
 uv run python -m app.scripts.seed_demo
 uv run alembic revision --autogenerate -m "your message"
 ```

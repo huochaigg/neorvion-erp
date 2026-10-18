@@ -11,7 +11,6 @@ from sqlalchemy import (
     CheckConstraint,
     Date,
     DateTime,
-    ForeignKey,
     ForeignKeyConstraint,
     Index,
     Integer,

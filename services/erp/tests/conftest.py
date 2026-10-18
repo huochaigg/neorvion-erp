@@ -48,6 +48,7 @@ from app.db.session import SessionLocal
 from app.main import app
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, text
+
 from tests.helpers.identity_stub import install_identity_stub, reset_identity_stub
 
 get_settings.cache_clear()
@@ -56,16 +57,7 @@ snapshot_store.cache_clear()
 test_signer.cache_clear()
 install_identity_stub(app)
 
-# 身份中心测试已迁到 services/iam。此处忽略避免双套身份断言。
-collect_ignore = [
-    "test_auth.py",
-    "test_rsa.py",
-    "test_tenants.py",
-    "test_members.py",
-    "test_rbac.py",
-    "test_my_permissions.py",
-    "test_v235_rbac.py",
-]
+# 身份中心测试已迁到 services/iam。ERP 不再收集登录/成员/RBAC 用例。
 
 
 def _ensure_test_database() -> None:
@@ -140,12 +132,7 @@ def _wipe_business_tables() -> None:
         session.execute(text("DELETE FROM brands"))
         session.execute(text("DELETE FROM product_categories"))
         session.execute(text("DELETE FROM warehouses"))
-        session.execute(text("DELETE FROM role_permissions"))
-        session.execute(text("DELETE FROM member_roles"))
-        session.execute(text("DELETE FROM roles"))
-        session.execute(text("DELETE FROM tenant_members"))
-        session.execute(text("DELETE FROM tenants"))
-        session.execute(text("DELETE FROM users"))
+        session.execute(text("DELETE FROM identity_name_snapshots"))
         session.execute(text("SET FOREIGN_KEY_CHECKS=1"))
         session.commit()
     except Exception:

@@ -4,11 +4,11 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.events import AggregateType, EventType
 from app.core.exceptions import AppError
+from app.core.identity_names import identity_display_names
 from app.core.operations import OperationAction, OperationModule
 from app.core.permissions import PermissionCode
 from app.core.tenant import TenantContext
@@ -21,7 +21,6 @@ from app.models.outbound import (
     OutboundPickLine,
 )
 from app.models.sales_order import SalesOrderItem
-from app.models.user import User
 from app.repositories.outbound import OutboundOrderRepository
 from app.repositories.sales_order import SalesOrderRepository
 from app.repositories.shipment import ShipmentRepository
@@ -588,13 +587,7 @@ class OutboundOrderService:
         return self.pick_outs(self.outbounds.list_picks_for_sales_order(sales_order_id))
 
     def pick_outs(self, picks: list[OutboundPick]) -> list[OutboundPickOut]:
-        user_ids = {pick.picked_by for pick in picks if pick.picked_by is not None}
-        names: dict[int, str] = {}
-        if user_ids:
-            rows = self.session.execute(
-                select(User.id, User.display_name).where(User.id.in_(user_ids))
-            ).all()
-            names = {row.id: row.display_name for row in rows}
+        names = identity_display_names(self.session, {pick.picked_by for pick in picks})
         result: list[OutboundPickOut] = []
         for pick in picks:
             outbound = pick.outbound_order

@@ -51,7 +51,7 @@ flowchart LR
 | Knowledge 微前端 | 8017 | — | 知识库页面 |
 | IAM 微前端 | 8018 | — | 用户/租户/角色/应用/审计 |
 
-禁止跨库 JOIN 用户与订单/文档。业务表保留整数 `user_id` / `tenant_id` / `member_id` 作为 ID 契约。ERP 本地 `users` 表降级为展示名投影（请求时按 IAM 快照 upsert），不用于登录。
+禁止跨库 JOIN 用户与订单/文档。业务表保留整数 `user_id` / `tenant_id` / `member_id` 作为 ID 契约，**没有**指向 IAM 的外键。ERP 只保留 `identity_name_snapshots`（`user_id` → 展示名），由 JWT 上下文 upsert，供单据列表 JOIN，不能登录。
 
 ## 目录
 
@@ -196,8 +196,9 @@ docker compose up -d mysql redis postgres iam erp worker knowledge
 1. ERP 不再提供 `/api/v1/auth/*`、角色/成员管理、身份内省。前端必须把登录基址改到 IAM `:8010`。
 2. JWT 从 HS256 改为 RS256，旧 Token 全部失效，需重新登录。
 3. Knowledge 去掉 `ErpIdentityClient`。未写 Redis 快照的请求会被拒绝。
-4. ERP 业务表去掉对 `users` / `tenants` 的外键；列仍在，跨服务无 FK。ERP `users` 仅作操作人姓名投影。
-5. 恢复：用迁移前的 MySQL / Redis 备份回滚代码；或重新 `migrate_from_erp` 后再登录。
+4. ERP 业务表去掉对 `users` / `tenants` 的外键；列仍在，跨服务无 FK。
+5. ERP `20261018_0022` 删除遗留身份表，改为 `identity_name_snapshots`。Docker `erp` 启动仍会 `alembic upgrade head`；对有数据的 `neorvion_erp` 请先 mysqldump 再升级。Alembic 不能重建身份库，回滚靠备份 SQL。
+6. 恢复：用迁移前的 MySQL / Redis 备份回滚代码。`migrate_from_erp` 在 ERP 身份表 DROP 之后不可再跑。
 
 ## 生产部署
 

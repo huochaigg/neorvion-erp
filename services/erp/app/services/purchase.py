@@ -4,19 +4,19 @@ from __future__ import annotations
 
 from datetime import date, datetime
 
-from sqlalchemy import func, select
+from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.events import AggregateType, EventType
 from app.core.exceptions import AppError
+from app.core.identity_names import identity_display_name
 from app.core.operations import OperationAction, OperationModule
 from app.core.permissions import PermissionCode
 from app.core.tenant import TenantContext
 from app.models.product import ProductSku, SkuStatus
 from app.models.purchase import PurchaseOrder, PurchaseOrderItem, PurchaseOrderStatus
 from app.models.supplier import SupplierStatus
-from app.models.user import User
 from app.models.warehouse import WarehouseStatus
 from app.repositories.product import ProductSkuRepository
 from app.repositories.purchase import PurchaseOrderRepository
@@ -441,9 +441,7 @@ class PurchaseOrderService:
         return found
 
     def _user_name(self, user_id: int | None) -> str | None:
-        if user_id is None:
-            return None
-        return self.session.scalar(select(User.display_name).where(User.id == user_id))
+        return identity_display_name(self.session, user_id)
 
     def _detail_out(self, order: PurchaseOrder) -> PurchaseOrderDetailOut:
         item_ids = [row.id for row in order.items]

@@ -1,11 +1,13 @@
-"""幂等写入演示租户 Neorvion Demo。不会在 API 启动时自动执行。
+"""幂等写入演示业务单。不会创建用户或租户。
 
-用法（backend 目录，且已设置 DEMO_EMAIL / DEMO_PASSWORD）：
+身份必须已经存在于 IAM。用法：
 
-    uv run python -m app.scripts.seed_permissions
-    uv run python -m app.scripts.seed_demo
+    uv run --directory services/iam python -m app.scripts.seed_permissions
+    # 在 IAM 创建演示用户/租户后：
+    DEMO_TENANT_ID=1 DEMO_USER_ID=1 DEMO_MEMBER_ID=1 DEMO_DISPLAY_NAME='Demo Owner' \\
+      uv run --directory services/erp python -m app.scripts.seed_demo
 
-已存在 code=neorvion-demo 的租户时直接退出，不重复插入业务单。
+已存在「深圳一号仓」时直接退出，不重复插入业务单。
 数据为 synthetic / demo，不是真实客户或 GMV。
 """
 
@@ -14,12 +16,13 @@ from __future__ import annotations
 import os
 from decimal import Decimal
 
-from app.core.security import hash_password
+from sqlalchemy import select
+
+from app.core.identity_projection import project_display_user
+from app.core.permissions import known_permission_codes
 from app.core.tenant import TenantContext
 from app.db.session import SessionLocal
-from app.models.user import User, UserStatus
-from app.repositories.tenant import TenantMemberRepository, TenantRepository
-from app.repositories.user import UserRepository
+from app.models.warehouse import Warehouse
 from app.schemas.carrier import CarrierCreate
 from app.schemas.customer import CustomerCreate
 from app.schemas.inventory import InventoryInitialize
@@ -39,15 +42,12 @@ from app.services.outbound import OutboundOrderService
 from app.services.product import ProductService
 from app.services.purchase import PurchaseOrderService
 from app.services.purchase_receipt import PurchaseReceiptService
-from app.services.rbac import RoleService
 from app.services.sales_order import SalesOrderService
 from app.services.shipment import ShipmentService
 from app.services.supplier import SupplierService
-from app.services.tenant import TenantService
 from app.services.warehouse import WarehouseService
 
-DEMO_TENANT_CODE = "neorvion-demo"
-DEMO_TENANT_NAME = "Neorvion Demo"
+DEMO_WAREHOUSE_NAME = "深圳一号仓"
 
 _PRODUCTS = [
     ("蓝牙耳机", "黑"),
@@ -63,70 +63,57 @@ _PRODUCTS = [
 ]
 
 
-def _env_credentials() -> tuple[str, str]:
-    email = (os.environ.get("DEMO_EMAIL") or "").strip().lower()
-    password = os.environ.get("DEMO_PASSWORD") or ""
-    if not email or not password:
-        raise SystemExit("请设置 DEMO_EMAIL 与 DEMO_PASSWORD 后再执行演示 seed。")
-    has_letter = any(char.isalpha() for char in password)
-    has_digit = any(char.isdigit() for char in password)
-    if len(password) < 8 or not has_letter or not has_digit:
-        raise SystemExit("DEMO_PASSWORD 至少 8 位，且同时包含字母和数字。")
-    return email, password
+def _env_identity() -> tuple[int, int, int, str]:
+    """读取 IAM 已有身份 ID。ERP 禁止自己建 users / tenants。"""
+    try:
+        tenant_id = int((os.environ.get("DEMO_TENANT_ID") or "").strip())
+        user_id = int((os.environ.get("DEMO_USER_ID") or "").strip())
+        member_id = int((os.environ.get("DEMO_MEMBER_ID") or "").strip())
+    except ValueError as exc:
+        raise SystemExit("DEMO_TENANT_ID / DEMO_USER_ID / DEMO_MEMBER_ID 必须是正整数") from exc
+    if tenant_id <= 0 or user_id <= 0 or member_id <= 0:
+        raise SystemExit(
+            "请设置 DEMO_TENANT_ID、DEMO_USER_ID、DEMO_MEMBER_ID（来自 IAM，不要在 ERP 建用户）"
+        )
+    display_name = (os.environ.get("DEMO_DISPLAY_NAME") or "Demo Owner").strip() or "Demo Owner"
+    return tenant_id, user_id, member_id, display_name[:64]
 
 
-def _context(user_id: int, tenant_id: int, member_id: int) -> TenantContext:
+def _context(user_id: int, tenant_id: int, member_id: int, display_name: str) -> TenantContext:
     return TenantContext(
         user_id=user_id,
         tenant_id=tenant_id,
         member_id=member_id,
         is_owner=True,
         role="OWNER",
+        permission_codes=frozenset(known_permission_codes()),
+        role_codes=("OWNER",),
+        display_name=display_name,
     )
 
 
 def main() -> None:
-    email, password = _env_credentials()
+    tenant_id, user_id, member_id, display_name = _env_identity()
     session = SessionLocal()
     try:
-        RoleService(session).seed_permission_catalog()
-        session.commit()
-
-        users = UserRepository(session)
-        user = users.get_by_email(email)
-        if user is None:
-            user = User(
-                email=email,
-                password_hash=hash_password(password),
-                display_name="Demo Owner",
-                status=UserStatus.ACTIVE.value,
-                must_change_password=False,
+        existing = session.scalar(
+            select(Warehouse.id).where(
+                Warehouse.tenant_id == tenant_id,
+                Warehouse.name == DEMO_WAREHOUSE_NAME,
             )
-            users.add(user)
-            session.commit()
-            print(f"created demo user {email}")
-        else:
-            print(f"reuse demo user {email}")
-
-        tenants = TenantRepository(session)
-        existing = tenants.get_by_code(DEMO_TENANT_CODE)
+        )
         if existing is not None:
-            print(f"demo tenant already exists id={existing.id}, skip business seed")
+            print(f"demo warehouse already exists tenant_id={tenant_id}, skip business seed")
             return
 
-        tenant = TenantService(session).create_tenant(
-            user=user, name=DEMO_TENANT_NAME, code=DEMO_TENANT_CODE
-        )
-        member = TenantMemberRepository(session).get_by_tenant_user(tenant.id, user.id)
-        if member is None:
-            raise RuntimeError("demo tenant owner membership missing")
-        ctx = _context(user.id, tenant.id, member.id)
+        ctx = _context(user_id, tenant_id, member_id, display_name)
+        project_display_user(session, ctx)
 
         warehouses = [
             WarehouseService(session, ctx).create_warehouse(
                 WarehouseCreate(name=name, type="DOMESTIC", city="深圳")
             )
-            for name in ("深圳一号仓", "广州仓", "美西海外仓")
+            for name in (DEMO_WAREHOUSE_NAME, "广州仓", "美西海外仓")
         ]
         main_wh = warehouses[0]
         category = CatalogService(session, ctx).create_category(CategoryCreate(name="3C配件"))
@@ -251,7 +238,7 @@ def main() -> None:
         )
         shipments.confirm_shipment(shipment.id)
         shipments.mark_delivered(shipment.id, ShipmentDeliver())
-        print(f"demo tenant ready id={tenant.id} code={DEMO_TENANT_CODE}")
+        print(f"demo business seed ready tenant_id={tenant_id}")
     except Exception:
         session.rollback()
         raise

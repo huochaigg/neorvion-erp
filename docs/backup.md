@@ -8,8 +8,14 @@
 
 逻辑备份：
 
+身份在 `neorvion_iam`，业务在 `neorvion_erp`。ERP `20261018_0022` 会 DROP 遗留身份表，升级前单独导出：
+
 ```bash
+mysqldump -u neorvion -p --single-transaction neorvion_erp \
+  users tenants tenant_members roles permissions member_roles role_permissions \
+  > services/erp/var/exports/legacy_identity.sql
 mysqldump -u neorvion -p --single-transaction --routines --triggers neorvion_erp > backup.sql
+mysqldump -u neorvion -p --single-transaction --routines --triggers neorvion_iam > backup-iam.sql
 ```
 
 Docker：
@@ -22,7 +28,7 @@ docker exec neorvion-mysql mysqldump -uneorvion -pneorvion_dev --single-transact
 
 ## Redis
 
-当前用途：任务队列、Refresh 会话、RSA challenge、Worker 心跳。Compose 已开 AOF。
+当前用途：任务队列、IAM Refresh 会话、RSA challenge、授权快照、Worker 心跳。Compose 已开 AOF。
 
 - Refresh / challenge 丢失：用户重新登录即可
 - 队列中的 `task_id` 丢失：任务表仍在 MySQL，可按状态人工重试

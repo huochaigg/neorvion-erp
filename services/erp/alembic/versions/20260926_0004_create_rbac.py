@@ -9,7 +9,6 @@ from collections.abc import Sequence
 
 import sqlalchemy as sa
 from alembic import op
-from sqlalchemy.orm import Session
 
 revision: str = "20260926_0004"
 down_revision: str | None = "20260925_0003"
@@ -95,12 +94,7 @@ def upgrade() -> None:
         sa.UniqueConstraint("role_id", "permission_id", name="uq_role_permissions_role_perm"),
     )
 
-    # 与 Alembic 共用同一连接，只 flush，由迁移事务提交。
-    session = Session(bind=op.get_bind())
-    from app.services.rbac import RoleService
-
-    RoleService(session).backfill_existing_tenants()
-    session.flush()
+    # 权限目录与租户角色 seed 已迁到 IAM。此处只建表，避免 ERP 再依赖 RoleService。
 
 
 def downgrade() -> None:

@@ -2,6 +2,7 @@
 
 from collections.abc import Sequence
 
+from neorvion_security import SecurityError
 from sqlalchemy.orm import Session
 
 from app.core.exceptions import AppError, from_security_error
@@ -13,7 +14,6 @@ from app.core.permissions import (
 )
 from app.core.tenant import TenantContext
 from app.schemas.tenant import MyPermissionsOut
-from neorvion_security import SecurityError
 
 
 class AuthorizationService:

@@ -3,26 +3,18 @@
 from typing import Annotated
 
 from fastapi import Depends, Request
+from neorvion_security import SecurityError
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.core.context import set_tenant_context
 from app.core.exceptions import AppError, from_security_error
-from app.core.config import settings
 from app.core.iam import authority_client, jwt_verifier, snapshot_store
 from app.core.identity_projection import project_display_user
 from app.core.tenant import TENANT_HEADER, TenantContext
 from app.db.session import get_db
-from app.models.user import User
-from neorvion_security import SecurityError
 
 DbSession = Annotated[Session, Depends(get_db)]
-
-_PASSWORD_CHANGE_ALLOWED: frozenset[tuple[str, str]] = frozenset(
-    {
-        ("GET", "/api/v1/auth/me"),
-        ("POST", "/api/v1/auth/change-password"),
-    }
-)
 
 
 def _extract_bearer_token(request: Request) -> str:
@@ -61,10 +53,7 @@ def get_tenant_context(request: Request, db: DbSession) -> TenantContext:
     except SecurityError as exc:
         raise from_security_error(exc) from exc
     if context.must_change_password:
-        method = request.method.upper()
-        path = request.url.path.rstrip("/") or "/"
-        if (method, path) not in _PASSWORD_CHANGE_ALLOWED:
-            raise AppError("请先修改临时密码", code=40350, status_code=403)
+        raise AppError("请先修改临时密码", code=40350, status_code=403)
     project_display_user(db, context)
     set_tenant_context(tenant_id=context.tenant_id, user_id=context.user_id)
     return context
@@ -75,19 +64,6 @@ def get_current_tenant(
 ) -> TenantContext:
     """给后续业务接口复用的别名。"""
     return context
-
-
-def get_current_user(request: Request, db: DbSession) -> User:
-    """只校验 Access Token，不要求 X-Tenant-ID。供注册后的 /auth/me 与创建企业使用。"""
-    token = _extract_bearer_token(request)
-    try:
-        claims = jwt_verifier().verify_access(token)
-    except SecurityError as exc:
-        raise from_security_error(exc) from exc
-    user = db.get(User, claims.user_id)
-    if user is None:
-        raise AppError("用户不存在", code=40102, status_code=401)
-    return user
 
 
 def get_high_risk_context(request: Request, db: DbSession) -> TenantContext:
@@ -129,4 +105,3 @@ def get_high_risk_context(request: Request, db: DbSession) -> TenantContext:
 TenantContextDep = Annotated[TenantContext, Depends(get_tenant_context)]
 HighRiskTenantContextDep = Annotated[TenantContext, Depends(get_high_risk_context)]
 CurrentTenant = Annotated[TenantContext, Depends(get_current_tenant)]
-CurrentUser = Annotated[User, Depends(get_current_user)]

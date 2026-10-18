@@ -5,6 +5,7 @@
     uv run python -m app.scripts.migrate_from_erp
 
 默认读取 ERP 库 neorvion_erp。已存在相同 email/code 时跳过，保持幂等。
+ERP `20261018_0022` 之后身份表已删除，本脚本只适用于尚未 DROP 的旧库。
 """
 
 from __future__ import annotations

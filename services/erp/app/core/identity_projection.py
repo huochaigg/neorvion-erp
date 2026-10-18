@@ -1,38 +1,34 @@
-"""把 IAM 快照中的展示名投影到本地 users 表。
+"""把当前请求 JWT 中的展示名投影到本地快照表。
 
-身份所有权在 IAM。本模块只写展示字段，供库存流水、拣货记录等 JOIN 操作人姓名。
-password_hash 使用不可校验占位符，ERP 不得再用本表做登录。
+不是 IAM 双写：不写密码、成员、角色。只保证本请求内 JOIN 操作人姓名可见。
 """
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
+
+from neorvion_security.tenant import TenantContext
 from sqlalchemy.orm import Session
 
-from app.models.user import User
-from neorvion_security.tenant import TenantContext
-
-_UNUSABLE_PASSWORD_HASH = "!"
+from app.models.identity import IdentityNameSnapshot
 
 
 def project_display_user(session: Session, context: TenantContext) -> None:
-    """按 IAM user_id 写入或更新本地展示名。同一请求内 flush 后即可被 JOIN 看到。"""
-    email = (context.email or "").strip().lower() or f"iam-user-{context.user_id}@neorvion.invalid"
+    """按 IAM user_id upsert 展示名。同一请求 flush 后即可被 OUTER JOIN 看到。"""
     name = (context.display_name or "").strip() or f"用户{context.user_id}"
-    user = session.get(User, context.user_id)
-    if user is None:
+    row = session.get(IdentityNameSnapshot, context.user_id)
+    now = datetime.now(UTC).replace(tzinfo=None)
+    if row is None:
         session.add(
-            User(
-                id=context.user_id,
-                email=email[:255],
-                password_hash=_UNUSABLE_PASSWORD_HASH,
+            IdentityNameSnapshot(
+                user_id=context.user_id,
                 display_name=name[:64],
-                status="ACTIVE",
+                updated_at=now,
             )
         )
         session.flush()
         return
-    if user.display_name != name[:64]:
-        user.display_name = name[:64]
-    if user.email != email[:255]:
-        user.email = email[:255]
-    session.flush()
+    if row.display_name != name[:64]:
+        row.display_name = name[:64]
+        row.updated_at = now
+        session.flush()

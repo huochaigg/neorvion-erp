@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.core.events import AggregateType, EventType
 from app.core.exceptions import AppError
+from app.core.identity_names import identity_display_name
 from app.core.operations import OperationAction, OperationModule
 from app.core.permissions import PermissionCode
 from app.core.tenant import TenantContext
@@ -19,7 +20,6 @@ from app.models.purchase_receipt import (
     PurchaseReceiptItem,
     PurchaseReceiptStatus,
 )
-from app.models.user import User
 from app.repositories.purchase import PurchaseOrderRepository
 from app.repositories.purchase_receipt import PurchaseReceiptRepository
 from app.schemas.purchase_receipt import (
@@ -447,7 +447,6 @@ class PurchaseReceiptService:
         warehouse_name = ""
         if order is not None and order.warehouse is not None:
             warehouse_name = order.warehouse.name
-        receiver = self.session.get(User, receipt.received_by) if receipt.received_by else None
         items = [self._item_out(item) for item in receipt.items]
         return PurchaseReceiptOut(
             id=receipt.id,
@@ -460,7 +459,7 @@ class PurchaseReceiptService:
             status=receipt.status,
             remark=receipt.remark,
             received_by=receipt.received_by,
-            received_by_name=None if receiver is None else receiver.display_name,
+            received_by_name=identity_display_name(self.session, receipt.received_by),
             received_at=receipt.received_at,
             created_by=receipt.created_by,
             created_at=receipt.created_at,

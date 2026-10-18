@@ -1,30 +1,13 @@
-"""幂等写入平台权限目录。重复运行只更新名称/说明，不删已有权限。
+"""ERP 不再维护权限目录。请到 IAM 执行：
 
-用法（在 backend 目录）：
-
-    uv run python -m app.scripts.seed_permissions
+    uv run --directory services/iam python -m app.scripts.seed_permissions
 """
-
-from app.db.session import SessionLocal
-from app.services.rbac import RoleService
 
 
 def main() -> None:
-    session = SessionLocal()
-    try:
-        service = RoleService(session)
-        created = service.seed_permission_catalog()
-        expanded = service.expand_legacy_manage_permissions()
-        tenants = service.backfill_existing_tenants()
-        session.commit()
-    except Exception:
-        session.rollback()
-        raise
-    finally:
-        session.close()
-    print(
-        "permissions seeded, "
-        f"newly created={created}, legacy expanded={expanded}, tenants backfilled={tenants}"
+    raise SystemExit(
+        "权限目录已迁到 IAM。请执行："
+        "uv run --directory services/iam python -m app.scripts.seed_permissions"
     )
 
 

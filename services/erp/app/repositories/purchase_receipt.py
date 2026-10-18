@@ -5,11 +5,11 @@ from datetime import datetime
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
 
+from app.models.identity import IdentityNameSnapshot
 from app.models.product import ProductSku
 from app.models.purchase import PurchaseOrder, PurchaseOrderItem
 from app.models.purchase_receipt import PurchaseReceipt, PurchaseReceiptItem
 from app.models.supplier import Supplier
-from app.models.user import User
 from app.models.warehouse import Warehouse
 from app.repositories.base import BaseRepository
 
@@ -120,14 +120,17 @@ class PurchaseReceiptRepository(BaseRepository):
                 PurchaseOrder.order_no,
                 Supplier.name,
                 Warehouse.name,
-                User.display_name,
+                IdentityNameSnapshot.display_name,
                 func.coalesce(item_qty.c.sku_count, 0),
                 func.coalesce(item_qty.c.total_received, 0),
             )
             .join(PurchaseOrder, PurchaseOrder.id == PurchaseReceipt.purchase_order_id)
             .join(Supplier, Supplier.id == PurchaseOrder.supplier_id)
             .join(Warehouse, Warehouse.id == PurchaseReceipt.warehouse_id)
-            .outerjoin(User, User.id == PurchaseReceipt.received_by)
+            .outerjoin(
+                IdentityNameSnapshot,
+                IdentityNameSnapshot.user_id == PurchaseReceipt.received_by,
+            )
             .outerjoin(item_qty, item_qty.c.receipt_id == PurchaseReceipt.id)
             .where(*filters)
         )

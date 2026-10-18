@@ -1,6 +1,8 @@
 # 多租户说明（V2.2.1 后端 + V2.2.4 前端 + V2.3.1 RBAC）
 
-本阶段使用 **共享 MySQL + 共享业务表 + tenant_id**。细粒度权限见 `docs/rbac.md`。不做每租户独立库、独立 Schema 或微服务。
+身份表（`users` / `tenants` / `tenant_members` / 角色权限）在 **IAM** 库 `neorvion_iam`。ERP 业务库只用整数 `tenant_id` 做行隔离，已无身份表，也不再 JOIN IAM。细粒度权限见 `docs/rbac.md`。
+
+ERP 业务仍是 **共享 MySQL + 共享业务表 + tenant_id**。不做每租户独立库、独立 Schema。
 
 ## users 和 tenant_members 为什么要分开
 
@@ -14,7 +16,7 @@
 - 一个 tenant 多行 member → 一家企业多名员工
 - `UNIQUE(tenant_id, user_id)` → 同一人不能重复加入同一家
 
-JWT 只证明「你是这个 user_id」。进哪家企业要再查 `tenant_members`。
+JWT 只证明「你是这个 user_id」。进哪家企业要再校验 IAM 写入的授权快照（由 `tenant_members` 生成），ERP 不再查该表。
 
 ## 多对多在 SQLAlchemy 里怎么写
 

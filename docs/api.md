@@ -20,7 +20,7 @@
 
 ## 认证
 
-详见 `docs/auth.md`。
+详见 `docs/auth.md`。登录、注册、Refresh、改密由 **IAM :8010** 提供，ERP 不再挂这些路由。
 
 - `GET /api/crypto/public-key`
 - `POST /api/v1/auth/register`
@@ -32,27 +32,27 @@
 
 ## 租户
 
-详见 `docs/multi-tenancy.md`。除「创建 / 我的列表」外，租户业务接口使用请求头 `X-Tenant-ID`。
+详见 `docs/multi-tenancy.md`。创建企业、成员 CRUD 在 IAM。ERP 只提供当前会话快照，业务接口仍带 `X-Tenant-ID`。
 
-- `POST /api/v1/tenants`
-- `GET /api/v1/tenants`
-- `GET /api/v1/tenants/current`（需要 `X-Tenant-ID`，含 `permission_codes`）
-- `GET /api/v1/tenants/current/my-permissions`（当前成员 `roles` + `permissions`）
-- `GET /api/v1/tenants/{tenant_id}`
-- `GET /api/v1/tenants/{tenant_id}/members`（分页：`q` / `status` / `page` / `page_size`）
-- `POST /api/v1/tenants/{tenant_id}/members`（`email` + `role_ids`，已有账号）
-- `POST /api/v1/tenants/{tenant_id}/members/accounts`（代建账号，响应含一次性 `temporary_password`）
-- `GET /api/v1/tenants/{tenant_id}/members/{member_id}`
-- `GET /api/v1/tenants/{tenant_id}/members/{member_id}/permissions`
-- `PUT /api/v1/tenants/{tenant_id}/members/{member_id}/roles`
-- `PATCH /api/v1/tenants/{tenant_id}/members/{member_id}`（企业内名称和/或启用禁用）
-- `DELETE /api/v1/tenants/{tenant_id}/members/{member_id}`（移出企业，不删 User）
+- `POST /api/v1/tenants`（IAM）
+- `GET /api/v1/tenants`（IAM）
+- `GET /api/v1/tenants/current`（ERP，需要 `X-Tenant-ID`，含 `permission_codes`）
+- `GET /api/v1/tenants/current/my-permissions`（ERP，当前成员 `roles` + `permissions`）
+- `GET /api/v1/tenants/{tenant_id}`（IAM）
+- `GET /api/v1/tenants/{tenant_id}/members`（IAM，分页：`q` / `status` / `page` / `page_size`）
+- `POST /api/v1/tenants/{tenant_id}/members`（IAM，`email` + `role_ids`，已有账号）
+- `POST /api/v1/tenants/{tenant_id}/members/accounts`（IAM，代建账号，响应含一次性 `temporary_password`）
+- `GET /api/v1/tenants/{tenant_id}/members/{member_id}`（IAM）
+- `GET /api/v1/tenants/{tenant_id}/members/{member_id}/permissions`（IAM）
+- `PUT /api/v1/tenants/{tenant_id}/members/{member_id}/roles`（IAM）
+- `PATCH /api/v1/tenants/{tenant_id}/members/{member_id}`（IAM）
+- `DELETE /api/v1/tenants/{tenant_id}/members/{member_id}`（IAM，移出企业，不删 User）
 
 `GET /api/v1/tenants/current` 含 `permission_codes`。`GET /api/v1/tenants/current/my-permissions` 是前端菜单的数据源。
 
-## 角色与权限（V2.3.1）
+## 角色与权限（IAM）
 
-详见 `docs/rbac.md`。需要登录和 `X-Tenant-ID`。
+详见 `docs/rbac.md`。配置接口在 IAM，需要登录和 `X-Tenant-ID`。ERP 只执行快照中的权限编码。
 
 - `GET /api/v1/permissions`
 - `GET /api/v1/permissions/tree`

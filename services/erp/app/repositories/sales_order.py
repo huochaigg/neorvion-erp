@@ -6,9 +6,9 @@ from sqlalchemy.engine import CursorResult
 from sqlalchemy.orm import Session, selectinload
 
 from app.models.customer import Customer
+from app.models.identity import IdentityNameSnapshot
 from app.models.product import Product, ProductSku
 from app.models.sales_order import SalesOrder, SalesOrderItem
-from app.models.user import User
 from app.models.warehouse import Warehouse
 from app.repositories.base import BaseRepository
 
@@ -178,7 +178,7 @@ class SalesOrderRepository(BaseRepository):
                 SalesOrder,
                 Customer.name,
                 Warehouse.name,
-                User.display_name,
+                IdentityNameSnapshot.display_name,
                 sku_count,
                 total_qty,
                 total_amount,
@@ -197,7 +197,10 @@ class SalesOrderRepository(BaseRepository):
                     Warehouse.id == SalesOrder.warehouse_id,
                 ),
             )
-            .outerjoin(User, User.id == SalesOrder.created_by)
+            .outerjoin(
+                IdentityNameSnapshot,
+                IdentityNameSnapshot.user_id == SalesOrder.created_by,
+            )
             .outerjoin(
                 SalesOrderItem,
                 and_(
@@ -206,7 +209,12 @@ class SalesOrderRepository(BaseRepository):
                 ),
             )
             .where(*filters)
-            .group_by(SalesOrder.id, Customer.name, Warehouse.name, User.display_name)
+            .group_by(
+                SalesOrder.id,
+                Customer.name,
+                Warehouse.name,
+                IdentityNameSnapshot.display_name,
+            )
             .order_by(SalesOrder.created_at.desc(), SalesOrder.id.desc())
             .offset((page - 1) * page_size)
             .limit(page_size)

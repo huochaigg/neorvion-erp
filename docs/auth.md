@@ -120,6 +120,8 @@ RSA 只保护 **password 字段**，不能保护整次会话。
 
 ## 数据模型
 
+以下表在 **IAM** 库 `neorvion_iam`，不在 ERP。ERP 升级 `20261018_0022` 后已 DROP 同名遗留表，只保留 `identity_name_snapshots`。
+
 `users`
 
 | 字段 | 说明 |

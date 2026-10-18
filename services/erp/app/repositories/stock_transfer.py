@@ -5,9 +5,9 @@ from datetime import datetime
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session, selectinload
 
+from app.models.identity import IdentityNameSnapshot
 from app.models.product import ProductSku
 from app.models.stock_transfer import StockTransfer, StockTransferItem
-from app.models.user import User
 from app.models.warehouse import Warehouse
 from app.repositories.base import BaseRepository
 
@@ -129,13 +129,16 @@ class StockTransferRepository(BaseRepository):
                 StockTransfer,
                 source.c.name,
                 target.c.name,
-                User.display_name,
+                IdentityNameSnapshot.display_name,
                 func.coalesce(qty.c.sku_count, 0),
                 func.coalesce(qty.c.total_quantity, 0),
             )
             .join(source, source.c.id == StockTransfer.source_warehouse_id)
             .join(target, target.c.id == StockTransfer.target_warehouse_id)
-            .outerjoin(User, User.id == StockTransfer.created_by)
+            .outerjoin(
+                IdentityNameSnapshot,
+                IdentityNameSnapshot.user_id == StockTransfer.created_by,
+            )
             .outerjoin(qty, qty.c.transfer_id == StockTransfer.id)
             .where(*filters)
             .order_by(StockTransfer.created_at.desc(), StockTransfer.id.desc())

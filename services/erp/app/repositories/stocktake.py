@@ -5,9 +5,9 @@ from datetime import datetime
 from sqlalchemy import case, func, select
 from sqlalchemy.orm import Session, selectinload
 
+from app.models.identity import IdentityNameSnapshot
 from app.models.product import ProductSku
 from app.models.stocktake import StocktakeItem, StocktakeOrder
-from app.models.user import User
 from app.models.warehouse import Warehouse
 from app.repositories.base import BaseRepository
 
@@ -128,12 +128,15 @@ class StocktakeRepository(BaseRepository):
             select(
                 StocktakeOrder,
                 Warehouse.name,
-                User.display_name,
+                IdentityNameSnapshot.display_name,
                 func.coalesce(qty.c.sku_count, 0),
                 func.coalesce(qty.c.difference_sku_count, 0),
             )
             .join(Warehouse, Warehouse.id == StocktakeOrder.warehouse_id)
-            .outerjoin(User, User.id == StocktakeOrder.created_by)
+            .outerjoin(
+                IdentityNameSnapshot,
+                IdentityNameSnapshot.user_id == StocktakeOrder.created_by,
+            )
             .outerjoin(qty, qty.c.stocktake_id == StocktakeOrder.id)
             .where(*filters)
             .order_by(StocktakeOrder.created_at.desc(), StocktakeOrder.id.desc())

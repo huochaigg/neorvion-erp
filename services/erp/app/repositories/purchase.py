@@ -5,10 +5,10 @@ from sqlalchemy import and_, delete, func, select, update
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.orm import Session, selectinload
 
+from app.models.identity import IdentityNameSnapshot
 from app.models.product import ProductSku
 from app.models.purchase import PurchaseOrder, PurchaseOrderItem
 from app.models.supplier import Supplier
-from app.models.user import User
 from app.models.warehouse import Warehouse
 from app.repositories.base import BaseRepository
 
@@ -136,7 +136,7 @@ class PurchaseOrderRepository(BaseRepository):
                 PurchaseOrder,
                 Supplier.name,
                 Warehouse.name,
-                User.display_name,
+                IdentityNameSnapshot.display_name,
                 sku_count,
                 total_qty,
                 total_amount,
@@ -155,7 +155,10 @@ class PurchaseOrderRepository(BaseRepository):
                     Warehouse.id == PurchaseOrder.warehouse_id,
                 ),
             )
-            .outerjoin(User, User.id == PurchaseOrder.created_by)
+            .outerjoin(
+                IdentityNameSnapshot,
+                IdentityNameSnapshot.user_id == PurchaseOrder.created_by,
+            )
             .outerjoin(
                 PurchaseOrderItem,
                 and_(
@@ -164,7 +167,12 @@ class PurchaseOrderRepository(BaseRepository):
                 ),
             )
             .where(*filters)
-            .group_by(PurchaseOrder.id, Supplier.name, Warehouse.name, User.display_name)
+            .group_by(
+                PurchaseOrder.id,
+                Supplier.name,
+                Warehouse.name,
+                IdentityNameSnapshot.display_name,
+            )
             .order_by(PurchaseOrder.created_at.desc(), PurchaseOrder.id.desc())
             .offset((page - 1) * page_size)
             .limit(page_size)

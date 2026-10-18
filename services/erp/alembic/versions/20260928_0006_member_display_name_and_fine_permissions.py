@@ -9,7 +9,6 @@ from collections.abc import Sequence
 
 import sqlalchemy as sa
 from alembic import op
-from sqlalchemy.orm import Session
 
 revision: str = "20260928_0006"
 down_revision: str | None = "20260928_0005"
@@ -22,14 +21,7 @@ def upgrade() -> None:
         "tenant_members",
         sa.Column("display_name", sa.String(length=64), nullable=True),
     )
-    # 与迁移共用连接，只 flush。seed 幂等，旧 manage 会展开成细粒度权限，不删旧 code。
-    session = Session(bind=op.get_bind())
-    from app.services.rbac import RoleService
-
-    service = RoleService(session)
-    service.seed_permission_catalog()
-    service.expand_legacy_manage_permissions()
-    session.flush()
+    # 细粒度权限 seed 已迁到 IAM。本修订只加企业内展示名列。
 
 
 def downgrade() -> None:
