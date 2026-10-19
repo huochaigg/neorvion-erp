@@ -76,8 +76,8 @@ async def judge_answer(
     ]
     try:
         text, usage = await collect_chat(messages)
-    except AppError as exc:
-        return None, None, exc.message
+    except AppError:
+        raise
     except Exception:
         return None, None, "Judge 模型调用失败"
     raw = _extract_json(text)

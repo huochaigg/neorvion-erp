@@ -44,6 +44,22 @@ def classify_model_http_error(status: int, body: str) -> AppError:
         return AppError("模型服务余额不足", code=40260, status_code=502)
     if status == 429:
         return AppError("模型服务限流，请稍后重试", code=42960, status_code=429)
+    if any(
+        token in combined
+        for token in (
+            "context_length",
+            "context window",
+            "maximum context",
+            "too many tokens",
+            "max_tokens",
+            "token_limit",
+        )
+    ):
+        return AppError(
+            "单次请求超出模型上下文窗口，请缩短上下文或降低 Top-K，本题不会无限重试",
+            code=40093,
+            status_code=400,
+        )
     if status in {408, 504}:
         return AppError("模型服务超时", code=50460, status_code=504)
     if status == 404:

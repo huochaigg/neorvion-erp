@@ -152,6 +152,8 @@ class ExperimentConfigIn(BaseModel):
     similarity_threshold: float | None = Field(default=None, ge=0, le=1)
     rerank: bool = False
     evaluate_generation: bool = Field(default=False, description="是否调用生成与 Judge，会产生模型费用")
+    token_budget: int | None = Field(default=None, ge=0, description="本 Run Token 预算；空则用服务默认值")
+    cost_budget_usd: float | None = Field(default=None, ge=0, description="本 Run 费用预算；空表示不限制")
     knowledge_base_ids: list[int] | None = None
 
     @field_validator("strategy")
@@ -183,8 +185,41 @@ class ExperimentOut(BaseModel):
     updated_at: datetime
 
 
+class ExperimentLatestRunOut(BaseModel):
+    """列表用最近一次运行摘要。指标缺失为 null，不用 0 冒充。"""
+
+    id: int
+    status: str
+    progress: int
+    dataset_id: int
+    dataset_version: int
+    error_message: str | None = None
+    recall: float | None = Field(default=None, description="Recall@K，K 为该次运行最终 Top-K")
+    mrr: float | None = None
+    ndcg: float | None = Field(default=None, description="nDCG@K")
+    hit_rate: float | None = Field(default=None, description="Hit@K")
+    precision: float | None = None
+    k: int | None = Field(default=None, description="指标截断 K，通常等于最终 Top-K")
+    latency_p95_ms: float | None = None
+    supervised_count: int | None = Field(default=None, description="参与检索指标宏平均的有效题目数")
+    unanswerable_count: int | None = None
+    case_count: int | None = Field(default=None, description="本次运行题目总数")
+    comparable: bool | None = Field(default=None, description="数据集快照是否含失效标注")
+    embedding_model: str | None = None
+    embedding_dimensions: int | None = None
+    started_at: datetime | None = None
+    finished_at: datetime | None = None
+    created_at: datetime
+
+
+class ExperimentListItemOut(ExperimentOut):
+    """实验列表行：参数方案 + 最近一次运行的状态与真实指标。"""
+
+    latest_run: ExperimentLatestRunOut | None = None
+
+
 class ExperimentListOut(BaseModel):
-    items: list[ExperimentOut]
+    items: list[ExperimentListItemOut]
     total: int
     page: int
     page_size: int
@@ -199,6 +234,11 @@ class RunOut(BaseModel):
     progress: int
     attempt: int
     error_message: str | None
+    interrupt_reason: str | None = None
+    current_case_id: int | None = None
+    current_stage: str | None = None
+    token_budget: int | None = None
+    cost_budget_usd: float | None = None
     config_snapshot: dict[str, Any]
     dataset_snapshot_meta: dict[str, Any]
     metrics: dict[str, Any] | None
@@ -231,6 +271,13 @@ class ResultOut(BaseModel):
     latency_ms: int
     usage: dict[str, Any] | None = Field(default=None, description="本题 Token 与费用；未生成时为空")
     error_message: str | None
+    result_status: str = "SUCCESS"
+    stages: dict[str, Any] = Field(default_factory=dict)
+
+
+class RunResumeIn(BaseModel):
+    token_budget: int | None = Field(default=None, ge=0, description="恢复前可上调的 Token 预算")
+    cost_budget_usd: float | None = Field(default=None, ge=0, description="恢复前可上调的费用预算")
 
 
 class HumanOverrideIn(BaseModel):

@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from fastapi import APIRouter, File, Query, UploadFile
+from fastapi import APIRouter, BackgroundTasks, File, Query, UploadFile
 from fastapi.responses import PlainTextResponse
 
 from app.api.deps import (
@@ -10,6 +10,7 @@ from app.api.deps import (
     KnowledgeReadContext,
     KnowledgeUpdateContext,
 )
+from app.core.config import settings
 from app.models.evaluation import EvaluationResult, EvaluationRun
 from app.repositories.evaluation import EvaluationRepository
 from app.schemas.common import ApiResponse, ok
@@ -36,32 +37,24 @@ from app.schemas.evaluation import (
     ResultOut,
     RunListOut,
     RunOut,
+    RunResumeIn,
 )
 from app.schemas.ops import ProbeIn, ProbeOut
 from app.services.evaluation import EvaluationService
-from app.services.evaluation_run import EvaluationRunService
+from app.services.evaluation_run import EvaluationRunService, execute_eval_run
 
 router = APIRouter(tags=["knowledge-evaluation"])
 
 
+def _schedule_eval_run(background: BackgroundTasks, run_id: int) -> None:
+    """redis 已在 Service 入队；inline 等 HTTP 响应发出后再跑，避免运行接口一直 pending。"""
+    if settings.task_executor == "redis":
+        return
+    background.add_task(execute_eval_run, run_id)
+
+
 def _run_out(row: EvaluationRun) -> RunOut:
-    return RunOut(
-        id=row.id,
-        experiment_id=row.experiment_id,
-        dataset_id=row.dataset_id,
-        dataset_version=row.dataset_version,
-        status=row.status,
-        progress=row.progress,
-        attempt=row.attempt,
-        error_message=row.error_message,
-        config_snapshot=dict(row.config_snapshot or {}),
-        dataset_snapshot_meta=dict(row.dataset_snapshot_meta or {}),
-        metrics=row.metrics,
-        usage=row.usage,
-        started_at=row.started_at,
-        finished_at=row.finished_at,
-        created_at=row.created_at,
-    )
+    return EvaluationService._run_out(row)
 
 
 def _result_out(item: EvaluationResult, expected_answer: str | None = None) -> ResultOut:
@@ -81,6 +74,8 @@ def _result_out(item: EvaluationResult, expected_answer: str | None = None) -> R
         latency_ms=item.latency_ms,
         usage=item.usage,
         error_message=item.error_message,
+        result_status=getattr(item, "result_status", None) or "SUCCESS",
+        stages=dict(getattr(item, "stages", None) or {}),
     )
 
 
@@ -249,10 +244,24 @@ async def list_experiments(
     context: KnowledgeReadContext,
     session: DbSession,
     dataset_id: int | None = None,
+    status: str | None = Query(default=None, description="最近运行状态，含 NEVER_RUN"),
+    strategy: str | None = Query(default=None, description="实验参数方案中的检索策略"),
+    sort_by: str = Query(default="id", description="id / created_at / recall / mrr / ndcg / hit_rate / latency_p95"),
+    sort_order: str = Query(default="desc"),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
 ) -> ApiResponse[ExperimentListOut]:
-    return ok(await EvaluationService(session, context).list_experiments(dataset_id, page, page_size))
+    return ok(
+        await EvaluationService(session, context).list_experiments(
+            dataset_id,
+            page,
+            page_size,
+            status=status.upper() if status else None,
+            strategy=strategy.upper() if strategy else None,
+            sort_by=sort_by,
+            sort_order=sort_order.lower(),
+        )
+    )
 
 
 @router.post("/evaluation/experiments", response_model=ApiResponse[ExperimentOut])
@@ -298,9 +307,13 @@ async def delete_experiment(
 
 @router.post("/evaluation/experiments/{experiment_id}/run", response_model=ApiResponse[RunOut])
 async def start_run(
-    experiment_id: int, context: KnowledgeCreateContext, session: DbSession
+    experiment_id: int,
+    context: KnowledgeCreateContext,
+    session: DbSession,
+    background: BackgroundTasks,
 ) -> ApiResponse[RunOut]:
     row = await EvaluationRunService(session, context).start(experiment_id)
+    _schedule_eval_run(background, row.id)
     return ok(_run_out(row), "已排队评测")
 
 
@@ -309,12 +322,24 @@ async def list_runs(
     context: KnowledgeReadContext,
     session: DbSession,
     experiment_id: int | None = None,
+    status: str | None = Query(default=None, description="运行状态"),
+    strategy: str | None = Query(default=None, description="config_snapshot 中的检索策略"),
+    sort_by: str = Query(default="id", description="id / created_at / recall / mrr / ndcg / hit_rate / latency_p95"),
+    sort_order: str = Query(default="desc"),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
 ) -> ApiResponse[RunListOut]:
-    repo = EvaluationRepository(session, context.tenant_id)
-    rows, total = await repo.list_runs(experiment_id=experiment_id, page=page, page_size=page_size)
-    return ok(RunListOut(items=[_run_out(item) for item in rows], total=total, page=page, page_size=page_size))
+    return ok(
+        await EvaluationService(session, context).list_runs(
+            experiment_id=experiment_id,
+            status=status.upper() if status else None,
+            strategy=strategy.upper() if strategy else None,
+            sort_by=sort_by,
+            sort_order=sort_order.lower(),
+            page=page,
+            page_size=page_size,
+        )
+    )
 
 
 @router.get("/evaluation/runs/{run_id}", response_model=ApiResponse[RunOut])
@@ -352,9 +377,51 @@ async def cancel_run(run_id: int, context: KnowledgeUpdateContext, session: DbSe
     return ok(_run_out(await EvaluationRunService(session, context).cancel(run_id)), "已请求取消")
 
 
+@router.post("/evaluation/runs/{run_id}/pause", response_model=ApiResponse[RunOut])
+async def pause_run(run_id: int, context: KnowledgeUpdateContext, session: DbSession) -> ApiResponse[RunOut]:
+    return ok(_run_out(await EvaluationRunService(session, context).pause(run_id)), "已请求暂停")
+
+
+@router.post("/evaluation/runs/{run_id}/resume", response_model=ApiResponse[RunOut])
+async def resume_run(
+    run_id: int,
+    context: KnowledgeUpdateContext,
+    session: DbSession,
+    background: BackgroundTasks,
+    payload: RunResumeIn | None = None,
+) -> ApiResponse[RunOut]:
+    body = payload or RunResumeIn()
+    row = await EvaluationRunService(session, context).resume(
+        run_id,
+        token_budget=body.token_budget,
+        cost_budget_usd=body.cost_budget_usd,
+    )
+    _schedule_eval_run(background, row.id)
+    return ok(_run_out(row), "已继续运行")
+
+
 @router.post("/evaluation/runs/{run_id}/retry", response_model=ApiResponse[RunOut])
-async def retry_run(run_id: int, context: KnowledgeUpdateContext, session: DbSession) -> ApiResponse[RunOut]:
-    return ok(_run_out(await EvaluationRunService(session, context).retry(run_id)), "已重新排队")
+async def retry_run(
+    run_id: int,
+    context: KnowledgeUpdateContext,
+    session: DbSession,
+    background: BackgroundTasks,
+) -> ApiResponse[RunOut]:
+    row = await EvaluationRunService(session, context).retry(run_id)
+    _schedule_eval_run(background, row.id)
+    return ok(_run_out(row), "已重新排队")
+
+
+@router.post("/evaluation/runs/{run_id}/retry-failed", response_model=ApiResponse[RunOut])
+async def retry_failed_run(
+    run_id: int,
+    context: KnowledgeUpdateContext,
+    session: DbSession,
+    background: BackgroundTasks,
+) -> ApiResponse[RunOut]:
+    row = await EvaluationRunService(session, context).retry_failed(run_id)
+    _schedule_eval_run(background, row.id)
+    return ok(_run_out(row), "已重试失败题目")
 
 
 @router.post("/evaluation/results/{result_id}/human", response_model=ApiResponse[ResultOut])

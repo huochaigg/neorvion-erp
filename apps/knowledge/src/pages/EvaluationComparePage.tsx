@@ -2,13 +2,15 @@ import {
   knowledgeEvalCompareQueryKey,
   knowledgeEvalRunsQueryKey,
   knowledgeRetrievalStrategyLabel,
+  knowledgeRunStatusColor,
   knowledgeRunStatusLabel,
   type KnowledgeEvalRun,
 } from '@neorvion/shared';
 import { useQuery } from '@tanstack/react-query';
-import { Alert, Button, Card, Select, Space, Table } from 'antd';
+import { Alert, Button, Card, Select, Space, Table, Tag } from 'antd';
 import { useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { parseCompareRunIds } from '@/lib/evalMetrics';
 import { compareEvalRuns, fetchEvalResults, fetchEvalRuns } from '@/api/evaluation';
 import { GroupedMetricBars } from '@/components/MetricBars';
 import { PageHeader } from '@/components/PageHeader';
@@ -32,11 +34,22 @@ function metricOf(run: KnowledgeEvalRun, key: string): number | null {
 export function EvaluationComparePage() {
   const navigate = useNavigate();
   const { tenantId } = usePermissions();
-  const [selected, setSelected] = useState<number[]>([]);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const selected = parseCompareRunIds(searchParams.get('run_ids'));
   const [lowRunId, setLowRunId] = useState<number | null>(null);
 
+  const setSelected = (ids: number[]) => {
+    const next = parseCompareRunIds(ids.join(','));
+    if (next.length) {
+      setSearchParams({ run_ids: next.join(',') }, { replace: true });
+      return;
+    }
+    const params = new URLSearchParams(searchParams);
+    params.delete('run_ids');
+    setSearchParams(params, { replace: true });
+  };
+
   useEffect(() => {
-    setSelected([]);
     setLowRunId(null);
   }, [tenantId]);
 
@@ -89,16 +102,26 @@ export function EvaluationComparePage() {
       <Space wrap className="mb-4">
         <Select
           mode="multiple"
+          maxCount={3}
           placeholder="选择至少两次成功运行"
           style={{ minWidth: 360 }}
           value={selected}
           onChange={setSelected}
-          options={(runsQuery.data?.items ?? [])
-            .filter((item) => item.status === 'SUCCESS')
-            .map((item) => ({
+          options={(() => {
+            const byId = new Map<number, KnowledgeEvalRun>();
+            for (const item of runsQuery.data?.items ?? []) {
+              if (item.status === 'SUCCESS') {
+                byId.set(item.id, item);
+              }
+            }
+            for (const item of runs) {
+              byId.set(item.id, item);
+            }
+            return [...byId.values()].map((item) => ({
               value: item.id,
               label: `#${item.id} ${knowledgeRetrievalStrategyLabel(String(item.config_snapshot.strategy ?? ''))} v${item.dataset_version}`,
-            }))}
+            }));
+          })()}
         />
       </Space>
       {compareQuery.data && !compareQuery.data.comparable ? (
@@ -140,7 +163,14 @@ export function EvaluationComparePage() {
               dataSource={runs}
               columns={[
                 { title: 'Run', dataIndex: 'id', width: 70 },
-                { title: '状态', dataIndex: 'status', width: 90, render: (value: string) => knowledgeRunStatusLabel(value) },
+                {
+                  title: '状态',
+                  dataIndex: 'status',
+                  width: 90,
+                  render: (value: string) => (
+                    <Tag color={knowledgeRunStatusColor(value)}>{knowledgeRunStatusLabel(value)}</Tag>
+                  ),
+                },
                 { title: '数据集版本', dataIndex: 'dataset_version', width: 100 },
                 {
                   title: '策略',

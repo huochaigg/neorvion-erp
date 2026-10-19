@@ -85,6 +85,11 @@ class Settings(BaseSettings):
     eval_token_budget: int = 200000
     eval_prompt_token_usd: float = 0.0
     eval_completion_token_usd: float = 0.0
+    eval_model_retries: int = 3
+    eval_retry_base_seconds: float = 0.2
+    eval_lease_seconds: int = 45
+    eval_token_reserve: int = 1500
+    eval_continue_on_error: bool = True
     api_key_rate_limit_per_minute: int = 60
 
     def resolved_provider(self, kind: str) -> str:

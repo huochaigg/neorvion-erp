@@ -39,8 +39,8 @@ flowchart LR
 | 处理任务 | `/tasks` | PARSE / CHUNK / EMBED |
 | 模型配置 | `/models` | 平台级 Chat / Embedding / Rerank（无密钥明文） |
 | 评测数据集 | `/datasets`、`/datasets/:id` | 数据集 CRUD、导入导出、问题标注 |
-| 检索评测 | `/experiments` | 参数方案、异步跑批、单题结果 |
-| 实验对比 | `/experiments/compare` | 多 run 指标、参数差异、低分问题 |
+| 检索评测 | `/experiments` | 实验列表展示最近运行状态、Recall/MRR/nDCG/Hit/P95；展开看完整参数；可选 2–3 个成功实验进入对比 |
+| 实验对比 | `/experiments/compare` | 多 run 指标、参数差异、低分问题；支持 `?run_ids=` |
 | 使用统计 | `/stats` | 来自 retrieval_logs / messages 的真实用量 |
 | 回收站 | `/recycle` | 软删除恢复与彻底清理 |
 | API Key | `/api-keys` | 外部检索密钥，明文只显示一次 |
@@ -52,7 +52,7 @@ flowchart LR
 
 ## 数据库
 
-迁移：`20261013_0001`（V1）→ `20261013_0002`（V2）→ `20261013_0003`（V3：pgvector + 会话）→ `20261014_0004`（V4 评测）→ `20261014_0005`（V5：版本/授权/API Key/审计 + 评测幂等键）→ `20261014_0006`（V5 时间戳默认值）。评测题说明见 [evaluation/README.md](./evaluation/README.md)。
+迁移：`20261013_0001`（V1）→ `20261013_0002`（V2）→ `20261013_0003`（V3：pgvector + 会话）→ `20261014_0004`（V4 评测）→ `20261014_0005`（V5：版本/授权/API Key/审计 + 评测幂等键）→ `20261014_0006`（V5 时间戳默认值）→ `20261019_0007`（评测 PAUSED / 租约 / 阶段 checkpoint / Run 预算）。评测题说明见 [evaluation/README.md](./evaluation/README.md)。
 
 V1/V2 表保持不变。V3 增量：
 
@@ -140,12 +140,14 @@ RERANK_MODEL=qwen3-rerank
 
 ```text
 QUEUED → RUNNING → SUCCESS
-                 ↘ FAILED →（重试）QUEUED
+                 ↘ PAUSED →（继续运行 / 重试失败题）QUEUED
+                 ↘ FAILED →（重试失败题）QUEUED
+                 ↘ CANCELLED
 ```
 
 `PARSE` / `CHUNK` 失败会影响文档状态；`EMBED` 失败不影响 V2 原文与切片。PostgreSQL 是真相；Redis List 只投递 `task_id` 或 `eval:{run_id}`。`TASK_EXECUTOR=inline` 仅建议测试。
 
-Worker：`uv run python -m app.tasks.worker`。评测运行与文档任务共用同一队列，前缀 `eval:` 区分。重启后 RUNNING 评测标失败，QUEUED 重新入队。
+Worker：`uv run python -m app.tasks.worker`。评测运行与文档任务共用同一队列，前缀 `eval:` 区分。文档 RUNNING 重启后标失败；评测 RUNNING 在租约过期后改为 QUEUED，保留已落库题目并从中断阶段续跑。同一 Run 通过 `lease_owner` / `lease_until` 保证同一时刻只有一个 Worker 执行。
 
 ## 本地运行
 
@@ -233,6 +235,16 @@ Document 粒度单独计算并标记 `granularity=document`，不得与 Chunk �
 
 可选 LLM-as-a-Judge（默认关闭）：Faithfulness / Answer Relevancy / Answer Correctness。无标准答案时 `answer_correctness` 必须为 null。Judge 输出非法 JSON 或越界分数时 **不伪造分数**，只记 `judge_error`。知识库摘录包在 `<untrusted_document>` 中。记录 `judge_model` 与 `judge_prompt_version=v4-judge-1`。结果具有主观性与波动，界面会标明。支持人工 `human_override`。
 
+### 实验列表
+
+`GET /evaluation/experiments` 一次返回参数方案和 `latest_run`（该实验最近一次运行摘要），避免前端再逐条拉详情。`latest_run` 为 `null` 表示尚未运行。指标只在最近运行 `SUCCESS` 时从已落库的 `metrics` / `usage` 读取；未执行、运行中、失败、无有效监督题时字段为 `null`，**不用 0 冒充缺失**。`supervised_count` 是实际参与宏平均的有效题目数。
+
+支持 `status`（含 `NEVER_RUN`）、`strategy`、`sort_by=id|created_at|recall|mrr|ndcg|hit_rate|latency_p95`。Vector/Keyword Top-K、RRF、候选召回、阈值、模型版本等放在展开行，不挤占默认列。对比入口携带 `?run_ids=` 复用现有 compare API；数据集或 Embedding/索引版本不同时列表与对比页都会提示不可严格比较。
+
+### 运行记录列表
+
+`GET /evaluation/runs` 返回每次运行自己的 `config_snapshot`、`metrics`、`usage`。页面下方运行表只读这份快照，不回填实验当前配置。启动评测时会把当时的 Embedding/Chat/Rerank/指标版本写入快照；历史记录缺 key 显示「未记录」，不用系统默认值冒充。未完成运行的指标为 `null`。支持按 `status` / `strategy` 筛选，按 Recall/MRR/nDCG/Hit/P95 排序。
+
 ### 实验可复现
 
 每次运行冻结当前数据集版本。`config_snapshot` 含策略、Top-K、RRF、Rerank、Embedding 模型与维度、Chat/Rerank 模型、Prompt/指标版本。对比时若数据集版本或 Embedding/维度不同，标记 **非严格可比**，不给出误导性提升结论。Chunk Size / Overlap 变化必须通过独立索引版本对比，评测不得改写线上切片。
@@ -240,12 +252,15 @@ Document 粒度单独计算并标记 `granularity=document`，不得与 Chunk �
 ### 任务与限额
 
 - 单任务最大题量 `EVAL_MAX_CASES`（默认 200）
-- Token 预算 `EVAL_TOKEN_BUDGET`
-- Worker 并发 `WORKER_CONCURRENCY`
-- 同一实验同时只能有一个 QUEUED/RUNNING
-- 取消：QUEUED 立即 CANCELLED；RUNNING 设 `cancel_requested`，下一题前退出
-- 重试：仅 FAILED/CANCELLED，先删本题结果再入队，`attempt+1`
-- 费用：`EVAL_PROMPT_TOKEN_USD` / `EVAL_COMPLETION_TOKEN_USD` 为 0 时不估算，不用假账单
+- Token 预算 `EVAL_TOKEN_BUDGET`，可在实验配置或「继续运行」时上调；累计值来自已落库 `evaluation_results.usage`，恢复不会从 0 重算
+- 费用预算可选；`EVAL_PROMPT_TOKEN_USD` / `EVAL_COMPLETION_TOKEN_USD` 为 0 时不估算，不用假账单。供应商未返回精确 Token 时标记 `token_estimated`
+- Worker 并发 `WORKER_CONCURRENCY`；评测另有 `EVAL_LEASE_SECONDS` 租约
+- 同一实验同时只能有一个 QUEUED / RUNNING / PAUSED
+- 暂停：QUEUED 立即 PAUSED；RUNNING 设 `pause_requested`，下一题前退出。继续运行仍是同一个 Run，不新建实验
+- 取消：QUEUED / PAUSED 立即 CANCELLED；RUNNING 设 `cancel_requested`，下一题前退出
+- 重试失败题：保留 SUCCESS 结果，只重置失败/未完成阶段（Judge 失败时复用已生成回答）
+- 单题失败默认继续其余题目（`EVAL_CONTINUE_ON_ERROR`）；上下文超限不无限重试；429/超时有限指数退避。超时请求可能已产生费用，恢复不能保证绝对不重复计费
+- 阶段 checkpoint：`RETRIEVE` / `RERANK` / `GENERATE` / `JUDGE` / `METRICS`。Rerank 不是第二次检索，状态来自同一次 `search()`
 
 ### 检索调优
 
@@ -269,6 +284,8 @@ Document 粒度单独计算并标记 `granularity=document`，不得与 Chunk �
 - LLM Judge 不稳定，不能替代有监督检索指标。
 - xlsx 导入只支持简单共享字符串表，复杂 Excel 请改 CSV/JSONL。
 - 评测不会为对比自动创建独立向量索引；切片策略变化需另建知识库或重建后再评。
+- 模型请求超时后供应商可能已经计费；续跑不会保证绝对不重复扣费。Token 预算是单次 Run 级预留，不是租户钱包。
+- 评测 Worker 崩溃后需等待租约过期（默认 45 秒）才会被其他进程收回；心跳按题目刷新。
 
 ## V5 已实现
 

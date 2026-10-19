@@ -9,6 +9,7 @@ from sqlalchemy import (
     BigInteger,
     Boolean,
     DateTime,
+    Float,
     ForeignKeyConstraint,
     Index,
     Integer,
@@ -51,9 +52,13 @@ class CaseSource(StrEnum):
 class RunStatus(StrEnum):
     QUEUED = "QUEUED"
     RUNNING = "RUNNING"
+    PAUSED = "PAUSED"
     SUCCESS = "SUCCESS"
     FAILED = "FAILED"
     CANCELLED = "CANCELLED"
+
+
+ACTIVE_RUN_STATUSES = (RunStatus.QUEUED.value, RunStatus.RUNNING.value, RunStatus.PAUSED.value)
 
 
 class EvaluationDataset(TimestampMixin, TenantMixin, Base):
@@ -286,7 +291,7 @@ class EvaluationRun(TimestampMixin, TenantMixin, Base):
             "tenant_id",
             "experiment_id",
             unique=True,
-            postgresql_where=text("status IN ('QUEUED', 'RUNNING')"),
+            postgresql_where=text("status IN ('QUEUED', 'RUNNING', 'PAUSED')"),
         ),
     )
 
@@ -298,11 +303,23 @@ class EvaluationRun(TimestampMixin, TenantMixin, Base):
         String(16),
         nullable=False,
         server_default=RunStatus.QUEUED.value,
-        comment="QUEUED / RUNNING / SUCCESS / FAILED / CANCELLED",
+        comment="QUEUED / RUNNING / PAUSED / SUCCESS / FAILED / CANCELLED",
     )
     progress: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0", comment="0-100")
     attempt: Mapped[int] = mapped_column(Integer, nullable=False, server_default="1")
     cancel_requested: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))
+    pause_requested: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))
+    interrupt_reason: Mapped[str | None] = mapped_column(
+        String(32),
+        nullable=True,
+        comment="USER_PAUSE / TOKEN_BUDGET / RATE_LIMIT / WORKER_CRASH 等",
+    )
+    current_case_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True, comment="正在执行的题目")
+    current_stage: Mapped[str | None] = mapped_column(String(16), nullable=True, comment="正在执行的阶段")
+    token_budget: Mapped[int | None] = mapped_column(Integer, nullable=True, comment="本 Run Token 预算，可在恢复前调整")
+    cost_budget_usd: Mapped[float | None] = mapped_column(Float, nullable=True, comment="本 Run 费用预算，空表示不限制")
+    lease_owner: Mapped[str | None] = mapped_column(String(64), nullable=True, comment="持有租约的 Worker")
+    lease_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     config_snapshot: Mapped[dict] = mapped_column(JSONB, nullable=False, comment="运行入参快照，含模型与语料版本")
     dataset_snapshot_meta: Mapped[dict] = mapped_column(
@@ -351,3 +368,15 @@ class EvaluationResult(TimestampMixin, TenantMixin, Base):
     latency_ms: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
     usage: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    result_status: Mapped[str] = mapped_column(
+        String(16),
+        nullable=False,
+        server_default="SUCCESS",
+        comment="PENDING / SUCCESS / FAILED；历史已完成行视为 SUCCESS",
+    )
+    stages: Mapped[dict] = mapped_column(
+        JSONB,
+        nullable=False,
+        server_default=text("'{}'::jsonb"),
+        comment="RETRIEVE/RERANK/GENERATE/JUDGE/METRICS 阶段状态与用量",
+    )

@@ -431,11 +431,37 @@ export const KNOWLEDGE_ANNOTATION_STATUS_LABEL: Record<string, string> = {
 };
 
 export const KNOWLEDGE_RUN_STATUS_LABEL: Record<string, string> = {
+  NEVER_RUN: '未运行',
   QUEUED: '排队中',
   RUNNING: '运行中',
+  PAUSED: '已暂停',
   SUCCESS: '成功',
   FAILED: '失败',
   CANCELLED: '已取消',
+};
+
+export const KNOWLEDGE_EVAL_INTERRUPT_LABEL: Record<string, string> = {
+  USER_PAUSE: '用户暂停',
+  TOKEN_BUDGET: 'Token 预算耗尽',
+  COST_BUDGET: '费用预算耗尽',
+  RATE_LIMIT: '模型限流',
+  TIMEOUT: '模型超时',
+  INSUFFICIENT_FUNDS: '模型余额不足',
+  INVALID_KEY: '模型密钥无效',
+  CONTEXT_OVERFLOW: '单次上下文超限',
+  CASE_FAILED: '单题执行失败',
+  WORKER_CRASH: 'Worker 异常退出',
+  SNAPSHOT_UNAVAILABLE: '原始快照或索引不可用',
+  MODEL_UNAVAILABLE: '快照中的模型配置不可用',
+  CANCELLED: '已取消',
+};
+
+export const KNOWLEDGE_EVAL_STAGE_LABEL: Record<string, string> = {
+  RETRIEVE: '检索',
+  RERANK: 'Rerank',
+  GENERATE: '生成',
+  JUDGE: 'Judge',
+  METRICS: '指标',
 };
 
 export function knowledgeQuestionTypeLabel(value: string): string {
@@ -448,6 +474,33 @@ export function knowledgeAnnotationStatusLabel(value: string): string {
 
 export function knowledgeRunStatusLabel(value: string): string {
   return KNOWLEDGE_RUN_STATUS_LABEL[value] ?? value;
+}
+
+export function knowledgeEvalInterruptLabel(value: string | null | undefined): string {
+  if (!value) {
+    return '';
+  }
+  return KNOWLEDGE_EVAL_INTERRUPT_LABEL[value] ?? value;
+}
+
+export function knowledgeEvalStageLabel(value: string): string {
+  return KNOWLEDGE_EVAL_STAGE_LABEL[value] ?? value;
+}
+
+export function knowledgeRunStatusColor(value: string): string {
+  if (value === 'RUNNING' || value === 'SUCCESS') {
+    return 'success';
+  }
+  if (value === 'FAILED') {
+    return 'error';
+  }
+  if (value === 'QUEUED') {
+    return 'processing';
+  }
+  if (value === 'PAUSED') {
+    return 'warning';
+  }
+  return 'default';
 }
 
 export interface KnowledgeEvalDataset {
@@ -631,7 +684,34 @@ export interface KnowledgeEvalExperimentConfig {
   similarity_threshold?: number | null;
   rerank?: boolean;
   evaluate_generation?: boolean;
+  token_budget?: number | null;
+  cost_budget_usd?: number | null;
   knowledge_base_ids?: number[] | null;
+}
+
+export interface KnowledgeEvalExperimentLatestRun {
+  id: number;
+  status: string;
+  progress: number;
+  dataset_id: number;
+  dataset_version: number;
+  error_message: string | null;
+  recall: number | null;
+  mrr: number | null;
+  ndcg: number | null;
+  hit_rate: number | null;
+  precision: number | null;
+  k: number | null;
+  latency_p95_ms: number | null;
+  supervised_count: number | null;
+  unanswerable_count: number | null;
+  case_count: number | null;
+  comparable: boolean | null;
+  embedding_model: string | null;
+  embedding_dimensions: number | null;
+  started_at: string | null;
+  finished_at: string | null;
+  created_at: string;
 }
 
 export interface KnowledgeEvalExperiment {
@@ -642,6 +722,7 @@ export interface KnowledgeEvalExperiment {
   config: Record<string, unknown>;
   created_at: string;
   updated_at: string;
+  latest_run?: KnowledgeEvalExperimentLatestRun | null;
 }
 
 export interface KnowledgeEvalExperimentList {
@@ -660,6 +741,11 @@ export interface KnowledgeEvalRun {
   progress: number;
   attempt: number;
   error_message: string | null;
+  interrupt_reason?: string | null;
+  current_case_id?: number | null;
+  current_stage?: string | null;
+  token_budget?: number | null;
+  cost_budget_usd?: number | null;
   config_snapshot: Record<string, unknown>;
   dataset_snapshot_meta: Record<string, unknown>;
   metrics: Record<string, unknown> | null;
@@ -692,6 +778,8 @@ export interface KnowledgeEvalResult {
   latency_ms: number;
   usage?: Record<string, unknown> | null;
   error_message: string | null;
+  result_status?: string;
+  stages?: Record<string, unknown> | null;
 }
 
 export interface KnowledgeEvalCompare {

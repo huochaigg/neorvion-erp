@@ -76,6 +76,7 @@ def test_aggregate_separates_unanswerable() -> None:
     aggregated = aggregate_retrieval(supervised, unanswerable_rows=unanswerable)
     assert aggregated["supervised_count"] == 1
     assert aggregated["unanswerable_count"] == 1
+    assert aggregated["k"] == 3
     assert aggregated["recall"] == pytest.approx(2 / 3)
     assert aggregated["unanswerable_false_recall"] == 1.0
     assert aggregated["granularity"] == "chunk"

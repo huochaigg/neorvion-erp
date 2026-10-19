@@ -1,20 +1,32 @@
 import { useEffect, useRef, useState } from 'react';
 
-const MIN_BODY = 160;
 const FALLBACK_HEADER = 39;
-const FALLBACK_PAGINATION = 56;
+const FALLBACK_PAGINATION = 64;
 const GAP = 8;
+
+function blockSize(el: HTMLElement | null, fallback: number): number {
+  if (!el) {
+    return fallback;
+  }
+  const style = window.getComputedStyle(el);
+  return Math.ceil(
+    el.getBoundingClientRect().height +
+      (Number.parseFloat(style.marginTop) || 0) +
+      (Number.parseFloat(style.marginBottom) || 0),
+  );
+}
 
 export function measureTableScrollY(container: HTMLElement, hasPagination: boolean): number {
   const header =
     container.querySelector<HTMLElement>('.ant-table-header') ??
     container.querySelector<HTMLElement>('.ant-table-thead');
   const pagination = container.querySelector<HTMLElement>('.ant-table-pagination');
-  const headerHeight = header?.getBoundingClientRect().height || FALLBACK_HEADER;
-  const paginationHeight = hasPagination
-    ? pagination?.getBoundingClientRect().height || FALLBACK_PAGINATION
-    : 0;
-  return Math.max(MIN_BODY, Math.floor(container.clientHeight - headerHeight - paginationHeight - GAP));
+  const headerHeight = blockSize(header, FALLBACK_HEADER);
+  const paginationHeight = hasPagination ? blockSize(pagination, FALLBACK_PAGINATION) : 0;
+  return Math.max(
+    0,
+    Math.floor(container.clientHeight - headerHeight - paginationHeight - GAP),
+  );
 }
 
 export function useTableScrollY(hasPagination = true) {

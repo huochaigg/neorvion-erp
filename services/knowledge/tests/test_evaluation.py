@@ -232,7 +232,8 @@ def test_unanswerable_and_multi_chunk_eval(client: TestClient, identity: FakeIde
 
     run = client.post(f"/api/v1/evaluation/experiments/{experiment_id}/run", headers=headers)
     assert run.status_code == 200, run.text
-    body = run.json()["data"]
+    assert run.json()["data"]["status"] == "QUEUED"
+    body = client.get(f"/api/v1/evaluation/runs/{run.json()['data']['id']}", headers=headers).json()["data"]
     assert body["status"] == "SUCCESS"
     assert body["metrics"]["granularity"] == "chunk"
     assert "recall" in body["metrics"]
@@ -403,6 +404,182 @@ def test_async_cancel_retry_and_limits(client: TestClient, identity: FakeIdentit
     assert retried.status_code == 200
     assert retried.json()["data"]["status"] == "QUEUED"
     assert retried.json()["data"]["attempt"] == 2
+
+
+def test_experiment_list_latest_run_metrics_filter_and_sort(
+    client: TestClient, identity: FakeIdentityClient, monkeypatch
+) -> None:
+    get_embedding_client.cache_clear()
+    headers = _grant(identity)
+    base_id = _create_base(client, headers)
+    _doc_id, chunk_id = _upload(client, base_id, headers)
+    dataset_id = _create_dataset(client, headers, base_id)
+    case = client.post(
+        f"/api/v1/evaluation/datasets/{dataset_id}/cases",
+        json={"question": "七天无理由退货政策是什么？", "expected_answer": "七日内可退"},
+        headers=headers,
+    )
+    case_id = case.json()["data"]["id"]
+    judged = client.put(
+        f"/api/v1/evaluation/cases/{case_id}/judgments",
+        json=[{"chunk_id": chunk_id, "relevance": 3}],
+        headers=headers,
+    )
+    assert judged.status_code == 200
+
+    idle = client.post(
+        "/api/v1/evaluation/experiments",
+        json={"dataset_id": dataset_id, "name": "未跑", "config": {"strategy": "VECTOR", "top_k": 5}},
+        headers=headers,
+    )
+    hybrid = client.post(
+        "/api/v1/evaluation/experiments",
+        json={"dataset_id": dataset_id, "name": "已跑", "config": {"strategy": "HYBRID", "top_k": 5}},
+        headers=headers,
+    )
+    idle_id = idle.json()["data"]["id"]
+    hybrid_id = hybrid.json()["data"]["id"]
+
+    listed = client.get("/api/v1/evaluation/experiments", headers=headers)
+    assert listed.status_code == 200, listed.text
+    by_id = {item["id"]: item for item in listed.json()["data"]["items"]}
+    assert by_id[idle_id]["latest_run"] is None
+    assert by_id[hybrid_id]["latest_run"] is None
+
+    never_run = client.get("/api/v1/evaluation/experiments", params={"status": "NEVER_RUN"}, headers=headers)
+    never_ids = {item["id"] for item in never_run.json()["data"]["items"]}
+    assert idle_id in never_ids
+    assert hybrid_id in never_ids
+
+    run = client.post(f"/api/v1/evaluation/experiments/{hybrid_id}/run", headers=headers)
+    assert run.status_code == 200, run.text
+    finished = client.get(f"/api/v1/evaluation/runs/{run.json()['data']['id']}", headers=headers).json()["data"]
+    assert finished["status"] == "SUCCESS"
+
+    listed = client.get("/api/v1/evaluation/experiments", headers=headers).json()["data"]["items"]
+    by_id = {item["id"]: item for item in listed}
+    assert by_id[idle_id]["latest_run"] is None
+    latest = by_id[hybrid_id]["latest_run"]
+    assert latest["status"] == "SUCCESS"
+    assert latest["recall"] is not None
+    assert latest["mrr"] is not None
+    assert latest["ndcg"] is not None
+    assert latest["hit_rate"] is not None
+    assert latest["supervised_count"] == 1
+    assert latest["k"] == 5
+    assert latest["latency_p95_ms"] is not None
+
+    success_only = client.get("/api/v1/evaluation/experiments", params={"status": "SUCCESS"}, headers=headers)
+    success_ids = {item["id"] for item in success_only.json()["data"]["items"]}
+    assert hybrid_id in success_ids
+    assert idle_id not in success_ids
+
+    vector_only = client.get("/api/v1/evaluation/experiments", params={"strategy": "VECTOR"}, headers=headers)
+    vector_ids = {item["id"] for item in vector_only.json()["data"]["items"]}
+    assert idle_id in vector_ids
+    assert hybrid_id not in vector_ids
+
+    sorted_rows = client.get(
+        "/api/v1/evaluation/experiments",
+        params={"sort_by": "recall", "sort_order": "desc"},
+        headers=headers,
+    ).json()["data"]["items"]
+    assert sorted_rows[0]["id"] == hybrid_id
+    assert any(item["id"] == idle_id and item["latest_run"] is None for item in sorted_rows)
+
+    bad = client.get("/api/v1/evaluation/experiments", params={"sort_by": "score"}, headers=headers)
+    assert bad.status_code == 400
+
+    monkeypatch.setattr(settings, "task_executor", "redis")
+    monkeypatch.setattr("app.services.evaluation_run.enqueue_eval_run", AsyncMock(return_value=True))
+    queued_exp = client.post(
+        "/api/v1/evaluation/experiments",
+        json={"dataset_id": dataset_id, "name": "排队", "config": {"strategy": "KEYWORD"}},
+        headers=headers,
+    )
+    queued_id = queued_exp.json()["data"]["id"]
+    queued_run = client.post(f"/api/v1/evaluation/experiments/{queued_id}/run", headers=headers)
+    assert queued_run.status_code == 200
+    assert queued_run.json()["data"]["status"] == "QUEUED"
+    queued_list = client.get("/api/v1/evaluation/experiments", params={"status": "QUEUED"}, headers=headers)
+    row = next(item for item in queued_list.json()["data"]["items"] if item["id"] == queued_id)
+    assert row["latest_run"]["status"] == "QUEUED"
+    assert row["latest_run"]["recall"] is None
+    assert row["latest_run"]["latency_p95_ms"] is None
+    assert row["latest_run"]["supervised_count"] is None
+
+
+def test_run_list_frozen_snapshot_sort_and_missing_metrics(
+    client: TestClient, identity: FakeIdentityClient, monkeypatch
+) -> None:
+    get_embedding_client.cache_clear()
+    headers = _grant(identity)
+    base_id = _create_base(client, headers)
+    _doc_id, chunk_id = _upload(client, base_id, headers)
+    dataset_id = _create_dataset(client, headers, base_id, "运行列表集")
+    case = client.post(
+        f"/api/v1/evaluation/datasets/{dataset_id}/cases",
+        json={"question": "七天无理由退货政策是什么？", "expected_answer": "七日内可退"},
+        headers=headers,
+    )
+    client.put(
+        f"/api/v1/evaluation/cases/{case.json()['data']['id']}/judgments",
+        json=[{"chunk_id": chunk_id, "relevance": 3}],
+        headers=headers,
+    )
+    experiment = client.post(
+        "/api/v1/evaluation/experiments",
+        json={"dataset_id": dataset_id, "name": "快照实验", "config": {"strategy": "HYBRID", "top_k": 5, "rerank": False}},
+        headers=headers,
+    )
+    experiment_id = experiment.json()["data"]["id"]
+    started = client.post(f"/api/v1/evaluation/experiments/{experiment_id}/run", headers=headers)
+    assert started.status_code == 200, started.text
+    run_id = started.json()["data"]["id"]
+    finished = client.get(f"/api/v1/evaluation/runs/{run_id}", headers=headers).json()["data"]
+    assert finished["status"] == "SUCCESS"
+    snapshot = finished["config_snapshot"]
+    assert snapshot["strategy"] == "HYBRID"
+    assert snapshot["top_k"] == 5
+    assert snapshot["embedding_model"]
+    assert "rerank_model" in snapshot
+
+    updated = client.patch(
+        f"/api/v1/evaluation/experiments/{experiment_id}",
+        json={"config": {"strategy": "KEYWORD", "top_k": 8, "rerank": True}},
+        headers=headers,
+    )
+    assert updated.status_code == 200
+    assert updated.json()["data"]["config"]["strategy"] == "KEYWORD"
+    frozen = client.get(f"/api/v1/evaluation/runs/{run_id}", headers=headers).json()["data"]
+    assert frozen["config_snapshot"]["strategy"] == "HYBRID"
+    assert frozen["config_snapshot"]["top_k"] == 5
+    assert frozen["config_snapshot"]["rerank"] is False
+
+    listed = client.get("/api/v1/evaluation/runs", params={"strategy": "HYBRID", "sort_by": "recall"}, headers=headers)
+    assert listed.status_code == 200, listed.text
+    items = listed.json()["data"]["items"]
+    row = next(item for item in items if item["id"] == run_id)
+    assert row["metrics"]["recall"] is not None
+    assert row["config_snapshot"]["strategy"] == "HYBRID"
+    keyword_only = client.get("/api/v1/evaluation/runs", params={"strategy": "KEYWORD"}, headers=headers)
+    assert all(item["id"] != run_id for item in keyword_only.json()["data"]["items"])
+
+    monkeypatch.setattr(settings, "task_executor", "redis")
+    monkeypatch.setattr("app.services.evaluation_run.enqueue_eval_run", AsyncMock(return_value=True))
+    queued_exp = client.post(
+        "/api/v1/evaluation/experiments",
+        json={"dataset_id": dataset_id, "name": "排队运行", "config": {"strategy": "VECTOR"}},
+        headers=headers,
+    )
+    queued = client.post(f"/api/v1/evaluation/experiments/{queued_exp.json()['data']['id']}/run", headers=headers)
+    queued_id = queued.json()["data"]["id"]
+    queued_list = client.get("/api/v1/evaluation/runs", params={"status": "QUEUED"}, headers=headers)
+    queued_row = next(item for item in queued_list.json()["data"]["items"] if item["id"] == queued_id)
+    assert queued_row["metrics"] is None
+    assert queued_row["usage"] is None
+    bad = client.get("/api/v1/evaluation/runs", params={"sort_by": "score"}, headers=headers)
+    assert bad.status_code == 400
 
 
 def test_tenant_isolation_and_spoofed_header(client: TestClient, identity: FakeIdentityClient) -> None:

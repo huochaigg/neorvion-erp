@@ -2,10 +2,11 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from sqlalchemy import func, select
+from sqlalchemy import Float, and_, func, nulls_last, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.evaluation import (
+    ACTIVE_RUN_STATUSES,
     EvaluationCase,
     EvaluationDataset,
     EvaluationDatasetVersion,
@@ -184,20 +185,68 @@ class EvaluationRepository(BaseRepository):
             )
         )
 
-    async def list_experiments(self, *, dataset_id: int | None, page: int, page_size: int):
+    async def list_experiments(
+        self,
+        *,
+        dataset_id: int | None,
+        status: str | None,
+        strategy: str | None,
+        sort_by: str,
+        sort_order: str,
+        page: int,
+        page_size: int,
+    ) -> tuple[list[tuple[EvaluationExperiment, EvaluationRun | None]], int]:
+        """按最近一次运行做筛选排序，避免列表再逐条查 run。"""
         tenant_id = self.ensure_tenant()
+        latest_run_id = (
+            select(func.max(EvaluationRun.id))
+            .where(
+                EvaluationRun.tenant_id == tenant_id,
+                EvaluationRun.experiment_id == EvaluationExperiment.id,
+            )
+            .correlate(EvaluationExperiment)
+            .scalar_subquery()
+        )
         filters = [EvaluationExperiment.tenant_id == tenant_id, EvaluationExperiment.deleted_at.is_(None)]
         if dataset_id is not None:
             filters.append(EvaluationExperiment.dataset_id == dataset_id)
-        total = int(await self.session.scalar(select(func.count(EvaluationExperiment.id)).where(*filters)) or 0)
-        stmt = (
-            select(EvaluationExperiment)
+        if strategy:
+            filters.append(EvaluationExperiment.config["strategy"].astext == strategy)
+        if status == "NEVER_RUN":
+            filters.append(EvaluationRun.id.is_(None))
+        elif status:
+            filters.append(EvaluationRun.status == status)
+
+        join_on = and_(EvaluationRun.tenant_id == tenant_id, EvaluationRun.id == latest_run_id)
+        count_stmt = (
+            select(func.count(EvaluationExperiment.id))
+            .select_from(EvaluationExperiment)
+            .outerjoin(EvaluationRun, join_on)
             .where(*filters)
-            .order_by(EvaluationExperiment.id.desc())
+        )
+        total = int(await self.session.scalar(count_stmt) or 0)
+
+        metric_cols = {
+            "recall": EvaluationRun.metrics["recall"].astext.cast(Float),
+            "mrr": EvaluationRun.metrics["mrr"].astext.cast(Float),
+            "ndcg": EvaluationRun.metrics["ndcg"].astext.cast(Float),
+            "hit_rate": EvaluationRun.metrics["hit_rate"].astext.cast(Float),
+            "latency_p95": EvaluationRun.usage["latency_p95_ms"].astext.cast(Float),
+            "id": EvaluationExperiment.id,
+            "created_at": EvaluationExperiment.created_at,
+        }
+        order_col = metric_cols.get(sort_by, EvaluationExperiment.id)
+        order_expr = order_col.asc() if sort_order == "asc" else order_col.desc()
+        stmt = (
+            select(EvaluationExperiment, EvaluationRun)
+            .outerjoin(EvaluationRun, join_on)
+            .where(*filters)
+            .order_by(nulls_last(order_expr), EvaluationExperiment.id.desc())
             .offset((page - 1) * page_size)
             .limit(page_size)
         )
-        return list((await self.session.scalars(stmt)).all()), total
+        rows = list((await self.session.execute(stmt)).all())
+        return [(experiment, run) for experiment, run in rows], total
 
     async def get_experiment(self, experiment_id: int) -> EvaluationExperiment | None:
         tenant_id = self.ensure_tenant()
@@ -209,16 +258,41 @@ class EvaluationRepository(BaseRepository):
             )
         )
 
-    async def list_runs(self, *, experiment_id: int | None, page: int, page_size: int):
+    async def list_runs(
+        self,
+        *,
+        experiment_id: int | None,
+        status: str | None = None,
+        strategy: str | None = None,
+        sort_by: str = "id",
+        sort_order: str = "desc",
+        page: int,
+        page_size: int,
+    ):
         tenant_id = self.ensure_tenant()
         filters = [EvaluationRun.tenant_id == tenant_id]
         if experiment_id is not None:
             filters.append(EvaluationRun.experiment_id == experiment_id)
+        if status:
+            filters.append(EvaluationRun.status == status)
+        if strategy:
+            filters.append(EvaluationRun.config_snapshot["strategy"].astext == strategy)
         total = int(await self.session.scalar(select(func.count(EvaluationRun.id)).where(*filters)) or 0)
+        metric_cols = {
+            "recall": EvaluationRun.metrics["recall"].astext.cast(Float),
+            "mrr": EvaluationRun.metrics["mrr"].astext.cast(Float),
+            "ndcg": EvaluationRun.metrics["ndcg"].astext.cast(Float),
+            "hit_rate": EvaluationRun.metrics["hit_rate"].astext.cast(Float),
+            "latency_p95": EvaluationRun.usage["latency_p95_ms"].astext.cast(Float),
+            "id": EvaluationRun.id,
+            "created_at": EvaluationRun.created_at,
+        }
+        order_col = metric_cols.get(sort_by, EvaluationRun.id)
+        order_expr = order_col.asc() if sort_order == "asc" else order_col.desc()
         stmt = (
             select(EvaluationRun)
             .where(*filters)
-            .order_by(EvaluationRun.id.desc())
+            .order_by(nulls_last(order_expr), EvaluationRun.id.desc())
             .offset((page - 1) * page_size)
             .limit(page_size)
         )
@@ -244,6 +318,16 @@ class EvaluationRepository(BaseRepository):
         )
         return list((await self.session.scalars(stmt)).all())
 
+    async def get_result_by_run_case(self, run_id: int, case_id: int) -> EvaluationResult | None:
+        tenant_id = self.ensure_tenant()
+        return await self.session.scalar(
+            select(EvaluationResult).where(
+                EvaluationResult.tenant_id == tenant_id,
+                EvaluationResult.run_id == run_id,
+                EvaluationResult.case_id == case_id,
+            )
+        )
+
     async def get_result(self, result_id: int) -> EvaluationResult | None:
         tenant_id = self.ensure_tenant()
         return await self.session.scalar(
@@ -261,14 +345,28 @@ class EvaluationRepository(BaseRepository):
                 await self.session.delete(row)
 
     async def fail_stale_running(self, message: str) -> list[EvaluationRun]:
-        stmt = select(EvaluationRun).where(EvaluationRun.status == RunStatus.RUNNING.value)
-        rows = list((await self.session.scalars(stmt)).all())
+        """兼容旧 Worker：评测改走 pause_stale_running，保留部分结果。"""
+        return await self.pause_stale_running(message)
+
+    async def pause_stale_running(self, message: str) -> list[EvaluationRun]:
+        """把租约已过期或未持有租约的 RUNNING 标为 QUEUED，保留已落库题目。
+
+        仍在租约窗口内的任务可能由其他 Worker 执行，不能抢。
+        """
         now = datetime.now(UTC)
-        for row in rows:
-            row.status = RunStatus.FAILED.value
+        stmt = select(EvaluationRun).where(EvaluationRun.status == RunStatus.RUNNING.value)
+        recovered: list[EvaluationRun] = []
+        for row in list((await self.session.scalars(stmt)).all()):
+            if row.lease_until is not None and row.lease_until > now:
+                continue
+            row.status = RunStatus.QUEUED.value
+            row.interrupt_reason = "WORKER_CRASH"
             row.error_message = message
-            row.finished_at = now
-        return rows
+            row.lease_owner = None
+            row.lease_until = None
+            row.finished_at = None
+            recovered.append(row)
+        return recovered
 
     async def list_queued_runs(self) -> list[EvaluationRun]:
         stmt = select(EvaluationRun).where(EvaluationRun.status == RunStatus.QUEUED.value)
@@ -282,7 +380,7 @@ class EvaluationRepository(BaseRepository):
                 await self.session.scalars(
                     select(EvaluationRun).where(
                         EvaluationRun.tenant_id == tenant_id,
-                        EvaluationRun.status.in_((RunStatus.QUEUED.value, RunStatus.RUNNING.value)),
+                        EvaluationRun.status.in_(ACTIVE_RUN_STATUSES),
                     )
                 )
             ).all()
@@ -297,7 +395,7 @@ class EvaluationRepository(BaseRepository):
                 continue
             run.cancel_requested = True
             run.error_message = "知识库已删除，评测取消"
-            if run.status == RunStatus.QUEUED.value:
+            if run.status in {RunStatus.QUEUED.value, RunStatus.PAUSED.value}:
                 run.status = RunStatus.CANCELLED.value
                 run.finished_at = now
             count += 1
@@ -309,6 +407,6 @@ class EvaluationRepository(BaseRepository):
             select(EvaluationRun).where(
                 EvaluationRun.tenant_id == tenant_id,
                 EvaluationRun.experiment_id == experiment_id,
-                EvaluationRun.status.in_((RunStatus.QUEUED.value, RunStatus.RUNNING.value)),
+                EvaluationRun.status.in_(ACTIVE_RUN_STATUSES),
             )
         )

@@ -77,6 +77,7 @@ export type {
   KnowledgeEvalCase,
   KnowledgeEvalCaseList,
   KnowledgeEvalExperimentConfig,
+  KnowledgeEvalExperimentLatestRun,
   KnowledgeEvalExperiment,
   KnowledgeEvalExperimentList,
   KnowledgeEvalRun,
@@ -116,9 +117,14 @@ export {
   KNOWLEDGE_QUESTION_TYPE_LABEL,
   KNOWLEDGE_ANNOTATION_STATUS_LABEL,
   KNOWLEDGE_RUN_STATUS_LABEL,
+  KNOWLEDGE_EVAL_INTERRUPT_LABEL,
+  KNOWLEDGE_EVAL_STAGE_LABEL,
   knowledgeQuestionTypeLabel,
   knowledgeAnnotationStatusLabel,
   knowledgeRunStatusLabel,
+  knowledgeRunStatusColor,
+  knowledgeEvalInterruptLabel,
+  knowledgeEvalStageLabel,
 } from './types/knowledge';
 export type {
   AsyncTask,

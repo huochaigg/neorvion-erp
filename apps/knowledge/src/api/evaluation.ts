@@ -159,13 +159,25 @@ export function importEvalFromChat(datasetId: number, payload: { conversation_id
 }
 
 export function fetchEvalExperiments(
-  params: { datasetId?: number; page: number; pageSize: number },
+  params: {
+    datasetId?: number;
+    status?: string;
+    strategy?: string;
+    sortBy?: string;
+    sortOrder?: string;
+    page: number;
+    pageSize: number;
+  },
   signal?: AbortSignal,
 ) {
   return unwrapApi(
     apiClient.get<ApiResponse<KnowledgeEvalExperimentList>>('/api/v1/evaluation/experiments', {
       params: {
         dataset_id: params.datasetId,
+        status: params.status || undefined,
+        strategy: params.strategy || undefined,
+        sort_by: params.sortBy,
+        sort_order: params.sortOrder,
         page: params.page,
         page_size: params.pageSize,
       },
@@ -192,24 +204,31 @@ export function deleteEvalExperiment(id: number) {
 }
 
 export function startEvalRun(experimentId: number) {
-  // inline 模式下接口会同步跑完整场评测，不能沿用全局 8s 超时，否则浏览器显示 canceled 而服务端仍在跑。
   return unwrapApi(
-    apiClient.post<ApiResponse<KnowledgeEvalRun>>(
-      `/api/v1/evaluation/experiments/${experimentId}/run`,
-      undefined,
-      { timeout: 0 },
-    ),
+    apiClient.post<ApiResponse<KnowledgeEvalRun>>(`/api/v1/evaluation/experiments/${experimentId}/run`),
   );
 }
 
 export function fetchEvalRuns(
-  params: { experimentId?: number; page: number; pageSize: number },
+  params: {
+    experimentId?: number;
+    status?: string;
+    strategy?: string;
+    sortBy?: string;
+    sortOrder?: string;
+    page: number;
+    pageSize: number;
+  },
   signal?: AbortSignal,
 ) {
   return unwrapApi(
     apiClient.get<ApiResponse<KnowledgeEvalRunList>>('/api/v1/evaluation/runs', {
       params: {
         experiment_id: params.experimentId,
+        status: params.status || undefined,
+        strategy: params.strategy || undefined,
+        sort_by: params.sortBy,
+        sort_order: params.sortOrder,
         page: params.page,
         page_size: params.pageSize,
       },
@@ -232,12 +251,25 @@ export function cancelEvalRun(runId: number) {
   return unwrapApi(apiClient.post<ApiResponse<KnowledgeEvalRun>>(`/api/v1/evaluation/runs/${runId}/cancel`));
 }
 
-export function retryEvalRun(runId: number) {
+export function pauseEvalRun(runId: number) {
+  return unwrapApi(apiClient.post<ApiResponse<KnowledgeEvalRun>>(`/api/v1/evaluation/runs/${runId}/pause`));
+}
+
+export function resumeEvalRun(
+  runId: number,
+  payload?: { token_budget?: number | null; cost_budget_usd?: number | null },
+) {
   return unwrapApi(
-    apiClient.post<ApiResponse<KnowledgeEvalRun>>(`/api/v1/evaluation/runs/${runId}/retry`, undefined, {
-      timeout: 0,
-    }),
+    apiClient.post<ApiResponse<KnowledgeEvalRun>>(`/api/v1/evaluation/runs/${runId}/resume`, payload ?? {}),
   );
+}
+
+export function retryEvalRun(runId: number) {
+  return unwrapApi(apiClient.post<ApiResponse<KnowledgeEvalRun>>(`/api/v1/evaluation/runs/${runId}/retry`));
+}
+
+export function retryFailedEvalRun(runId: number) {
+  return unwrapApi(apiClient.post<ApiResponse<KnowledgeEvalRun>>(`/api/v1/evaluation/runs/${runId}/retry-failed`));
 }
 
 export function overrideEvalResult(

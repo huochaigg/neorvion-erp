@@ -308,6 +308,7 @@ export function ProductFormPage(props: PageProps) {
 
             <Card
               title="SKU"
+              className='mt-4!'
               extra={<span className="text-sm text-slate-500">至少保留一个 SKU。已产生库存后将禁止物理删除。</span>}
             >
               <Form.List

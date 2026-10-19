@@ -161,6 +161,9 @@ def aggregate_retrieval(rows: list[dict], *, unanswerable_rows: list[dict]) -> d
         for key in keys:
             values = [float(row[key]) for row in rows if key in row]
             result[key] = sum(values) / len(values) if values else None
+        ks = {int(row["k"]) for row in rows if "k" in row and row["k"] is not None}
+        if len(ks) == 1:
+            result["k"] = next(iter(ks))
         for cutoff in (1, 3, 5, 10):
             for prefix in ("hit_rate", "recall", "precision", "ndcg"):
                 name = f"{prefix}@{cutoff}"

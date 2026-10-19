@@ -491,14 +491,30 @@ export function knowledgeEvalCasesQueryKey(
 
 export function knowledgeEvalExperimentsQueryKey(
   tenantId: number | null,
-  filters?: { datasetId?: number; page?: number; pageSize?: number },
+  filters?: {
+    datasetId?: number;
+    status?: string;
+    strategy?: string;
+    sortBy?: string;
+    sortOrder?: string;
+    page?: number;
+    pageSize?: number;
+  },
 ) {
   return ['tenant', tenantId, 'knowledge-eval-experiments', filters ?? {}] as const;
 }
 
 export function knowledgeEvalRunsQueryKey(
   tenantId: number | null,
-  filters?: { experimentId?: number; page?: number; pageSize?: number },
+  filters?: {
+    experimentId?: number;
+    status?: string;
+    strategy?: string;
+    sortBy?: string;
+    sortOrder?: string;
+    page?: number;
+    pageSize?: number;
+  },
 ) {
   return ['tenant', tenantId, 'knowledge-eval-runs', filters ?? {}] as const;
 }

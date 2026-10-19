@@ -1,7 +1,7 @@
 """Knowledge Worker：消费解析 / 切片任务。
 
 本地：uv run python -m app.tasks.worker
-进程重启时把遗留 RUNNING 标为失败，并把 QUEUED 重新投递。
+进程重启时：文档 RUNNING 标失败；评测 RUNNING 在租约过期后改为 QUEUED 并续跑，保留部分结果。
 """
 
 from __future__ import annotations
@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 
 
 async def recover_stale_tasks() -> None:
-    """重启后：中断的 RUNNING 无法确认副作用，标记失败；QUEUED 重新入队。"""
+    """重启后回收过期评测租约，并把 QUEUED 重新入队。文档 RUNNING 仍标失败。"""
     async with SessionLocal() as session:
         repo = TaskRepository(session)
         failed = await repo.fail_stale_running(message="Worker 重启，任务中断，请重试")
@@ -46,7 +46,7 @@ async def recover_stale_tasks() -> None:
                 document.error_message = "Worker 重启，任务中断，请重试"
         queued = await repo.list_queued()
         eval_repo = EvaluationRepository(session, 0)
-        eval_failed = await eval_repo.fail_stale_running("Worker 重启，评测中断，请重试")
+        eval_failed = await eval_repo.pause_stale_running("Worker 重启，已保留部分结果，将从中断处继续")
         eval_queued = await eval_repo.list_queued_runs()
         await session.commit()
         for task in queued:
@@ -63,14 +63,31 @@ async def recover_stale_tasks() -> None:
             )
 
 
+async def recover_expired_eval_leases() -> None:
+    """空闲时回收租约过期的 RUNNING 评测，避免 Worker 崩溃后任务永久卡住。"""
+    async with SessionLocal() as session:
+        eval_repo = EvaluationRepository(session, 0)
+        recovered = await eval_repo.pause_stale_running("评测租约过期，已保留部分结果，将从中断处继续")
+        await session.commit()
+        for run in recovered:
+            await enqueue_eval_run(run.id)
+        if recovered:
+            logger.info("knowledge worker reclaimed expired eval leases=%s", len(recovered))
+
+
 async def handle_one(task_id: int) -> None:
     async with SessionLocal() as session:
         await ProcessingService(session).execute(task_id)
 
 
 async def handle_eval(run_id: int) -> None:
-    async with SessionLocal() as session:
-        await EvaluationRunService(session).execute(run_id)
+    from app.evaluation.stages import PauseRun
+
+    try:
+        async with SessionLocal() as session:
+            await EvaluationRunService(session).execute(run_id)
+    except PauseRun:
+        logger.info("eval run paused run_id=%s", run_id)
 
 
 async def run_forever() -> None:
@@ -80,6 +97,7 @@ async def run_forever() -> None:
     while True:
         raw = await pop_queue_item(timeout=3)
         if raw is None:
+            await recover_expired_eval_leases()
             continue
         try:
             if raw.startswith("eval:"):

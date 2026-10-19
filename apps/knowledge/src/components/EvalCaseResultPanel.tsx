@@ -1,4 +1,5 @@
-import { Collapse, Descriptions, Statistic, Table, Tag } from 'antd';
+import { knowledgeEvalStageLabel } from '@neorvion/shared';
+import { Collapse, Descriptions, Space, Statistic, Table, Tag } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { MetricBars } from '@/components/MetricBars';
 
@@ -48,6 +49,12 @@ function metricLabel(metrics: Record<string, unknown> | null | undefined, key: s
 
 function scoreText(value: number | null | undefined): string {
   return typeof value === 'number' ? value.toFixed(4) : '无数据';
+}
+
+function stageStatusColor(status: string): string {
+  if (status === 'SUCCESS' || status === 'SKIPPED' || status === 'DEGRADED') return 'success';
+  if (status === 'FAILED') return 'error';
+  return 'default';
 }
 
 function statusTag(view: EvalCaseResultView) {
@@ -108,9 +115,25 @@ export function EvalCaseResultPanel({ view }: { view: EvalCaseResultView }) {
         <Descriptions.Item label="标准答案">{view.expected_answer || (view.is_unanswerable ? '本题无标准答案' : '无数据')}</Descriptions.Item>
         <Descriptions.Item label="实际回答">{view.answer || (view.generation_metrics ? '无数据' : '未执行生成')}</Descriptions.Item>
       </Descriptions>
+      {view.stages && Object.keys(view.stages).some((key) => ['RETRIEVE', 'RERANK', 'GENERATE', 'JUDGE', 'METRICS'].includes(key)) ? (
+        <Space wrap>
+          {['RETRIEVE', 'RERANK', 'GENERATE', 'JUDGE', 'METRICS'].map((name) => {
+            const entry = view.stages?.[name];
+            const status =
+              entry && typeof entry === 'object' && 'status' in entry ? String((entry as { status?: string }).status) : 'PENDING';
+            const error =
+              entry && typeof entry === 'object' && 'error' in entry ? String((entry as { error?: string }).error ?? '') : '';
+            return (
+              <Tag key={name} color={stageStatusColor(status)} title={error || undefined}>
+                {knowledgeEvalStageLabel(name)} · {status}
+              </Tag>
+            );
+          })}
+        </Space>
+      ) : null}
       {view.error_message ? <div className="text-sm text-red-500">{view.error_message}</div> : null}
       {view.judge_error ? <div className="text-sm text-amber-600">裁判失败：{view.judge_error}（未伪造分数）</div> : null}
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-4 mt-4!">
         <Statistic title="Hit Rate（0-1，非百分比）" value={metricLabel(metrics, 'hit_rate')} />
         <Statistic title="Recall（0-1）" value={metricLabel(metrics, 'recall')} />
         <Statistic title="MRR" value={metricLabel(metrics, 'mrr')} />
@@ -151,10 +174,12 @@ export function EvalCaseResultPanel({ view }: { view: EvalCaseResultView }) {
       />
       {view.answer ? (
         <Collapse
+          className='mt-4!'
           items={[{ key: 'answer', label: '模型回答全文', children: <pre className="whitespace-pre-wrap text-xs">{view.answer}</pre> }]}
         />
       ) : null}
       <Collapse
+        className='mt-4!'
         items={[
           {
             key: 'raw',
