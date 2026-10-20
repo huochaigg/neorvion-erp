@@ -101,7 +101,9 @@ def mark_stage(
     latency_ms: int = 0,
     usage: dict | None = None,
     error: str | None = None,
+    extra: dict | None = None,
 ) -> dict:
+    """写入阶段状态。extra 只附加诊断字段，不能改掉 status。"""
     payload = dict(stages) if isinstance(stages, dict) else empty_stages()
     current = dict(stage_entry(payload, name))
     current["status"] = status
@@ -109,6 +111,11 @@ def mark_stage(
     if usage is not None:
         current["usage"] = usage
     current["error"] = error
+    if extra:
+        for key, value in extra.items():
+            if key == "status":
+                continue
+            current[key] = value
     payload[name] = current
     return payload
 

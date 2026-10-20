@@ -54,6 +54,7 @@ class Settings(BaseSettings):
     chunk_size_max: int = 8000
     default_chunk_size: int = 800
     default_chunk_overlap: int = 120
+    pdf_page_warn: int = 80
 
     # 全局开关：mock 仅测试。各能力可再单独指定 provider。
     model_provider: str = "openai_compat"

@@ -12,10 +12,10 @@ import {
   type KnowledgeEvalProbe,
 } from '@neorvion/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { App, Button, Drawer, Form, Input, InputNumber, Modal, Popconfirm, Select, Space, Switch, Tag } from 'antd';
+import { Alert, App, Button, Drawer, Form, Input, InputNumber, Modal, Popconfirm, Select, Space, Switch, Tabs, Tag } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { useEffect, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { fetchChunks } from '@/api/documents';
 import { fetchConversations } from '@/api/rag';
 import {
@@ -32,6 +32,7 @@ import {
 } from '@/api/evaluation';
 import { ActionCell, AppTable } from '@/components/AppTable';
 import { EvalCaseResultPanel } from '@/components/EvalCaseResultPanel';
+import { EvaluationDatasetVersionsPanel } from '@/components/EvaluationDatasetVersionsPanel';
 import { Can } from '@/components/Can';
 import { ListPageContainer, ListTableArea, ListToolbar } from '@/components/PageContainer';
 import { PageHeader } from '@/components/PageHeader';
@@ -45,6 +46,9 @@ export function EvaluationDatasetDetailPage() {
   const queryClient = useQueryClient();
   const { tenantId } = usePermissions();
   const datasetId = Number(useParams().id);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tab = searchParams.get('tab') === 'versions' ? 'versions' : 'draft';
+  const focusVersion = Number(searchParams.get('version'));
   const [status, setStatus] = useState<string | undefined>();
   const [keyword, setKeyword] = useState('');
   const [page, setPage] = useState(1);
@@ -73,7 +77,7 @@ export function EvaluationDatasetDetailPage() {
   const casesQuery = useQuery({
     queryKey: knowledgeEvalCasesQueryKey(tenantId, datasetId, { status, q: keyword, page, pageSize }),
     queryFn: ({ signal }) => fetchEvalCases(datasetId, { status, q: keyword, page, pageSize }, signal),
-    enabled: tenantId != null && Number.isFinite(datasetId),
+    enabled: tenantId != null && Number.isFinite(datasetId) && tab === 'draft',
   });
 
   const chunksQuery = useQuery({
@@ -106,6 +110,7 @@ export function EvaluationDatasetDetailPage() {
     void queryClient.invalidateQueries({ queryKey: ['tenant', tenantId, 'knowledge-eval-cases'] });
     void queryClient.invalidateQueries({ queryKey: ['tenant', tenantId, 'knowledge-eval-dataset'] });
     void queryClient.invalidateQueries({ queryKey: ['tenant', tenantId, 'knowledge-eval-datasets'] });
+    void queryClient.invalidateQueries({ queryKey: ['tenant', tenantId, 'knowledge-eval-versions'] });
   };
 
   const saveCase = useMutation({
@@ -237,7 +242,7 @@ export function EvaluationDatasetDetailPage() {
     <ListPageContainer>
       <PageHeader
         title={datasetQuery.data?.name ?? '问题标注'}
-        description="待标注 / 已标注 / 可评测必须分开。无答案题单独标记，不能当成缺少标注。Chunk 版本变化后的失效标注需重新确认。"
+        description="工作稿可以继续编辑。冻结会另存一份只读快照，正式评测使用快照，不会锁定这里的题目。"
         extra={
           <Space>
             <Button onClick={() => navigate('/datasets')}>返回列表</Button>
@@ -246,7 +251,19 @@ export function EvaluationDatasetDetailPage() {
                 <Button onClick={() => refreshEvalStale(datasetId).then(() => { message.success('已刷新失效标注'); invalidate(); }).catch((error: Error) => message.error(error.message))}>
                   刷新失效标注
                 </Button>
-                <Button onClick={() => freezeEvalDataset(datasetId).then((row) => { message.success(`已冻结 v${row.version}`); invalidate(); }).catch((error: Error) => message.error(error.message))}>
+                <Button
+                  onClick={() =>
+                    freezeEvalDataset(datasetId)
+                      .then((row) => {
+                        message.success(
+                          `已创建冻结快照 v${row.version}，共 ${row.case_count} 题。正式评测会读取这份快照，当前工作稿仍可继续修改。`,
+                        );
+                        invalidate();
+                        setSearchParams({ tab: 'versions' });
+                      })
+                      .catch((error: Error) => message.error(error.message))
+                  }
+                >
                   冻结版本
                 </Button>
                 <Button
@@ -265,6 +282,19 @@ export function EvaluationDatasetDetailPage() {
           </Space>
         }
       />
+      <Tabs
+        activeKey={tab}
+        onChange={(key) => setSearchParams(key === 'versions' ? { tab: 'versions' } : {})}
+        items={[
+          { key: 'draft', label: '工作稿' },
+          { key: 'versions', label: '版本管理' },
+        ]}
+      />
+      {tab === 'versions' ? (
+        <EvaluationDatasetVersionsPanel datasetId={datasetId} focusVersion={Number.isFinite(focusVersion) && focusVersion > 0 ? focusVersion : null} />
+      ) : (
+        <>
+      <Alert className="mb-3!" type="info" showIcon message="这里是当前可编辑工作稿。冻结版本不会锁定这些题目，也不会把之后的修改写进已有快照。" />
       <ListToolbar>
         <Space wrap>
           <Input.Search
@@ -330,6 +360,8 @@ export function EvaluationDatasetDetailPage() {
           }}
         />
       </ListTableArea>
+        </>
+      )}
       <Drawer
         title={editing ? '编辑问题与标注' : '新增问题'}
         open={creating || editing != null}

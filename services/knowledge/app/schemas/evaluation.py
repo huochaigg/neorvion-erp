@@ -42,6 +42,97 @@ class DatasetListOut(BaseModel):
     page_size: int
 
 
+class FreezeOut(BaseModel):
+    """一次冻结的结果。快照独立于仍可编辑的工作稿。"""
+
+    version: int
+    case_count: int
+    ready_count: int
+    unanswerable_count: int
+    stale_judgment_count: int
+
+
+class SnapshotJudgmentOut(BaseModel):
+    chunk_id: int
+    document_id: int | None = None
+    relevance: int
+    source_key: str | None = None
+    chunk_version: int | None = None
+    content_hash: str | None = None
+    filename: str | None = None
+    snippet: str | None = None
+    stale: bool = False
+
+
+class SnapshotCaseOut(BaseModel):
+    """冻结当时的题目与标注。没有工作稿上的更新时间，也不能再编辑。"""
+
+    id: int
+    question: str
+    expected_answer: str | None = None
+    question_type: str | None = None
+    difficulty: int | None = None
+    tags: list[str] = Field(default_factory=list)
+    is_unanswerable: bool = False
+    annotation_status: str | None = None
+    judgments: list[SnapshotJudgmentOut] = Field(default_factory=list)
+
+
+class DatasetVersionOut(BaseModel):
+    id: int
+    dataset_id: int
+    version: int
+    case_count: int
+    ready_count: int
+    unanswerable_count: int
+    stale_judgment_count: int
+    run_count: int
+    is_current: bool
+    deletable: bool
+    created_at: datetime
+    created_by: int
+
+
+class DatasetVersionListOut(BaseModel):
+    items: list[DatasetVersionOut]
+    total: int
+    page: int
+    page_size: int
+    current_version: int
+
+
+class DatasetVersionDetailOut(BaseModel):
+    version: DatasetVersionOut
+    knowledge_base_ids: list[int]
+    items: list[SnapshotCaseOut]
+    total: int
+    page: int
+    page_size: int
+    note: str
+
+
+class VersionCaseChangeOut(BaseModel):
+    change: str
+    case_id: int
+    fields: list[str] = Field(default_factory=list)
+    before: SnapshotCaseOut | None = None
+    after: SnapshotCaseOut | None = None
+
+
+class DatasetVersionDiffOut(BaseModel):
+    left_version: int
+    right_version: int
+    added_count: int
+    removed_count: int
+    modified_count: int
+    unchanged_count: int
+    items: list[VersionCaseChangeOut]
+    total: int
+    page: int
+    page_size: int
+    note: str
+
+
 class CaseCreateIn(BaseModel):
     question: str = Field(min_length=1, max_length=8000)
     expected_answer: str | None = Field(default=None, description="标准答案；无答案题可空")
@@ -284,7 +375,25 @@ class HumanOverrideIn(BaseModel):
     faithfulness: float | None = Field(default=None, ge=0, le=1)
     answer_relevancy: float | None = Field(default=None, ge=0, le=1)
     answer_correctness: float | None = Field(default=None, ge=0, le=1)
+    citation_supported: bool | None = Field(
+        default=None,
+        description="人工判断引用是否支持对应事实；空表示未复核。不等于自动引用检查。",
+    )
     note: str | None = Field(default=None, max_length=500)
+
+
+class CaseDiagnosisOut(BaseModel):
+    """两次 Run 的同题诊断。不可比时仍返回对齐结果，但 comparable=false。"""
+
+    comparable: bool
+    incomparable_reason: str | None = None
+    baseline_usage: dict[str, Any]
+    candidate_usage: dict[str, Any]
+    summary: dict[str, Any]
+    groups: dict[str, Any]
+    recall_bootstrap: dict[str, Any]
+    cases: list[dict[str, Any]]
+    note: str
 
 
 class CompareOut(BaseModel):

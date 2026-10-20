@@ -42,6 +42,9 @@ export function useTableScrollY(hasPagination = true) {
     const update = () => {
       cancelAnimationFrame(frame);
       frame = requestAnimationFrame(() => {
+        if (node.clientHeight < 1) {
+          return;
+        }
         setScrollY(measureTableScrollY(node, hasPagination));
       });
     };

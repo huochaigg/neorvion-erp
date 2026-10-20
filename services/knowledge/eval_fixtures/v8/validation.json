@@ -1,0 +1,18 @@
+{
+  "ok": true,
+  "errors": [],
+  "document_count": 13,
+  "question_count": 25,
+  "by_dataset": {
+    "V8-01-Hard-Cases": 5,
+    "V8-02-Multi-Doc": 3,
+    "V8-03-Unanswerable": 3,
+    "V8-04-Hallucination": 3,
+    "V8-05-Long-Query": 3,
+    "V8-06-Retrieval-Precision": 4,
+    "V8-07-Regression": 4
+  },
+  "pending_review": 25,
+  "ready": 0,
+  "missing_chunk_judgments": 25
+}

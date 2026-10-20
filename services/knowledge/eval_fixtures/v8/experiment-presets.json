@@ -1,0 +1,54 @@
+[
+  {
+    "dataset_id": 0,
+    "name": "V8-A-VECTOR",
+    "description": "V8 对照配置。不要在创建时自动运行。",
+    "config": {
+      "top_k": 8,
+      "candidate_k": 24,
+      "rrf_k": 60,
+      "evaluate_generation": false,
+      "strategy": "VECTOR",
+      "rerank": false
+    }
+  },
+  {
+    "dataset_id": 0,
+    "name": "V8-B-KEYWORD",
+    "description": "V8 对照配置。不要在创建时自动运行。",
+    "config": {
+      "top_k": 8,
+      "candidate_k": 24,
+      "rrf_k": 60,
+      "evaluate_generation": false,
+      "strategy": "KEYWORD",
+      "rerank": false
+    }
+  },
+  {
+    "dataset_id": 0,
+    "name": "V8-C-HYBRID",
+    "description": "V8 对照配置。不要在创建时自动运行。",
+    "config": {
+      "top_k": 8,
+      "candidate_k": 24,
+      "rrf_k": 60,
+      "evaluate_generation": false,
+      "strategy": "HYBRID",
+      "rerank": false
+    }
+  },
+  {
+    "dataset_id": 0,
+    "name": "V8-D-HYBRID-RERANK",
+    "description": "V8 对照配置。不要在创建时自动运行。",
+    "config": {
+      "top_k": 8,
+      "candidate_k": 24,
+      "rrf_k": 60,
+      "evaluate_generation": false,
+      "strategy": "HYBRID",
+      "rerank": true
+    }
+  }
+]

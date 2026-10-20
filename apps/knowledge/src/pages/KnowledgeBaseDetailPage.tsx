@@ -40,6 +40,7 @@ export function KnowledgeBaseDetailPage() {
   const queryClient = useQueryClient();
   const { tenantId } = usePermissions();
   const [uploadOpen, setUploadOpen] = useState(false);
+  const [tab, setTab] = useState('overview');
 
   const detailQuery = useQuery({
     queryKey: knowledgeBaseQueryKey(tenantId, Number.isFinite(knowledgeBaseId) ? knowledgeBaseId : null),
@@ -99,48 +100,47 @@ export function KnowledgeBaseDetailPage() {
         }
       />
       <Tabs
-        className="min-h-0 flex-1 overflow-hidden [&_.ant-tabs-content-holder]:min-h-0 [&_.ant-tabs-content]:h-full [&_.ant-tabs-tabpane]:h-full"
+        className="shrink-0 [&_.ant-tabs-content-holder]:hidden"
+        activeKey={tab}
+        onChange={setTab}
         items={[
-          {
-            key: 'overview',
-            label: '概览',
-            children: (
-              <Card>
-                <Descriptions column={2} bordered size="small">
-                  <Descriptions.Item label="状态">
-                    <Tag color={item.status === KNOWLEDGE_BASE_STATUS.active ? 'success' : 'default'}>
-                      {knowledgeBaseStatusLabel(item.status)}
-                    </Tag>
-                  </Descriptions.Item>
-                  <Descriptions.Item label="文档数量">{item.document_count}</Descriptions.Item>
-                  <Descriptions.Item label="创建时间">{formatDateTime(item.created_at)}</Descriptions.Item>
-                  <Descriptions.Item label="更新时间">{formatDateTime(item.updated_at)}</Descriptions.Item>
-                </Descriptions>
-              </Card>
-            ),
-          },
-          {
-            key: 'documents',
-            label: '文档',
-            children: <DocumentTable knowledgeBaseId={knowledgeBaseId} />,
-          },
-          {
-            key: 'chunks',
-            label: '切片',
-            children: <ChunkTable knowledgeBaseId={knowledgeBaseId} />,
-          },
-          {
-            key: 'index',
-            label: '向量索引',
-            children: <IndexStatusPanel knowledgeBaseId={knowledgeBaseId} />,
-          },
-          {
-            key: 'grants',
-            label: '授权',
-            children: <GrantsPanel knowledgeBaseId={knowledgeBaseId} />,
-          },
+          { key: 'overview', label: '概览' },
+          { key: 'documents', label: '文档' },
+          { key: 'chunks', label: '切片' },
+          { key: 'index', label: '向量索引' },
+          { key: 'grants', label: '授权' },
         ]}
       />
+      <div className="min-h-0 flex-1 overflow-hidden">
+        {tab === 'overview' ? (
+          <div className="h-full overflow-auto">
+            <Card>
+              <Descriptions column={2} bordered size="small">
+                <Descriptions.Item label="状态">
+                  <Tag color={item.status === KNOWLEDGE_BASE_STATUS.active ? 'success' : 'default'}>
+                    {knowledgeBaseStatusLabel(item.status)}
+                  </Tag>
+                </Descriptions.Item>
+                <Descriptions.Item label="文档数量">{item.document_count}</Descriptions.Item>
+                <Descriptions.Item label="创建时间">{formatDateTime(item.created_at)}</Descriptions.Item>
+                <Descriptions.Item label="更新时间">{formatDateTime(item.updated_at)}</Descriptions.Item>
+              </Descriptions>
+            </Card>
+          </div>
+        ) : null}
+        {tab === 'documents' ? <DocumentTable knowledgeBaseId={knowledgeBaseId} /> : null}
+        {tab === 'chunks' ? <ChunkTable knowledgeBaseId={knowledgeBaseId} /> : null}
+        {tab === 'index' ? (
+          <div className="h-full overflow-auto">
+            <IndexStatusPanel knowledgeBaseId={knowledgeBaseId} />
+          </div>
+        ) : null}
+        {tab === 'grants' ? (
+          <div className="h-full overflow-auto">
+            <GrantsPanel knowledgeBaseId={knowledgeBaseId} />
+          </div>
+        ) : null}
+      </div>
       <UploadDocumentsDrawer
         knowledgeBaseId={knowledgeBaseId}
         open={uploadOpen}
@@ -228,7 +228,7 @@ function DocumentTable({ knowledgeBaseId }: { knowledgeBaseId: number }) {
   ];
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
+    <div className="flex h-full min-h-0 flex-col overflow-hidden">
       <Space wrap className="mb-3">
         <Input.Search
           allowClear
@@ -256,7 +256,7 @@ function DocumentTable({ knowledgeBaseId }: { knowledgeBaseId: number }) {
           }))}
         />
       </Space>
-      <div className="min-h-0 flex-1">
+      <div className="min-h-0 flex-1 overflow-hidden">
         <AppTable<KnowledgeDocument>
           rowKey="id"
           loading={listQuery.isLoading}
@@ -322,22 +322,24 @@ function ChunkTable({ knowledgeBaseId }: { knowledgeBaseId: number }) {
   ];
 
   return (
-    <AppTable<KnowledgeChunk>
-      rowKey="id"
-      loading={listQuery.isLoading}
-      columns={columns}
-      dataSource={listQuery.data?.items ?? []}
-      pagination={{
-        current: page,
-        pageSize,
-        total: listQuery.data?.total ?? 0,
-        onChange: (nextPage, nextSize) => {
-          setPage(nextPage);
-          setPageSize(nextSize);
-        },
-      }}
-      locale={{ emptyText: '暂无切片' }}
-    />
+    <div className="flex h-full min-h-0 flex-col overflow-hidden">
+      <AppTable<KnowledgeChunk>
+        rowKey="id"
+        loading={listQuery.isLoading}
+        columns={columns}
+        dataSource={listQuery.data?.items ?? []}
+        pagination={{
+          current: page,
+          pageSize,
+          total: listQuery.data?.total ?? 0,
+          onChange: (nextPage, nextSize) => {
+            setPage(nextPage);
+            setPageSize(nextSize);
+          },
+        }}
+        locale={{ emptyText: '暂无切片' }}
+      />
+    </div>
   );
 }
 

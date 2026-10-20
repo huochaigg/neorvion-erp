@@ -14,6 +14,7 @@ from app.core.exceptions import AppError
 from app.core.permissions import PermissionCode
 from app.core.tenant import TenantContext
 from app.evaluation.importing import parse_table
+from app.evaluation.version_diff import diff_snapshots
 from app.models.evaluation import (
     AnnotationStatus,
     CaseSource,
@@ -43,6 +44,10 @@ from app.schemas.evaluation import (
     DatasetListOut,
     DatasetOut,
     DatasetUpdateIn,
+    DatasetVersionDetailOut,
+    DatasetVersionDiffOut,
+    DatasetVersionListOut,
+    DatasetVersionOut,
     ExperimentConfigIn,
     ExperimentCreateIn,
     ExperimentLatestRunOut,
@@ -55,6 +60,9 @@ from app.schemas.evaluation import (
     JudgmentOut,
     RunListOut,
     RunOut,
+    SnapshotCaseOut,
+    SnapshotJudgmentOut,
+    VersionCaseChangeOut,
 )
 from app.services.authorization import AuthorizationService
 
@@ -483,6 +491,112 @@ class EvaluationService:
         self.auth.require_all(self.context, (PermissionCode.KNOWLEDGE_UPDATE,))
         return await self._freeze_now(dataset_id)
 
+    async def list_versions(self, dataset_id: int, *, page: int, page_size: int) -> DatasetVersionListOut:
+        """列出版本元数据。快照正文由详情接口分页返回。"""
+        self.auth.require_all(self.context, (PermissionCode.KNOWLEDGE_READ,))
+        dataset = await self._require_dataset(dataset_id)
+        rows, total = await self.repo.list_versions_page(dataset.id, page=page, page_size=page_size)
+        counts = await self.repo.run_counts_by_version(dataset.id)
+        return DatasetVersionListOut(
+            items=[self._version_out(row, current=dataset.current_version, run_count=counts.get(row.version, 0)) for row in rows],
+            total=total,
+            page=page,
+            page_size=page_size,
+            current_version=dataset.current_version,
+        )
+
+    async def get_version_detail(
+        self,
+        dataset_id: int,
+        version: int,
+        *,
+        page: int,
+        page_size: int,
+        q: str | None,
+    ) -> DatasetVersionDetailOut:
+        """只读查看某次冻结时的题目和标注。不回写工作稿。"""
+        self.auth.require_all(self.context, (PermissionCode.KNOWLEDGE_READ,))
+        dataset = await self._require_dataset(dataset_id)
+        row = await self.repo.get_version(dataset.id, version)
+        if row is None:
+            raise AppError("冻结版本不存在或不可访问", code=40485, status_code=404)
+        cases = self._filter_snapshot_cases(row.snapshot, q)
+        start = (page - 1) * page_size
+        page_items = cases[start : start + page_size]
+        snapshot = row.snapshot if isinstance(row.snapshot, dict) else {}
+        run_count = await self.repo.count_runs_for_version(dataset.id, row.version)
+        return DatasetVersionDetailOut(
+            version=self._version_out(row, current=dataset.current_version, run_count=run_count),
+            knowledge_base_ids=[int(item) for item in snapshot.get("knowledge_base_ids") or []],
+            items=[self._snapshot_case_out(item) for item in page_items],
+            total=len(cases),
+            page=page,
+            page_size=page_size,
+            note="这是冻结当时的只读快照。数据集页面上的题目仍是可编辑工作稿，之后的修改不会改写本版本。",
+        )
+
+    async def compare_versions(
+        self,
+        dataset_id: int,
+        *,
+        left: int,
+        right: int,
+        page: int,
+        page_size: int,
+    ) -> DatasetVersionDiffOut:
+        """比较两个冻结版本。右版本相对左版本统计新增、删除和修改。"""
+        self.auth.require_all(self.context, (PermissionCode.KNOWLEDGE_READ,))
+        dataset = await self._require_dataset(dataset_id)
+        left_row = await self.repo.get_version(dataset.id, left)
+        right_row = await self.repo.get_version(dataset.id, right)
+        if left_row is None or right_row is None:
+            raise AppError("冻结版本不存在或不可访问", code=40485, status_code=404)
+        compared = diff_snapshots(self._snapshot_cases(left_row.snapshot), self._snapshot_cases(right_row.snapshot))
+        changes = compared["changes"]
+        start = (page - 1) * page_size
+        return DatasetVersionDiffOut(
+            left_version=left,
+            right_version=right,
+            added_count=compared["added_count"],
+            removed_count=compared["removed_count"],
+            modified_count=compared["modified_count"],
+            unchanged_count=compared["unchanged_count"],
+            items=[
+                VersionCaseChangeOut(
+                    change=item["change"],
+                    case_id=item["case_id"],
+                    fields=item["fields"],
+                    before=self._snapshot_case_out(item["before"]) if item["before"] else None,
+                    after=self._snapshot_case_out(item["after"]) if item["after"] else None,
+                )
+                for item in changes[start : start + page_size]
+            ],
+            total=len(changes),
+            page=page,
+            page_size=page_size,
+            note="差异按题目 ID 对齐，只比较两份冻结快照，不比较当前工作稿。",
+        )
+
+    async def delete_version(self, dataset_id: int, version: int) -> None:
+        """删除没有 Run 引用的历史快照。
+
+        先锁数据集再锁快照，并在同一事务里重数引用。当前最新版本直接拒绝，不回退 current_version。
+        """
+        self.auth.require_all(self.context, (PermissionCode.KNOWLEDGE_DELETE,))
+        dataset = await self.repo.get_dataset_for_update(dataset_id)
+        if dataset is None:
+            raise AppError(_UNAVAILABLE_DATASET, code=40480, status_code=404)
+        row = await self.repo.get_version_for_update(dataset.id, version)
+        if row is None:
+            raise AppError("冻结版本不存在或不可访问", code=40485, status_code=404)
+        if row.version == dataset.current_version:
+            raise AppError("当前最新冻结版本不能删除，也不会回退版本号", code=40983, status_code=409)
+        used = await self.repo.count_runs_for_version(dataset.id, row.version)
+        if used:
+            raise AppError(f"已有 {used} 次评测运行使用该快照，不能删除", code=40984, status_code=409)
+        await self.session.delete(row)
+        await self.session.commit()
+
     async def _mark_stale(self, dataset_id: int) -> None:
         cases = await self.repo.list_all_cases(dataset_id)
         for case in cases:
@@ -490,10 +604,14 @@ class EvaluationService:
             await self._refresh_case_status(case)
 
     async def _freeze_now(self, dataset_id: int) -> EvaluationDatasetVersion:
-        """内部冻结：调用方已完成权限校验，避免评测运行再要求 update。"""
-        dataset = await self._require_dataset(dataset_id)
+        """内部冻结：调用方已完成权限校验，避免评测运行再要求 update。
+
+        锁住数据集行后再递增版本，避免两次冻结写出同一个版本号。
+        """
+        dataset = await self.repo.get_dataset_for_update(dataset_id)
+        if dataset is None:
+            raise AppError(_UNAVAILABLE_DATASET, code=40480, status_code=404)
         await self._mark_stale(dataset.id)
-        dataset = await self._require_dataset(dataset_id)
         cases = await self.repo.list_all_cases(dataset.id)
         snapshot_cases = []
         stale_count = 0
@@ -790,6 +908,65 @@ class EvaluationService:
                 raise AppError("包含无权访问或不存在的知识库", code=40450, status_code=404)
             allowed.append(row.id)
         return allowed
+
+    def _version_out(self, row: EvaluationDatasetVersion, *, current: int, run_count: int) -> DatasetVersionOut:
+        is_current = row.version == current
+        return DatasetVersionOut(
+            id=row.id,
+            dataset_id=row.dataset_id,
+            version=row.version,
+            case_count=row.case_count,
+            ready_count=row.ready_count,
+            unanswerable_count=row.unanswerable_count,
+            stale_judgment_count=row.stale_judgment_count,
+            run_count=run_count,
+            is_current=is_current,
+            deletable=not is_current and run_count == 0,
+            created_at=row.created_at,
+            created_by=row.created_by,
+        )
+
+    def _snapshot_cases(self, snapshot: dict | None) -> list[dict]:
+        payload = snapshot if isinstance(snapshot, dict) else {}
+        return [item for item in payload.get("cases") or [] if isinstance(item, dict) and item.get("id") is not None]
+
+    def _filter_snapshot_cases(self, snapshot: dict | None, q: str | None) -> list[dict]:
+        cases = self._snapshot_cases(snapshot)
+        if q:
+            needle = q.strip().lower()
+            cases = [item for item in cases if needle in str(item.get("question") or "").lower()]
+        return sorted(cases, key=lambda item: int(item["id"]))
+
+    def _snapshot_case_out(self, raw: dict) -> SnapshotCaseOut:
+        judgments = []
+        for item in raw.get("judgments") or []:
+            if not isinstance(item, dict) or item.get("chunk_id") is None:
+                continue
+            judgments.append(
+                SnapshotJudgmentOut(
+                    chunk_id=int(item["chunk_id"]),
+                    document_id=int(item["document_id"]) if item.get("document_id") is not None else None,
+                    relevance=int(item.get("relevance") or 0),
+                    source_key=item.get("source_key"),
+                    chunk_version=int(item["chunk_version"]) if item.get("chunk_version") is not None else None,
+                    content_hash=item.get("content_hash"),
+                    filename=item.get("filename"),
+                    snippet=item.get("snippet"),
+                    stale=bool(item.get("stale")),
+                )
+            )
+        tags = raw.get("tags") or []
+        return SnapshotCaseOut(
+            id=int(raw["id"]),
+            question=str(raw.get("question") or ""),
+            expected_answer=raw.get("expected_answer"),
+            question_type=raw.get("question_type"),
+            difficulty=int(raw["difficulty"]) if raw.get("difficulty") is not None else None,
+            tags=[str(item) for item in tags] if isinstance(tags, list) else [],
+            is_unanswerable=bool(raw.get("is_unanswerable")),
+            annotation_status=raw.get("annotation_status"),
+            judgments=judgments,
+        )
 
     async def _require_dataset(self, dataset_id: int) -> EvaluationDataset:
         row = await self.repo.get_dataset(dataset_id)

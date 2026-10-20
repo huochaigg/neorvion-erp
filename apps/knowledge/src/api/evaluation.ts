@@ -6,6 +6,10 @@ import type {
   KnowledgeEvalCompare,
   KnowledgeEvalDataset,
   KnowledgeEvalDatasetList,
+  KnowledgeEvalDatasetVersionDetail,
+  KnowledgeEvalDatasetVersionDiff,
+  KnowledgeEvalDatasetVersionList,
+  KnowledgeEvalFreezeResult,
   KnowledgeEvalExperiment,
   KnowledgeEvalExperimentConfig,
   KnowledgeEvalExperimentList,
@@ -52,9 +56,66 @@ export function copyEvalDataset(id: number) {
 }
 
 export function freezeEvalDataset(id: number) {
-  return unwrapApi(apiClient.post<ApiResponse<{ version: number; ready_count: number; stale_judgment_count: number }>>(
-    `/api/v1/evaluation/datasets/${id}/freeze`,
-  ));
+  return unwrapApi(
+    apiClient.post<ApiResponse<KnowledgeEvalFreezeResult>>(`/api/v1/evaluation/datasets/${id}/freeze`),
+  );
+}
+
+export function fetchEvalVersions(
+  datasetId: number,
+  params: { page: number; pageSize: number },
+  signal?: AbortSignal,
+) {
+  return unwrapApi(
+    apiClient.get<ApiResponse<KnowledgeEvalDatasetVersionList>>(`/api/v1/evaluation/datasets/${datasetId}/versions`, {
+      params: { page: params.page, page_size: params.pageSize },
+      signal,
+    }),
+  );
+}
+
+export function fetchEvalVersion(
+  datasetId: number,
+  version: number,
+  params: { q?: string; page: number; pageSize: number },
+  signal?: AbortSignal,
+) {
+  return unwrapApi(
+    apiClient.get<ApiResponse<KnowledgeEvalDatasetVersionDetail>>(
+      `/api/v1/evaluation/datasets/${datasetId}/versions/${version}`,
+      {
+        params: { q: params.q || undefined, page: params.page, page_size: params.pageSize },
+        signal,
+      },
+    ),
+  );
+}
+
+export function compareEvalVersions(
+  datasetId: number,
+  params: { left: number; right: number; page: number; pageSize: number },
+  signal?: AbortSignal,
+) {
+  return unwrapApi(
+    apiClient.get<ApiResponse<KnowledgeEvalDatasetVersionDiff>>(
+      `/api/v1/evaluation/datasets/${datasetId}/versions/compare`,
+      {
+        params: {
+          left: params.left,
+          right: params.right,
+          page: params.page,
+          page_size: params.pageSize,
+        },
+        signal,
+      },
+    ),
+  );
+}
+
+export function deleteEvalVersion(datasetId: number, version: number) {
+  return unwrapApi(
+    apiClient.delete<ApiResponse<null>>(`/api/v1/evaluation/datasets/${datasetId}/versions/${version}`),
+  );
 }
 
 export function refreshEvalStale(id: number) {
@@ -278,6 +339,27 @@ export function overrideEvalResult(
 ) {
   return unwrapApi(
     apiClient.post<ApiResponse<KnowledgeEvalResult>>(`/api/v1/evaluation/results/${resultId}/human`, payload),
+  );
+}
+
+export interface KnowledgeEvalCaseDiagnosis {
+  comparable: boolean;
+  incomparable_reason: string | null;
+  baseline_usage: Record<string, unknown>;
+  candidate_usage: Record<string, unknown>;
+  summary: Record<string, number>;
+  groups: Record<string, unknown>;
+  recall_bootstrap: Record<string, unknown>;
+  cases: Array<Record<string, unknown>>;
+  note: string;
+}
+
+export function diagnoseEvalRuns(baselineId: number, candidateId: number, signal?: AbortSignal) {
+  return unwrapApi(
+    apiClient.get<ApiResponse<KnowledgeEvalCaseDiagnosis>>('/api/v1/evaluation/compare/cases', {
+      params: { baseline_id: baselineId, candidate_id: candidateId },
+      signal,
+    }),
   );
 }
 

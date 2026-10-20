@@ -960,7 +960,15 @@ export function EvaluationExperimentsPage() {
                 return (
                   <Descriptions size="small" column={4} bordered>
                     <Descriptions.Item label="数据集">{datasetName(record.dataset_id)}</Descriptions.Item>
-                    <Descriptions.Item label="数据集版本">{record.dataset_version}</Descriptions.Item>
+                    <Descriptions.Item label="数据集版本">
+                      <Button
+                        type="link"
+                        size="small"
+                        onClick={() => navigate(`/datasets/${record.dataset_id}?tab=versions&version=${record.dataset_version}`)}
+                      >
+                        查看冻结快照 v{record.dataset_version}
+                      </Button>
+                    </Descriptions.Item>
                     <Descriptions.Item label="Vector Top-K">{snapshotParam(snapshot, 'vector_k')}</Descriptions.Item>
                     <Descriptions.Item label="Keyword Top-K">{snapshotParam(snapshot, 'keyword_k')}</Descriptions.Item>
                     <Descriptions.Item label="RRF k">{snapshotParam(snapshot, 'rrf_k')}</Descriptions.Item>
@@ -1089,6 +1097,13 @@ export function EvaluationExperimentsPage() {
             <Space wrap>
               <Tag color={knowledgeRunStatusColor(activeRun.status)}>{knowledgeRunStatusLabel(activeRun.status)}</Tag>
               <Tag>数据集版本 {activeRun.dataset_version}</Tag>
+              <Button
+                type="link"
+                size="small"
+                onClick={() => navigate(`/datasets/${activeRun.dataset_id}?tab=versions&version=${activeRun.dataset_version}`)}
+              >
+                查看冻结快照
+              </Button>
               <Tag>{knowledgeRetrievalStrategyLabel(String(activeRun.config_snapshot.strategy ?? ''))}</Tag>
               {activeRun.dataset_snapshot_meta.comparable === false ? <Tag color="warning">含失效标注，非严格可比</Tag> : null}
               <Tag>最终 Top-K {snapshotParam(activeRun.config_snapshot, 'top_k')}</Tag>

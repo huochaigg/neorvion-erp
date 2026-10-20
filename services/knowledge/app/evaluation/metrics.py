@@ -127,13 +127,18 @@ def retrieval_metrics(
 
 
 def unanswerable_retrieval_stats(ranked_ids: list[int], k: int) -> dict:
-    """无答案题：不计算 Recall。统计是否错误召回。"""
+    """无答案题不计算 Recall。
+
+    false_recall 只表示 Top-K 非空，不是幻觉率，也不是「召回了错误证据」。
+    知识库里本来就可能有无关段落，检索返回它们不等于模型编造了事实。
+    """
     top = ranked_ids[:k]
     return {
         "metric_version": METRIC_VERSION,
         "granularity": "chunk",
         "unanswerable": True,
         "false_recall": 1.0 if top else 0.0,
+        "false_recall_definition": "top_k_nonempty_not_hallucination_rate",
         "empty_ok": 1.0 if not top else 0.0,
         "retrieved_count": len(top),
     }
@@ -174,6 +179,7 @@ def aggregate_retrieval(rows: list[dict], *, unanswerable_rows: list[dict]) -> d
         result["unanswerable_false_recall"] = sum(
             float(row.get("false_recall") or 0) for row in unanswerable_rows
         ) / len(unanswerable_rows)
+        result["unanswerable_false_recall_definition"] = "top_k_nonempty_not_hallucination_rate"
         result["unanswerable_empty_ok"] = sum(
             float(row.get("empty_ok") or 0) for row in unanswerable_rows
         ) / len(unanswerable_rows)

@@ -54,6 +54,7 @@ def test_unanswerable_does_not_compute_recall() -> None:
     stats = unanswerable_retrieval_stats([1, 2], k=5)
     assert "recall" not in stats
     assert stats["false_recall"] == 1.0
+    assert stats["false_recall_definition"] == "top_k_nonempty_not_hallucination_rate"
     empty = unanswerable_retrieval_stats([], k=5)
     assert empty["empty_ok"] == 1.0
     assert empty["false_recall"] == 0.0

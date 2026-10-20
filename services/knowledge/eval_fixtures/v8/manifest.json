@@ -1,0 +1,214 @@
+[
+  {
+    "filename": "sales-order-status.md",
+    "source_type": "DERIVED",
+    "domain": "sales-order",
+    "scenario": "state-machine",
+    "source_paths": [
+      "services/erp/app/models/sales_order.py"
+    ],
+    "datasets": [
+      "V8-01-Hard-Cases",
+      "V8-07-Regression"
+    ],
+    "sha256": "0a2564b8d56b2cf03a89db13a2265a4f88da9f58219e37fb111115fef247eab9",
+    "needs_human_review": true,
+    "imported": false
+  },
+  {
+    "filename": "purchase-order-status.md",
+    "source_type": "DERIVED",
+    "domain": "purchase",
+    "scenario": "similar-rule",
+    "source_paths": [
+      "services/erp/app/models/purchase.py"
+    ],
+    "datasets": [
+      "V8-01-Hard-Cases",
+      "V8-06-Retrieval-Precision"
+    ],
+    "sha256": "017e742459af435f5c176004e180f09b23538c882334e208aa97c2f02390c157",
+    "needs_human_review": true,
+    "imported": false
+  },
+  {
+    "filename": "purchase-receipt-confirm.md",
+    "source_type": "DERIVED",
+    "domain": "purchase",
+    "scenario": "inventory-increase",
+    "source_paths": [
+      "services/erp/app/services/purchase_receipt.py"
+    ],
+    "datasets": [
+      "V8-02-Multi-Doc",
+      "V8-06-Retrieval-Precision"
+    ],
+    "sha256": "c9587b547155e4a9d4854f097104a0b2ba491dd77262e24938a44f1666c2f06a",
+    "needs_human_review": true,
+    "imported": false
+  },
+  {
+    "filename": "stock-transfer-draft.md",
+    "source_type": "DERIVED",
+    "domain": "warehouse",
+    "scenario": "no-stock-change",
+    "source_paths": [
+      "services/erp/app/services/stock_transfer.py"
+    ],
+    "datasets": [
+      "V8-01-Hard-Cases",
+      "V8-02-Multi-Doc"
+    ],
+    "sha256": "9347fcda5f6e8c136c2dc7f3621664cd73e90c78cd1748a8ac677cc0de0611ac",
+    "needs_human_review": true,
+    "imported": false
+  },
+  {
+    "filename": "outbound-reserved-error.md",
+    "source_type": "DERIVED",
+    "domain": "outbound",
+    "scenario": "error-code",
+    "source_paths": [
+      "services/erp/app/services/outbound.py"
+    ],
+    "datasets": [
+      "V8-06-Retrieval-Precision",
+      "V8-07-Regression"
+    ],
+    "sha256": "14ab56e6da8f89ab64668d1108614705ccd90245f9f86d121501e214c7853b20",
+    "needs_human_review": true,
+    "imported": false
+  },
+  {
+    "filename": "inventory-release-error.md",
+    "source_type": "DERIVED",
+    "domain": "inventory",
+    "scenario": "error-code",
+    "source_paths": [
+      "services/erp/app/services/inventory.py",
+      "services/erp/tests/test_inventory.py"
+    ],
+    "datasets": [
+      "V8-01-Hard-Cases",
+      "V8-06-Retrieval-Precision"
+    ],
+    "sha256": "8ce9e2811a7ac25ddce0b9cf12be59e0e8f173f1164f1b7f8eb5bcd0bb9c45a9",
+    "needs_human_review": true,
+    "imported": false
+  },
+  {
+    "filename": "knowledge-processing.md",
+    "source_type": "DERIVED",
+    "domain": "knowledge",
+    "scenario": "pipeline",
+    "source_paths": [
+      "services/knowledge/app/core/config.py",
+      "services/knowledge/app/processing/extract.py",
+      "services/knowledge/app/processing/split.py"
+    ],
+    "datasets": [
+      "V8-05-Long-Query",
+      "V8-07-Regression"
+    ],
+    "sha256": "d4c7de03f1abb1f5a14fe942fbfb9abba0e7b248ed830541e0888fba42eef0b8",
+    "needs_human_review": true,
+    "imported": false
+  },
+  {
+    "filename": "knowledge-eval-boundary.md",
+    "source_type": "DERIVED",
+    "domain": "knowledge",
+    "scenario": "evaluation",
+    "source_paths": [
+      "services/knowledge/app/services/evaluation.py",
+      "services/knowledge/app/evaluation/metrics.py"
+    ],
+    "datasets": [
+      "V8-04-Hallucination",
+      "V8-07-Regression"
+    ],
+    "sha256": "340853e915887a7252ed37f62dd85629ec75c5df297e70f8e38fe24a08a7d59e",
+    "needs_human_review": true,
+    "imported": false
+  },
+  {
+    "filename": "iam-knowledge-permission.md",
+    "source_type": "DERIVED",
+    "domain": "rbac",
+    "scenario": "permission-code",
+    "source_paths": [
+      "services/iam/app/core/permissions.py"
+    ],
+    "datasets": [
+      "V8-06-Retrieval-Precision"
+    ],
+    "sha256": "04667e777b0247008adb458918afe1f0ea9096a7e5a1525dbcce54d2553faa33",
+    "needs_human_review": true,
+    "imported": false
+  },
+  {
+    "filename": "long-order-and-stock.md",
+    "source_type": "DERIVED",
+    "domain": "cross-doc",
+    "scenario": "long-context",
+    "source_paths": [
+      "services/erp/app/models/sales_order.py",
+      "services/erp/app/models/purchase.py",
+      "services/erp/app/services/purchase_receipt.py",
+      "services/erp/app/services/stock_transfer.py"
+    ],
+    "datasets": [
+      "V8-02-Multi-Doc",
+      "V8-05-Long-Query"
+    ],
+    "sha256": "8aa908e873100ad62cecdfd827c9fb840e3ed855ef927f69390508735c0a6ed1",
+    "needs_human_review": true,
+    "imported": false
+  },
+  {
+    "filename": "english-identifiers.md",
+    "source_type": "DERIVED",
+    "domain": "api",
+    "scenario": "exact-token",
+    "source_paths": [
+      "services/erp/app/models/sales_order.py",
+      "services/erp/app/services/outbound.py",
+      "services/iam/app/core/permissions.py"
+    ],
+    "datasets": [
+      "V8-06-Retrieval-Precision",
+      "V8-05-Long-Query"
+    ],
+    "sha256": "736e27df94eadced9c5ae078158d820d55e966672c92000dc5304dca89f2155a",
+    "needs_human_review": true,
+    "imported": false
+  },
+  {
+    "filename": "synthetic-noise.md",
+    "source_type": "SYNTHETIC",
+    "domain": "adversarial",
+    "scenario": "noise",
+    "source_paths": [],
+    "datasets": [
+      "V8-01-Hard-Cases",
+      "V8-04-Hallucination"
+    ],
+    "sha256": "6114aea4c4f09fe04cf579f8629f68ab0889b7141fdf4ace67683a703292d019",
+    "needs_human_review": true,
+    "imported": false
+  },
+  {
+    "filename": "synthetic-similar-policy.md",
+    "source_type": "SYNTHETIC",
+    "domain": "adversarial",
+    "scenario": "near-miss",
+    "source_paths": [],
+    "datasets": [
+      "V8-04-Hallucination",
+      "V8-03-Unanswerable"
+    ],
+    "sha256": "309baa37c925a1d7f264dad53bf5a9d457ae4bb65b32423412c09b9b3473a7ec",
+    "needs_human_review": true,
+    "imported": false
+  }
+]

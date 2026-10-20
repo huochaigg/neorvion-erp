@@ -11,7 +11,7 @@ import { Alert, Button, Card, Select, Space, Table, Tag } from 'antd';
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { parseCompareRunIds } from '@/lib/evalMetrics';
-import { compareEvalRuns, fetchEvalResults, fetchEvalRuns } from '@/api/evaluation';
+import { compareEvalRuns, diagnoseEvalRuns, fetchEvalResults, fetchEvalRuns } from '@/api/evaluation';
 import { GroupedMetricBars } from '@/components/MetricBars';
 import { PageHeader } from '@/components/PageHeader';
 import { usePermissions } from '@/hooks/usePermissions';
@@ -70,6 +70,12 @@ export function EvaluationComparePage() {
     queryKey: ['tenant', tenantId, 'knowledge-eval-results', lowRunId, 'lows'],
     queryFn: ({ signal }) => fetchEvalResults(lowRunId!, signal),
     enabled: tenantId != null && lowRunId != null,
+  });
+
+  const diagnosisQuery = useQuery({
+    queryKey: ['tenant', tenantId, 'knowledge-eval-diagnosis', selected[0] ?? null, selected[1] ?? null],
+    queryFn: ({ signal }) => diagnoseEvalRuns(selected[0], selected[1], signal),
+    enabled: tenantId != null && selected.length >= 2,
   });
 
   const runs = compareQuery.data?.runs ?? [];
@@ -154,6 +160,28 @@ export function EvaluationComparePage() {
                 ...runs.slice(1).map((run) => ({ title: `#${run.id}`, dataIndex: `run_${run.id}` })),
               ]}
             />
+          </Card>
+          <Card size="small" title="同题诊断" className="lg:col-span-2">
+            {diagnosisQuery.data ? (
+              <div className="space-y-2 text-sm">
+                {!diagnosisQuery.data.comparable ? (
+                  <Alert type="warning" showIcon message={diagnosisQuery.data.incomparable_reason || '不能直接比较'} />
+                ) : null}
+                <div>
+                  对齐 {diagnosisQuery.data.summary.matched ?? 0} 题，缺失 {diagnosisQuery.data.summary.missing ?? 0}。
+                  Recall 改善 {diagnosisQuery.data.summary.recall_improved ?? 0}，退化 {diagnosisQuery.data.summary.recall_regressed ?? 0}，不变 {diagnosisQuery.data.summary.recall_unchanged ?? 0}。
+                  排序改善 {diagnosisQuery.data.summary.rank_improved ?? 0}，退化 {diagnosisQuery.data.summary.rank_regressed ?? 0}。
+                </div>
+                <div className="text-xs text-slate-500">{diagnosisQuery.data.note}</div>
+                <div className="text-xs text-slate-500">
+                  {diagnosisQuery.data.recall_bootstrap.available
+                    ? `Recall 差值均值 ${Number(diagnosisQuery.data.recall_bootstrap.mean).toFixed(3)}，重抽样区间 ${Number(diagnosisQuery.data.recall_bootstrap.low).toFixed(3)} ~ ${Number(diagnosisQuery.data.recall_bootstrap.high).toFixed(3)}。${String(diagnosisQuery.data.recall_bootstrap.note ?? '')}`
+                    : String(diagnosisQuery.data.recall_bootstrap.reason ?? '样本不足，不估计置信区间')}
+                </div>
+              </div>
+            ) : (
+              <div className="text-sm text-slate-500">选择两次运行后按题目对齐。不会重新调用模型。</div>
+            )}
           </Card>
           <Card size="small" title="参数差异" className="lg:col-span-2">
             <Table

@@ -86,7 +86,21 @@
 
 不要对全部真实评测题默认打开生成评测。联调用 `MODEL_PROVIDER=mock`。
 
-## 13. 如何记录问题与改进方案
+## 13. V8 诊断题包
+
+原始 100 题保持不动。新的可追溯题、文档 manifest 和四组未运行的实验配置在 `services/knowledge/eval_fixtures/v8/`。生成命令是 `uv run python -m app.scripts.v8_pack`，它不写数据库。
+
+同题对比使用 `GET /api/v1/evaluation/compare/cases`。Recall 变化和 MRR 排序变化分开统计。样本少于 8 个有效差值时不给重抽样区间。
+
+无答案题的 `false_recall` 只表示 Top-K 非空，不是幻觉率。
+
+PDF 压力先分三级，不要直接上传数百 MB 或开启 OCR、批量 Embedding：
+
+- 小：1 页文本 PDF，确认逐页提取和切片。
+- 中：约 20 页含标题和表格的文本 PDF，观察告警、Chunk 数和内存。
+- 大：超过 `pdf_page_warn`（默认 80 页）的文本 PDF，只确认告警出现且旧 ACTIVE 版本不受影响。扫描版应失败并保留错误，不要假装 OCR 成功。
+
+## 14. 如何记录问题与改进方案
 
 可复制：
 

@@ -185,6 +185,73 @@ class EvaluationRepository(BaseRepository):
             )
         )
 
+    async def get_dataset_for_update(self, dataset_id: int) -> EvaluationDataset | None:
+        """锁住数据集行，使冻结、开跑和删除快照按同一顺序排队。"""
+        tenant_id = self.ensure_tenant()
+        return await self.session.scalar(
+            select(EvaluationDataset)
+            .where(
+                EvaluationDataset.tenant_id == tenant_id,
+                EvaluationDataset.id == dataset_id,
+                EvaluationDataset.deleted_at.is_(None),
+            )
+            .with_for_update()
+        )
+
+    async def get_version_for_update(self, dataset_id: int, version: int) -> EvaluationDatasetVersion | None:
+        """锁住指定快照。必须先锁数据集，避免和开跑互相等待。"""
+        tenant_id = self.ensure_tenant()
+        return await self.session.scalar(
+            select(EvaluationDatasetVersion)
+            .where(
+                EvaluationDatasetVersion.tenant_id == tenant_id,
+                EvaluationDatasetVersion.dataset_id == dataset_id,
+                EvaluationDatasetVersion.version == version,
+            )
+            .with_for_update()
+        )
+
+    async def list_versions_page(self, dataset_id: int, *, page: int, page_size: int) -> tuple[list[EvaluationDatasetVersion], int]:
+        tenant_id = self.ensure_tenant()
+        filters = [
+            EvaluationDatasetVersion.tenant_id == tenant_id,
+            EvaluationDatasetVersion.dataset_id == dataset_id,
+        ]
+        total = int(await self.session.scalar(select(func.count(EvaluationDatasetVersion.id)).where(*filters)) or 0)
+        stmt = (
+            select(EvaluationDatasetVersion)
+            .where(*filters)
+            .order_by(EvaluationDatasetVersion.version.desc())
+            .offset((page - 1) * page_size)
+            .limit(page_size)
+        )
+        return list((await self.session.scalars(stmt)).all()), total
+
+    async def count_runs_for_version(self, dataset_id: int, version: int) -> int:
+        tenant_id = self.ensure_tenant()
+        return int(
+            await self.session.scalar(
+                select(func.count(EvaluationRun.id)).where(
+                    EvaluationRun.tenant_id == tenant_id,
+                    EvaluationRun.dataset_id == dataset_id,
+                    EvaluationRun.dataset_version == version,
+                )
+            )
+            or 0
+        )
+
+    async def run_counts_by_version(self, dataset_id: int) -> dict[int, int]:
+        tenant_id = self.ensure_tenant()
+        stmt = (
+            select(EvaluationRun.dataset_version, func.count())
+            .where(
+                EvaluationRun.tenant_id == tenant_id,
+                EvaluationRun.dataset_id == dataset_id,
+            )
+            .group_by(EvaluationRun.dataset_version)
+        )
+        return {int(version): int(count) for version, count in (await self.session.execute(stmt)).all()}
+
     async def list_experiments(
         self,
         *,

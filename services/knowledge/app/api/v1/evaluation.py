@@ -16,6 +16,7 @@ from app.repositories.evaluation import EvaluationRepository
 from app.schemas.common import ApiResponse, ok
 from app.schemas.evaluation import (
     CaseCreateIn,
+    CaseDiagnosisOut,
     CaseListOut,
     CaseOut,
     CaseUpdateIn,
@@ -27,10 +28,14 @@ from app.schemas.evaluation import (
     DatasetListOut,
     DatasetOut,
     DatasetUpdateIn,
+    DatasetVersionDetailOut,
+    DatasetVersionDiffOut,
+    DatasetVersionListOut,
     ExperimentCreateIn,
     ExperimentListOut,
     ExperimentOut,
     ExperimentUpdateIn,
+    FreezeOut,
     HumanOverrideIn,
     ImportResultOut,
     JudgmentIn,
@@ -130,10 +135,83 @@ async def refresh_stale(dataset_id: int, context: KnowledgeUpdateContext, sessio
     return ok(await EvaluationService(session, context).refresh_stale(dataset_id), "已刷新失效标注")
 
 
-@router.post("/evaluation/datasets/{dataset_id}/freeze", response_model=ApiResponse[dict])
-async def freeze_dataset(dataset_id: int, context: KnowledgeUpdateContext, session: DbSession) -> ApiResponse[dict]:
+@router.post("/evaluation/datasets/{dataset_id}/freeze", response_model=ApiResponse[FreezeOut])
+async def freeze_dataset(dataset_id: int, context: KnowledgeUpdateContext, session: DbSession) -> ApiResponse[FreezeOut]:
     row = await EvaluationService(session, context).freeze_version(dataset_id)
-    return ok({"version": row.version, "ready_count": row.ready_count, "stale_judgment_count": row.stale_judgment_count})
+    return ok(
+        FreezeOut(
+            version=row.version,
+            case_count=row.case_count,
+            ready_count=row.ready_count,
+            unanswerable_count=row.unanswerable_count,
+            stale_judgment_count=row.stale_judgment_count,
+        ),
+        f"已创建冻结快照 v{row.version}",
+    )
+
+
+@router.get("/evaluation/datasets/{dataset_id}/versions", response_model=ApiResponse[DatasetVersionListOut])
+async def list_dataset_versions(
+    dataset_id: int,
+    context: KnowledgeReadContext,
+    session: DbSession,
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=100),
+) -> ApiResponse[DatasetVersionListOut]:
+    return ok(await EvaluationService(session, context).list_versions(dataset_id, page=page, page_size=page_size))
+
+
+@router.get("/evaluation/datasets/{dataset_id}/versions/compare", response_model=ApiResponse[DatasetVersionDiffOut])
+async def compare_dataset_versions(
+    dataset_id: int,
+    context: KnowledgeReadContext,
+    session: DbSession,
+    left: int = Query(ge=1, description="对照版本"),
+    right: int = Query(ge=1, description="待比较版本"),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=100),
+) -> ApiResponse[DatasetVersionDiffOut]:
+    return ok(
+        await EvaluationService(session, context).compare_versions(
+            dataset_id,
+            left=left,
+            right=right,
+            page=page,
+            page_size=page_size,
+        )
+    )
+
+
+@router.get("/evaluation/datasets/{dataset_id}/versions/{version}", response_model=ApiResponse[DatasetVersionDetailOut])
+async def get_dataset_version(
+    dataset_id: int,
+    version: int,
+    context: KnowledgeReadContext,
+    session: DbSession,
+    q: str | None = None,
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=100),
+) -> ApiResponse[DatasetVersionDetailOut]:
+    return ok(
+        await EvaluationService(session, context).get_version_detail(
+            dataset_id,
+            version,
+            page=page,
+            page_size=page_size,
+            q=q,
+        )
+    )
+
+
+@router.delete("/evaluation/datasets/{dataset_id}/versions/{version}", response_model=ApiResponse[None])
+async def delete_dataset_version(
+    dataset_id: int,
+    version: int,
+    context: KnowledgeDeleteContext,
+    session: DbSession,
+) -> ApiResponse[None]:
+    await EvaluationService(session, context).delete_version(dataset_id, version)
+    return ok(None, "已删除未被引用的历史快照")
 
 
 @router.get("/evaluation/datasets/{dataset_id}/cases", response_model=ApiResponse[CaseListOut])
@@ -441,6 +519,64 @@ async def human_override(
     await session.commit()
     await session.refresh(row)
     return ok(_result_out(row))
+
+
+@router.get("/evaluation/compare/cases", response_model=ApiResponse[CaseDiagnosisOut])
+async def compare_cases(
+    context: KnowledgeReadContext,
+    session: DbSession,
+    baseline_id: int = Query(description="对照 Run"),
+    candidate_id: int = Query(description="待比较 Run"),
+) -> ApiResponse[CaseDiagnosisOut]:
+    """按 case_id 对齐两份结果。不重新跑检索，也不调用 Judge。"""
+    from app.evaluation.diagnose import align_case_results, usage_snapshot
+
+    repo = EvaluationRepository(session, context.tenant_id)
+    baseline = await repo.get_run(baseline_id)
+    candidate = await repo.get_run(candidate_id)
+    if baseline is None or candidate is None:
+        from app.core.exceptions import AppError
+
+        raise AppError("评测任务不存在或不可访问", code=40483, status_code=404)
+    comparable = True
+    reason = None
+    if baseline.dataset_id != candidate.dataset_id or baseline.dataset_version != candidate.dataset_version:
+        comparable = False
+        reason = "数据集版本不同，不能直接比较"
+    left_snap = baseline.config_snapshot or {}
+    right_snap = candidate.config_snapshot or {}
+    if left_snap.get("embedding_model") != right_snap.get("embedding_model") or left_snap.get(
+        "embedding_dimensions"
+    ) != right_snap.get("embedding_dimensions"):
+        comparable = False
+        reason = (reason + "；" if reason else "") + "Embedding 或索引维度不同，不能直接比较"
+    version = await repo.get_version(baseline.dataset_id, baseline.dataset_version)
+    meta: dict[int, dict] = {}
+    for case in ((version.snapshot or {}).get("cases") or []) if version is not None else []:
+        try:
+            meta[int(case["id"])] = {
+                "question_type": case.get("question_type"),
+                "difficulty": case.get("difficulty"),
+                "tags": case.get("tags") or [],
+            }
+        except (KeyError, TypeError, ValueError):
+            continue
+    left_rows = [_result_out(item).model_dump() for item in await repo.list_results(baseline.id)]
+    right_rows = [_result_out(item).model_dump() for item in await repo.list_results(candidate.id)]
+    aligned = align_case_results(left_rows, right_rows, case_meta=meta)
+    return ok(
+        CaseDiagnosisOut(
+            comparable=comparable,
+            incomparable_reason=reason,
+            baseline_usage=usage_snapshot(baseline.usage),
+            candidate_usage=usage_snapshot(candidate.usage),
+            summary=aligned["summary"],
+            groups=aligned["groups"],
+            recall_bootstrap=aligned["recall_bootstrap"],
+            cases=aligned["cases"],
+            note=aligned["note"],
+        )
+    )
 
 
 @router.get("/evaluation/compare", response_model=ApiResponse[CompareOut])

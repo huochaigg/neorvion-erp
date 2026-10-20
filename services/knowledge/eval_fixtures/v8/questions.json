@@ -1,0 +1,461 @@
+[
+  {
+    "external_key": "v8-hard-001",
+    "dataset": "V8-01-Hard-Cases",
+    "question": "销售订单 DRAFT 会预占库存吗？",
+    "expected_answer": "不会。DRAFT 未预占库存。",
+    "question_type": "FACTUAL",
+    "difficulty": 2,
+    "tags": [
+      "order",
+      "reserve",
+      "v8",
+      "V8-01-Hard-Cases"
+    ],
+    "is_unanswerable": false,
+    "source_document": "sales-order-status.md",
+    "evidence_quote": "未预占库存",
+    "needs_human_review": true,
+    "design_goal": "区分草稿和确认"
+  },
+  {
+    "external_key": "v8-hard-002",
+    "dataset": "V8-01-Hard-Cases",
+    "question": "部分出库的销售订单还能整单取消吗？",
+    "expected_answer": "不能。PARTIALLY_OUTBOUND 已经扣过库存，不能整单取消。",
+    "question_type": "PARAPHRASE",
+    "difficulty": 3,
+    "tags": [
+      "cancel",
+      "v8",
+      "V8-01-Hard-Cases"
+    ],
+    "is_unanswerable": false,
+    "source_document": "sales-order-status.md",
+    "evidence_quote": "不能整单取消",
+    "needs_human_review": true,
+    "design_goal": "相似状态下的相反结论"
+  },
+  {
+    "external_key": "v8-hard-003",
+    "dataset": "V8-01-Hard-Cases",
+    "question": "采购单批准后库存 quantity 会增加吗？",
+    "expected_answer": "不会。审核通过不改库存。",
+    "question_type": "FACTUAL",
+    "difficulty": 3,
+    "tags": [
+      "purchase",
+      "v8",
+      "V8-01-Hard-Cases"
+    ],
+    "is_unanswerable": false,
+    "source_document": "purchase-order-status.md",
+    "evidence_quote": "审核通过不改库存",
+    "needs_human_review": true,
+    "design_goal": "和销售确认对照"
+  },
+  {
+    "external_key": "v8-hard-004",
+    "dataset": "V8-01-Hard-Cases",
+    "question": "调拨从 DRAFT 提交到 PENDING_OUTBOUND 时改库存吗？",
+    "expected_answer": "不改。提交调拨仍然不改库存。",
+    "question_type": "FACTUAL",
+    "difficulty": 3,
+    "tags": [
+      "transfer",
+      "v8",
+      "V8-01-Hard-Cases"
+    ],
+    "is_unanswerable": false,
+    "source_document": "stock-transfer-draft.md",
+    "evidence_quote": "仍然不改库存",
+    "needs_human_review": true,
+    "design_goal": "同名状态不同系统"
+  },
+  {
+    "external_key": "v8-hard-005",
+    "dataset": "V8-01-Hard-Cases",
+    "question": "释放预占超过 reserved_quantity 的错误码是什么？",
+    "expected_answer": "INSUFFICIENT_RESERVED_INVENTORY。",
+    "question_type": "FACTUAL",
+    "difficulty": 2,
+    "tags": [
+      "error-code",
+      "v8",
+      "V8-01-Hard-Cases"
+    ],
+    "is_unanswerable": false,
+    "source_document": "inventory-release-error.md",
+    "evidence_quote": "INSUFFICIENT_RESERVED_INVENTORY",
+    "needs_human_review": true,
+    "design_goal": "相近错误码干扰"
+  },
+  {
+    "external_key": "v8-multi-001",
+    "dataset": "V8-02-Multi-Doc",
+    "question": "销售确认和采购收货确认对库存的影响有什么不同？",
+    "expected_answer": "销售确认才会预占库存；采购收货确认才增加 quantity，并且只加 quantity，不改 reserved。",
+    "question_type": "MULTI_DOC",
+    "difficulty": 4,
+    "tags": [
+      "order",
+      "purchase",
+      "v8",
+      "V8-02-Multi-Doc"
+    ],
+    "is_unanswerable": false,
+    "source_document": "long-order-and-stock.md",
+    "evidence_quote": "库存效果不同",
+    "needs_human_review": true,
+    "design_goal": "必须同时看到两种确认"
+  },
+  {
+    "external_key": "v8-multi-002",
+    "dataset": "V8-02-Multi-Doc",
+    "question": "调拨提交和销售订单确认都会进入某种待出库，它们都预占库存吗？",
+    "expected_answer": "不是。销售确认才会预占；调拨提交到 PENDING_OUTBOUND 仍然不改库存。",
+    "question_type": "MULTI_CONDITION",
+    "difficulty": 4,
+    "tags": [
+      "transfer",
+      "order",
+      "v8",
+      "V8-02-Multi-Doc"
+    ],
+    "is_unanswerable": false,
+    "source_document": "long-order-and-stock.md",
+    "evidence_quote": "仍然不改库存",
+    "needs_human_review": true,
+    "design_goal": "跨文档否定"
+  },
+  {
+    "external_key": "v8-multi-003",
+    "dataset": "V8-02-Multi-Doc",
+    "question": "采购收货确认会修改 reserved 吗？",
+    "expected_answer": "不改 reserved。确认时只加 quantity。",
+    "question_type": "FACTUAL",
+    "difficulty": 3,
+    "tags": [
+      "purchase",
+      "reserve",
+      "v8",
+      "V8-02-Multi-Doc"
+    ],
+    "is_unanswerable": false,
+    "source_document": "purchase-receipt-confirm.md",
+    "evidence_quote": "不改 reserved",
+    "needs_human_review": true,
+    "design_goal": "精确字段"
+  },
+  {
+    "external_key": "v8-empty-001",
+    "dataset": "V8-03-Unanswerable",
+    "question": "极速仓支付后 15 分钟超时的正式错误码是什么？",
+    "expected_answer": null,
+    "question_type": "UNANSWERABLE",
+    "difficulty": 3,
+    "tags": [
+      "synthetic",
+      "unanswerable",
+      "v8",
+      "V8-03-Unanswerable"
+    ],
+    "is_unanswerable": true,
+    "source_document": "synthetic-similar-policy.md",
+    "evidence_quote": "当前仓库代码没有这个制度",
+    "needs_human_review": true,
+    "design_goal": "语料中只有虚构制度，不能当正式答案"
+  },
+  {
+    "external_key": "v8-empty-002",
+    "dataset": "V8-03-Unanswerable",
+    "question": "Neorvion 当前出库服务是否定义了 MAGIC_STOCK_OVERFLOW？",
+    "expected_answer": null,
+    "question_type": "UNANSWERABLE",
+    "difficulty": 2,
+    "tags": [
+      "synthetic",
+      "unanswerable",
+      "v8",
+      "V8-03-Unanswerable"
+    ],
+    "is_unanswerable": true,
+    "source_document": "synthetic-noise.md",
+    "evidence_quote": "MAGIC_STOCK_OVERFLOW",
+    "needs_human_review": true,
+    "design_goal": "噪声文档不能变成肯定答案"
+  },
+  {
+    "external_key": "v8-empty-003",
+    "dataset": "V8-03-Unanswerable",
+    "question": "销售订单状态枚举里有 FAST_WAREHOUSE_TIMEOUT 吗？",
+    "expected_answer": null,
+    "question_type": "UNANSWERABLE",
+    "difficulty": 2,
+    "tags": [
+      "unanswerable",
+      "v8",
+      "V8-03-Unanswerable"
+    ],
+    "is_unanswerable": true,
+    "source_document": "sales-order-status.md",
+    "evidence_quote": "DRAFT",
+    "needs_human_review": true,
+    "design_goal": "目标状态机文档没有该码，不能靠检索为空来定性"
+  },
+  {
+    "external_key": "v8-hallu-001",
+    "dataset": "V8-04-Hallucination",
+    "question": "既然噪声文档说 DRAFT 会扣减 quantity，正式规则是不是也这样？",
+    "expected_answer": "不是。正式注释写明 DRAFT 未预占库存。噪声文档标记为 SYNTHETIC。",
+    "question_type": "HALLUCINATION",
+    "difficulty": 4,
+    "tags": [
+      "synthetic",
+      "v8",
+      "V8-04-Hallucination"
+    ],
+    "is_unanswerable": false,
+    "source_document": "synthetic-noise.md",
+    "evidence_quote": "SYNTHETIC",
+    "needs_human_review": true,
+    "design_goal": "对抗噪声"
+  },
+  {
+    "external_key": "v8-hallu-002",
+    "dataset": "V8-04-Hallucination",
+    "question": "评测指标可以由 LLM Judge 直接打出 Recall 吗？",
+    "expected_answer": "不可以。Hit、Recall、Precision、MRR、nDCG 由代码计算，禁止用 LLM 给这些指标打分。",
+    "question_type": "HALLUCINATION",
+    "difficulty": 2,
+    "tags": [
+      "eval",
+      "v8",
+      "V8-04-Hallucination"
+    ],
+    "is_unanswerable": false,
+    "source_document": "knowledge-eval-boundary.md",
+    "evidence_quote": "禁止用 LLM 给这些指标打分",
+    "needs_human_review": true,
+    "design_goal": "边界题"
+  },
+  {
+    "external_key": "v8-hallu-003",
+    "dataset": "V8-04-Hallucination",
+    "question": "false_recall 是不是幻觉率？",
+    "expected_answer": "不是。它只表示 Top-K 非空，定义是 top_k_nonempty_not_hallucination_rate。",
+    "question_type": "FACTUAL",
+    "difficulty": 3,
+    "tags": [
+      "eval",
+      "metric",
+      "v8",
+      "V8-04-Hallucination"
+    ],
+    "is_unanswerable": false,
+    "source_document": "knowledge-eval-boundary.md",
+    "evidence_quote": "不是幻觉率",
+    "needs_human_review": true,
+    "design_goal": "防止指标误读"
+  },
+  {
+    "external_key": "v8-long-001",
+    "dataset": "V8-05-Long-Query",
+    "question": "请结合销售草稿、部分出库、采购批准和调拨提交，说明哪些动作会改库存。",
+    "expected_answer": "销售 DRAFT 未预占；PARTIALLY_OUTBOUND 已经扣过库存；采购批准不改库存；调拨提交仍然不改库存；采购收货确认才增加 quantity。",
+    "question_type": "LONG",
+    "difficulty": 5,
+    "tags": [
+      "order",
+      "purchase",
+      "transfer",
+      "v8",
+      "V8-05-Long-Query"
+    ],
+    "is_unanswerable": false,
+    "source_document": "long-order-and-stock.md",
+    "evidence_quote": "库存效果不同",
+    "needs_human_review": true,
+    "design_goal": "长问题需要多条证据"
+  },
+  {
+    "external_key": "v8-long-002",
+    "dataset": "V8-05-Long-Query",
+    "question": "Knowledge 默认切片长度是多少字符，overlap 能不能大于等于切片长度？",
+    "expected_answer": "默认 800 字符，overlap 默认 120，并且 overlap 必须小于 chunk_size。",
+    "question_type": "MIXED_LANG",
+    "difficulty": 3,
+    "tags": [
+      "chunk",
+      "v8",
+      "V8-05-Long-Query"
+    ],
+    "is_unanswerable": false,
+    "source_document": "knowledge-processing.md",
+    "evidence_quote": "overlap 必须小于 chunk_size",
+    "needs_human_review": true,
+    "design_goal": "中英参数"
+  },
+  {
+    "external_key": "v8-long-003",
+    "dataset": "V8-05-Long-Query",
+    "question": "扫描版 PDF 在当前解析器里会 OCR 吗？",
+    "expected_answer": "不会。提取不到文本时失败，错误码 40075，明确不支持 OCR。",
+    "question_type": "FACTUAL",
+    "difficulty": 2,
+    "tags": [
+      "pdf",
+      "v8",
+      "V8-05-Long-Query"
+    ],
+    "is_unanswerable": false,
+    "source_document": "knowledge-processing.md",
+    "evidence_quote": "不支持 OCR",
+    "needs_human_review": true,
+    "design_goal": "解析边界"
+  },
+  {
+    "external_key": "v8-exact-001",
+    "dataset": "V8-06-Retrieval-Precision",
+    "question": "出库超过预占时的 error 字符串是什么？",
+    "expected_answer": "OUTBOUND_EXCEEDS_RESERVED",
+    "question_type": "FACTUAL",
+    "difficulty": 2,
+    "tags": [
+      "error-code",
+      "v8",
+      "V8-06-Retrieval-Precision"
+    ],
+    "is_unanswerable": false,
+    "source_document": "outbound-reserved-error.md",
+    "evidence_quote": "OUTBOUND_EXCEEDS_RESERVED",
+    "needs_human_review": true,
+    "design_goal": "精确码"
+  },
+  {
+    "external_key": "v8-exact-002",
+    "dataset": "V8-06-Retrieval-Precision",
+    "question": "IAM 里知识库读取权限码的准确字符串是什么？",
+    "expected_answer": "knowledge:read",
+    "question_type": "FACTUAL",
+    "difficulty": 1,
+    "tags": [
+      "rbac",
+      "v8",
+      "V8-06-Retrieval-Precision"
+    ],
+    "is_unanswerable": false,
+    "source_document": "iam-knowledge-permission.md",
+    "evidence_quote": "knowledge:read",
+    "needs_human_review": true,
+    "design_goal": "精确权限码"
+  },
+  {
+    "external_key": "v8-exact-003",
+    "dataset": "V8-06-Retrieval-Precision",
+    "question": "SalesOrderStatus 里表示部分出库的枚举值是什么？",
+    "expected_answer": "PARTIALLY_OUTBOUND",
+    "question_type": "FACTUAL",
+    "difficulty": 2,
+    "tags": [
+      "order",
+      "v8",
+      "V8-06-Retrieval-Precision"
+    ],
+    "is_unanswerable": false,
+    "source_document": "english-identifiers.md",
+    "evidence_quote": "PARTIALLY_OUTBOUND",
+    "needs_human_review": true,
+    "design_goal": "英文标识"
+  },
+  {
+    "external_key": "v8-exact-004",
+    "dataset": "V8-06-Retrieval-Precision",
+    "question": "采购单有没有单独的 APPROVED 状态？",
+    "expected_answer": "没有。批准同事务直达待收货，无单独 APPROVED。",
+    "question_type": "FACTUAL",
+    "difficulty": 3,
+    "tags": [
+      "purchase",
+      "v8",
+      "V8-06-Retrieval-Precision"
+    ],
+    "is_unanswerable": false,
+    "source_document": "purchase-order-status.md",
+    "evidence_quote": "无单独 APPROVED",
+    "needs_human_review": true,
+    "design_goal": "否定枚举"
+  },
+  {
+    "external_key": "v8-reg-001",
+    "dataset": "V8-07-Regression",
+    "question": "待出库销售订单在尚未正式出库时可以整单取消吗？",
+    "expected_answer": "可以。WAITING_OUTBOUND 尚未正式出库时可以整单取消并释放预占。",
+    "question_type": "FACTUAL",
+    "difficulty": 2,
+    "tags": [
+      "cancel",
+      "v8",
+      "V8-07-Regression"
+    ],
+    "is_unanswerable": false,
+    "source_document": "sales-order-status.md",
+    "evidence_quote": "可以整单取消并释放预占",
+    "needs_human_review": true,
+    "design_goal": "回归：可取消集合"
+  },
+  {
+    "external_key": "v8-reg-002",
+    "dataset": "V8-07-Regression",
+    "question": "评测运行会改写线上向量索引吗？",
+    "expected_answer": "不会。评测不修改线上 Chunk 或向量索引。",
+    "question_type": "FACTUAL",
+    "difficulty": 1,
+    "tags": [
+      "eval",
+      "v8",
+      "V8-07-Regression"
+    ],
+    "is_unanswerable": false,
+    "source_document": "knowledge-eval-boundary.md",
+    "evidence_quote": "不修改线上 Chunk",
+    "needs_human_review": true,
+    "design_goal": "回归：评测隔离"
+  },
+  {
+    "external_key": "v8-reg-003",
+    "dataset": "V8-07-Regression",
+    "question": "盘点与预占冲突的错误码是什么？",
+    "expected_answer": "STOCKTAKE_CONFLICT_WITH_RESERVED_INVENTORY",
+    "question_type": "FACTUAL",
+    "difficulty": 2,
+    "tags": [
+      "error-code",
+      "v8",
+      "V8-07-Regression"
+    ],
+    "is_unanswerable": false,
+    "source_document": "inventory-release-error.md",
+    "evidence_quote": "STOCKTAKE_CONFLICT_WITH_RESERVED_INVENTORY",
+    "needs_human_review": true,
+    "design_goal": "回归：错误码"
+  },
+  {
+    "external_key": "v8-reg-004",
+    "dataset": "V8-07-Regression",
+    "question": "PDF 超过建议页数时当前实现会直接拒绝上传吗？",
+    "expected_answer": "不会。超过 pdf_page_warn 只在 warning 中提示，没有页数硬拒绝。",
+    "question_type": "FACTUAL",
+    "difficulty": 3,
+    "tags": [
+      "pdf",
+      "v8",
+      "V8-07-Regression"
+    ],
+    "is_unanswerable": false,
+    "source_document": "knowledge-processing.md",
+    "evidence_quote": "没有页数硬拒绝",
+    "needs_human_review": true,
+    "design_goal": "回归：大文件边界"
+  }
+]

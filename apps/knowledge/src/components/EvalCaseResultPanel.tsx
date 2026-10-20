@@ -14,6 +14,7 @@ export type EvalRetrievedHit = {
   rrf_score?: number | null;
   rerank_score?: number | null;
   relevance?: number | null;
+  generation_truncated?: boolean;
 };
 
 export type EvalCaseResultView = {
@@ -130,6 +131,12 @@ export function EvalCaseResultPanel({ view }: { view: EvalCaseResultView }) {
             );
           })}
         </Space>
+      ) : null}
+      {view.retrieval_metrics?.false_recall_definition === 'top_k_nonempty_not_hallucination_rate' ? (
+        <div className="text-xs text-slate-500">false_recall 表示 Top-K 非空，不是幻觉率，也不是错误证据率。</div>
+      ) : null}
+      {Array.isArray(view.retrieved) && view.retrieved.some((item) => item && typeof item === 'object' && 'generation_truncated' in item && item.generation_truncated) ? (
+        <div className="text-xs text-slate-500">生成上下文按与问答相同的字符预算截断；列表中的正文仍是 500 字展示摘要。</div>
       ) : null}
       {view.error_message ? <div className="text-sm text-red-500">{view.error_message}</div> : null}
       {view.judge_error ? <div className="text-sm text-amber-600">裁判失败：{view.judge_error}（未伪造分数）</div> : null}

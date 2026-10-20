@@ -11,6 +11,7 @@ from charset_normalizer import from_bytes
 from docx import Document as DocxDocument
 from pypdf import PdfReader
 
+from app.core.config import settings
 from app.core.exceptions import AppError
 
 _CONTROL_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f]")
@@ -110,7 +111,18 @@ def _extract_pdf(payload: bytes) -> ExtractResult:
     warning = None
     if empty_pages:
         warning = f"第 {', '.join(str(item) for item in empty_pages[:20])} 页没有可提取文本；复杂表格与图片 OCR 暂不支持。"
+    page_note = pdf_page_warning(len(reader.pages))
+    if page_note:
+        warning = f"{warning} {page_note}".strip() if warning else page_note
     return ExtractResult(text=joined, pages=pages, warning=warning, parser="pypdf")
+
+
+def pdf_page_warning(page_count: int) -> str | None:
+    """页数过多时只告警。解析仍逐页 extract_text，内存随页数增长，这里不拒绝文件。"""
+    limit = int(settings.pdf_page_warn)
+    if page_count > limit:
+        return f"PDF 共 {page_count} 页，超过建议 {limit} 页。当前没有页数硬限制，大文件会增加解析内存。"
+    return None
 
 
 def _extract_docx(payload: bytes) -> ExtractResult:

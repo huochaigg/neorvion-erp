@@ -525,6 +525,93 @@ export interface KnowledgeEvalDatasetList {
   page_size: number;
 }
 
+export interface KnowledgeEvalFreezeResult {
+  version: number;
+  case_count: number;
+  ready_count: number;
+  unanswerable_count: number;
+  stale_judgment_count: number;
+}
+
+export interface KnowledgeEvalSnapshotJudgment {
+  chunk_id: number;
+  document_id: number | null;
+  relevance: number;
+  source_key: string | null;
+  chunk_version: number | null;
+  content_hash: string | null;
+  filename: string | null;
+  snippet: string | null;
+  stale: boolean;
+}
+
+export interface KnowledgeEvalSnapshotCase {
+  id: number;
+  question: string;
+  expected_answer: string | null;
+  question_type: string | null;
+  difficulty: number | null;
+  tags: string[];
+  is_unanswerable: boolean;
+  annotation_status: string | null;
+  judgments: KnowledgeEvalSnapshotJudgment[];
+}
+
+export interface KnowledgeEvalDatasetVersion {
+  id: number;
+  dataset_id: number;
+  version: number;
+  case_count: number;
+  ready_count: number;
+  unanswerable_count: number;
+  stale_judgment_count: number;
+  run_count: number;
+  is_current: boolean;
+  deletable: boolean;
+  created_at: string;
+  created_by: number;
+}
+
+export interface KnowledgeEvalDatasetVersionList {
+  items: KnowledgeEvalDatasetVersion[];
+  total: number;
+  page: number;
+  page_size: number;
+  current_version: number;
+}
+
+export interface KnowledgeEvalDatasetVersionDetail {
+  version: KnowledgeEvalDatasetVersion;
+  knowledge_base_ids: number[];
+  items: KnowledgeEvalSnapshotCase[];
+  total: number;
+  page: number;
+  page_size: number;
+  note: string;
+}
+
+export interface KnowledgeEvalVersionCaseChange {
+  change: string;
+  case_id: number;
+  fields: string[];
+  before: KnowledgeEvalSnapshotCase | null;
+  after: KnowledgeEvalSnapshotCase | null;
+}
+
+export interface KnowledgeEvalDatasetVersionDiff {
+  left_version: number;
+  right_version: number;
+  added_count: number;
+  removed_count: number;
+  modified_count: number;
+  unchanged_count: number;
+  items: KnowledgeEvalVersionCaseChange[];
+  total: number;
+  page: number;
+  page_size: number;
+  note: string;
+}
+
 export interface KnowledgeEvalJudgment {
   id: number;
   chunk_id: number;

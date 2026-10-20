@@ -23,6 +23,8 @@ from app.evaluation.budget import (
     estimate_next_call,
     tokens_of,
 )
+from app.evaluation.context_pack import generation_text, pack_retrieved_hits, retrieval_diagnostics
+from app.evaluation.diagnose import citation_presence, generation_contexts, unanswerable_outcome
 from app.evaluation.judge import (
     JUDGE_PROMPT_VERSION,
     collect_chat,
@@ -97,13 +99,7 @@ class EvaluationRunService:
         if await repo.find_active_run(experiment.id) is not None:
             raise AppError("该实验已有进行中的评测", code=40981, status_code=409)
         eval_service = EvaluationService(self.session, self.context)
-        dataset = await eval_service._require_dataset(experiment.dataset_id)
-        if dataset.current_version <= 0:
-            version_row = await eval_service._freeze_now(dataset.id)
-        else:
-            version_row = await repo.get_version(dataset.id, dataset.current_version)
-            if version_row is None:
-                version_row = await eval_service._freeze_now(dataset.id)
+        dataset, version_row = await self._locked_snapshot(eval_service, experiment.dataset_id)
         snapshot = version_row.snapshot or {}
         ready_cases = [
             item
@@ -144,6 +140,30 @@ class EvaluationRunService:
         if settings.task_executor == "redis":
             await enqueue_eval_run(run.id)
         return run
+
+    async def _locked_snapshot(self, eval_service: EvaluationService, dataset_id: int):
+        """锁住数据集和当前快照后再创建 Run，避免读到的版本在提交前被删掉。
+
+        尚未冻结时会先冻结并提交；提交后重新加锁，Run 使用加锁时的最新版本。
+        """
+        dataset = await self.repo.get_dataset_for_update(dataset_id)
+        if dataset is None:
+            raise AppError("评测数据集不存在或不可访问", code=40480, status_code=404)
+        if dataset.current_version <= 0:
+            await eval_service._freeze_now(dataset.id)
+            dataset = await self.repo.get_dataset_for_update(dataset_id)
+        if dataset is None:
+            raise AppError("评测数据集不存在或不可访问", code=40480, status_code=404)
+        version_row = await self.repo.get_version_for_update(dataset.id, dataset.current_version)
+        if version_row is None:
+            await eval_service._freeze_now(dataset.id)
+            dataset = await self.repo.get_dataset_for_update(dataset_id)
+            if dataset is None:
+                raise AppError("评测数据集不存在或不可访问", code=40480, status_code=404)
+            version_row = await self.repo.get_version_for_update(dataset.id, dataset.current_version)
+        if version_row is None:
+            raise AppError("数据集快照不存在", code=40485, status_code=404)
+        return dataset, version_row
 
     async def cancel(self, run_id: int) -> EvaluationRun:
         assert self.context is not None
@@ -382,8 +402,19 @@ class EvaluationRunService:
                 ),
                 what="retrieve",
             )
-            row.retrieved = _hits_to_retrieved(search.hits, case)
-            stages = mark_stage(stages, EvalStage.RETRIEVE.value, StageStatus.SUCCESS.value, latency_ms=search.latency_ms)
+            context_budget = int(settings.chat_max_context_chars)
+            row.retrieved = pack_retrieved_hits(search.hits, case, context_budget=context_budget)
+            stages = mark_stage(
+                stages,
+                EvalStage.RETRIEVE.value,
+                StageStatus.SUCCESS.value,
+                latency_ms=search.latency_ms,
+                extra={
+                    "diagnostics": retrieval_diagnostics(
+                        search, context_budget=context_budget, packed=row.retrieved
+                    )
+                },
+            )
             if not config.get("rerank"):
                 stages = mark_stage(stages, EvalStage.RERANK.value, StageStatus.SKIPPED.value)
             elif search.rerank_degraded:
@@ -426,8 +457,8 @@ class EvaluationRunService:
                     "faithfulness": 1.0,
                     "answer_relevancy": 1.0,
                     "answer_correctness": None,
-                    "refusal": True,
                     "judge_skipped": True,
+                    "unanswerable_outcome": unanswerable_outcome(retrieved_nonempty=False, answer=_REFUSE),
                 }
                 stages = mark_stage(stages, EvalStage.GENERATE.value, StageStatus.SUCCESS.value)
                 stages = mark_stage(stages, EvalStage.JUDGE.value, StageStatus.SKIPPED.value)
@@ -441,6 +472,7 @@ class EvaluationRunService:
                     EvalStage.GENERATE.value,
                     StageStatus.SUCCESS.value,
                     usage=row.usage,
+                    extra={"citation_presence": citation_presence(row.answer, len(row.retrieved or []))},
                 )
             row.stages = stages
             await self._touch_run_usage(run)
@@ -450,7 +482,7 @@ class EvaluationRunService:
             run.current_stage = EvalStage.JUDGE.value
             await self.session.commit()
             assert_budget(run, extra_tokens=estimate_next_call())
-            contexts = [str(item.get("content") or "") for item in (row.retrieved or [])]
+            contexts = generation_contexts(row.retrieved or [])
             generation_metrics, judge_raw, judge_error = await call_with_retry(
                 lambda: judge_answer(
                     question=str(case["question"]),
@@ -467,8 +499,24 @@ class EvaluationRunService:
             row.judge_model = str(config.get("chat_model") or settings.chat_model)
             row.judge_prompt_version = str(config.get("judge_prompt_version") or JUDGE_PROMPT_VERSION)
             if case.get("is_unanswerable"):
-                row.generation_metrics = row.generation_metrics or {}
-                row.generation_metrics["refusal"] = looks_like_refusal(row.answer or "")
+                outcome = unanswerable_outcome(
+                    retrieved_nonempty=bool(row.retrieved),
+                    answer=row.answer,
+                )
+                if row.generation_metrics is None:
+                    stages = mark_stage(
+                        stages,
+                        EvalStage.JUDGE.value,
+                        stage_status(stages, EvalStage.JUDGE.value),
+                        extra={"unanswerable_outcome": outcome},
+                    )
+                else:
+                    row.generation_metrics = {
+                        **row.generation_metrics,
+                        "refusal_keyword_hint": outcome["refusal_keyword_hint"],
+                        "unanswerable_outcome": outcome,
+                    }
+                    row.generation_metrics.pop("refusal", None)
             if judge_error:
                 stages = mark_stage(stages, EvalStage.JUDGE.value, StageStatus.FAILED.value, error=judge_error)
                 row.result_status = ResultCaseStatus.FAILED.value
@@ -877,29 +925,8 @@ async def _load_run(session: AsyncSession, run_id: int) -> EvaluationRun | None:
 
 
 def _hits_to_retrieved(hits, case: dict) -> list[dict]:
-    label_map = {
-        int(item["chunk_id"]): int(item["relevance"])
-        for item in case.get("judgments") or []
-        if not item.get("stale")
-    }
-    return [
-        {
-            "chunk_id": hit.chunk_id,
-            "document_id": hit.document_id,
-            "filename": hit.filename,
-            "content": hit.content[:500],
-            "page_no": getattr(hit, "page_no", None),
-            "heading": getattr(hit, "heading", None),
-            "version": getattr(hit, "version", None),
-            "final_rank": hit.final_rank,
-            "vector_score": hit.vector_score,
-            "keyword_score": hit.keyword_score,
-            "rrf_score": hit.rrf_score,
-            "rerank_score": hit.rerank_score,
-            "relevance": label_map.get(hit.chunk_id),
-        }
-        for hit in hits
-    ]
+    """兼容 probe：展示摘要与生成摘录分开，预算与 Chat 上下文一致。"""
+    return pack_retrieved_hits(hits, case, context_budget=int(settings.chat_max_context_chars))
 
 
 class _HitProxy:
@@ -907,7 +934,7 @@ class _HitProxy:
         self.chunk_id = payload.get("chunk_id")
         self.document_id = payload.get("document_id")
         self.filename = payload.get("filename") or ""
-        self.content = payload.get("content") or ""
+        self.content = generation_text(payload)
         self.page_no = payload.get("page_no")
         self.heading = payload.get("heading")
         self.version = payload.get("version")
