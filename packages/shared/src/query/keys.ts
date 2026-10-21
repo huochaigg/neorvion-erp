@@ -489,6 +489,14 @@ export function knowledgeEvalVersionsQueryKey(
   return ['tenant', tenantId, 'knowledge-eval-versions', datasetId, filters ?? {}] as const;
 }
 
+export function knowledgeEvalLabelSuggestionsQueryKey(
+  tenantId: number | null,
+  datasetId: number | null,
+  filters?: { confidence?: string; status?: string },
+) {
+  return ['tenant', tenantId, 'knowledge-eval-label-suggestions', datasetId, filters ?? {}] as const;
+}
+
 export function knowledgeEvalCasesQueryKey(
   tenantId: number | null,
   datasetId: number | null,

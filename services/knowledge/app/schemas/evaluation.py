@@ -403,6 +403,36 @@ class CompareOut(BaseModel):
     metric_deltas: dict[str, Any]
 
 
+class SuggestLabelsIn(BaseModel):
+    execute: bool = Field(default=False, description="false 只估算调用次数；true 才调用模型并写草稿")
+    rerun: bool = False
+    only_failed: bool = False
+    only_rejected: bool = False
+
+
+class SuggestionItemIn(BaseModel):
+    chunk_id: int
+    relevance: int = Field(ge=0, le=3)
+    reason: str = ""
+    excerpt: str = ""
+
+
+class SuggestionUpdateIn(BaseModel):
+    confidence: str | None = None
+    rationale: str | None = None
+    risk: str | None = None
+    items: list[SuggestionItemIn] | None = None
+
+
+class SuggestionConfirmIn(BaseModel):
+    suggestion_ids: list[int] | None = None
+    only_high: bool = True
+
+
+class SuggestionRejectIn(BaseModel):
+    note: str = ""
+
+
 class UsageStatsOut(BaseModel):
     query_count: int
     search_success: int

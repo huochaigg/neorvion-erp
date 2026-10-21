@@ -304,7 +304,13 @@ class EvaluationService:
             difficulty=payload.difficulty,
             tags=payload.tags,
             is_unanswerable=unanswerable,
-            annotation_status=AnnotationStatus.READY.value if unanswerable else AnnotationStatus.PENDING.value,
+            annotation_status=(
+                AnnotationStatus.PENDING.value
+                if payload.needs_human_review
+                else AnnotationStatus.READY.value
+                if unanswerable
+                else AnnotationStatus.PENDING.value
+            ),
             source=CaseSource.MANUAL.value,
             external_key=(payload.external_key or "").strip() or None,
             needs_human_review=payload.needs_human_review,
@@ -397,6 +403,7 @@ class EvaluationService:
                 await self.session.flush()
             await self._refresh_stale_for_case(row.id)
             await self._refresh_case_status(row)
+            await self.session.flush()
             await self.session.refresh(row)
             judgments = await self.repo.list_judgments(row.id)
             results.append(self._case_out(row, judgments))
@@ -430,6 +437,12 @@ class EvaluationService:
             row.is_unanswerable = True
         row.updated_by = self.context.user_id
         await self._refresh_case_status(row)
+        if payload.needs_human_review is False and row.annotation_status != AnnotationStatus.READY.value:
+            raise AppError(
+                "有答案题需要至少一条未失效且相关性≥1的切片标注，或将题目标为无答案，才能标为可评测",
+                code=40090,
+                status_code=400,
+            )
         await self.session.commit()
         await self.session.refresh(row)
         return self._case_out(row, await self.repo.list_judgments(row.id))
@@ -1010,8 +1023,12 @@ class EvaluationService:
             judgment.stale = digest != judgment.content_hash or chunk.version != judgment.chunk_version
 
     async def _refresh_case_status(self, case: EvaluationCase) -> None:
+        """按标注刷新状态。待人工复核的题目停在待标注或已标注，不能直接变成可评测。"""
         judgments = await self.repo.list_judgments(case.id)
         valid = [item for item in judgments if not item.stale and item.relevance >= 1]
+        if case.needs_human_review:
+            case.annotation_status = AnnotationStatus.LABELED.value if judgments else AnnotationStatus.PENDING.value
+            return
         if case.is_unanswerable:
             case.annotation_status = AnnotationStatus.READY.value
         elif valid:

@@ -12,6 +12,8 @@ from app.models.evaluation import (
     EvaluationDatasetVersion,
     EvaluationExperiment,
     EvaluationJudgment,
+    EvaluationLabelJob,
+    EvaluationLabelSuggestion,
     EvaluationResult,
     EvaluationRun,
     RunStatus,
@@ -104,6 +106,15 @@ class EvaluationRepository(BaseRepository):
                 EvaluationCase.tenant_id == tenant_id,
                 EvaluationCase.id == case_id,
                 EvaluationCase.deleted_at.is_(None),
+            )
+        )
+
+    async def get_case_including_deleted(self, case_id: int) -> EvaluationCase | None:
+        tenant_id = self.ensure_tenant()
+        return await self.session.scalar(
+            select(EvaluationCase).where(
+                EvaluationCase.tenant_id == tenant_id,
+                EvaluationCase.id == case_id,
             )
         )
 
@@ -467,6 +478,62 @@ class EvaluationRepository(BaseRepository):
                 run.finished_at = now
             count += 1
         return count
+
+    async def list_label_suggestions(self, dataset_id: int, *, confidence: str | None, status: str | None):
+        tenant_id = self.ensure_tenant()
+        filters = [
+            EvaluationLabelSuggestion.tenant_id == tenant_id,
+            EvaluationLabelSuggestion.dataset_id == dataset_id,
+        ]
+        if confidence:
+            filters.append(EvaluationLabelSuggestion.confidence == confidence)
+        if status:
+            filters.append(EvaluationLabelSuggestion.status == status)
+        stmt = (
+            select(EvaluationLabelSuggestion)
+            .where(*filters)
+            .order_by(EvaluationLabelSuggestion.case_id.asc())
+        )
+        return list((await self.session.scalars(stmt)).all())
+
+    async def get_label_suggestion(self, suggestion_id: int) -> EvaluationLabelSuggestion | None:
+        tenant_id = self.ensure_tenant()
+        return await self.session.scalar(
+            select(EvaluationLabelSuggestion).where(
+                EvaluationLabelSuggestion.tenant_id == tenant_id,
+                EvaluationLabelSuggestion.id == suggestion_id,
+            )
+        )
+
+    async def latest_label_job(self, dataset_id: int) -> EvaluationLabelJob | None:
+        tenant_id = self.ensure_tenant()
+        return await self.session.scalar(
+            select(EvaluationLabelJob)
+            .where(
+                EvaluationLabelJob.tenant_id == tenant_id,
+                EvaluationLabelJob.dataset_id == dataset_id,
+            )
+            .order_by(EvaluationLabelJob.id.desc())
+            .limit(1)
+        )
+
+    async def get_label_job(self, job_id: int) -> EvaluationLabelJob | None:
+        tenant_id = self.ensure_tenant()
+        return await self.session.scalar(
+            select(EvaluationLabelJob).where(
+                EvaluationLabelJob.tenant_id == tenant_id,
+                EvaluationLabelJob.id == job_id,
+            )
+        )
+
+    async def get_label_suggestion_by_case(self, case_id: int) -> EvaluationLabelSuggestion | None:
+        tenant_id = self.ensure_tenant()
+        return await self.session.scalar(
+            select(EvaluationLabelSuggestion).where(
+                EvaluationLabelSuggestion.tenant_id == tenant_id,
+                EvaluationLabelSuggestion.case_id == case_id,
+            )
+        )
 
     async def find_active_run(self, experiment_id: int) -> EvaluationRun | None:
         tenant_id = self.ensure_tenant()

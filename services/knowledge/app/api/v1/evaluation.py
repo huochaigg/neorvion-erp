@@ -43,10 +43,15 @@ from app.schemas.evaluation import (
     RunListOut,
     RunOut,
     RunResumeIn,
+    SuggestionConfirmIn,
+    SuggestionRejectIn,
+    SuggestionUpdateIn,
+    SuggestLabelsIn,
 )
 from app.schemas.ops import ProbeIn, ProbeOut
 from app.services.evaluation import EvaluationService
 from app.services.evaluation_run import EvaluationRunService, execute_eval_run
+from app.services.label_suggestion import LabelSuggestionService, execute_label_job
 
 router = APIRouter(tags=["knowledge-evaluation"])
 
@@ -275,6 +280,120 @@ async def replace_judgments(
     session: DbSession,
 ) -> ApiResponse[CaseOut]:
     return ok(await EvaluationService(session, context).replace_judgments(case_id, payload), "已保存标注")
+
+
+@router.get("/evaluation/datasets/{dataset_id}/label-suggestions/estimate")
+async def estimate_label_suggestions(
+    dataset_id: int,
+    session: DbSession,
+    context: KnowledgeReadContext,
+    rerun: bool = False,
+    only_failed: bool = False,
+) -> ApiResponse[dict]:
+    data = await LabelSuggestionService(session, context).estimate(
+        dataset_id,
+        rerun=rerun,
+        only_failed=only_failed,
+    )
+    return ok(data)
+
+
+@router.get("/evaluation/datasets/{dataset_id}/label-suggestions")
+async def list_label_suggestions(
+    dataset_id: int,
+    session: DbSession,
+    context: KnowledgeReadContext,
+    confidence: str | None = None,
+    status: str | None = None,
+) -> ApiResponse[list[dict]]:
+    data = await LabelSuggestionService(session, context).list_suggestions(
+        dataset_id,
+        confidence=confidence,
+        status=status,
+    )
+    return ok(data)
+
+
+@router.get("/evaluation/datasets/{dataset_id}/label-jobs/current")
+async def current_label_job(
+    dataset_id: int,
+    session: DbSession,
+    context: KnowledgeReadContext,
+) -> ApiResponse[dict | None]:
+    data = await LabelSuggestionService(session, context).current_job(dataset_id)
+    return ok(data)
+
+
+@router.post("/evaluation/datasets/{dataset_id}/label-suggestions")
+async def suggest_labels(
+    dataset_id: int,
+    payload: SuggestLabelsIn,
+    session: DbSession,
+    context: KnowledgeUpdateContext,
+    background: BackgroundTasks,
+) -> ApiResponse[dict]:
+    service = LabelSuggestionService(session, context)
+    if not payload.execute:
+        return ok(
+            await service.estimate(
+                dataset_id,
+                rerun=payload.rerun,
+                only_failed=payload.only_failed,
+                only_rejected=payload.only_rejected,
+            )
+        )
+    data = await service.accept(
+        dataset_id,
+        rerun=payload.rerun,
+        only_failed=payload.only_failed,
+        only_rejected=payload.only_rejected,
+    )
+    if data["status"] == "QUEUED" and not data["already_running"]:
+        background.add_task(execute_label_job, int(data["id"]))
+    return ok(data, "已开始初标")
+
+
+@router.post("/evaluation/datasets/{dataset_id}/label-suggestions/confirm")
+async def confirm_label_suggestions(
+    dataset_id: int,
+    payload: SuggestionConfirmIn,
+    session: DbSession,
+    context: KnowledgeUpdateContext,
+) -> ApiResponse[dict]:
+    data = await LabelSuggestionService(session, context).confirm(dataset_id, payload)
+    return ok(data)
+
+
+@router.patch("/evaluation/label-suggestions/{suggestion_id}")
+async def update_label_suggestion(
+    suggestion_id: int,
+    payload: SuggestionUpdateIn,
+    session: DbSession,
+    context: KnowledgeUpdateContext,
+) -> ApiResponse[dict]:
+    data = await LabelSuggestionService(session, context).update_draft(suggestion_id, payload)
+    return ok(data)
+
+
+@router.post("/evaluation/label-suggestions/{suggestion_id}/reject")
+async def reject_label_suggestion(
+    suggestion_id: int,
+    payload: SuggestionRejectIn,
+    session: DbSession,
+    context: KnowledgeUpdateContext,
+) -> ApiResponse[dict]:
+    data = await LabelSuggestionService(session, context).reject(suggestion_id, payload.note)
+    return ok(data)
+
+
+@router.delete("/evaluation/label-suggestions/{suggestion_id}")
+async def delete_label_suggestion(
+    suggestion_id: int,
+    session: DbSession,
+    context: KnowledgeUpdateContext,
+) -> ApiResponse[None]:
+    await LabelSuggestionService(session, context).delete_suggestion(suggestion_id)
+    return ok(None, "已删除初标草稿")
 
 
 @router.post("/evaluation/cases/{case_id}/probe", summary="单题真实检索评测")

@@ -31,9 +31,11 @@ import {
   updateEvalCase,
 } from '@/api/evaluation';
 import { ActionCell, AppTable } from '@/components/AppTable';
+import { Can } from '@/components/Can';
 import { EvalCaseResultPanel } from '@/components/EvalCaseResultPanel';
 import { EvaluationDatasetVersionsPanel } from '@/components/EvaluationDatasetVersionsPanel';
-import { Can } from '@/components/Can';
+import { EvaluationLabelSuggestionsPanel } from '@/components/EvaluationLabelSuggestionsPanel';
+import { FormLabelHelp } from '@/components/FormLabelHelp';
 import { ListPageContainer, ListTableArea, ListToolbar } from '@/components/PageContainer';
 import { PageHeader } from '@/components/PageHeader';
 import { usePermissions } from '@/hooks/usePermissions';
@@ -47,7 +49,8 @@ export function EvaluationDatasetDetailPage() {
   const { tenantId } = usePermissions();
   const datasetId = Number(useParams().id);
   const [searchParams, setSearchParams] = useSearchParams();
-  const tab = searchParams.get('tab') === 'versions' ? 'versions' : 'draft';
+  const tabParam = searchParams.get('tab');
+  const tab = tabParam === 'versions' || tabParam === 'labels' ? tabParam : 'draft';
   const focusVersion = Number(searchParams.get('version'));
   const [status, setStatus] = useState<string | undefined>();
   const [keyword, setKeyword] = useState('');
@@ -111,6 +114,7 @@ export function EvaluationDatasetDetailPage() {
     void queryClient.invalidateQueries({ queryKey: ['tenant', tenantId, 'knowledge-eval-dataset'] });
     void queryClient.invalidateQueries({ queryKey: ['tenant', tenantId, 'knowledge-eval-datasets'] });
     void queryClient.invalidateQueries({ queryKey: ['tenant', tenantId, 'knowledge-eval-versions'] });
+    void queryClient.invalidateQueries({ queryKey: ['tenant', tenantId, 'knowledge-eval-label-suggestions'] });
   };
 
   const saveCase = useMutation({
@@ -121,6 +125,7 @@ export function EvaluationDatasetDetailPage() {
       difficulty?: number;
       tags?: string[];
       is_unanswerable?: boolean;
+      needs_human_review?: boolean;
       judgments?: { chunk_id: number; relevance: number }[];
     }) => {
       const payload = {
@@ -130,12 +135,20 @@ export function EvaluationDatasetDetailPage() {
         difficulty: values.difficulty,
         tags: values.tags,
         is_unanswerable: values.is_unanswerable,
+        needs_human_review: values.needs_human_review,
       };
-      const row = editing
-        ? await updateEvalCase(editing.id, payload)
-        : await createEvalCase(datasetId, payload);
-      if (values.judgments) {
-        return replaceEvalJudgments(row.id, values.judgments);
+      const judgments = values.judgments;
+      const approving = values.needs_human_review === false;
+      if (editing) {
+        // 先写标注再取消复核，避免 PATCH 时库里还没有切片、状态算不成可评测
+        if (judgments && (judgments.length > 0 || !approving)) {
+          await replaceEvalJudgments(editing.id, judgments);
+        }
+        return updateEvalCase(editing.id, payload);
+      }
+      const row = await createEvalCase(datasetId, payload);
+      if (judgments && judgments.length > 0) {
+        return replaceEvalJudgments(row.id, judgments);
       }
       return row;
     },
@@ -208,6 +221,7 @@ export function EvaluationDatasetDetailPage() {
                 difficulty: record.difficulty,
                 tags: record.tags,
                 is_unanswerable: record.is_unanswerable,
+                needs_human_review: record.needs_human_review,
               });
               judgmentForm.setFieldsValue({
                 judgments: record.judgments.map((item) => ({ chunk_id: item.chunk_id, relevance: item.relevance })),
@@ -284,14 +298,17 @@ export function EvaluationDatasetDetailPage() {
       />
       <Tabs
         activeKey={tab}
-        onChange={(key) => setSearchParams(key === 'versions' ? { tab: 'versions' } : {})}
+        onChange={(key) => setSearchParams(key === 'draft' ? {} : { tab: key })}
         items={[
           { key: 'draft', label: '工作稿' },
+          { key: 'labels', label: '智能标注' },
           { key: 'versions', label: '版本管理' },
         ]}
       />
       {tab === 'versions' ? (
         <EvaluationDatasetVersionsPanel datasetId={datasetId} focusVersion={Number.isFinite(focusVersion) && focusVersion > 0 ? focusVersion : null} />
+      ) : tab === 'labels' ? (
+        <EvaluationLabelSuggestionsPanel datasetId={datasetId} />
       ) : (
         <>
       <Alert className="mb-3!" type="info" showIcon message="这里是当前可编辑工作稿。冻结版本不会锁定这些题目，也不会把之后的修改写进已有快照。" />
@@ -390,13 +407,43 @@ export function EvaluationDatasetDetailPage() {
           <Form.Item name="is_unanswerable" label="无答案问题" valuePropName="checked">
             <Switch />
           </Form.Item>
+          <Form.Item name="needs_human_review" label="仍待人工复核" valuePropName="checked">
+            <Switch />
+          </Form.Item>
         </Form>
+        {editing?.needs_human_review ? (
+          <div className="mb-3 text-sm text-amber-700">
+            这道题尚未人工确认。保存后仍不会变成可评测。确认标注或确认它确实无答案后，再点「确认审核并标为可评测」。
+          </div>
+        ) : null}
+        {editing?.judgments.length ? (
+          <div className="mb-3 space-y-2 text-sm">
+            {editing.judgments.map((item) => (
+              <div key={`${item.chunk_id}-${item.relevance}`} className="rounded border border-slate-200 p-2">
+                <div>
+                  建议标注 Chunk #{item.chunk_id} {item.filename || ''} 相关性 {item.relevance}
+                  {item.stale ? '（失效）' : ''}
+                </div>
+                <div className="mt-1 text-slate-600">{item.snippet || '无切片原文'}</div>
+              </div>
+            ))}
+          </div>
+        ) : null}
         <Form form={judgmentForm} layout="vertical">
           <Form.List name="judgments">
             {(fields, { add, remove }) => (
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <span className="text-sm">相关 Chunk（相关性 0–3，可多个）</span>
+                  <FormLabelHelp label="相关 Chunk">
+                    <p>可写多条。无答案题不必标切片。</p>
+                    <p>3：能直接回答问题的核心证据。</p>
+                    <p>2：相关但不完整，例如同文档相邻段、部分条件。</p>
+                    <p>1：弱相关但仍有用，例如背景、定义。Hit / Recall / Precision / MRR 把 1–3 都当成相关。</p>
+                    <p>0：无关或干扰材料。可以写进来标明「这是噪声」，但不会算进相关集合；nDCG 增益也是 0。</p>
+                    <p>漏标真正相关的切片：相关集合变小，Recall 会被高估，正式评测也找不到这份证据。</p>
+                    <p>错把干扰材料标成 1–3：检索到噪声会被当成命中，Hit / Recall / Precision / nDCG 都会虚高。</p>
+                    <p>切片改过正文后会失效，需重新确认，失效标注不参与计分。</p>
+                  </FormLabelHelp>
                   <Button size="small" onClick={() => add({ relevance: 3 })}>
                     添加
                   </Button>
@@ -410,12 +457,20 @@ export function EvaluationDatasetDetailPage() {
                         style={{ width: 360 }}
                         options={(chunksQuery.data?.items ?? []).map((item) => ({
                           value: item.id,
-                          label: `#${item.id} ${item.content.slice(0, 40)}`,
+                          label: `#${item.id} ${item.content.slice(0, 80)}`,
                         }))}
                       />
                     </Form.Item>
                     <Form.Item {...field} name={[field.name, 'relevance']} rules={[{ required: true }]}>
-                      <InputNumber min={0} max={3} />
+                      <Select
+                        style={{ width: 148 }}
+                        options={[
+                          { value: 3, label: '3 核心证据' },
+                          { value: 2, label: '2 部分相关' },
+                          { value: 1, label: '1 弱相关' },
+                          { value: 0, label: '0 无关/干扰' },
+                        ]}
+                      />
                     </Form.Item>
                     <Button onClick={() => remove(field.name)}>删除</Button>
                   </Space>
@@ -427,17 +482,35 @@ export function EvaluationDatasetDetailPage() {
         {editing?.judgments.some((item) => item.stale) ? (
           <div className="mb-3 text-sm text-amber-600">存在失效标注，保存前请重新确认 Chunk，不会悄悄当作有效结果。</div>
         ) : null}
-        <Button
-          type="primary"
-          loading={saveCase.isPending}
-          onClick={async () => {
-            const values = await form.validateFields();
-            const judgments = (judgmentForm.getFieldValue('judgments') ?? []) as { chunk_id: number; relevance: number }[];
-            saveCase.mutate({ ...values, judgments });
-          }}
-        >
-          保存
-        </Button>
+        <Space>
+          <Button
+            loading={saveCase.isPending}
+            onClick={async () => {
+              const values = await form.validateFields();
+              const judgments = (judgmentForm.getFieldValue('judgments') ?? []) as { chunk_id: number; relevance: number }[];
+              saveCase.mutate({ ...values, judgments });
+            }}
+          >
+            保存
+          </Button>
+          <Button
+            type="primary"
+            loading={saveCase.isPending}
+            onClick={async () => {
+              const values = await form.validateFields();
+              const judgments = (judgmentForm.getFieldValue('judgments') ?? []) as { chunk_id: number; relevance: number }[];
+              const unanswerable = Boolean(values.is_unanswerable || values.question_type === 'UNANSWERABLE');
+              const validJudgments = judgments.filter((item) => item.chunk_id != null && item.relevance >= 1);
+              if (!unanswerable && validJudgments.length === 0 && !(editing?.judgments ?? []).some((item) => !item.stale && item.relevance >= 1)) {
+                message.error('有答案题需要至少一条有效相关切片，才能标为可评测');
+                return;
+              }
+              saveCase.mutate({ ...values, needs_human_review: false, judgments });
+            }}
+          >
+            确认审核并标为可评测
+          </Button>
+        </Space>
       </Drawer>
       <Modal
         title={probing ? `单题评测：${probing.question.slice(0, 40)}` : '单题评测'}

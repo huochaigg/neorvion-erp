@@ -304,11 +304,13 @@ function ChunkTable({ knowledgeBaseId }: { knowledgeBaseId: number }) {
   });
 
   const columns: ColumnsType<KnowledgeChunk> = [
+    { title: 'ID', dataIndex: 'id', width: 80 },
+    { title: '标题', dataIndex: 'heading', width: 80 },
     { title: '文档', dataIndex: 'document_id', width: 80 },
     { title: '序号', dataIndex: 'chunk_index', width: 70 },
     { title: '字符数', dataIndex: 'char_count', width: 80 },
     { title: '页码', dataIndex: 'page_no', width: 70, render: (value: number | null) => value ?? '-' },
-    { title: '内容', dataIndex: 'content', ellipsis: true },
+    { title: '内容', dataIndex: 'content', width: 360 },
     {
       title: '启用',
       dataIndex: 'enabled',

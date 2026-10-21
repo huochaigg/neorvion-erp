@@ -117,6 +117,8 @@ def _wipe_tables() -> None:
         connection.execute(text("DELETE FROM evaluation_runs"))
         connection.execute(text("DELETE FROM evaluation_experiments"))
         connection.execute(text("DELETE FROM evaluation_judgments"))
+        connection.execute(text("DELETE FROM evaluation_label_suggestions"))
+        connection.execute(text("DELETE FROM evaluation_label_jobs"))
         connection.execute(text("DELETE FROM evaluation_cases"))
         connection.execute(text("DELETE FROM evaluation_dataset_versions"))
         connection.execute(text("DELETE FROM evaluation_datasets"))

@@ -503,6 +503,33 @@ export function knowledgeRunStatusColor(value: string): string {
   return 'default';
 }
 
+export const KNOWLEDGE_EVAL_LABEL_SUGGESTION_STATUS_LABEL: Record<string, string> = {
+  DRAFT: '草稿',
+  CONFIRMED: '可评测',
+  REJECTED: '已驳回',
+  FAILED: '失败',
+};
+
+export function knowledgeEvalLabelSuggestionStatusLabel(value: string): string {
+  return KNOWLEDGE_EVAL_LABEL_SUGGESTION_STATUS_LABEL[value] ?? value;
+}
+
+export function knowledgeEvalLabelSuggestionStatusColor(value: string): string {
+  if (value === 'CONFIRMED') {
+    return 'success';
+  }
+  if (value === 'FAILED') {
+    return 'error';
+  }
+  if (value === 'DRAFT') {
+    return 'processing';
+  }
+  if (value === 'REJECTED') {
+    return 'warning';
+  }
+  return 'default';
+}
+
 export interface KnowledgeEvalDataset {
   id: number;
   tenant_id: number;
@@ -622,6 +649,60 @@ export interface KnowledgeEvalJudgment {
   filename: string;
   snippet: string;
   stale: boolean;
+}
+
+export interface KnowledgeEvalLabelItem {
+  chunk_id: number;
+  document_id: number;
+  filename: string;
+  relevance: number;
+  reason: string;
+  excerpt: string;
+  chunk_version: number;
+  content_hash: string;
+  methods?: string[];
+}
+
+export interface KnowledgeEvalLabelSuggestion {
+  id: number;
+  dataset_id: number;
+  case_id: number;
+  question: string;
+  expected_answer: string | null;
+  question_type: string;
+  is_unanswerable: boolean;
+  annotation_status: string;
+  needs_human_review: boolean;
+  case_deleted: boolean;
+  status: string;
+  confidence: string;
+  verdict: string;
+  rationale: string;
+  risk: string;
+  items: KnowledgeEvalLabelItem[];
+  original_items: KnowledgeEvalLabelItem[];
+  model_name: string | null;
+  error_message: string | null;
+  reviewed_by: number | null;
+  reviewed_at: string | null;
+  review_note: string;
+}
+
+export interface KnowledgeEvalLabelEstimate {
+  dataset_id: number;
+  case_count: number;
+  pending_cases: number;
+  skipped_cases: number;
+  executed: boolean;
+  chat_calls: number;
+  embedding_calls: number;
+  document_embedding_calls: number;
+  retry_limit: number;
+  worst_chat_calls: number;
+  chat_model: string;
+  embedding_model: string;
+  drafted?: number;
+  failed?: number;
 }
 
 export interface KnowledgeEvalCase {

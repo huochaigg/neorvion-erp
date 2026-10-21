@@ -178,3 +178,38 @@ def test_eval_upsert_idempotent(client: TestClient, identity: FakeIdentityClient
     row = listed.json()["data"]["items"][0]
     assert row["external_key"] == "erp-001"
     assert row["needs_human_review"] is True
+    assert row["annotation_status"] == "PENDING"
+    unanswerable = client.post(
+        f"/api/v1/evaluation/datasets/{dataset_id}/upsert-cases",
+        json={
+            "items": [
+                {
+                    "external_key": "empty-1",
+                    "question": "仓库有没有不存在的制度？",
+                    "question_type": "UNANSWERABLE",
+                    "is_unanswerable": True,
+                    "needs_human_review": True,
+                }
+            ]
+        },
+        headers=headers,
+    )
+    assert unanswerable.status_code == 200, unanswerable.text
+    pending = unanswerable.json()["data"]["items"][0]
+    assert pending["is_unanswerable"] is True
+    assert pending["annotation_status"] == "PENDING"
+    blocked = client.patch(
+        f"/api/v1/evaluation/cases/{row['id']}",
+        json={"needs_human_review": False},
+        headers=headers,
+    )
+    assert blocked.status_code == 400
+    assert blocked.json()["code"] == 40090
+    approved = client.patch(
+        f"/api/v1/evaluation/cases/{pending['id']}",
+        json={"needs_human_review": False},
+        headers=headers,
+    )
+    assert approved.status_code == 200, approved.text
+    assert approved.json()["data"]["needs_human_review"] is False
+    assert approved.json()["data"]["annotation_status"] == "READY"

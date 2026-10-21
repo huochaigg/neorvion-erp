@@ -380,3 +380,122 @@ class EvaluationResult(TimestampMixin, TenantMixin, Base):
         server_default=text("'{}'::jsonb"),
         comment="RETRIEVE/RERANK/GENERATE/JUDGE/METRICS 阶段状态与用量",
     )
+
+
+class LabelJobStatus(StrEnum):
+    QUEUED = "QUEUED"
+    RUNNING = "RUNNING"
+    SUCCEEDED = "SUCCEEDED"
+    FAILED = "FAILED"
+
+
+class SuggestionStatus(StrEnum):
+    DRAFT = "DRAFT"
+    CONFIRMED = "CONFIRMED"
+    REJECTED = "REJECTED"
+    FAILED = "FAILED"
+
+
+class LabelConfidence(StrEnum):
+    HIGH = "HIGH"
+    MEDIUM = "MEDIUM"
+    LOW = "LOW"
+
+
+class EvaluationLabelSuggestion(TimestampMixin, TenantMixin, Base):
+    """AI 初标草稿。确认前不写入正式标注，也不能把题目标成 READY。"""
+
+    __tablename__ = "evaluation_label_suggestions"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "id", name="uq_eval_label_suggestions_tenant_id"),
+        UniqueConstraint("tenant_id", "case_id", name="uq_eval_label_suggestions_case"),
+        ForeignKeyConstraint(
+            ["tenant_id", "case_id"],
+            ["evaluation_cases.tenant_id", "evaluation_cases.id"],
+            name="fk_eval_label_suggestions_case_tenant",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["tenant_id", "dataset_id"],
+            ["evaluation_datasets.tenant_id", "evaluation_datasets.id"],
+            name="fk_eval_label_suggestions_dataset_tenant",
+        ),
+        Index("ix_eval_label_suggestions_dataset", "tenant_id", "dataset_id", "status"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    dataset_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    case_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    status: Mapped[str] = mapped_column(
+        String(16),
+        nullable=False,
+        server_default=SuggestionStatus.DRAFT.value,
+        comment="DRAFT 待审核 / CONFIRMED 已确认 / REJECTED 已驳回 / FAILED 调用失败",
+    )
+    confidence: Mapped[str] = mapped_column(
+        String(16),
+        nullable=False,
+        server_default=LabelConfidence.LOW.value,
+        comment="HIGH/MEDIUM/LOW，只表示审核优先级，不是正确率",
+    )
+    verdict: Mapped[str] = mapped_column(
+        String(32),
+        nullable=False,
+        server_default="INSUFFICIENT",
+        comment="ANSWERABLE / UNANSWERABLE / PARTIAL / CONFLICT / INSUFFICIENT",
+    )
+    rationale: Mapped[str] = mapped_column(Text, nullable=False, server_default="")
+    risk: Mapped[str] = mapped_column(Text, nullable=False, server_default="")
+    items: Mapped[list] = mapped_column(
+        JSONB,
+        nullable=False,
+        server_default=text("'[]'::jsonb"),
+        comment="当前建议切片。确认前不是正式 Ground Truth",
+    )
+    original_items: Mapped[list] = mapped_column(
+        JSONB,
+        nullable=False,
+        server_default=text("'[]'::jsonb"),
+        comment="模型最初给出的切片，人工修改后仍保留",
+    )
+    model_name: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    prompt_version: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    reviewed_by: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    review_note: Mapped[str] = mapped_column(Text, nullable=False, server_default="")
+    created_by: Mapped[int] = mapped_column(BigInteger, nullable=False)
+
+
+class EvaluationLabelJob(TimestampMixin, TenantMixin, Base):
+    """一次智能初标任务。HTTP 只负责入队，进度以这张表为准。"""
+
+    __tablename__ = "evaluation_label_jobs"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "id", name="uq_eval_label_jobs_tenant_id"),
+        ForeignKeyConstraint(
+            ["tenant_id", "dataset_id"],
+            ["evaluation_datasets.tenant_id", "evaluation_datasets.id"],
+            name="fk_eval_label_jobs_dataset_tenant",
+        ),
+        Index(
+            "uq_eval_label_jobs_active",
+            "tenant_id",
+            "dataset_id",
+            unique=True,
+            postgresql_where=text("status IN ('QUEUED', 'RUNNING')"),
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    dataset_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, server_default=LabelJobStatus.QUEUED.value)
+    options: Mapped[dict] = mapped_column(JSONB, nullable=False, server_default=text("'{}'::jsonb"))
+    total: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    drafted: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    failed: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    skipped: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_by: Mapped[int] = mapped_column(BigInteger, nullable=False)

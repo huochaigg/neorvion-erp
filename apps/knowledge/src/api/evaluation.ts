@@ -6,6 +6,8 @@ import type {
   KnowledgeEvalCompare,
   KnowledgeEvalDataset,
   KnowledgeEvalDatasetList,
+  KnowledgeEvalLabelEstimate,
+  KnowledgeEvalLabelSuggestion,
   KnowledgeEvalDatasetVersionDetail,
   KnowledgeEvalDatasetVersionDiff,
   KnowledgeEvalDatasetVersionList,
@@ -165,6 +167,7 @@ export function updateEvalCase(
     difficulty?: number;
     tags?: string[];
     is_unanswerable?: boolean;
+    needs_human_review?: boolean;
   },
 ) {
   return unwrapApi(apiClient.patch<ApiResponse<KnowledgeEvalCase>>(`/api/v1/evaluation/cases/${caseId}`, payload));
@@ -370,6 +373,105 @@ export function compareEvalRuns(runIds: number[], signal?: AbortSignal) {
       signal,
     }),
   );
+}
+
+export interface KnowledgeEvalLabelJob {
+  id: number;
+  dataset_id: number;
+  status: 'QUEUED' | 'RUNNING' | 'SUCCEEDED' | 'FAILED' | string;
+  accepted: boolean;
+  already_running: boolean;
+  executed: boolean;
+  total: number;
+  drafted: number;
+  failed: number;
+  skipped: number;
+  pending_cases: number;
+  error_message: string | null;
+  started_at: string | null;
+  finished_at: string | null;
+}
+
+export function fetchEvalLabelJob(datasetId: number, signal?: AbortSignal) {
+  return unwrapApi(
+    apiClient.get<ApiResponse<KnowledgeEvalLabelJob | null>>(
+      `/api/v1/evaluation/datasets/${datasetId}/label-jobs/current`,
+      { signal },
+    ),
+  );
+}
+
+export function estimateEvalLabels(datasetId: number, signal?: AbortSignal) {
+  return unwrapApi(
+    apiClient.get<ApiResponse<KnowledgeEvalLabelEstimate>>(
+      `/api/v1/evaluation/datasets/${datasetId}/label-suggestions/estimate`,
+      { signal },
+    ),
+  );
+}
+
+export function fetchEvalLabelSuggestions(
+  datasetId: number,
+  params: { confidence?: string; status?: string },
+  signal?: AbortSignal,
+) {
+  return unwrapApi(
+    apiClient.get<ApiResponse<KnowledgeEvalLabelSuggestion[]>>(
+      `/api/v1/evaluation/datasets/${datasetId}/label-suggestions`,
+      { params: { confidence: params.confidence || undefined, status: params.status || undefined }, signal },
+    ),
+  );
+}
+
+export function runEvalLabelSuggestions(
+  datasetId: number,
+  payload: { execute: boolean; rerun?: boolean; only_failed?: boolean; only_rejected?: boolean },
+) {
+  return unwrapApi(
+    apiClient.post<ApiResponse<KnowledgeEvalLabelEstimate & Partial<KnowledgeEvalLabelJob>>>(
+      `/api/v1/evaluation/datasets/${datasetId}/label-suggestions`,
+      payload,
+    ),
+  );
+}
+
+export function confirmEvalLabelSuggestions(datasetId: number, payload: { suggestion_ids?: number[]; only_high?: boolean }) {
+  return unwrapApi(
+    apiClient.post<ApiResponse<{ confirmed: number; errors: { suggestion_id: number; message: string }[] }>>(
+      `/api/v1/evaluation/datasets/${datasetId}/label-suggestions/confirm`,
+      payload,
+    ),
+  );
+}
+
+export function updateEvalLabelSuggestion(
+  suggestionId: number,
+  payload: {
+    confidence?: string;
+    rationale?: string;
+    risk?: string;
+    items?: { chunk_id: number; relevance: number; reason?: string; excerpt?: string }[];
+  },
+) {
+  return unwrapApi(
+    apiClient.patch<ApiResponse<KnowledgeEvalLabelSuggestion>>(
+      `/api/v1/evaluation/label-suggestions/${suggestionId}`,
+      payload,
+    ),
+  );
+}
+
+export function rejectEvalLabelSuggestion(suggestionId: number, note: string) {
+  return unwrapApi(
+    apiClient.post<ApiResponse<KnowledgeEvalLabelSuggestion>>(
+      `/api/v1/evaluation/label-suggestions/${suggestionId}/reject`,
+      { note },
+    ),
+  );
+}
+
+export function deleteEvalLabelSuggestion(suggestionId: number) {
+  return unwrapApi(apiClient.delete<ApiResponse<null>>(`/api/v1/evaluation/label-suggestions/${suggestionId}`));
 }
 
 export function fetchUsageStats(days: number, signal?: AbortSignal) {
