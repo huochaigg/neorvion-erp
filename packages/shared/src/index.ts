@@ -132,6 +132,7 @@ export {
   KNOWLEDGE_EVAL_STAGE_LABEL,
   knowledgeQuestionTypeLabel,
   knowledgeAnnotationStatusLabel,
+  knowledgeAnnotationStatusColor,
   knowledgeRunStatusLabel,
   knowledgeRunStatusColor,
   KNOWLEDGE_EVAL_LABEL_SUGGESTION_STATUS_LABEL,

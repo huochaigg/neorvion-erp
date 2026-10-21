@@ -1,5 +1,6 @@
 import {
   DEFAULT_PAGE_SIZE,
+  knowledgeAnnotationStatusColor,
   knowledgeAnnotationStatusLabel,
   knowledgeChunksQueryKey,
   knowledgeConversationsQueryKey,
@@ -173,7 +174,9 @@ export function EvaluationDatasetDetailPage() {
       title: '状态',
       dataIndex: 'annotation_status',
       width: 100,
-      render: (value: string) => <Tag>{knowledgeAnnotationStatusLabel(value)}</Tag>,
+      render: (value: string) => (
+        <Tag color={knowledgeAnnotationStatusColor(value)}>{knowledgeAnnotationStatusLabel(value)}</Tag>
+      ),
     },
     {
       title: '无答案',

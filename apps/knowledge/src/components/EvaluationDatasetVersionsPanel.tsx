@@ -1,5 +1,6 @@
 import {
   DEFAULT_PAGE_SIZE,
+  knowledgeAnnotationStatusColor,
   knowledgeAnnotationStatusLabel,
   knowledgeEvalVersionsQueryKey,
   knowledgeQuestionTypeLabel,
@@ -252,7 +253,11 @@ export function EvaluationDatasetVersionsPanel({
                 {
                   title: '状态',
                   width: 90,
-                  render: (_, record) => knowledgeAnnotationStatusLabel(record.annotation_status || ''),
+                  render: (_, record) => (
+                    <Tag color={knowledgeAnnotationStatusColor(record.annotation_status || '')}>
+                      {knowledgeAnnotationStatusLabel(record.annotation_status || '')}
+                    </Tag>
+                  ),
                 },
                 {
                   title: '无答案',

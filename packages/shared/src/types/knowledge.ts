@@ -472,6 +472,19 @@ export function knowledgeAnnotationStatusLabel(value: string): string {
   return KNOWLEDGE_ANNOTATION_STATUS_LABEL[value] ?? value;
 }
 
+export function knowledgeAnnotationStatusColor(value: string): string {
+  if (value === 'READY') {
+    return 'success';
+  }
+  if (value === 'PENDING') {
+    return 'processing';
+  }
+  if (value === 'LABELED') {
+    return 'warning';
+  }
+  return 'default';
+}
+
 export function knowledgeRunStatusLabel(value: string): string {
   return KNOWLEDGE_RUN_STATUS_LABEL[value] ?? value;
 }

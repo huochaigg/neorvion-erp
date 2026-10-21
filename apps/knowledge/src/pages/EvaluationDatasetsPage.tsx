@@ -1,5 +1,6 @@
 import {
   DEFAULT_PAGE_SIZE,
+  knowledgeAnnotationStatusColor,
   knowledgeAnnotationStatusLabel,
   knowledgeBasesQueryKey,
   knowledgeEvalDatasetsQueryKey,
@@ -97,9 +98,15 @@ export function EvaluationDatasetsPage() {
       width: 220,
       render: (_, record) => (
         <Space size={4} wrap>
-          <Tag>{knowledgeAnnotationStatusLabel('PENDING')} {record.pending_count}</Tag>
-          <Tag color="gold">{knowledgeAnnotationStatusLabel('LABELED')} {record.labeled_count}</Tag>
-          <Tag color="green">{knowledgeAnnotationStatusLabel('READY')} {record.ready_count}</Tag>
+          <Tag color={knowledgeAnnotationStatusColor('PENDING')}>
+            {knowledgeAnnotationStatusLabel('PENDING')} {record.pending_count}
+          </Tag>
+          <Tag color={knowledgeAnnotationStatusColor('LABELED')}>
+            {knowledgeAnnotationStatusLabel('LABELED')} {record.labeled_count}
+          </Tag>
+          <Tag color={knowledgeAnnotationStatusColor('READY')}>
+            {knowledgeAnnotationStatusLabel('READY')} {record.ready_count}
+          </Tag>
         </Space>
       ),
     },
