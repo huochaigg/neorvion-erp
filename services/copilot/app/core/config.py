@@ -19,12 +19,11 @@ class Settings(BaseSettings):
     app_env: str = "development"
     app_host: str = "0.0.0.0"
     app_port: int = 8013
-    app_version: str = "1.1.0"
+    app_version: str = "2.0.0"
     git_sha: str = ""
     enable_api_docs: bool = True
     cors_origins: str = (
-        "http://localhost:8015,http://localhost:8018,"
-        "http://127.0.0.1:8015,http://127.0.0.1:8018"
+        "http://localhost:8015,http://localhost:8018,http://127.0.0.1:8015,http://127.0.0.1:8018"
     )
 
     iam_jwt_issuer: str = "neorvion-iam"
@@ -44,7 +43,16 @@ class Settings(BaseSettings):
     chat_max_messages: int = 12
     chat_max_message_chars: int = 4000
     chat_max_context_chars: int = 12000
-    graph_recursion_limit: int = 4
+    graph_recursion_limit: int = 16
+    erp_base_url: str = "http://127.0.0.1:8011"
+    erp_jwt_audience: str = "neorvion-erp"
+    erp_connect_timeout_seconds: float = 3.0
+    erp_read_timeout_seconds: float = 10.0
+    tool_max_rounds: int = 5
+    tool_max_calls: int = 8
+    tool_total_timeout_seconds: float = 30.0
+    tool_max_result_chars: int = 12000
+    tool_max_page_size: int = 50
     deepseek_api_key: str = ""
     dashscope_api_key: str = ""
 
@@ -81,4 +89,3 @@ def get_settings() -> Settings:
 
 
 settings = get_settings()
-

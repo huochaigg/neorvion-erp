@@ -8,7 +8,7 @@ def test_health_is_public(client) -> None:
     assert response.json()["data"] == {
         "status": "ok",
         "service": "copilot",
-        "version": "1.1.0",
+        "version": "2.0.0",
         "git_sha": "",
         "identity": "unavailable",
     }
@@ -58,4 +58,3 @@ def test_chat_requires_copilot_permission(client, authorize) -> None:
     assert response.status_code == 403
     assert response.json()["code"] == 40320
     app.dependency_overrides.pop(get_tenant_context, None)
-

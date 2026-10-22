@@ -10,8 +10,11 @@ from app.core.exceptions import AppError, from_security_error
 from app.core.iam import jwt_verifier, snapshot_store
 from app.core.permissions import PermissionCode
 from app.core.tenant import TENANT_HEADER, TenantContext
+from app.erp.client import get_erp_client
 from app.graph.workflow import CopilotWorkflow
 from app.services.authorization import AuthorizationService
+from app.tools.executor import ToolExecutor
+from app.tools.registry import build_tool_registry
 
 
 def _extract_bearer_token(request: Request) -> str:
@@ -46,6 +49,8 @@ async def get_tenant_context(request: Request) -> TenantContext:
     except SecurityError as exc:
         raise from_security_error(exc) from exc
     set_tenant_context(tenant_id=context.tenant_id, user_id=context.user_id)
+    request.state.access_token = token
+    request.state.jwt_audiences = claims.audience
     return context
 
 
@@ -62,8 +67,10 @@ CopilotContext = Annotated[TenantContext, Depends(get_copilot_context)]
 
 @lru_cache
 def get_workflow() -> CopilotWorkflow:
-    return CopilotWorkflow(get_chat_adapter())
+    return CopilotWorkflow(
+        get_chat_adapter(),
+        ToolExecutor(build_tool_registry(), get_erp_client()),
+    )
 
 
 WorkflowDep = Annotated[CopilotWorkflow, Depends(get_workflow)]
-

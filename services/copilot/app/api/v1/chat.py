@@ -8,9 +8,11 @@ from fastapi.responses import StreamingResponse
 from app.api.deps import CopilotContext, WorkflowDep
 from app.core.config import settings
 from app.core.exceptions import AppError
+from app.graph.workflow import AgentRuntime
 from app.schemas.chat import ChatRequest, ChatResponse, TokenUsageOut
 from app.schemas.common import ApiResponse, ok
 from app.services.chat import ChatService
+from app.tools.executor import ToolRuntime
 
 router = APIRouter(prefix="/chat", tags=["copilot-chat"])
 
@@ -23,13 +25,28 @@ def _sse(event: str, data: dict) -> str:
     return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
 
 
+def _runtime(request: Request, context: CopilotContext) -> AgentRuntime:
+    audiences = frozenset(getattr(request.state, "jwt_audiences", ()))
+    return AgentRuntime(
+        tools=ToolRuntime(
+            tenant=context,
+            access_token=str(getattr(request.state, "access_token", "")),
+            erp_audience_authorized=settings.erp_jwt_audience in audiences,
+            request_id=str(getattr(request.state, "request_id", "")),
+        )
+    )
+
+
 @router.post("", response_model=ApiResponse[ChatResponse], summary="非流式对话")
 async def chat(
     payload: ChatRequest,
-    _context: CopilotContext,
+    request: Request,
+    context: CopilotContext,
     workflow: WorkflowDep,
 ) -> ApiResponse[ChatResponse]:
-    answer, usage = await ChatService(workflow).complete(_messages(payload))
+    answer, usage = await ChatService(workflow).complete(
+        _messages(payload), context=_runtime(request, context)
+    )
     return ok(
         ChatResponse(
             answer=answer,
@@ -43,7 +60,7 @@ async def chat(
 async def chat_stream(
     payload: ChatRequest,
     request: Request,
-    _context: CopilotContext,
+    context: CopilotContext,
     workflow: WorkflowDep,
 ) -> StreamingResponse:
     async def event_stream():
@@ -51,6 +68,7 @@ async def chat_stream(
             async for event in ChatService(workflow).stream_events(
                 _messages(payload),
                 disconnected=request.is_disconnected,
+                context=_runtime(request, context),
             ):
                 name = str(event.get("event") or "message")
                 data = event.get("data") if isinstance(event.get("data"), dict) else {}
@@ -69,4 +87,3 @@ async def chat_stream(
             "X-Accel-Buffering": "no",
         },
     )
-

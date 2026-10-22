@@ -6,7 +6,13 @@ from collections.abc import AsyncIterator
 import httpx
 
 from app.ai.errors import classify_model_http_error, describe_model_transport
-from app.ai.types import ChatDelta, ModelMessage, ModelUsage
+from app.ai.types import (
+    ChatDelta,
+    ModelMessage,
+    ModelToolCall,
+    ModelToolDefinition,
+    ModelUsage,
+)
 from app.core.exceptions import AppError
 
 
@@ -30,7 +36,13 @@ class OpenAICompatChatAdapter:
         self.max_output_tokens = max_output_tokens
         self.transport = transport
 
-    async def stream(self, messages: list[ModelMessage]) -> AsyncIterator[ChatDelta]:
+    async def stream(
+        self,
+        messages: list[ModelMessage],
+        *,
+        tools: list[ModelToolDefinition] | None = None,
+        tool_choice: str | None = None,
+    ) -> AsyncIterator[ChatDelta]:
         if not self.api_key:
             raise AppError("未配置 Chat API Key", code=50361, status_code=503)
         if not self.base_url:
@@ -42,8 +54,12 @@ class OpenAICompatChatAdapter:
             "stream_options": {"include_usage": True},
             "max_tokens": self.max_output_tokens,
         }
+        if tools:
+            payload["tools"] = tools
+            payload["tool_choice"] = tool_choice or "auto"
         prompt_tokens = None
         completion_tokens = None
+        pending_calls: dict[int, dict[str, str]] = {}
         try:
             async with httpx.AsyncClient(
                 timeout=self.timeout_seconds,
@@ -70,7 +86,11 @@ class OpenAICompatChatAdapter:
                                 "prompt_tokens": prompt_tokens,
                                 "completion_tokens": completion_tokens,
                             }
-                            yield ChatDelta(finished=True, usage=usage)
+                            yield ChatDelta(
+                                finished=True,
+                                usage=usage,
+                                tool_calls=self._tool_calls(pending_calls),
+                            )
                             return
                         try:
                             chunk = json.loads(raw)
@@ -85,16 +105,41 @@ class OpenAICompatChatAdapter:
                         choices = chunk.get("choices") or []
                         if not choices:
                             continue
-                        text = (choices[0].get("delta") or {}).get("content") or ""
+                        delta = choices[0].get("delta") or {}
+                        text = delta.get("content") or ""
                         if text:
                             yield ChatDelta(text=str(text))
+                        for raw_call in delta.get("tool_calls") or []:
+                            index = int(raw_call.get("index") or 0)
+                            current = pending_calls.setdefault(
+                                index, {"id": "", "name": "", "arguments": ""}
+                            )
+                            current["id"] += str(raw_call.get("id") or "")
+                            function = raw_call.get("function") or {}
+                            current["name"] += str(function.get("name") or "")
+                            current["arguments"] += str(function.get("arguments") or "")
                     usage = {
                         "prompt_tokens": prompt_tokens,
                         "completion_tokens": completion_tokens,
                     }
-                    yield ChatDelta(finished=True, usage=usage)
+                    yield ChatDelta(
+                        finished=True,
+                        usage=usage,
+                        tool_calls=self._tool_calls(pending_calls),
+                    )
         except AppError:
             raise
         except httpx.HTTPError as exc:
             raise describe_model_transport(exc) from exc
 
+    @staticmethod
+    def _tool_calls(pending: dict[int, dict[str, str]]) -> tuple[ModelToolCall, ...]:
+        """把 OpenAI 分片的函数名和参数合并，参数 JSON 留给工具层严格校验。"""
+        return tuple(
+            ModelToolCall(
+                id=item["id"] or f"tool-{index}",
+                name=item["name"],
+                arguments=item["arguments"],
+            )
+            for index, item in sorted(pending.items())
+        )

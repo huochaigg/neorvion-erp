@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import AsyncIterator
 
 import pytest
-from app.ai.types import ChatDelta, ModelMessage
+from app.ai.types import ChatDelta, ModelMessage, ModelToolDefinition
 from app.core.exceptions import AppError
 from app.graph.workflow import CopilotWorkflow
 
@@ -14,7 +14,13 @@ class FakeAdapter:
         self.empty = empty
         self.closed = False
 
-    async def stream(self, messages: list[ModelMessage]) -> AsyncIterator[ChatDelta]:
+    async def stream(
+        self,
+        messages: list[ModelMessage],
+        *,
+        tools: list[ModelToolDefinition] | None = None,
+        tool_choice: str | None = None,
+    ) -> AsyncIterator[ChatDelta]:
         try:
             if self.error:
                 raise self.error
@@ -82,9 +88,7 @@ def test_non_stream_model_errors(client, authorize, use_workflow, error, status,
 def test_sse_model_error_is_business_event(client, authorize, use_workflow) -> None:
     authorize()
     use_workflow(
-        CopilotWorkflow(
-            FakeAdapter(error=AppError("模型服务限流", code=42960, status_code=429))
-        )
+        CopilotWorkflow(FakeAdapter(error=AppError("模型服务限流", code=42960, status_code=429)))
     )
     response = client.post("/api/v1/chat/stream", json=payload())
     assert response.status_code == 200
@@ -112,4 +116,3 @@ def test_context_validation(client, authorize, messages) -> None:
     authorize()
     response = client.post("/api/v1/chat", json={"messages": messages})
     assert response.status_code == 422
-

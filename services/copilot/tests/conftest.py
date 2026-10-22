@@ -9,16 +9,20 @@ os.environ["IAM_JWKS_URL"] = "http://127.0.0.1:9/.well-known/jwks.json"
 
 import pytest
 from app.api.deps import get_tenant_context, get_workflow
+from app.core.config import settings
 from app.core.permissions import PermissionCode
 from app.core.tenant import TenantContext
 from app.main import app
+from fastapi import Request
 from fastapi.testclient import TestClient
 
 
-def make_context(*, permitted: bool = True, tenant_id: int = 7) -> TenantContext:
-    permissions = (
-        frozenset({PermissionCode.COPILOT_USE.value}) if permitted else frozenset()
-    )
+def make_context(
+    *, permitted: bool = True, tenant_id: int = 7, extra_permissions: set[str] | None = None
+) -> TenantContext:
+    permissions = set(extra_permissions or ())
+    if permitted:
+        permissions.add(PermissionCode.COPILOT_USE.value)
     return TenantContext(
         user_id=11,
         tenant_id=tenant_id,
@@ -26,7 +30,7 @@ def make_context(*, permitted: bool = True, tenant_id: int = 7) -> TenantContext
         is_owner=False,
         role="OPERATOR",
         role_codes=("OPERATOR",),
-        permission_codes=permissions,
+        permission_codes=frozenset(permissions),
         token_jti="test-jti",
         token_version=0,
         authz_version=3,
@@ -43,10 +47,16 @@ def client(monkeypatch: pytest.MonkeyPatch) -> Iterator[TestClient]:
 
 @pytest.fixture
 def authorize():
-    def apply(*, permitted: bool = True, tenant_id: int = 7) -> TenantContext:
-        context = make_context(permitted=permitted, tenant_id=tenant_id)
+    def apply(
+        *, permitted: bool = True, tenant_id: int = 7, extra_permissions: set[str] | None = None
+    ) -> TenantContext:
+        context = make_context(
+            permitted=permitted, tenant_id=tenant_id, extra_permissions=extra_permissions
+        )
 
-        async def override_context() -> TenantContext:
+        async def override_context(request: Request) -> TenantContext:
+            request.state.access_token = "test-user-token"
+            request.state.jwt_audiences = (settings.erp_jwt_audience,)
             return context
 
         app.dependency_overrides[get_tenant_context] = override_context
@@ -61,4 +71,3 @@ def use_workflow():
         app.dependency_overrides[get_workflow] = lambda: workflow
 
     return apply
-

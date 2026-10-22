@@ -9,13 +9,17 @@ from app.core.config import settings
 from app.core.exceptions import register_exception_handlers
 from app.core.logging import setup_logging
 from app.core.request_id import REQUEST_ID_HEADER, RequestIdMiddleware
+from app.erp.client import close_erp_client
 
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     setup_logging()
     settings.require_runtime_secrets()
-    yield
+    try:
+        yield
+    finally:
+        await close_erp_client()
 
 
 def create_app() -> FastAPI:
@@ -23,7 +27,7 @@ def create_app() -> FastAPI:
     app = FastAPI(
         title=settings.app_name,
         version=settings.app_version,
-        description="受 IAM 权限约束的 ERP Copilot。V1-B 仅支持无业务写入的模型对话。",
+        description="受 IAM 权限约束、仅通过 ERP API 查询的只读 ERP Copilot V2。",
         lifespan=lifespan,
         docs_url="/docs" if docs_enabled else None,
         redoc_url="/redoc" if docs_enabled else None,
@@ -45,4 +49,3 @@ def create_app() -> FastAPI:
 
 
 app = create_app()
-

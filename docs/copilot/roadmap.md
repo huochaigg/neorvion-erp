@@ -163,3 +163,14 @@ Copilot 最终应成为“受策略控制的 ERP 操作入口”：默认只读�
 - 客户端只能携带有限 `user` / `assistant` 上下文，系统提示由服务端注入。
 - 尚未实现 ERP Tool、Knowledge Tool、前端和会话持久化；这些不属于 V1-B。
 
+### V2：ERP 只读 Tool Calling 已实现
+
+- OpenAI-compatible Adapter 支持 `tools`、`tool_choice`、流式 `tool_calls` 参数拼接和 `tool` 消息。
+- LangGraph 升级为 `Agent → Tool → Agent` 条件循环，限制轮次、调用数、总时限、分页与结果大小。
+- 只读工具覆盖销售订单、库存、商品、采购单、仓库和售后；所有数据通过 ERP HTTP API 获取。
+- 使用已验证用户的多 audience Access Token 和租户头访问 ERP；ERP 继续独立校验租户与具体读权限。
+- 服务端执行工具白名单、严格参数校验、字段脱敏、结果截断和不可信数据隔离。
+- SSE 新增 `tool_start` / `tool_end` / `tool_error`，保留 `message` / `done` / `error`。
+- 未注册低库存工具：现有阈值不是持久化的可信安全库存配置，V2 不生成补货结论。
+- 仍未实现前端、会话持久化、Knowledge/RAG、多 Agent、写操作或审批。
+
