@@ -1,6 +1,5 @@
-from datetime import UTC, datetime
+from datetime import datetime
 
-from neorvion_db import PrivilegedOperation, privileged_option
 from sqlalchemy import and_, delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -246,16 +245,20 @@ class ChunkRepository(BaseRepository):
             await self.session.scalar(
                 select(func.count(DocumentChunk.id))
                 .select_from(DocumentChunk)
-                .join(KnowledgeDocument, KnowledgeDocument.id == DocumentChunk.document_id)
-                .join(KnowledgeBase, KnowledgeBase.id == DocumentChunk.knowledge_base_id)
+                .join(KnowledgeDocument, and_(KnowledgeDocument.tenant_id == DocumentChunk.tenant_id,
+                    KnowledgeDocument.id == DocumentChunk.document_id))
+                .join(KnowledgeBase, and_(KnowledgeBase.tenant_id == DocumentChunk.tenant_id,
+                    KnowledgeBase.id == DocumentChunk.knowledge_base_id))
                 .where(*filters)
             )
             or 0
         )
         stmt = (
             select(DocumentChunk)
-            .join(KnowledgeDocument, KnowledgeDocument.id == DocumentChunk.document_id)
-            .join(KnowledgeBase, KnowledgeBase.id == DocumentChunk.knowledge_base_id)
+            .join(KnowledgeDocument, and_(KnowledgeDocument.tenant_id == DocumentChunk.tenant_id,
+                KnowledgeDocument.id == DocumentChunk.document_id))
+            .join(KnowledgeBase, and_(KnowledgeBase.tenant_id == DocumentChunk.tenant_id,
+                KnowledgeBase.id == DocumentChunk.knowledge_base_id))
             .where(*filters)
             .order_by(DocumentChunk.document_id.asc(), DocumentChunk.chunk_index.asc())
             .offset((page - 1) * page_size)
@@ -267,8 +270,10 @@ class ChunkRepository(BaseRepository):
         tenant_id = self.ensure_tenant()
         stmt = (
             select(DocumentChunk)
-            .join(KnowledgeDocument, KnowledgeDocument.id == DocumentChunk.document_id)
-            .join(KnowledgeBase, KnowledgeBase.id == DocumentChunk.knowledge_base_id)
+            .join(KnowledgeDocument, and_(KnowledgeDocument.tenant_id == DocumentChunk.tenant_id,
+                KnowledgeDocument.id == DocumentChunk.document_id))
+            .join(KnowledgeBase, and_(KnowledgeBase.tenant_id == DocumentChunk.tenant_id,
+                KnowledgeBase.id == DocumentChunk.knowledge_base_id))
             .where(
                 DocumentChunk.tenant_id == tenant_id,
                 DocumentChunk.id == chunk_id,
@@ -282,8 +287,10 @@ class ChunkRepository(BaseRepository):
         stmt = (
             select(func.count(DocumentChunk.id))
             .select_from(DocumentChunk)
-            .join(KnowledgeDocument, KnowledgeDocument.id == DocumentChunk.document_id)
-            .join(KnowledgeBase, KnowledgeBase.id == DocumentChunk.knowledge_base_id)
+            .join(KnowledgeDocument, and_(KnowledgeDocument.tenant_id == DocumentChunk.tenant_id,
+                KnowledgeDocument.id == DocumentChunk.document_id))
+            .join(KnowledgeBase, and_(KnowledgeBase.tenant_id == DocumentChunk.tenant_id,
+                KnowledgeBase.id == DocumentChunk.knowledge_base_id))
             .where(
                 DocumentChunk.tenant_id == tenant_id,
                 DocumentChunk.status == ChunkStatus.ACTIVE.value,
@@ -381,8 +388,8 @@ class TaskRepository(BaseRepository):
         return (await self.session.scalars(stmt)).first()
 
     async def get_by_id(self, task_id: int) -> DocumentProcessingTask | None:
-        stmt = select(DocumentProcessingTask).where(DocumentProcessingTask.id == task_id)
-        return (await self.session.scalars(stmt)).first()
+        """按当前租户读取任务。全局领取在 system_queue，不从这里按主键跨租户读取。"""
+        return await self.get_in_tenant(task_id)
 
     async def find_active(self, document_id: int, task_type: str) -> DocumentProcessingTask | None:
         tenant_id = self.ensure_tenant()
@@ -424,25 +431,3 @@ class TaskRepository(BaseRepository):
                 DocumentProcessingTask.document_id == document_id,
             )
         )
-
-    async def list_queued(self) -> list[DocumentProcessingTask]:
-        stmt = (
-            select(DocumentProcessingTask)
-            .where(DocumentProcessingTask.status == TaskStatus.QUEUED.value)
-            .execution_options(**privileged_option(PrivilegedOperation.WORKER_CLAIM))
-        )
-        return list((await self.session.scalars(stmt)).all())
-
-    async def fail_stale_running(self, *, message: str) -> list[DocumentProcessingTask]:
-        stmt = (
-            select(DocumentProcessingTask)
-            .where(DocumentProcessingTask.status == TaskStatus.RUNNING.value)
-            .execution_options(**privileged_option(PrivilegedOperation.WORKER_CLAIM))
-        )
-        rows = list((await self.session.scalars(stmt)).all())
-        now = datetime.now(UTC)
-        for row in rows:
-            row.status = TaskStatus.FAILED.value
-            row.error_message = message
-            row.finished_at = now
-        return rows

@@ -3,5 +3,13 @@
 from neorvion_db import PrivilegedOperation
 
 PRIVILEGED_CALLERS = {
-    PrivilegedOperation.WORKER_CLAIM: frozenset({"app.tasks.worker"}),
+    PrivilegedOperation.WORKER_CLAIM: frozenset(
+        {"app.tasks.worker", "app.services.evaluation_run", "app.services.label_suggestion"}
+    ),
+}
+
+PRIVILEGED_FLUSH_MODELS = {
+    PrivilegedOperation.WORKER_CLAIM: frozenset(
+        {"DocumentProcessingTask", "KnowledgeDocument", "EvaluationRun"}
+    ),
 }

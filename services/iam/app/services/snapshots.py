@@ -1,5 +1,6 @@
 """把 IAM 数据库中的成员授权写成 Redis 快照，供 ERP / Knowledge 本地校验。"""
 
+import logging
 from datetime import datetime
 
 from neorvion_security.snapshot import AuthzSnapshot, SnapshotStore
@@ -16,6 +17,8 @@ from app.repositories.tenant import TenantMemberRepository
 from app.repositories.user import UserRepository
 from app.services.authorization import AuthorizationService
 from app.services.authz_revision import current_revision
+
+logger = logging.getLogger(__name__)
 
 
 class SnapshotService:
@@ -136,3 +139,62 @@ class SnapshotService:
         if rows:
             self.session.commit()
         return len(rows)
+
+
+def sweep_committed_outbox(*, limit: int = 100) -> int:
+    """补刷已经提交、但所属租户还没有再次发请求的授权 Outbox。
+
+    和请求内 drain 分开。请求内 drain 必须看见本事务尚未提交的行；
+    这里只处理其他租户已经提交的积压，所以使用新的特权会话读取，再用该租户的会话写回。
+    """
+    from neorvion_db import PrivilegedOperation, open_privileged_session, privileged_option
+
+    from app.db.isolation import REGISTRY
+    from app.db.session import engine, open_tenant_session
+    from app.db.system_access import PRIVILEGED_CALLERS, PRIVILEGED_FLUSH_MODELS
+
+    claim = open_privileged_session(
+        PrivilegedOperation.OUTBOX_SCAN,
+        registry=REGISTRY,
+        allowed_callers=PRIVILEGED_CALLERS[PrivilegedOperation.OUTBOX_SCAN],
+        bind=engine,
+        flush_models=PRIVILEGED_FLUSH_MODELS[PrivilegedOperation.OUTBOX_SCAN],
+    )
+    try:
+        rows = list(
+            claim.scalars(
+                select(AuthzOutbox)
+                .where(AuthzOutbox.processed_at.is_(None))
+                .order_by(AuthzOutbox.id.asc())
+                .limit(limit)
+                .execution_options(**privileged_option(PrivilegedOperation.OUTBOX_SCAN))
+            ).all()
+        )
+        pending = [
+            (row.id, row.user_id, row.tenant_id)
+            for row in rows
+            if type(row.tenant_id) is int and row.tenant_id > 0
+        ]
+    finally:
+        claim.close()
+    done = 0
+    for outbox_id, user_id, tenant_id in pending:
+        session = open_tenant_session(int(tenant_id))
+        try:
+            SnapshotService(session).refresh_member(user_id=user_id, tenant_id=int(tenant_id))
+            row = session.scalar(
+                select(AuthzOutbox).where(
+                    AuthzOutbox.id == outbox_id,
+                    AuthzOutbox.tenant_id == tenant_id,
+                )
+            )
+            if row is not None and row.processed_at is None:
+                row.processed_at = datetime.now()
+            session.commit()
+            done += 1
+        except Exception:
+            session.rollback()
+            logger.exception("outbox sweep failed id=%s tenant=%s", outbox_id, tenant_id)
+        finally:
+            session.close()
+    return done

@@ -85,7 +85,10 @@ class OutboundOrder(TimestampMixin, TenantMixin, Base):
     )
 
     sales_order: Mapped[SalesOrder] = relationship(
-        primaryjoin="OutboundOrder.sales_order_id == SalesOrder.id",
+        primaryjoin=(
+            "and_(OutboundOrder.tenant_id == SalesOrder.tenant_id, "
+            "OutboundOrder.sales_order_id == SalesOrder.id)"
+        ),
         foreign_keys="OutboundOrder.sales_order_id",
         viewonly=True,
     )
@@ -155,12 +158,18 @@ class OutboundOrderItem(TimestampMixin, TenantMixin, Base):
 
     outbound_order: Mapped[OutboundOrder] = relationship(back_populates="items")
     sales_order_item: Mapped[SalesOrderItem] = relationship(
-        primaryjoin="OutboundOrderItem.sales_order_item_id == SalesOrderItem.id",
+        primaryjoin=(
+            "and_(OutboundOrderItem.tenant_id == SalesOrderItem.tenant_id, "
+            "OutboundOrderItem.sales_order_item_id == SalesOrderItem.id)"
+        ),
         foreign_keys="OutboundOrderItem.sales_order_item_id",
         viewonly=True,
     )
     sku: Mapped[ProductSku] = relationship(
-        primaryjoin="OutboundOrderItem.sku_id == ProductSku.id",
+        primaryjoin=(
+            "and_(OutboundOrderItem.tenant_id == ProductSku.tenant_id, "
+            "OutboundOrderItem.sku_id == ProductSku.id)"
+        ),
         foreign_keys="OutboundOrderItem.sku_id",
         viewonly=True,
     )
@@ -190,7 +199,10 @@ class OutboundPick(TimestampMixin, TenantMixin, Base):
     )
 
     outbound_order: Mapped[OutboundOrder] = relationship(
-        primaryjoin="OutboundPick.outbound_order_id == OutboundOrder.id",
+        primaryjoin=(
+            "and_(OutboundPick.tenant_id == OutboundOrder.tenant_id, "
+            "OutboundPick.outbound_order_id == OutboundOrder.id)"
+        ),
         foreign_keys="OutboundPick.outbound_order_id",
         viewonly=True,
     )
@@ -248,7 +260,10 @@ class OutboundPickLine(TimestampMixin, TenantMixin, Base):
 
     pick: Mapped[OutboundPick] = relationship(back_populates="lines")
     sku: Mapped[ProductSku] = relationship(
-        primaryjoin="OutboundPickLine.sku_id == ProductSku.id",
+        primaryjoin=(
+            "and_(OutboundPickLine.tenant_id == ProductSku.tenant_id, "
+            "OutboundPickLine.sku_id == ProductSku.id)"
+        ),
         foreign_keys="OutboundPickLine.sku_id",
         viewonly=True,
     )

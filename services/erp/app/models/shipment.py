@@ -117,17 +117,26 @@ class Shipment(TimestampMixin, TenantMixin, Base):
     )
 
     sales_order: Mapped[SalesOrder] = relationship(
-        primaryjoin="Shipment.sales_order_id == SalesOrder.id",
+        primaryjoin=(
+            "and_(Shipment.tenant_id == SalesOrder.tenant_id, "
+            "Shipment.sales_order_id == SalesOrder.id)"
+        ),
         foreign_keys="Shipment.sales_order_id",
         viewonly=True,
     )
     outbound_order: Mapped[OutboundOrder] = relationship(
-        primaryjoin="Shipment.outbound_order_id == OutboundOrder.id",
+        primaryjoin=(
+            "and_(Shipment.tenant_id == OutboundOrder.tenant_id, "
+            "Shipment.outbound_order_id == OutboundOrder.id)"
+        ),
         foreign_keys="Shipment.outbound_order_id",
         viewonly=True,
     )
     carrier: Mapped[Carrier] = relationship(
-        primaryjoin="Shipment.carrier_id == Carrier.id",
+        primaryjoin=(
+            "and_(Shipment.tenant_id == Carrier.tenant_id, "
+            "Shipment.carrier_id == Carrier.id)"
+        ),
         foreign_keys="Shipment.carrier_id",
         viewonly=True,
     )
@@ -190,17 +199,26 @@ class ShipmentItem(TimestampMixin, TenantMixin, Base):
 
     shipment: Mapped[Shipment] = relationship(back_populates="items")
     outbound_order_item: Mapped[OutboundOrderItem] = relationship(
-        primaryjoin="ShipmentItem.outbound_order_item_id == OutboundOrderItem.id",
+        primaryjoin=(
+            "and_(ShipmentItem.tenant_id == OutboundOrderItem.tenant_id, "
+            "ShipmentItem.outbound_order_item_id == OutboundOrderItem.id)"
+        ),
         foreign_keys="ShipmentItem.outbound_order_item_id",
         viewonly=True,
     )
     sales_order_item: Mapped[SalesOrderItem] = relationship(
-        primaryjoin="ShipmentItem.sales_order_item_id == SalesOrderItem.id",
+        primaryjoin=(
+            "and_(ShipmentItem.tenant_id == SalesOrderItem.tenant_id, "
+            "ShipmentItem.sales_order_item_id == SalesOrderItem.id)"
+        ),
         foreign_keys="ShipmentItem.sales_order_item_id",
         viewonly=True,
     )
     sku: Mapped[ProductSku] = relationship(
-        primaryjoin="ShipmentItem.sku_id == ProductSku.id",
+        primaryjoin=(
+            "and_(ShipmentItem.tenant_id == ProductSku.tenant_id, "
+            "ShipmentItem.sku_id == ProductSku.id)"
+        ),
         foreign_keys="ShipmentItem.sku_id",
         viewonly=True,
     )

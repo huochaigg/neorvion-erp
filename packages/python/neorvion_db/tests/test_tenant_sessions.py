@@ -20,7 +20,8 @@ from neorvion_db import (
     require_tenant_id,
     reviewed_sql_option,
 )
-from sqlalchemy import func, insert, select, text, update
+from neorvion_db.static_check import scan_raw_connections
+from sqlalchemy import and_, func, insert, select, text, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy.orm import Session, joinedload, selectinload
@@ -178,8 +179,21 @@ def test_privileged_session_is_not_a_bypass_flag(registry, seeded) -> None:
         ).all()
     )
     session.add(Widget(tenant_id=3, name="claimed"))
-    session.commit()
+    with pytest.raises(PrivilegeError):
+        session.commit()
+    session.rollback()
     session.close()
+
+    allowed = open_privileged_session(
+        PrivilegedOperation.WORKER_CLAIM,
+        registry=registry,
+        allowed_callers=frozenset({__name__}),
+        bind=seeded,
+        flush_models=frozenset({"Widget"}),
+    )
+    allowed.add(Widget(tenant_id=3, name="claimed"))
+    allowed.commit()
+    allowed.close()
     assert names == {"alpha", "beta"}
 
     tenant = TenantSession(1, registry=registry, bind=seeded)
@@ -335,4 +349,52 @@ def test_advisory_lock_text_is_reviewed_and_other_text_is_rejected(registry, eng
             {"name": "erp:tenant:1"},
         )
     assert not isinstance(caught.value, TenantIsolationError)
+    with pytest.raises(TenantIsolationError):
+        session.execute(
+            text("SELECT pg_advisory_xact_lock(:lock_id)"),
+            {"lock_id": 1},
+        )
+    with pytest.raises(Exception) as postgres_lock:
+        session.execute(
+            text("SELECT pg_advisory_xact_lock(:lock_id)").execution_options(
+                **reviewed_sql_option(ReviewedSql.ADVISORY_LOCK)
+            ),
+            {"lock_id": 1},
+        )
+    assert not isinstance(postgres_lock.value, TenantIsolationError)
     session.close()
+
+
+def test_identity_map_delete_and_composite_join_stay_in_tenant(registry, seeded) -> None:
+    """同一会话里的缓存、删除和复合 JOIN 都不能带出另一租户。"""
+    session = TenantSession(1, registry=registry, bind=seeded)
+    first = session.scalars(select(Widget)).one()
+    again = session.get(Widget, first.id)
+    assert again is first
+    foreign = session.get(Widget, first.id + 1)
+    assert foreign is None or foreign.tenant_id == 1
+    joined = session.execute(
+        select(Widget.name, Part.id).join(
+            Part,
+            and_(Part.tenant_id == Widget.tenant_id, Part.widget_id == Widget.id),
+        )
+    ).all()
+    assert joined
+    assert all(name == "alpha" for name, _part_id in joined)
+    removed = session.scalar(select(Part).where(Part.tenant_id == 1))
+    assert removed is not None
+    session.delete(removed)
+    session.flush()
+    assert session.scalar(select(Part.id).where(Part.tenant_id == 1)) is None
+    session.rollback()
+    session.close()
+
+
+def test_raw_connection_calls_are_flagged() -> None:
+    source = (
+        "def leak(session, engine):\n"
+        "    session.connection().execute('select 1')\n"
+        "    engine.connect()\n"
+    )
+    findings = scan_raw_connections(source)
+    assert [item.qualname for item in findings] == ["leak", "leak"]

@@ -98,12 +98,18 @@ class StockTransfer(TimestampMixin, TenantMixin, Base):
     )
 
     source_warehouse: Mapped[Warehouse] = relationship(
-        primaryjoin="StockTransfer.source_warehouse_id == Warehouse.id",
+        primaryjoin=(
+            "and_(StockTransfer.tenant_id == Warehouse.tenant_id, "
+            "StockTransfer.source_warehouse_id == Warehouse.id)"
+        ),
         foreign_keys="StockTransfer.source_warehouse_id",
         viewonly=True,
     )
     target_warehouse: Mapped[Warehouse] = relationship(
-        primaryjoin="StockTransfer.target_warehouse_id == Warehouse.id",
+        primaryjoin=(
+            "and_(StockTransfer.tenant_id == Warehouse.tenant_id, "
+            "StockTransfer.target_warehouse_id == Warehouse.id)"
+        ),
         foreign_keys="StockTransfer.target_warehouse_id",
         viewonly=True,
     )
@@ -167,7 +173,10 @@ class StockTransferItem(TimestampMixin, TenantMixin, Base):
 
     stock_transfer: Mapped[StockTransfer] = relationship(back_populates="items")
     sku: Mapped[ProductSku] = relationship(
-        primaryjoin="StockTransferItem.sku_id == ProductSku.id",
+        primaryjoin=(
+            "and_(StockTransferItem.tenant_id == ProductSku.tenant_id, "
+            "StockTransferItem.sku_id == ProductSku.id)"
+        ),
         foreign_keys="StockTransferItem.sku_id",
         viewonly=True,
     )

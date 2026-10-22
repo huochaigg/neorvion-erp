@@ -160,11 +160,19 @@ class PrivilegedSystemSession(Session):
         if not isinstance(grant, PrivilegeGrant):
             raise PrivilegeError("特权会话必须接收 PrivilegeGrant，不能接收 reason 字符串")
         _require_registry(registry)
+        raw_models = kwargs.pop("flush_models", None)
+        if raw_models is None:
+            raw_models = frozenset()
+        if not isinstance(raw_models, frozenset) or not all(
+            isinstance(name, str) for name in raw_models
+        ):
+            raise PrivilegeError("flush_models 必须是模型类名的 frozenset，不能用字符串代替")
         kwargs.setdefault("autoflush", False)
         kwargs.setdefault("expire_on_commit", False)
         super().__init__(**kwargs)
         self._operation = grant.operation
         self._registry = registry
+        self._flush_models = raw_models
 
     @property
     def operation(self) -> PrivilegedOperation:
@@ -174,6 +182,11 @@ class PrivilegedSystemSession(Session):
     def registry(self) -> IsolationRegistry:
         return self._registry
 
+    @property
+    def flush_models(self) -> frozenset[str]:
+        """本操作允许 flush 的模型类名。未列入的业务模型即使在 flush 中也拒绝。"""
+        return self._flush_models
+
 
 def open_privileged_session(
     operation: PrivilegedOperation,
@@ -181,11 +194,21 @@ def open_privileged_session(
     registry: IsolationRegistry,
     allowed_callers: frozenset[str],
     bind: Any = None,
+    flush_models: frozenset[str] = frozenset(),
     **kwargs: Any,
 ) -> PrivilegedSystemSession:
-    """按调用方模块白名单打开特权会话。reason 字符串不能代替白名单。"""
+    """按调用方模块白名单打开特权会话。reason 字符串不能代替白名单。
+
+    flush_models 是本操作可以写入的模型类名。未列入的模型在 flush 时拒绝。
+    """
     grant = authorize_caller(operation, allowed_callers)
-    return PrivilegedSystemSession(grant, registry=registry, bind=bind, **kwargs)
+    return PrivilegedSystemSession(
+        grant,
+        registry=registry,
+        bind=bind,
+        flush_models=flush_models,
+        **kwargs,
+    )
 
 
 def require_tenant_id(session: Session) -> int:

@@ -182,17 +182,26 @@ class PurchaseReturn(TimestampMixin, TenantMixin, Base):
     )
 
     purchase_order: Mapped[PurchaseOrder] = relationship(
-        primaryjoin="PurchaseReturn.purchase_order_id == PurchaseOrder.id",
+        primaryjoin=(
+            "and_(PurchaseReturn.tenant_id == PurchaseOrder.tenant_id, "
+            "PurchaseReturn.purchase_order_id == PurchaseOrder.id)"
+        ),
         foreign_keys="PurchaseReturn.purchase_order_id",
         viewonly=True,
     )
     supplier: Mapped[Supplier] = relationship(
-        primaryjoin="PurchaseReturn.supplier_id == Supplier.id",
+        primaryjoin=(
+            "and_(PurchaseReturn.tenant_id == Supplier.tenant_id, "
+            "PurchaseReturn.supplier_id == Supplier.id)"
+        ),
         foreign_keys="PurchaseReturn.supplier_id",
         viewonly=True,
     )
     warehouse: Mapped[Warehouse] = relationship(
-        primaryjoin="PurchaseReturn.warehouse_id == Warehouse.id",
+        primaryjoin=(
+            "and_(PurchaseReturn.tenant_id == Warehouse.tenant_id, "
+            "PurchaseReturn.warehouse_id == Warehouse.id)"
+        ),
         foreign_keys="PurchaseReturn.warehouse_id",
         viewonly=True,
     )
@@ -302,12 +311,18 @@ class PurchaseReturnItem(TimestampMixin, TenantMixin, Base):
 
     purchase_return: Mapped[PurchaseReturn] = relationship(back_populates="items")
     purchase_order_item: Mapped[PurchaseOrderItem] = relationship(
-        primaryjoin="PurchaseReturnItem.purchase_order_item_id == PurchaseOrderItem.id",
+        primaryjoin=(
+            "and_(PurchaseReturnItem.tenant_id == PurchaseOrderItem.tenant_id, "
+            "PurchaseReturnItem.purchase_order_item_id == PurchaseOrderItem.id)"
+        ),
         foreign_keys="PurchaseReturnItem.purchase_order_item_id",
         viewonly=True,
     )
     sku: Mapped[ProductSku] = relationship(
-        primaryjoin="PurchaseReturnItem.sku_id == ProductSku.id",
+        primaryjoin=(
+            "and_(PurchaseReturnItem.tenant_id == ProductSku.tenant_id, "
+            "PurchaseReturnItem.sku_id == ProductSku.id)"
+        ),
         foreign_keys="PurchaseReturnItem.sku_id",
         viewonly=True,
     )

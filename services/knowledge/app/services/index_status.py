@@ -1,4 +1,4 @@
-from sqlalchemy import func, or_, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
@@ -37,8 +37,20 @@ class IndexService:
         total = int(
             await self.session.scalar(
                 select(func.count(DocumentChunk.id))
-                .join(KnowledgeDocument, KnowledgeDocument.id == DocumentChunk.document_id)
-                .join(KnowledgeBase, KnowledgeBase.id == DocumentChunk.knowledge_base_id)
+                .join(
+                    KnowledgeDocument,
+                    and_(
+                        KnowledgeDocument.tenant_id == DocumentChunk.tenant_id,
+                        KnowledgeDocument.id == DocumentChunk.document_id,
+                    ),
+                )
+                .join(
+                    KnowledgeBase,
+                    and_(
+                        KnowledgeBase.tenant_id == DocumentChunk.tenant_id,
+                        KnowledgeBase.id == DocumentChunk.knowledge_base_id,
+                    ),
+                )
                 .where(
                     DocumentChunk.tenant_id == tenant_id,
                     DocumentChunk.knowledge_base_id == knowledge_base_id,
@@ -57,7 +69,13 @@ class IndexService:
         rows = (
             await self.session.execute(
                 select(ChunkEmbedding.status, func.count())
-                .join(KnowledgeDocument, KnowledgeDocument.id == ChunkEmbedding.document_id)
+                .join(
+                    KnowledgeDocument,
+                    and_(
+                        KnowledgeDocument.tenant_id == ChunkEmbedding.tenant_id,
+                        KnowledgeDocument.id == ChunkEmbedding.document_id,
+                    ),
+                )
                 .where(
                     ChunkEmbedding.tenant_id == tenant_id,
                     ChunkEmbedding.knowledge_base_id == knowledge_base_id,
@@ -73,7 +91,13 @@ class IndexService:
         incompatible = int(
             await self.session.scalar(
                 select(func.count(ChunkEmbedding.id))
-                .join(KnowledgeDocument, KnowledgeDocument.id == ChunkEmbedding.document_id)
+                .join(
+                    KnowledgeDocument,
+                    and_(
+                        KnowledgeDocument.tenant_id == ChunkEmbedding.tenant_id,
+                        KnowledgeDocument.id == ChunkEmbedding.document_id,
+                    ),
+                )
                 .where(
                     ChunkEmbedding.tenant_id == tenant_id,
                     ChunkEmbedding.knowledge_base_id == knowledge_base_id,

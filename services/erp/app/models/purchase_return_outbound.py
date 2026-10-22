@@ -83,12 +83,18 @@ class PurchaseReturnOutbound(TimestampMixin, TenantMixin, Base):
     )
 
     purchase_return: Mapped[PurchaseReturn] = relationship(
-        primaryjoin="PurchaseReturnOutbound.purchase_return_id == PurchaseReturn.id",
+        primaryjoin=(
+            "and_(PurchaseReturnOutbound.tenant_id == PurchaseReturn.tenant_id, "
+            "PurchaseReturnOutbound.purchase_return_id == PurchaseReturn.id)"
+        ),
         foreign_keys="PurchaseReturnOutbound.purchase_return_id",
         viewonly=True,
     )
     warehouse: Mapped[Warehouse] = relationship(
-        primaryjoin="PurchaseReturnOutbound.warehouse_id == Warehouse.id",
+        primaryjoin=(
+            "and_(PurchaseReturnOutbound.tenant_id == Warehouse.tenant_id, "
+            "PurchaseReturnOutbound.warehouse_id == Warehouse.id)"
+        ),
         foreign_keys="PurchaseReturnOutbound.warehouse_id",
         viewonly=True,
     )
@@ -142,12 +148,18 @@ class PurchaseReturnOutboundItem(TimestampMixin, TenantMixin, Base):
 
     outbound: Mapped[PurchaseReturnOutbound] = relationship(back_populates="items")
     purchase_return_item: Mapped[PurchaseReturnItem] = relationship(
-        primaryjoin="PurchaseReturnOutboundItem.purchase_return_item_id == PurchaseReturnItem.id",
+        primaryjoin=(
+            "and_(PurchaseReturnOutboundItem.tenant_id == PurchaseReturnItem.tenant_id, "
+            "PurchaseReturnOutboundItem.purchase_return_item_id == PurchaseReturnItem.id)"
+        ),
         foreign_keys="PurchaseReturnOutboundItem.purchase_return_item_id",
         viewonly=True,
     )
     sku: Mapped[ProductSku] = relationship(
-        primaryjoin="PurchaseReturnOutboundItem.sku_id == ProductSku.id",
+        primaryjoin=(
+            "and_(PurchaseReturnOutboundItem.tenant_id == ProductSku.tenant_id, "
+            "PurchaseReturnOutboundItem.sku_id == ProductSku.id)"
+        ),
         foreign_keys="PurchaseReturnOutboundItem.sku_id",
         viewonly=True,
     )

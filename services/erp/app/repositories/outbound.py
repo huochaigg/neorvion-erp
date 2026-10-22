@@ -2,7 +2,7 @@
 
 from datetime import datetime
 
-from sqlalchemy import func, select, update
+from sqlalchemy import and_, func, select, update
 from sqlalchemy.orm import Session, selectinload
 
 from app.models.customer import Customer
@@ -90,7 +90,8 @@ class OutboundOrderRepository(BaseRepository):
                 OutboundOrderItem.sales_order_item_id,
                 func.coalesce(func.sum(OutboundOrderItem.planned_quantity), 0),
             )
-            .join(OutboundOrder, OutboundOrder.id == OutboundOrderItem.outbound_order_id)
+            .join(OutboundOrder, and_(OutboundOrder.tenant_id == OutboundOrderItem.tenant_id,
+                OutboundOrder.id == OutboundOrderItem.outbound_order_id))
             .where(
                 OutboundOrder.tenant_id == tenant_id,
                 OutboundOrder.sales_order_id == sales_order_id,
@@ -172,9 +173,12 @@ class OutboundOrderRepository(BaseRepository):
                 func.coalesce(qty.c.picked, 0),
                 func.coalesce(qty.c.outbound, 0),
             )
-            .join(SalesOrder, SalesOrder.id == OutboundOrder.sales_order_id)
-            .join(Customer, Customer.id == SalesOrder.customer_id)
-            .join(Warehouse, Warehouse.id == OutboundOrder.warehouse_id)
+            .join(SalesOrder, and_(SalesOrder.tenant_id == OutboundOrder.tenant_id,
+                SalesOrder.id == OutboundOrder.sales_order_id))
+            .join(Customer, and_(Customer.tenant_id == SalesOrder.tenant_id,
+                Customer.id == SalesOrder.customer_id))
+            .join(Warehouse, and_(Warehouse.tenant_id == OutboundOrder.tenant_id,
+                Warehouse.id == OutboundOrder.warehouse_id))
             .outerjoin(qty, qty.c.outbound_id == OutboundOrder.id)
             .where(*filters)
         )
@@ -210,7 +214,8 @@ class OutboundOrderRepository(BaseRepository):
         tenant_id = self.ensure_tenant()
         stmt = (
             self._pick_stmt()
-            .join(OutboundOrder, OutboundOrder.id == OutboundPick.outbound_order_id)
+            .join(OutboundOrder, and_(OutboundOrder.tenant_id == OutboundPick.tenant_id,
+                OutboundOrder.id == OutboundPick.outbound_order_id))
             .where(
                 OutboundPick.tenant_id == tenant_id,
                 OutboundOrder.tenant_id == tenant_id,

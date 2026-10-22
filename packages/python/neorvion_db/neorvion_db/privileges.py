@@ -82,7 +82,7 @@ def authorize_caller(
 
 
 def reviewed_sql_option(kind: ReviewedSql) -> dict[str, Any]:
-    """给 GET_LOCK 这类不访问业务表的语句使用。字符串值无效。"""
+    """给咨询锁这类不访问业务表的语句使用。字符串值无效。"""
     if not isinstance(kind, ReviewedSql):
         raise PrivilegeError("已审查 SQL 必须是 ReviewedSql 枚举")
     return {REVIEWED_SQL_KEY: kind}

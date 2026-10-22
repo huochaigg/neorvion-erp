@@ -4,7 +4,7 @@ from neorvion_db import AllowedQuery
 
 ALLOWLIST = (
     AllowedQuery(
-        "async_task.py:lock_task_for_worker",
+        "system_jobs.py:lock_task_for_worker",
         "Worker 按全局 task_id 领取排队任务，随后用任务行上的 tenant_id 进入业务",
     ),
     AllowedQuery(
@@ -16,7 +16,7 @@ ALLOWLIST = (
         "只构造拣货 select，调用方 list_picks 再追加 OutboundPick.tenant_id",
     ),
     AllowedQuery(
-        "system_event.py:SystemEventRepository.claim_pending",
+        "system_jobs.py:claim_pending_events",
         "Outbox 按全局队列领取待处理事件，事件行自己带可空 tenant_id",
     ),
 )

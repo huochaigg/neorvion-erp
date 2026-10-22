@@ -1,3 +1,7 @@
+"""IAM 应用入口。"""
+
+import logging
+import threading
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
@@ -15,13 +19,38 @@ from app.core.request_id import REQUEST_ID_HEADER, RequestIdMiddleware
 from app.db.session import engine
 from app.schemas.common import ApiResponse, ok
 
+logger = logging.getLogger(__name__)
+
+
+def _sweep_outbox_loop(stop: threading.Event) -> None:
+    """后台补刷其他租户已经提交的授权 Outbox。请求路径仍负责本事务内的行。"""
+    from app.services.snapshots import sweep_committed_outbox
+
+    while not stop.wait(30):
+        try:
+            sweep_committed_outbox()
+        except Exception:
+            logger.exception("授权 Outbox 后台补刷失败")
+
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     setup_logging()
-    yield
-    redis_client.close()
-    engine.dispose()
+    stop = threading.Event()
+    worker = threading.Thread(
+        target=_sweep_outbox_loop,
+        args=(stop,),
+        name="iam-outbox",
+        daemon=True,
+    )
+    worker.start()
+    try:
+        yield
+    finally:
+        stop.set()
+        worker.join(timeout=2)
+        redis_client.close()
+        engine.dispose()
 
 
 def create_app() -> FastAPI:

@@ -3,7 +3,7 @@
 from datetime import datetime
 from decimal import Decimal
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.models.product import ProductSku
@@ -100,7 +100,8 @@ class PurchaseReturnRepository(BaseRepository):
                 PurchaseReturnItem.purchase_order_item_id,
                 func.coalesce(func.sum(qty_expr), 0),
             )
-            .join(PurchaseReturn, PurchaseReturn.id == PurchaseReturnItem.purchase_return_id)
+            .join(PurchaseReturn, and_(PurchaseReturn.tenant_id == PurchaseReturnItem.tenant_id,
+                PurchaseReturn.id == PurchaseReturnItem.purchase_return_id))
             .where(
                 PurchaseReturnItem.tenant_id == tenant_id,
                 PurchaseReturnItem.purchase_order_item_id.in_(purchase_order_item_ids),
@@ -133,7 +134,8 @@ class PurchaseReturnRepository(BaseRepository):
                 PurchaseReturnItem.purchase_order_item_id,
                 func.coalesce(func.sum(amount_expr), 0),
             )
-            .join(PurchaseReturn, PurchaseReturn.id == PurchaseReturnItem.purchase_return_id)
+            .join(PurchaseReturn, and_(PurchaseReturn.tenant_id == PurchaseReturnItem.tenant_id,
+                PurchaseReturn.id == PurchaseReturnItem.purchase_return_id))
             .where(
                 PurchaseReturnItem.tenant_id == tenant_id,
                 PurchaseReturnItem.purchase_order_item_id.in_(purchase_order_item_ids),
@@ -155,7 +157,8 @@ class PurchaseReturnRepository(BaseRepository):
                 PurchaseReturnItem.purchase_order_item_id,
                 func.coalesce(func.sum(PurchaseReturnItem.returned_quantity), 0),
             )
-            .join(PurchaseReturn, PurchaseReturn.id == PurchaseReturnItem.purchase_return_id)
+            .join(PurchaseReturn, and_(PurchaseReturn.tenant_id == PurchaseReturnItem.tenant_id,
+                PurchaseReturn.id == PurchaseReturnItem.purchase_return_id))
             .where(
                 PurchaseReturnItem.tenant_id == tenant_id,
                 PurchaseReturnItem.purchase_order_item_id.in_(purchase_order_item_ids),
@@ -237,9 +240,12 @@ class PurchaseReturnRepository(BaseRepository):
 
         base = (
             select(PurchaseReturn)
-            .join(PurchaseOrder, PurchaseOrder.id == PurchaseReturn.purchase_order_id)
-            .join(Supplier, Supplier.id == PurchaseReturn.supplier_id)
-            .join(Warehouse, Warehouse.id == PurchaseReturn.warehouse_id)
+            .join(PurchaseOrder, and_(PurchaseOrder.tenant_id == PurchaseReturn.tenant_id,
+                PurchaseOrder.id == PurchaseReturn.purchase_order_id))
+            .join(Supplier, and_(Supplier.tenant_id == PurchaseReturn.tenant_id,
+                Supplier.id == PurchaseReturn.supplier_id))
+            .join(Warehouse, and_(Warehouse.tenant_id == PurchaseReturn.tenant_id,
+                Warehouse.id == PurchaseReturn.warehouse_id))
             .outerjoin(
                 PurchaseReturnItem,
                 PurchaseReturnItem.purchase_return_id == PurchaseReturn.id,
@@ -260,9 +266,12 @@ class PurchaseReturnRepository(BaseRepository):
                 apr_qty,
                 ret_qty,
             )
-            .join(PurchaseOrder, PurchaseOrder.id == PurchaseReturn.purchase_order_id)
-            .join(Supplier, Supplier.id == PurchaseReturn.supplier_id)
-            .join(Warehouse, Warehouse.id == PurchaseReturn.warehouse_id)
+            .join(PurchaseOrder, and_(PurchaseOrder.tenant_id == PurchaseReturn.tenant_id,
+                PurchaseOrder.id == PurchaseReturn.purchase_order_id))
+            .join(Supplier, and_(Supplier.tenant_id == PurchaseReturn.tenant_id,
+                Supplier.id == PurchaseReturn.supplier_id))
+            .join(Warehouse, and_(Warehouse.tenant_id == PurchaseReturn.tenant_id,
+                Warehouse.id == PurchaseReturn.warehouse_id))
             .outerjoin(
                 PurchaseReturnItem,
                 PurchaseReturnItem.purchase_return_id == PurchaseReturn.id,

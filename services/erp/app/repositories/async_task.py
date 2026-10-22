@@ -1,10 +1,7 @@
 from datetime import datetime
 
-from neorvion_db import PrivilegedOperation, privileged_option
 from sqlalchemy import Select, func, or_, select
-from sqlalchemy.orm import Session
 
-from app.core.async_tasks import TaskStatus
 from app.models.async_task import AsyncTask, AsyncTaskLog
 from app.repositories.base import BaseRepository
 
@@ -19,26 +16,30 @@ class AsyncTaskRepository(BaseRepository):
         return row
 
     def get_by_task_id(self, task_id: str) -> AsyncTask | None:
-        stmt = select(AsyncTask).where(AsyncTask.task_id == task_id)
-        if self.tenant_id is not None:
-            stmt = stmt.where(AsyncTask.tenant_id == self.tenant_id)
+        tenant_id = self.ensure_tenant()
+        stmt = select(AsyncTask).where(
+            AsyncTask.task_id == task_id,
+            AsyncTask.tenant_id == tenant_id,
+        )
         return self.session.execute(stmt).scalar_one_or_none()
 
     def lock_by_task_id(self, task_id: str) -> AsyncTask | None:
-        """锁住任务行，供重试 / 取消 / Worker 领取，避免并发重复入队。"""
-        stmt = select(AsyncTask).where(AsyncTask.task_id == task_id).with_for_update()
-        if self.tenant_id is not None:
-            stmt = stmt.where(AsyncTask.tenant_id == self.tenant_id)
+        """锁住当前租户的任务行，供重试和取消，避免并发重复入队。"""
+        tenant_id = self.ensure_tenant()
+        stmt = (
+            select(AsyncTask)
+            .where(AsyncTask.task_id == task_id, AsyncTask.tenant_id == tenant_id)
+            .with_for_update()
+        )
         return self.session.execute(stmt).scalar_one_or_none()
 
     def list_logs(self, task_id: str) -> list[AsyncTaskLog]:
+        tenant_id = self.ensure_tenant()
         stmt = (
             select(AsyncTaskLog)
-            .where(AsyncTaskLog.task_id == task_id)
+            .where(AsyncTaskLog.task_id == task_id, AsyncTaskLog.tenant_id == tenant_id)
             .order_by(AsyncTaskLog.id.asc())
         )
-        if self.tenant_id is not None:
-            stmt = stmt.where(AsyncTaskLog.tenant_id == self.tenant_id)
         return list(self.session.execute(stmt).scalars())
 
     def _filtered(
@@ -51,11 +52,8 @@ class AsyncTaskRepository(BaseRepository):
         created_to: datetime | None,
         keyword: str | None,
     ) -> Select[AsyncTask]:
-        stmt = select(AsyncTask)
-        if self.tenant_id is not None:
-            stmt = stmt.where(AsyncTask.tenant_id == self.tenant_id)
-        else:
-            stmt = stmt.where(AsyncTask.tenant_id.is_(None))
+        tenant_id = self.ensure_tenant()
+        stmt = select(AsyncTask).where(AsyncTask.tenant_id == tenant_id)
         if task_type:
             stmt = stmt.where(AsyncTask.task_type == task_type)
         if status:
@@ -102,16 +100,3 @@ class AsyncTaskRepository(BaseRepository):
             ).all()
         )
         return rows, total
-
-
-def lock_task_for_worker(session: Session, task_id: str) -> AsyncTask | None:
-    stmt = (
-        select(AsyncTask)
-        .where(
-            AsyncTask.task_id == task_id,
-            AsyncTask.status.in_((TaskStatus.QUEUED.value, TaskStatus.PENDING.value)),
-        )
-        .with_for_update(skip_locked=True)
-        .execution_options(**privileged_option(PrivilegedOperation.WORKER_CLAIM))
-    )
-    return session.execute(stmt).scalar_one_or_none()

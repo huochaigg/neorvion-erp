@@ -98,6 +98,7 @@ def _tenant_clause(tenant_id: int):
 def _reviewed_utility(execute_state: Any) -> bool:
     """只放行带 ReviewedSql 枚举、且 SQL 本身是咨询锁的语句。
 
+    MySQL 使用 GET_LOCK / RELEASE_LOCK。PostgreSQL 使用 pg_advisory_xact_lock。
     不根据 SQL 里有没有 tenant_id 这几个字符判断安全。枚举和语句文本必须同时符合。
     """
     kind = execute_state.execution_options.get(REVIEWED_SQL_KEY)
@@ -106,7 +107,11 @@ def _reviewed_utility(execute_state: Any) -> bool:
     text_sql = " ".join(str(execute_state.statement).split()).upper()
     if "TENANT_ID" in text_sql or "FROM " in text_sql:
         return False
-    return text_sql.startswith("SELECT GET_LOCK(") or text_sql.startswith("SELECT RELEASE_LOCK(")
+    return (
+        text_sql.startswith("SELECT GET_LOCK(")
+        or text_sql.startswith("SELECT RELEASE_LOCK(")
+        or text_sql.startswith("SELECT PG_ADVISORY_XACT_LOCK(")
+    )
 
 
 def _bound_int(expr: Any) -> int | None:
@@ -339,6 +344,7 @@ def guard_privileged_execute(execute_state: Any) -> None:
     if flushing and (
         execute_state.is_insert or execute_state.is_update or execute_state.is_delete
     ):
+        _reject_unlisted_flush_models(execute_state)
         return
     if not execute_state.is_orm_statement:
         raise TenantIsolationError("特权会话拒绝 text()。Connection.execute 同样不受本守卫保护")
@@ -366,9 +372,13 @@ def guard_global_flush(session: Any, _flush_context: Any, _instances: Any) -> No
 
 
 def guard_privileged_flush(session: Any, _flush_context: Any, _instances: Any) -> None:
-    """特权 flush 可以写多个租户的行，但不能把已有行的 tenant_id 改成另一家。"""
+    """特权 flush 只允许本操作登记过的模型，且不能改已有行的 tenant_id。"""
     registry = _registry_of(session)
+    allowed = _flush_model_names(session)
     for obj in _flush_objects(session):
+        name = type(obj).__name__
+        if name not in allowed:
+            raise PrivilegeError(f"特权会话不能 flush 未登记的模型 {name}")
         registration = registry.require(type(obj))
         if registration.isolation is IsolationClass.GLOBAL:
             continue
@@ -377,6 +387,21 @@ def guard_privileged_flush(session: Any, _flush_context: Any, _instances: Any) -
         _reject_tenant_rebind(state)
         if registration.isolation is IsolationClass.TENANT_SCOPED and type(current) is not int:
             raise TenantIsolationError("特权会话插入租户行时必须显式写出 tenant_id，不会自动填充")
+
+
+def _flush_model_names(session: Any) -> frozenset[str]:
+    raw = getattr(session, "flush_models", frozenset())
+    if isinstance(raw, frozenset):
+        return raw
+    return frozenset()
+
+
+def _reject_unlisted_flush_models(execute_state: Any) -> None:
+    """flush 发出的语句也只能碰到登记过的模型。未登记则拒绝，避免绕过对象检查。"""
+    allowed = _flush_model_names(execute_state.session)
+    for model in _mapped_models(execute_state):
+        if model.__name__ not in allowed:
+            raise PrivilegeError(f"特权会话不能在 flush 中写入未登记的模型 {model.__name__}")
 
 
 def _matching_operation(execute_state: Any) -> PrivilegedOperation | None:

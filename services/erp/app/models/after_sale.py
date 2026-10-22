@@ -158,12 +158,18 @@ class AfterSaleOrder(TimestampMixin, TenantMixin, Base):
     )
 
     sales_order: Mapped[SalesOrder] = relationship(
-        primaryjoin="AfterSaleOrder.sales_order_id == SalesOrder.id",
+        primaryjoin=(
+            "and_(AfterSaleOrder.tenant_id == SalesOrder.tenant_id, "
+            "AfterSaleOrder.sales_order_id == SalesOrder.id)"
+        ),
         foreign_keys="AfterSaleOrder.sales_order_id",
         viewonly=True,
     )
     customer: Mapped[Customer] = relationship(
-        primaryjoin="AfterSaleOrder.customer_id == Customer.id",
+        primaryjoin=(
+            "and_(AfterSaleOrder.tenant_id == Customer.tenant_id, "
+            "AfterSaleOrder.customer_id == Customer.id)"
+        ),
         foreign_keys="AfterSaleOrder.customer_id",
         viewonly=True,
     )
@@ -250,12 +256,18 @@ class AfterSaleItem(TimestampMixin, TenantMixin, Base):
 
     after_sale_order: Mapped[AfterSaleOrder] = relationship(back_populates="items")
     sales_order_item: Mapped[SalesOrderItem] = relationship(
-        primaryjoin="AfterSaleItem.sales_order_item_id == SalesOrderItem.id",
+        primaryjoin=(
+            "and_(AfterSaleItem.tenant_id == SalesOrderItem.tenant_id, "
+            "AfterSaleItem.sales_order_item_id == SalesOrderItem.id)"
+        ),
         foreign_keys="AfterSaleItem.sales_order_item_id",
         viewonly=True,
     )
     sku: Mapped[ProductSku] = relationship(
-        primaryjoin="AfterSaleItem.sku_id == ProductSku.id",
+        primaryjoin=(
+            "and_(AfterSaleItem.tenant_id == ProductSku.tenant_id, "
+            "AfterSaleItem.sku_id == ProductSku.id)"
+        ),
         foreign_keys="AfterSaleItem.sku_id",
         viewonly=True,
     )

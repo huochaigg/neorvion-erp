@@ -2,7 +2,7 @@
 
 from datetime import datetime
 
-from sqlalchemy import case, func, select
+from sqlalchemy import and_, case, func, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.models.identity import IdentityNameSnapshot
@@ -132,7 +132,8 @@ class StocktakeRepository(BaseRepository):
                 func.coalesce(qty.c.sku_count, 0),
                 func.coalesce(qty.c.difference_sku_count, 0),
             )
-            .join(Warehouse, Warehouse.id == StocktakeOrder.warehouse_id)
+            .join(Warehouse, and_(Warehouse.tenant_id == StocktakeOrder.tenant_id,
+                Warehouse.id == StocktakeOrder.warehouse_id))
             .outerjoin(
                 IdentityNameSnapshot,
                 IdentityNameSnapshot.user_id == StocktakeOrder.created_by,

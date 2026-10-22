@@ -19,10 +19,14 @@ from app.core.event_loop import selector_loop_factory
 from app.core.logging import setup_logging
 from app.db.isolation import REGISTRY
 from app.db.session import engine, open_tenant_session
-from app.db.system_access import PRIVILEGED_CALLERS
+from app.db.system_access import PRIVILEGED_CALLERS, PRIVILEGED_FLUSH_MODELS
 from app.models.knowledge import KnowledgeDocument, KnowledgeDocumentStatus, TaskType
-from app.repositories.documents import TaskRepository
-from app.repositories.evaluation import EvaluationRepository
+from app.repositories.system_queue import (
+    fail_stale_tasks,
+    list_queued_runs,
+    list_queued_tasks,
+    pause_stale_runs,
+)
 from app.services.evaluation_run import EvaluationRunService
 from app.services.processing import ProcessingService
 from app.tasks.queue import enqueue_eval_run, enqueue_task, pop_queue_item
@@ -37,6 +41,7 @@ def _open_claim():
         registry=REGISTRY,
         allowed_callers=PRIVILEGED_CALLERS[PrivilegedOperation.WORKER_CLAIM],
         bind=engine,
+        flush_models=PRIVILEGED_FLUSH_MODELS[PrivilegedOperation.WORKER_CLAIM],
     )
 
 
@@ -50,8 +55,7 @@ async def recover_stale_tasks() -> None:
     """重启后回收过期评测租约，并把 QUEUED 重新入队。文档 RUNNING 仍标失败。"""
     async with _open_claim() as privileged:
         session = cast(AsyncSession, cast(object, privileged))
-        repo = TaskRepository(session)
-        failed = await repo.fail_stale_running(message="Worker 重启，任务中断，请重试")
+        failed = await fail_stale_tasks(session, message="Worker 重启，任务中断，请重试")
         parse_or_chunk_docs = {
             row.document_id for row in failed if row.task_type in {TaskType.PARSE.value, TaskType.CHUNK.value}
         }
@@ -68,10 +72,9 @@ async def recover_stale_tasks() -> None:
             for document in docs:
                 document.status = KnowledgeDocumentStatus.FAILED.value
                 document.error_message = "Worker 重启，任务中断，请重试"
-        queued = await repo.list_queued()
-        eval_repo = EvaluationRepository(session, None)
-        eval_failed = await eval_repo.pause_stale_running("Worker 重启，已保留部分结果，将从中断处继续")
-        eval_queued = await eval_repo.list_queued_runs()
+        queued = await list_queued_tasks(session)
+        eval_failed = await pause_stale_runs(session, "Worker 重启，已保留部分结果，将从中断处继续")
+        eval_queued = await list_queued_runs(session)
         await session.commit()
         for task in queued:
             await enqueue_task(task.id)
@@ -91,8 +94,7 @@ async def recover_expired_eval_leases() -> None:
     """空闲时回收租约过期的 RUNNING 评测，避免 Worker 崩溃后任务永久卡住。"""
     async with _open_claim() as privileged:
         session = cast(AsyncSession, cast(object, privileged))
-        eval_repo = EvaluationRepository(session, None)
-        recovered = await eval_repo.pause_stale_running("评测租约过期，已保留部分结果，将从中断处继续")
+        recovered = await pause_stale_runs(session, "评测租约过期，已保留部分结果，将从中断处继续")
         await session.commit()
         for run in recovered:
             await enqueue_eval_run(run.id)

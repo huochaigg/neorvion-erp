@@ -2,7 +2,7 @@
 
 from datetime import datetime
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.models.product import ProductSku
@@ -128,10 +128,14 @@ class PurchaseReturnOutboundRepository(BaseRepository):
 
         base = (
             select(PurchaseReturnOutbound)
-            .join(PurchaseReturn, PurchaseReturn.id == PurchaseReturnOutbound.purchase_return_id)
-            .join(PurchaseOrder, PurchaseOrder.id == PurchaseReturn.purchase_order_id)
-            .join(Supplier, Supplier.id == PurchaseReturn.supplier_id)
-            .join(Warehouse, Warehouse.id == PurchaseReturnOutbound.warehouse_id)
+            .join(PurchaseReturn, and_(PurchaseReturn.tenant_id == PurchaseReturnOutbound.tenant_id,
+                PurchaseReturn.id == PurchaseReturnOutbound.purchase_return_id))
+            .join(PurchaseOrder, and_(PurchaseOrder.tenant_id == PurchaseReturn.tenant_id,
+                PurchaseOrder.id == PurchaseReturn.purchase_order_id))
+            .join(Supplier, and_(Supplier.tenant_id == PurchaseReturn.tenant_id,
+                Supplier.id == PurchaseReturn.supplier_id))
+            .join(Warehouse, and_(Warehouse.tenant_id == PurchaseReturnOutbound.tenant_id,
+                Warehouse.id == PurchaseReturnOutbound.warehouse_id))
             .outerjoin(
                 PurchaseReturnOutboundItem,
                 PurchaseReturnOutboundItem.purchase_return_outbound_id == PurchaseReturnOutbound.id,
@@ -155,10 +159,14 @@ class PurchaseReturnOutboundRepository(BaseRepository):
                 Warehouse.name,
                 total_qty,
             )
-            .join(PurchaseReturn, PurchaseReturn.id == PurchaseReturnOutbound.purchase_return_id)
-            .join(PurchaseOrder, PurchaseOrder.id == PurchaseReturn.purchase_order_id)
-            .join(Supplier, Supplier.id == PurchaseReturn.supplier_id)
-            .join(Warehouse, Warehouse.id == PurchaseReturnOutbound.warehouse_id)
+            .join(PurchaseReturn, and_(PurchaseReturn.tenant_id == PurchaseReturnOutbound.tenant_id,
+                PurchaseReturn.id == PurchaseReturnOutbound.purchase_return_id))
+            .join(PurchaseOrder, and_(PurchaseOrder.tenant_id == PurchaseReturn.tenant_id,
+                PurchaseOrder.id == PurchaseReturn.purchase_order_id))
+            .join(Supplier, and_(Supplier.tenant_id == PurchaseReturn.tenant_id,
+                Supplier.id == PurchaseReturn.supplier_id))
+            .join(Warehouse, and_(Warehouse.tenant_id == PurchaseReturnOutbound.tenant_id,
+                Warehouse.id == PurchaseReturnOutbound.warehouse_id))
             .outerjoin(
                 PurchaseReturnOutboundItem,
                 PurchaseReturnOutboundItem.purchase_return_outbound_id == PurchaseReturnOutbound.id,

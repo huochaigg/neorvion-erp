@@ -1,10 +1,7 @@
 from datetime import datetime
 
-from neorvion_db import PrivilegedOperation, privileged_option
 from sqlalchemy import Select, func, or_, select
-from sqlalchemy.orm import Session
 
-from app.core.events import EventStatus
 from app.models.system_event import SystemEvent
 from app.repositories.base import BaseRepository
 
@@ -15,15 +12,19 @@ class SystemEventRepository(BaseRepository):
         return event
 
     def get_by_event_id(self, event_id: str) -> SystemEvent | None:
-        stmt = select(SystemEvent).where(SystemEvent.event_id == event_id)
-        if self.tenant_id is not None:
-            stmt = stmt.where(SystemEvent.tenant_id == self.tenant_id)
+        tenant_id = self.ensure_tenant()
+        stmt = select(SystemEvent).where(
+            SystemEvent.event_id == event_id,
+            SystemEvent.tenant_id == tenant_id,
+        )
         return self.session.execute(stmt).scalar_one_or_none()
 
     def get_by_pk(self, event_pk: int) -> SystemEvent | None:
-        stmt = select(SystemEvent).where(SystemEvent.id == event_pk)
-        if self.tenant_id is not None:
-            stmt = stmt.where(SystemEvent.tenant_id == self.tenant_id)
+        tenant_id = self.ensure_tenant()
+        stmt = select(SystemEvent).where(
+            SystemEvent.id == event_pk,
+            SystemEvent.tenant_id == tenant_id,
+        )
         return self.session.execute(stmt).scalar_one_or_none()
 
     def _filtered(
@@ -41,11 +42,8 @@ class SystemEventRepository(BaseRepository):
         occurred_to: datetime | None,
         keyword: str | None,
     ) -> Select[SystemEvent]:
-        stmt = select(SystemEvent)
-        if self.tenant_id is not None:
-            stmt = stmt.where(SystemEvent.tenant_id == self.tenant_id)
-        else:
-            stmt = stmt.where(SystemEvent.tenant_id.is_(None))
+        tenant_id = self.ensure_tenant()
+        stmt = select(SystemEvent).where(SystemEvent.tenant_id == tenant_id)
         if event_type:
             stmt = stmt.where(SystemEvent.event_type == event_type)
         if event_source:
@@ -118,27 +116,3 @@ class SystemEventRepository(BaseRepository):
             ).all()
         )
         return rows, total
-
-    def claim_pending(self, limit: int = 20) -> list[SystemEvent]:
-        """
-        功能：并发安全领取待处理 Outbox 事件。
-        核心流程：SELECT ... FOR UPDATE SKIP LOCKED，避免多个 Worker 处理同一行。
-        事务边界：调用方负责随后改状态并 commit。
-        """
-        now = datetime.now()
-        stmt = (
-            select(SystemEvent)
-            .where(
-                SystemEvent.status == EventStatus.PENDING.value,
-                or_(SystemEvent.next_retry_at.is_(None), SystemEvent.next_retry_at <= now),
-            )
-            .order_by(SystemEvent.id.asc())
-            .limit(limit)
-            .with_for_update(skip_locked=True)
-            .execution_options(**privileged_option(PrivilegedOperation.OUTBOX_SCAN))
-        )
-        return list(self.session.execute(stmt).scalars())
-
-
-def claim_pending_events(session: Session, limit: int = 20) -> list[SystemEvent]:
-    return SystemEventRepository(session, None).claim_pending(limit)

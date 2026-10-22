@@ -83,7 +83,10 @@ class SupplierRefundRecord(TimestampMixin, TenantMixin, Base):
     )
 
     purchase_return: Mapped[PurchaseReturn] = relationship(
-        primaryjoin="SupplierRefundRecord.purchase_return_id == PurchaseReturn.id",
+        primaryjoin=(
+            "and_(SupplierRefundRecord.tenant_id == PurchaseReturn.tenant_id, "
+            "SupplierRefundRecord.purchase_return_id == PurchaseReturn.id)"
+        ),
         foreign_keys="SupplierRefundRecord.purchase_return_id",
         viewonly=True,
     )

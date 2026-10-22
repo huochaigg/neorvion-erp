@@ -5,3 +5,7 @@ from neorvion_db import PrivilegedOperation
 PRIVILEGED_CALLERS = {
     PrivilegedOperation.OUTBOX_SCAN: frozenset({"app.services.snapshots"}),
 }
+
+PRIVILEGED_FLUSH_MODELS = {
+    PrivilegedOperation.OUTBOX_SCAN: frozenset({"AuthzOutbox"}),
+}

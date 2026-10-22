@@ -8,6 +8,7 @@ import re
 import unicodedata
 from dataclasses import dataclass
 
+from neorvion_db import ReviewedSql, reviewed_sql_option
 from sqlalchemy import select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -125,7 +126,12 @@ async def embed_query(session: AsyncSession, tenant_id: int, text_value: str) ->
     cached = await _read_hit(session, tenant_id, key)
     if cached is not None:
         return cached
-    await session.execute(text("SELECT pg_advisory_xact_lock(:lock_id)"), {"lock_id": _lock_id(tenant_id, key)})
+    await session.execute(
+        text("SELECT pg_advisory_xact_lock(:lock_id)").execution_options(
+            **reviewed_sql_option(ReviewedSql.ADVISORY_LOCK)
+        ),
+        {"lock_id": _lock_id(tenant_id, key)},
+    )
     cached = await _read_hit(session, tenant_id, key)
     if cached is not None:
         return cached

@@ -128,17 +128,23 @@ class Product(TimestampMixin, TenantMixin, Base):
     )
 
     category: Mapped[ProductCategory] = relationship(
-        primaryjoin="Product.category_id == ProductCategory.id",
+        primaryjoin=(
+            "and_(Product.tenant_id == ProductCategory.tenant_id, "
+            "Product.category_id == ProductCategory.id)"
+        ),
         foreign_keys="Product.category_id",
         viewonly=True,
     )
     brand: Mapped[Brand | None] = relationship(
-        primaryjoin="Product.brand_id == Brand.id",
+        primaryjoin="and_(Product.tenant_id == Brand.tenant_id, Product.brand_id == Brand.id)",
         foreign_keys="Product.brand_id",
         viewonly=True,
     )
     skus: Mapped[list[ProductSku]] = relationship(
-        primaryjoin="Product.id == ProductSku.product_id",
+        primaryjoin=(
+            "and_(Product.tenant_id == ProductSku.tenant_id, "
+            "Product.id == ProductSku.product_id)"
+        ),
         foreign_keys="ProductSku.product_id",
         viewonly=True,
     )
@@ -174,7 +180,10 @@ class ProductSku(TimestampMixin, TenantMixin, Base):
     )
 
     product: Mapped[Product] = relationship(
-        primaryjoin="ProductSku.product_id == Product.id",
+        primaryjoin=(
+            "and_(ProductSku.tenant_id == Product.tenant_id, "
+            "ProductSku.product_id == Product.id)"
+        ),
         foreign_keys="ProductSku.product_id",
         viewonly=True,
     )

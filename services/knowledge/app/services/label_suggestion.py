@@ -4,12 +4,16 @@ from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime, timedelta
+from typing import cast
 
+from neorvion_db import PrivilegedOperation, open_privileged_async_session, privileged_option
+from neorvion_security import SecurityError
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import AppError
+from app.core.iam import snapshot_store
 from app.core.permissions import PermissionCode
 from app.core.tenant import TenantContext
 from app.evaluation.label_suggest import (
@@ -593,28 +597,107 @@ def _job_out(job: EvaluationLabelJob, *, accepted: bool, already_running: bool) 
 
 
 def context_for_label_job(job: EvaluationLabelJob) -> TenantContext:
-    """后台任务沿用入队时已经校验过的用户和租户，不读取请求头。"""
-    return TenantContext(
-        user_id=job.created_by,
-        tenant_id=job.tenant_id,
-        member_id=0,
-        is_owner=False,
-        role="MEMBER",
-        permission_codes=frozenset(
-            {PermissionCode.KNOWLEDGE_READ.value, PermissionCode.KNOWLEDGE_UPDATE.value}
-        ),
-    )
+    """已废弃的占位。后台执行必须使用 load_for_principal 还原的真实快照。"""
+    raise AppError(f"标签任务 {job.id} 必须使用创建者的授权快照", code=40320, status_code=403)
 
 
 async def execute_label_job(job_id: int) -> None:
-    from app.db.session import SessionLocal
+    """按任务行上的租户和创建者执行。不伪造 Owner，也不使用全部权限码。"""
+    from app.db.isolation import REGISTRY
+    from app.db.session import engine, open_tenant_session
+    from app.db.system_access import PRIVILEGED_CALLERS
+    from app.models.evaluation import EvaluationLabelJob
 
-    async with SessionLocal() as session:
-        job = await session.get(EvaluationLabelJob, job_id)
-        if job is None:
+    tenant_id: int | None = None
+    created_by: int | None = None
+    async with open_privileged_async_session(
+        PrivilegedOperation.WORKER_CLAIM,
+        registry=REGISTRY,
+        allowed_callers=PRIVILEGED_CALLERS[PrivilegedOperation.WORKER_CLAIM],
+        bind=engine,
+    ) as privileged:
+        session = cast(AsyncSession, cast(object, privileged))
+        job = await session.scalar(
+            select(EvaluationLabelJob)
+            .where(EvaluationLabelJob.id == job_id)
+            .execution_options(**privileged_option(PrivilegedOperation.WORKER_CLAIM))
+        )
+        if job is not None and type(job.tenant_id) is int and job.tenant_id > 0:
+            tenant_id = job.tenant_id
+            created_by = job.created_by if type(job.created_by) is int and job.created_by > 0 else None
+    if tenant_id is None:
+        return
+    async with open_tenant_session(tenant_id) as session:
+        if created_by is None:
+            await _fail_label_job(session, job_id, tenant_id, "标签任务缺少创建者，拒绝执行")
             return
-        service = LabelSuggestionService(session, context_for_label_job(job))
+        try:
+            context = _load_label_principal(created_by, tenant_id)
+        except SecurityError as exc:
+            if _label_auth_is_retryable(exc):
+                await _requeue_label_job(session, job_id, tenant_id, exc.message)
+            else:
+                await _fail_label_job(session, job_id, tenant_id, exc.message)
+            return
+        service = LabelSuggestionService(session, context)
         await service.run_job(job_id)
+
+
+def _label_auth_is_retryable(exc: SecurityError) -> bool:
+    """Redis 或快照暂时不可用可以再试。成员、租户和权限拒绝是确定的。"""
+    return exc.status_code == 503 or exc.code in {50313, 40321, 40310}
+
+
+def _load_label_principal(user_id: int, tenant_id: int):
+    """有限次读取创建者快照。基础设施抖动不把任务标成失败。"""
+    import time
+
+    last: SecurityError | None = None
+    for _ in range(3):
+        try:
+            return snapshot_store().load_for_principal(user_id=user_id, tenant_id=tenant_id)
+        except SecurityError as exc:
+            if not _label_auth_is_retryable(exc):
+                raise
+            last = exc
+            time.sleep(0.2)
+    assert last is not None
+    raise last
+
+
+async def _requeue_label_job(session: AsyncSession, job_id: int, tenant_id: int, message: str) -> None:
+    """暂时失败时保持 QUEUED，避免一次 Redis 抖动把任务永久标失败。"""
+    from app.models.evaluation import EvaluationLabelJob
+
+    job = await session.scalar(
+        select(EvaluationLabelJob).where(
+            EvaluationLabelJob.id == job_id,
+            EvaluationLabelJob.tenant_id == tenant_id,
+        )
+    )
+    if job is None:
+        return
+    job.status = LabelJobStatus.QUEUED.value
+    job.error_message = message
+    job.finished_at = None
+    await session.commit()
+
+
+async def _fail_label_job(session: AsyncSession, job_id: int, tenant_id: int, message: str) -> None:
+    from app.models.evaluation import EvaluationLabelJob
+
+    job = await session.scalar(
+        select(EvaluationLabelJob).where(
+            EvaluationLabelJob.id == job_id,
+            EvaluationLabelJob.tenant_id == tenant_id,
+        )
+    )
+    if job is None:
+        return
+    job.status = LabelJobStatus.FAILED.value
+    job.error_message = message
+    job.finished_at = datetime.now(UTC)
+    await session.commit()
 
 
 def draft_model_name() -> str:

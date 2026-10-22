@@ -115,12 +115,18 @@ class PurchaseOrder(TimestampMixin, TenantMixin, Base):
     )
 
     supplier: Mapped[Supplier] = relationship(
-        primaryjoin="PurchaseOrder.supplier_id == Supplier.id",
+        primaryjoin=(
+            "and_(PurchaseOrder.tenant_id == Supplier.tenant_id, "
+            "PurchaseOrder.supplier_id == Supplier.id)"
+        ),
         foreign_keys="PurchaseOrder.supplier_id",
         viewonly=True,
     )
     warehouse: Mapped[Warehouse] = relationship(
-        primaryjoin="PurchaseOrder.warehouse_id == Warehouse.id",
+        primaryjoin=(
+            "and_(PurchaseOrder.tenant_id == Warehouse.tenant_id, "
+            "PurchaseOrder.warehouse_id == Warehouse.id)"
+        ),
         foreign_keys="PurchaseOrder.warehouse_id",
         viewonly=True,
     )
@@ -183,7 +189,10 @@ class PurchaseOrderItem(TimestampMixin, TenantMixin, Base):
     """所属采购单。ORM 导航属性，对应 purchase_order_id。"""
     purchase_order: Mapped[PurchaseOrder] = relationship(back_populates="items")
     sku: Mapped[ProductSku] = relationship(
-        primaryjoin="PurchaseOrderItem.sku_id == ProductSku.id",
+        primaryjoin=(
+            "and_(PurchaseOrderItem.tenant_id == ProductSku.tenant_id, "
+            "PurchaseOrderItem.sku_id == ProductSku.id)"
+        ),
         foreign_keys="PurchaseOrderItem.sku_id",
         viewonly=True,
     )

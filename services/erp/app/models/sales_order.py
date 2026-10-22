@@ -151,12 +151,18 @@ class SalesOrder(TimestampMixin, TenantMixin, Base):
     )
 
     customer: Mapped[Customer] = relationship(
-        primaryjoin="SalesOrder.customer_id == Customer.id",
+        primaryjoin=(
+            "and_(SalesOrder.tenant_id == Customer.tenant_id, "
+            "SalesOrder.customer_id == Customer.id)"
+        ),
         foreign_keys="SalesOrder.customer_id",
         viewonly=True,
     )
     warehouse: Mapped[Warehouse] = relationship(
-        primaryjoin="SalesOrder.warehouse_id == Warehouse.id",
+        primaryjoin=(
+            "and_(SalesOrder.tenant_id == Warehouse.tenant_id, "
+            "SalesOrder.warehouse_id == Warehouse.id)"
+        ),
         foreign_keys="SalesOrder.warehouse_id",
         viewonly=True,
     )
@@ -236,7 +242,10 @@ class SalesOrderItem(TimestampMixin, TenantMixin, Base):
 
     sales_order: Mapped[SalesOrder] = relationship(back_populates="items")
     sku: Mapped[ProductSku] = relationship(
-        primaryjoin="SalesOrderItem.sku_id == ProductSku.id",
+        primaryjoin=(
+            "and_(SalesOrderItem.tenant_id == ProductSku.tenant_id, "
+            "SalesOrderItem.sku_id == ProductSku.id)"
+        ),
         foreign_keys="SalesOrderItem.sku_id",
         viewonly=True,
     )

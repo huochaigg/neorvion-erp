@@ -6,7 +6,9 @@ import logging
 import os
 import uuid
 from datetime import UTC, datetime, timedelta
+from typing import cast
 
+from neorvion_db import PrivilegedOperation, open_privileged_async_session, privileged_option
 from neorvion_security import SecurityError
 from sqlalchemy import or_, select, update
 from sqlalchemy.exc import IntegrityError
@@ -17,7 +19,9 @@ from app.core.exceptions import AppError
 from app.core.iam import snapshot_store
 from app.core.permissions import PermissionCode
 from app.core.tenant import TenantContext
-from app.db.session import SessionLocal
+from app.db.isolation import REGISTRY
+from app.db.session import engine, open_tenant_session
+from app.db.system_access import PRIVILEGED_CALLERS
 from app.evaluation.budget import (
     accumulate_results,
     assert_budget,
@@ -74,10 +78,35 @@ from app.tasks.queue import enqueue_eval_run
 logger = logging.getLogger(__name__)
 
 
+async def _read_run_tenant(run_id: int) -> int | None:
+    """内联执行前只从运行行读取租户。队列里的 id 不能代替这一行。"""
+    from app.models.evaluation import EvaluationRun
+
+    async with open_privileged_async_session(
+        PrivilegedOperation.WORKER_CLAIM,
+        registry=REGISTRY,
+        allowed_callers=PRIVILEGED_CALLERS[PrivilegedOperation.WORKER_CLAIM],
+        bind=engine,
+    ) as privileged:
+        session = cast(AsyncSession, cast(object, privileged))
+        run = await session.scalar(
+            select(EvaluationRun)
+            .where(EvaluationRun.id == run_id)
+            .execution_options(**privileged_option(PrivilegedOperation.WORKER_CLAIM))
+        )
+        if run is None or type(run.tenant_id) is not int or run.tenant_id <= 0:
+            return None
+        return run.tenant_id
+
+
 async def execute_eval_run(run_id: int) -> None:
-    """独立 Session 执行评测。请求级 Session 在响应后会关闭，不能复用。"""
+    """独立租户会话执行评测。请求级 Session 在响应后会关闭，不能复用。"""
+    tenant_id = await _read_run_tenant(run_id)
+    if tenant_id is None:
+        logger.error("eval run missing tenant run_id=%s", run_id)
+        return
     try:
-        async with SessionLocal() as session:
+        async with open_tenant_session(tenant_id) as session:
             await EvaluationRunService(session).execute(run_id)
     except PauseRun:
         logger.info("eval run paused run_id=%s", run_id)
@@ -85,12 +114,21 @@ async def execute_eval_run(run_id: int) -> None:
         logger.exception("eval run crashed run_id=%s", run_id)
 
 
+def _auth_interrupt(exc: SecurityError) -> tuple[str, bool]:
+    """区分暂时不可用和确定性拒绝。第二个值表示应终止，而不是暂停后自动重试。"""
+    if exc.status_code == 503 or exc.code in {50313, 40321, 40310}:
+        return InterruptReason.SNAPSHOT_UNAVAILABLE.value, False
+    if exc.code in {40311, 40312, 40320, 40104, 40410} or exc.status_code == 403:
+        return InterruptReason.FORBIDDEN.value, True
+    return InterruptReason.SNAPSHOT_UNAVAILABLE.value, False
+
+
 class EvaluationRunService:
     def __init__(self, session: AsyncSession, context: TenantContext | None = None) -> None:
         self.session = session
         self.context = context
         self.auth = AuthorizationService()
-        self.repo = EvaluationRepository(session, context.tenant_id if context else 0)
+        self.repo = EvaluationRepository(session, context.tenant_id if context else None)
         self.lease_owner = f"{os.getpid()}:{uuid.uuid4().hex[:8]}"
 
     async def start(self, experiment_id: int) -> EvaluationRun:
@@ -301,18 +339,10 @@ class EvaluationRunService:
             await self._pause_run(run, InterruptReason.SNAPSHOT_UNAVAILABLE.value, blocked)
             return
         if type(run.created_by) is not int or run.created_by <= 0:
-            await self._pause_run(
-                run,
-                InterruptReason.FORBIDDEN.value,
-                "评测缺少创建者，拒绝继续执行",
-            )
+            await self._fail_run(run, InterruptReason.FORBIDDEN.value, "评测缺少创建者，拒绝继续执行")
             return
         if type(run.tenant_id) is not int or run.tenant_id <= 0:
-            await self._pause_run(
-                run,
-                InterruptReason.FORBIDDEN.value,
-                "评测缺少租户，拒绝继续执行",
-            )
+            await self._fail_run(run, InterruptReason.FORBIDDEN.value, "评测缺少租户，拒绝继续执行")
             return
         try:
             context = snapshot_store().load_for_principal(
@@ -320,12 +350,11 @@ class EvaluationRunService:
                 tenant_id=run.tenant_id,
             )
         except SecurityError as exc:
-            reason = (
-                InterruptReason.FORBIDDEN.value
-                if exc.status_code == 403
-                else InterruptReason.SNAPSHOT_UNAVAILABLE.value
-            )
-            await self._pause_run(run, reason, exc.message)
+            reason, terminal = _auth_interrupt(exc)
+            if terminal:
+                await self._fail_run(run, reason, exc.message)
+            else:
+                await self._pause_run(run, reason, exc.message)
             return
         repo = EvaluationRepository(self.session, run.tenant_id)
         version = await repo.get_version(run.dataset_id, run.dataset_version)
@@ -613,7 +642,10 @@ class EvaluationRunService:
     async def _handle_case_error(
         self, run: EvaluationRun, case: dict, existing: EvaluationResult | None, exc: AppError
     ) -> bool:
-        """返回 False 表示已暂停整个 Run。"""
+        """返回 False 表示已暂停或终止整个 Run。"""
+        if exc.code in {40320, 40361, 40362, 40363, 40450}:
+            await self._fail_run(run, InterruptReason.FORBIDDEN.value, exc.message)
+            return False
         reason = interrupt_code_reason(exc)
         if exc.code in CONTEXT_OVERFLOW_CODES:
             await self._save_case_failure(run, case, existing, exc.message, stages_error=EvalStage.GENERATE.value)
@@ -763,6 +795,16 @@ class EvaluationRunService:
         run.pause_requested = False
         self._release_lease(run)
         await self._note_pending_error(run, message, diagnostics)
+        await self.session.commit()
+
+    async def _fail_run(self, run: EvaluationRun, reason: str, message: str) -> None:
+        """确定性授权失败。终止本次 Run，不进入可自动恢复的暂停。"""
+        run.status = RunStatus.FAILED.value
+        run.interrupt_reason = reason
+        run.error_message = message
+        run.finished_at = datetime.now(UTC)
+        run.pause_requested = False
+        self._release_lease(run)
         await self.session.commit()
 
     async def _note_pending_error(self, run: EvaluationRun, message: str, diagnostics: dict | None) -> None:

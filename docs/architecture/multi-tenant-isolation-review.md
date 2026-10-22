@@ -651,8 +651,8 @@ Knowledge：
 | ORM SELECT | 追加本租户条件，并加 loader criteria | 必须带 `WORKER_CLAIM` 或 `OUTBOX_SCAN` | 不拦截 |
 | JOIN / 别名 / selectinload / joinedload | loader criteria；只对本层 FROM 里已有的表追加 WHERE | 同特权查询 | 不拦截 |
 | 聚合 `count()` | 本层 FROM 是租户表时追加 WHERE | 同特权查询 | 不拦截 |
-| 子查询 | 内层直接读租户表时，必须自己带本租户等值 | 同特权查询 | 不拦截 |
-| ORM UPDATE / DELETE | WHERE 必须证明本租户，否则拒绝 | 显式语句要带枚举；flush 写入在 `_flushing` 中放行 | 不拦截 |
+| 子查询 | 内层直接读租户表且没有本租户等值时，就地补上 `tenant_id` 条件 | 同特权查询 | 不拦截 |
+| ORM UPDATE / DELETE | WHERE 必须证明本租户，否则拒绝 | 显式语句要带枚举；flush 只允许 `flush_models` 里的模型 | 不拦截 |
 | `session.delete(obj)` | `before_flush` 核对对象租户 | 禁止改已有行的 `tenant_id` | 不拦截 |
 | Core INSERT | 参数里的 `tenant_id` 必须等于会话 | 未带枚举则拒绝 | 不拦截 |
 | Core UPDATE / DELETE | 表能回到登记且 WHERE 证明租户才放行 | 未带枚举则拒绝 | 不拦截 |
@@ -665,14 +665,52 @@ Knowledge：
 
 - 业务代码若拿到裸 `Connection`，仍可绕过守卫。生产路径没有把 `connection()` 包起来。
 - 普通 `SessionLocal` 仍能读写全部租户。脚本、测试、健康检查、IAM 创建租户和内部授权使用它。
-- IAM 租户请求只补刷当前租户 Outbox。其他企业的积压要等到该企业下次请求，或内部授权那条普通会话。
+- IAM 请求内仍只补刷当前租户 Outbox，这样能看见本事务还没提交的行。进程内后台线程补刷其他租户已经提交的积压。
 - Alembic、`COPY`、数据库控制台不经过应用守卫。
 - Knowledge 导入脚本仍可自行构造所有者上下文，它不是 Worker。
 
-## 11. V3 下一步
+## 11. V3 已收口
 
-- 单列 JOIN 改为租户加主键的复合条件，并给每个聚合补跨租户测试。
-- 把可空租户表的系统查询从普通 Repository 挪到只接受特权会话的模块。
-- 评估是否把 IAM 内部授权的跨租户 Outbox 扫描改成显式特权语句，同时保持与当前事务可见性一致。
-- Knowledge RLS 仍留在 V4。应用层守卫稳定之前不加策略。
+V3 仍不删除手写 `WHERE tenant_id`，不改 API 契约，不改状态机，不加数据库约束。复合外键保持原样，JOIN 只在 SQL 条件里与它对齐。
+
+### 11.1 JOIN 与 Relationship
+
+ERP 租户表之间的 `primaryjoin` 改为 `tenant_id` 相等并且外键等于主键。销售、采购、库存、出库、发货、售后、盘点、调拨的单行 `.join` / `.outerjoin` 同样加上这对条件。Knowledge 文档与切片、IAM 角色与成员授权也按同一写法连接。
+
+用户表没有 `tenant_id`。成员搜索仍然只按 `users.id = tenant_members.user_id` 连接。
+
+报表仓库里还有多行书写的聚合 JOIN，没有逐条改写。这些语句跑在 `TenantSession` 上，本层 FROM 里的租户表仍会被加上当前租户条件。同一套复合外键也限制子行不能指向另一租户的父行，因此现有 SUM / COUNT 不因漏改 ON 而跨租户。
+
+### 11.2 特权 flush
+
+`PrivilegedSystemSession.flush_models` 列出本操作可以写入的模型类名。`before_flush` 和 flush 期间的 INSERT/UPDATE/DELETE 都会核对。未登记的业务模型不能借 flush 写入。ERP 领取只写任务和任务日志，Outbox 扫描只写系统事件。Knowledge 领取只写处理任务、文档状态和评测运行。全局领取函数放在 `system_jobs` 和 `system_queue`，普通列表查询必须带当前租户。
+
+### 11.3 IAM 会话
+
+| 入口 | 会话 | 原因 |
+| --- | --- | --- |
+| 登录、Refresh、用户目录 | `GlobalIdentitySession` | 只读全局身份 |
+| 租户内成员和角色 | `TenantSession` | 业务表 |
+| 创建租户和初始 Owner | 普通 `SessionLocal` | 同一事务要写全局租户和租户成员，拆开就看不见未提交的租户 |
+| 内部授权、平台目录、审计 | 普通 `SessionLocal` | 一次事务跨租户，且要看见本事务刚写入的 Outbox |
+| 登录后的跨企业快照 | 提交身份事务之后另开普通会话 | 全局身份会话不能读 `tenant_members` |
+| 其他租户已提交的 Outbox | 进程内后台线程，先特权读取再按行打开 `TenantSession` | 不依赖该租户下次有人请求 |
+
+后台补刷失败只记日志，不打断 IAM 进程。请求内 `drain_outbox` 仍然留在原事务里。
+
+### 11.4 裸连接
+
+`scan_raw_connections` 标记 `connection().execute`、`exec_driver_sql`、`engine.connect` 和 `engine.begin`。`check_service` 会扫描各服务的 Repository 和 Service。业务仓库目前没有这些调用。应用守卫覆盖不到 Alembic、数据库控制台、驱动直连和测试夹具里的管理连接。扫描通过也不表示这些路径已经关闭。
+
+### 11.5 Knowledge 任务身份
+
+内联评测和标签任务先用特权会话读任务行上的租户，再打开该租户的会话。评测执行使用 `load_for_principal`。Redis 不可用、快照还没写好或授权版本刚变化时暂停，之后可以恢复。成员停用、租户停用、创建者缺失、权限不足或登录失效时把 Run 标为失败，不自动再跑。题目执行中若知识库授权不匹配，同样终止整次 Run。标签任务对暂时性快照错误重试三次后保持 QUEUED；确定性拒绝标为失败。文档解析仍在任务所属租户会话里执行，不提升为所有者。
+
+## 12. 仍未解决
+
+- 报表 SQL 里还有只按主键连接的多行 JOIN。租户会话和复合外键仍限制结果，但语句本身还不是复合条件。
+- 创建租户、内部授权、平台目录和审计仍使用普通 `SessionLocal`。这是事务原子性要求，不是业务路由可以拿到的会话。
+- `connection().execute` 的运行时拦截没有做。静态扫描和测试能发现新增调用，挡不住已经拿到连接的代码。
+- Knowledge RLS 仍是 V4。
+- 导入脚本仍可自行构造所有者上下文，它不是 Worker。
 

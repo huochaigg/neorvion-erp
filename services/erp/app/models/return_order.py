@@ -110,17 +110,26 @@ class ReturnOrder(TimestampMixin, TenantMixin, Base):
     )
 
     after_sale_order: Mapped[AfterSaleOrder] = relationship(
-        primaryjoin="ReturnOrder.after_sale_order_id == AfterSaleOrder.id",
+        primaryjoin=(
+            "and_(ReturnOrder.tenant_id == AfterSaleOrder.tenant_id, "
+            "ReturnOrder.after_sale_order_id == AfterSaleOrder.id)"
+        ),
         foreign_keys="ReturnOrder.after_sale_order_id",
         viewonly=True,
     )
     sales_order: Mapped[SalesOrder] = relationship(
-        primaryjoin="ReturnOrder.sales_order_id == SalesOrder.id",
+        primaryjoin=(
+            "and_(ReturnOrder.tenant_id == SalesOrder.tenant_id, "
+            "ReturnOrder.sales_order_id == SalesOrder.id)"
+        ),
         foreign_keys="ReturnOrder.sales_order_id",
         viewonly=True,
     )
     warehouse: Mapped[Warehouse] = relationship(
-        primaryjoin="ReturnOrder.warehouse_id == Warehouse.id",
+        primaryjoin=(
+            "and_(ReturnOrder.tenant_id == Warehouse.tenant_id, "
+            "ReturnOrder.warehouse_id == Warehouse.id)"
+        ),
         foreign_keys="ReturnOrder.warehouse_id",
         viewonly=True,
     )
@@ -209,17 +218,26 @@ class ReturnOrderItem(TimestampMixin, TenantMixin, Base):
 
     return_order: Mapped[ReturnOrder] = relationship(back_populates="items")
     after_sale_item: Mapped[AfterSaleItem] = relationship(
-        primaryjoin="ReturnOrderItem.after_sale_item_id == AfterSaleItem.id",
+        primaryjoin=(
+            "and_(ReturnOrderItem.tenant_id == AfterSaleItem.tenant_id, "
+            "ReturnOrderItem.after_sale_item_id == AfterSaleItem.id)"
+        ),
         foreign_keys="ReturnOrderItem.after_sale_item_id",
         viewonly=True,
     )
     sales_order_item: Mapped[SalesOrderItem] = relationship(
-        primaryjoin="ReturnOrderItem.sales_order_item_id == SalesOrderItem.id",
+        primaryjoin=(
+            "and_(ReturnOrderItem.tenant_id == SalesOrderItem.tenant_id, "
+            "ReturnOrderItem.sales_order_item_id == SalesOrderItem.id)"
+        ),
         foreign_keys="ReturnOrderItem.sales_order_item_id",
         viewonly=True,
     )
     sku: Mapped[ProductSku] = relationship(
-        primaryjoin="ReturnOrderItem.sku_id == ProductSku.id",
+        primaryjoin=(
+            "and_(ReturnOrderItem.tenant_id == ProductSku.tenant_id, "
+            "ReturnOrderItem.sku_id == ProductSku.id)"
+        ),
         foreign_keys="ReturnOrderItem.sku_id",
         viewonly=True,
     )

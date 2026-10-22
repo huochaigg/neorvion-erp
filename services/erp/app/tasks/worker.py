@@ -26,10 +26,9 @@ from app.core.redis import redis_client
 from app.core.sanitize import public_error_message
 from app.db.isolation import REGISTRY
 from app.db.session import engine, open_tenant_session
-from app.db.system_access import PRIVILEGED_CALLERS
+from app.db.system_access import PRIVILEGED_CALLERS, PRIVILEGED_FLUSH_MODELS
 from app.models.async_task import AsyncTask
-from app.repositories.async_task import lock_task_for_worker
-from app.repositories.system_event import claim_pending_events
+from app.repositories.system_jobs import claim_pending_events, lock_task_for_worker
 from app.services.event_publisher import EventPublisher
 from app.tasks.handlers import HANDLERS, append_log
 from app.tasks.queue import pop_task
@@ -48,6 +47,7 @@ def _open_privileged(operation: PrivilegedOperation) -> Session:
                 registry=REGISTRY,
                 allowed_callers=PRIVILEGED_CALLERS[operation],
                 bind=engine,
+                flush_models=PRIVILEGED_FLUSH_MODELS[operation],
             ),
         ),
     )

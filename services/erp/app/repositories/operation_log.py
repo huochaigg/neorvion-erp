@@ -12,9 +12,11 @@ class OperationLogRepository(BaseRepository):
         return row
 
     def get_by_id(self, log_id: int) -> OperationLog | None:
-        stmt = select(OperationLog).where(OperationLog.id == log_id)
-        if self.tenant_id is not None:
-            stmt = stmt.where(OperationLog.tenant_id == self.tenant_id)
+        tenant_id = self.ensure_tenant()
+        stmt = select(OperationLog).where(
+            OperationLog.id == log_id,
+            OperationLog.tenant_id == tenant_id,
+        )
         return self.session.execute(stmt).scalar_one_or_none()
 
     def _filtered(
@@ -30,11 +32,8 @@ class OperationLogRepository(BaseRepository):
         occurred_to: datetime | None,
         keyword: str | None,
     ) -> Select[OperationLog]:
-        stmt = select(OperationLog)
-        if self.tenant_id is not None:
-            stmt = stmt.where(OperationLog.tenant_id == self.tenant_id)
-        else:
-            stmt = stmt.where(OperationLog.tenant_id.is_(None))
+        tenant_id = self.ensure_tenant()
+        stmt = select(OperationLog).where(OperationLog.tenant_id == tenant_id)
         if operator_user_id is not None:
             stmt = stmt.where(OperationLog.operator_user_id == operator_user_id)
         if module:

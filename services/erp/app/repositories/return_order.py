@@ -2,7 +2,7 @@
 
 from datetime import datetime
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.models.after_sale import AfterSaleOrder
@@ -132,10 +132,14 @@ class ReturnOrderRepository(BaseRepository):
 
         base = (
             select(ReturnOrder)
-            .join(AfterSaleOrder, AfterSaleOrder.id == ReturnOrder.after_sale_order_id)
-            .join(SalesOrder, SalesOrder.id == ReturnOrder.sales_order_id)
-            .join(Customer, Customer.id == AfterSaleOrder.customer_id)
-            .join(Warehouse, Warehouse.id == ReturnOrder.warehouse_id)
+            .join(AfterSaleOrder, and_(AfterSaleOrder.tenant_id == ReturnOrder.tenant_id,
+                AfterSaleOrder.id == ReturnOrder.after_sale_order_id))
+            .join(SalesOrder, and_(SalesOrder.tenant_id == ReturnOrder.tenant_id,
+                SalesOrder.id == ReturnOrder.sales_order_id))
+            .join(Customer, and_(Customer.tenant_id == AfterSaleOrder.tenant_id,
+                Customer.id == AfterSaleOrder.customer_id))
+            .join(Warehouse, and_(Warehouse.tenant_id == ReturnOrder.tenant_id,
+                Warehouse.id == ReturnOrder.warehouse_id))
             .outerjoin(ReturnOrderItem, ReturnOrderItem.return_order_id == ReturnOrder.id)
             .where(*filters)
             .group_by(
@@ -158,10 +162,14 @@ class ReturnOrderRepository(BaseRepository):
                 received,
                 inbound,
             )
-            .join(AfterSaleOrder, AfterSaleOrder.id == ReturnOrder.after_sale_order_id)
-            .join(SalesOrder, SalesOrder.id == ReturnOrder.sales_order_id)
-            .join(Customer, Customer.id == AfterSaleOrder.customer_id)
-            .join(Warehouse, Warehouse.id == ReturnOrder.warehouse_id)
+            .join(AfterSaleOrder, and_(AfterSaleOrder.tenant_id == ReturnOrder.tenant_id,
+                AfterSaleOrder.id == ReturnOrder.after_sale_order_id))
+            .join(SalesOrder, and_(SalesOrder.tenant_id == ReturnOrder.tenant_id,
+                SalesOrder.id == ReturnOrder.sales_order_id))
+            .join(Customer, and_(Customer.tenant_id == AfterSaleOrder.tenant_id,
+                Customer.id == AfterSaleOrder.customer_id))
+            .join(Warehouse, and_(Warehouse.tenant_id == ReturnOrder.tenant_id,
+                Warehouse.id == ReturnOrder.warehouse_id))
             .outerjoin(ReturnOrderItem, ReturnOrderItem.return_order_id == ReturnOrder.id)
             .where(*filters)
             .group_by(

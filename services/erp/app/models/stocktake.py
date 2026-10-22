@@ -88,7 +88,10 @@ class StocktakeOrder(TimestampMixin, TenantMixin, Base):
     )
 
     warehouse: Mapped[Warehouse] = relationship(
-        primaryjoin="StocktakeOrder.warehouse_id == Warehouse.id",
+        primaryjoin=(
+            "and_(StocktakeOrder.tenant_id == Warehouse.tenant_id, "
+            "StocktakeOrder.warehouse_id == Warehouse.id)"
+        ),
         foreign_keys="StocktakeOrder.warehouse_id",
         viewonly=True,
     )
@@ -150,12 +153,18 @@ class StocktakeItem(TimestampMixin, TenantMixin, Base):
 
     stocktake_order: Mapped[StocktakeOrder] = relationship(back_populates="items")
     inventory: Mapped[Inventory] = relationship(
-        primaryjoin="StocktakeItem.inventory_id == Inventory.id",
+        primaryjoin=(
+            "and_(StocktakeItem.tenant_id == Inventory.tenant_id, "
+            "StocktakeItem.inventory_id == Inventory.id)"
+        ),
         foreign_keys="StocktakeItem.inventory_id",
         viewonly=True,
     )
     sku: Mapped[ProductSku] = relationship(
-        primaryjoin="StocktakeItem.sku_id == ProductSku.id",
+        primaryjoin=(
+            "and_(StocktakeItem.tenant_id == ProductSku.tenant_id, "
+            "StocktakeItem.sku_id == ProductSku.id)"
+        ),
         foreign_keys="StocktakeItem.sku_id",
         viewonly=True,
     )

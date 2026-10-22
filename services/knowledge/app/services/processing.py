@@ -33,7 +33,7 @@ class ProcessingService:
         self.session = session
 
     async def execute(self, task_id: int) -> None:
-        """领取并执行一条任务。可被 Worker 或测试内联调用。"""
+        """领取并执行一条任务。调用方必须已经打开该任务所属租户的会话，不能提升成所有者。"""
         task = await self.session.scalar(
             select(DocumentProcessingTask).where(DocumentProcessingTask.id == task_id).with_for_update()
         )

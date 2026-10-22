@@ -77,7 +77,10 @@ class PurchaseReceipt(TimestampMixin, TenantMixin, Base):
 
     # 采购单，只读。
     purchase_order: Mapped[PurchaseOrder] = relationship(
-        primaryjoin="PurchaseReceipt.purchase_order_id == PurchaseOrder.id",
+        primaryjoin=(
+            "and_(PurchaseReceipt.tenant_id == PurchaseOrder.tenant_id, "
+            "PurchaseReceipt.purchase_order_id == PurchaseOrder.id)"
+        ),
         foreign_keys="PurchaseReceipt.purchase_order_id",
         viewonly=True,
     )
@@ -133,12 +136,18 @@ class PurchaseReceiptItem(TimestampMixin, TenantMixin, Base):
 
     receipt: Mapped[PurchaseReceipt] = relationship(back_populates="items")
     purchase_order_item: Mapped[PurchaseOrderItem] = relationship(
-        primaryjoin="PurchaseReceiptItem.purchase_order_item_id == PurchaseOrderItem.id",
+        primaryjoin=(
+            "and_(PurchaseReceiptItem.tenant_id == PurchaseOrderItem.tenant_id, "
+            "PurchaseReceiptItem.purchase_order_item_id == PurchaseOrderItem.id)"
+        ),
         foreign_keys="PurchaseReceiptItem.purchase_order_item_id",
         viewonly=True,
     )
     sku: Mapped[ProductSku] = relationship(
-        primaryjoin="PurchaseReceiptItem.sku_id == ProductSku.id",
+        primaryjoin=(
+            "and_(PurchaseReceiptItem.tenant_id == ProductSku.tenant_id, "
+            "PurchaseReceiptItem.sku_id == ProductSku.id)"
+        ),
         foreign_keys="PurchaseReceiptItem.sku_id",
         viewonly=True,
     )

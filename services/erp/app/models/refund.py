@@ -79,7 +79,10 @@ class RefundRecord(TimestampMixin, TenantMixin, Base):
     )
 
     after_sale_order: Mapped[AfterSaleOrder] = relationship(
-        primaryjoin="RefundRecord.after_sale_order_id == AfterSaleOrder.id",
+        primaryjoin=(
+            "and_(RefundRecord.tenant_id == AfterSaleOrder.tenant_id, "
+            "RefundRecord.after_sale_order_id == AfterSaleOrder.id)"
+        ),
         foreign_keys="RefundRecord.after_sale_order_id",
         viewonly=True,
     )

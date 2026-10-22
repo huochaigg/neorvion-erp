@@ -2,7 +2,7 @@
 
 from datetime import datetime
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.models.carrier import Carrier
@@ -117,7 +117,8 @@ class ShipmentRepository(BaseRepository):
                 ShipmentItem.outbound_order_item_id,
                 func.coalesce(func.sum(ShipmentItem.quantity), 0),
             )
-            .join(Shipment, Shipment.id == ShipmentItem.shipment_id)
+            .join(Shipment, and_(Shipment.tenant_id == ShipmentItem.tenant_id,
+                Shipment.id == ShipmentItem.shipment_id))
             .where(*filters)
             .group_by(ShipmentItem.outbound_order_item_id)
         )
@@ -209,10 +210,14 @@ class ShipmentRepository(BaseRepository):
                 func.coalesce(qty.c.sku_count, 0),
                 func.coalesce(qty.c.total_qty, 0),
             )
-            .join(SalesOrder, SalesOrder.id == Shipment.sales_order_id)
-            .join(OutboundOrder, OutboundOrder.id == Shipment.outbound_order_id)
-            .join(Customer, Customer.id == SalesOrder.customer_id)
-            .join(Carrier, Carrier.id == Shipment.carrier_id)
+            .join(SalesOrder, and_(SalesOrder.tenant_id == Shipment.tenant_id,
+                SalesOrder.id == Shipment.sales_order_id))
+            .join(OutboundOrder, and_(OutboundOrder.tenant_id == Shipment.tenant_id,
+                OutboundOrder.id == Shipment.outbound_order_id))
+            .join(Customer, and_(Customer.tenant_id == SalesOrder.tenant_id,
+                Customer.id == SalesOrder.customer_id))
+            .join(Carrier, and_(Carrier.tenant_id == Shipment.tenant_id,
+                Carrier.id == Shipment.carrier_id))
             .outerjoin(qty, qty.c.shipment_id == Shipment.id)
             .where(*filters)
         )

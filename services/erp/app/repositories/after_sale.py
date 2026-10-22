@@ -3,7 +3,7 @@
 from datetime import datetime
 from decimal import Decimal
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.models.after_sale import AfterSaleItem, AfterSaleOrder, AfterSaleStatus
@@ -89,7 +89,8 @@ class AfterSaleRepository(BaseRepository):
         )
         stmt = (
             select(AfterSaleItem.sales_order_item_id, func.coalesce(func.sum(qty_expr), 0))
-            .join(AfterSaleOrder, AfterSaleOrder.id == AfterSaleItem.after_sale_order_id)
+            .join(AfterSaleOrder, and_(AfterSaleOrder.tenant_id == AfterSaleItem.tenant_id,
+                AfterSaleOrder.id == AfterSaleItem.after_sale_order_id))
             .where(
                 AfterSaleItem.tenant_id == tenant_id,
                 AfterSaleItem.sales_order_item_id.in_(sales_order_item_ids),
@@ -121,7 +122,8 @@ class AfterSaleRepository(BaseRepository):
                 AfterSaleItem.sales_order_item_id,
                 func.coalesce(func.sum(amount_expr), 0),
             )
-            .join(AfterSaleOrder, AfterSaleOrder.id == AfterSaleItem.after_sale_order_id)
+            .join(AfterSaleOrder, and_(AfterSaleOrder.tenant_id == AfterSaleItem.tenant_id,
+                AfterSaleOrder.id == AfterSaleItem.after_sale_order_id))
             .where(
                 AfterSaleItem.tenant_id == tenant_id,
                 AfterSaleItem.sales_order_item_id.in_(sales_order_item_ids),
@@ -178,7 +180,8 @@ class AfterSaleRepository(BaseRepository):
         if sku_code:
             sku_exists = (
                 select(AfterSaleItem.id)
-                .join(ProductSku, ProductSku.id == AfterSaleItem.sku_id)
+                .join(ProductSku, and_(ProductSku.tenant_id == AfterSaleItem.tenant_id,
+                    ProductSku.id == AfterSaleItem.sku_id))
                 .where(
                     AfterSaleItem.after_sale_order_id == AfterSaleOrder.id,
                     AfterSaleItem.tenant_id == tenant_id,
@@ -190,8 +193,10 @@ class AfterSaleRepository(BaseRepository):
 
         base = (
             select(AfterSaleOrder)
-            .join(SalesOrder, SalesOrder.id == AfterSaleOrder.sales_order_id)
-            .join(Customer, Customer.id == AfterSaleOrder.customer_id)
+            .join(SalesOrder, and_(SalesOrder.tenant_id == AfterSaleOrder.tenant_id,
+                SalesOrder.id == AfterSaleOrder.sales_order_id))
+            .join(Customer, and_(Customer.tenant_id == AfterSaleOrder.tenant_id,
+                Customer.id == AfterSaleOrder.customer_id))
             .outerjoin(AfterSaleItem, AfterSaleItem.after_sale_order_id == AfterSaleOrder.id)
             .outerjoin(
                 IdentityNameSnapshot,
@@ -215,8 +220,10 @@ class AfterSaleRepository(BaseRepository):
                 IdentityNameSnapshot.display_name,
                 return_qty,
             )
-            .join(SalesOrder, SalesOrder.id == AfterSaleOrder.sales_order_id)
-            .join(Customer, Customer.id == AfterSaleOrder.customer_id)
+            .join(SalesOrder, and_(SalesOrder.tenant_id == AfterSaleOrder.tenant_id,
+                SalesOrder.id == AfterSaleOrder.sales_order_id))
+            .join(Customer, and_(Customer.tenant_id == AfterSaleOrder.tenant_id,
+                Customer.id == AfterSaleOrder.customer_id))
             .outerjoin(AfterSaleItem, AfterSaleItem.after_sale_order_id == AfterSaleOrder.id)
             .outerjoin(
                 IdentityNameSnapshot,

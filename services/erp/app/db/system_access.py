@@ -6,3 +6,8 @@ PRIVILEGED_CALLERS = {
     PrivilegedOperation.WORKER_CLAIM: frozenset({"app.tasks.worker"}),
     PrivilegedOperation.OUTBOX_SCAN: frozenset({"app.tasks.worker"}),
 }
+
+PRIVILEGED_FLUSH_MODELS = {
+    PrivilegedOperation.WORKER_CLAIM: frozenset({"AsyncTask", "AsyncTaskLog"}),
+    PrivilegedOperation.OUTBOX_SCAN: frozenset({"SystemEvent"}),
+}

@@ -2,7 +2,7 @@
 
 from datetime import datetime
 
-from sqlalchemy import func, select
+from sqlalchemy import and_, func, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.models.identity import IdentityNameSnapshot
@@ -124,9 +124,12 @@ class PurchaseReceiptRepository(BaseRepository):
                 func.coalesce(item_qty.c.sku_count, 0),
                 func.coalesce(item_qty.c.total_received, 0),
             )
-            .join(PurchaseOrder, PurchaseOrder.id == PurchaseReceipt.purchase_order_id)
-            .join(Supplier, Supplier.id == PurchaseOrder.supplier_id)
-            .join(Warehouse, Warehouse.id == PurchaseReceipt.warehouse_id)
+            .join(PurchaseOrder, and_(PurchaseOrder.tenant_id == PurchaseReceipt.tenant_id,
+                PurchaseOrder.id == PurchaseReceipt.purchase_order_id))
+            .join(Supplier, and_(Supplier.tenant_id == PurchaseOrder.tenant_id,
+                Supplier.id == PurchaseOrder.supplier_id))
+            .join(Warehouse, and_(Warehouse.tenant_id == PurchaseReceipt.tenant_id,
+                Warehouse.id == PurchaseReceipt.warehouse_id))
             .outerjoin(
                 IdentityNameSnapshot,
                 IdentityNameSnapshot.user_id == PurchaseReceipt.received_by,

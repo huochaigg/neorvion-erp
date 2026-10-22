@@ -109,8 +109,15 @@ def open_privileged_async_session(
     registry: IsolationRegistry,
     allowed_callers: frozenset[str],
     bind: Any = None,
+    flush_models: frozenset[str] = frozenset(),
     **kwargs: Any,
 ) -> PrivilegedAsyncSession:
     """异步特权会话的唯一入口。调用方检查与同步版本相同。"""
     grant = authorize_caller(operation, allowed_callers)
-    return PrivilegedAsyncSession(grant, registry=registry, bind=bind, **kwargs)
+    return PrivilegedAsyncSession(
+        grant,
+        registry=registry,
+        bind=bind,
+        flush_models=flush_models,
+        **kwargs,
+    )

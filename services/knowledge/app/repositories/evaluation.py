@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from neorvion_db import PrivilegedOperation, privileged_option
 from sqlalchemy import Float, func, nulls_last, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -370,8 +369,12 @@ class EvaluationRepository(BaseRepository):
         )
 
     async def get_run_for_update(self, run_id: int) -> EvaluationRun | None:
+        """按当前租户加锁。Worker 全局领取在 system_queue。"""
+        tenant_id = self.ensure_tenant()
         return await self.session.scalar(
-            select(EvaluationRun).where(EvaluationRun.id == run_id).with_for_update()
+            select(EvaluationRun)
+            .where(EvaluationRun.tenant_id == tenant_id, EvaluationRun.id == run_id)
+            .with_for_update()
         )
 
     async def list_results(self, run_id: int) -> list[EvaluationResult]:
@@ -408,42 +411,6 @@ class EvaluationRepository(BaseRepository):
         for row in rows:
             if row.tenant_id == tenant_id:
                 await self.session.delete(row)
-
-    async def fail_stale_running(self, message: str) -> list[EvaluationRun]:
-        """兼容旧 Worker：评测改走 pause_stale_running，保留部分结果。"""
-        return await self.pause_stale_running(message)
-
-    async def pause_stale_running(self, message: str) -> list[EvaluationRun]:
-        """把租约已过期或未持有租约的 RUNNING 标为 QUEUED，保留已落库题目。
-
-        仍在租约窗口内的任务可能由其他 Worker 执行，不能抢。
-        """
-        now = datetime.now(UTC)
-        stmt = (
-            select(EvaluationRun)
-            .where(EvaluationRun.status == RunStatus.RUNNING.value)
-            .execution_options(**privileged_option(PrivilegedOperation.WORKER_CLAIM))
-        )
-        recovered: list[EvaluationRun] = []
-        for row in list((await self.session.scalars(stmt)).all()):
-            if row.lease_until is not None and row.lease_until > now:
-                continue
-            row.status = RunStatus.QUEUED.value
-            row.interrupt_reason = "WORKER_CRASH"
-            row.error_message = message
-            row.lease_owner = None
-            row.lease_until = None
-            row.finished_at = None
-            recovered.append(row)
-        return recovered
-
-    async def list_queued_runs(self) -> list[EvaluationRun]:
-        stmt = (
-            select(EvaluationRun)
-            .where(EvaluationRun.status == RunStatus.QUEUED.value)
-            .execution_options(**privileged_option(PrivilegedOperation.WORKER_CLAIM))
-        )
-        return list((await self.session.scalars(stmt)).all())
 
     async def request_cancel_for_knowledge_base(self, knowledge_base_id: int) -> int:
         """知识库删除后取消仍覆盖该库的排队/运行中评测。历史结果与快照保留。"""

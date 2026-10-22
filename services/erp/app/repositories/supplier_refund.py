@@ -3,7 +3,7 @@
 from datetime import datetime
 from decimal import Decimal
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.models.identity import IdentityNameSnapshot
@@ -125,9 +125,12 @@ class SupplierRefundRepository(BaseRepository):
 
         base = (
             select(SupplierRefundRecord)
-            .join(PurchaseReturn, PurchaseReturn.id == SupplierRefundRecord.purchase_return_id)
-            .join(PurchaseOrder, PurchaseOrder.id == PurchaseReturn.purchase_order_id)
-            .join(Supplier, Supplier.id == PurchaseReturn.supplier_id)
+            .join(PurchaseReturn, and_(PurchaseReturn.tenant_id == SupplierRefundRecord.tenant_id,
+                PurchaseReturn.id == SupplierRefundRecord.purchase_return_id))
+            .join(PurchaseOrder, and_(PurchaseOrder.tenant_id == PurchaseReturn.tenant_id,
+                PurchaseOrder.id == PurchaseReturn.purchase_order_id))
+            .join(Supplier, and_(Supplier.tenant_id == PurchaseReturn.tenant_id,
+                Supplier.id == PurchaseReturn.supplier_id))
             .outerjoin(
                 IdentityNameSnapshot,
                 IdentityNameSnapshot.user_id == SupplierRefundRecord.created_by,
@@ -145,9 +148,12 @@ class SupplierRefundRepository(BaseRepository):
                 Supplier.name,
                 IdentityNameSnapshot.display_name,
             )
-            .join(PurchaseReturn, PurchaseReturn.id == SupplierRefundRecord.purchase_return_id)
-            .join(PurchaseOrder, PurchaseOrder.id == PurchaseReturn.purchase_order_id)
-            .join(Supplier, Supplier.id == PurchaseReturn.supplier_id)
+            .join(PurchaseReturn, and_(PurchaseReturn.tenant_id == SupplierRefundRecord.tenant_id,
+                PurchaseReturn.id == SupplierRefundRecord.purchase_return_id))
+            .join(PurchaseOrder, and_(PurchaseOrder.tenant_id == PurchaseReturn.tenant_id,
+                PurchaseOrder.id == PurchaseReturn.purchase_order_id))
+            .join(Supplier, and_(Supplier.tenant_id == PurchaseReturn.tenant_id,
+                Supplier.id == PurchaseReturn.supplier_id))
             .outerjoin(
                 IdentityNameSnapshot,
                 IdentityNameSnapshot.user_id == SupplierRefundRecord.created_by,

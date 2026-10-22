@@ -258,8 +258,10 @@ class SnapshotStore:
             raise SecurityError("权限已变更，请重新进入企业", code=40321, status_code=403)
         if snapshot.user_id != user_id or snapshot.tenant_id != tenant_id:
             raise SecurityError("租户不存在或不可访问", code=40410, status_code=404)
-        if snapshot.status != "ACTIVE" or snapshot.tenant_status != "ACTIVE":
-            raise SecurityError("无权访问该租户", code=40310, status_code=403)
+        if snapshot.tenant_status != "ACTIVE":
+            raise SecurityError("租户已停用", code=40311, status_code=403)
+        if snapshot.status != "ACTIVE":
+            raise SecurityError("成员已停用", code=40312, status_code=403)
         return snapshot.to_context(token_jti="")
 
     def require_permissions(

@@ -86,12 +86,18 @@ class Inventory(TimestampMixin, TenantMixin, Base):
     version: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
 
     warehouse: Mapped[Warehouse] = relationship(
-        primaryjoin="Inventory.warehouse_id == Warehouse.id",
+        primaryjoin=(
+            "and_(Inventory.tenant_id == Warehouse.tenant_id, "
+            "Inventory.warehouse_id == Warehouse.id)"
+        ),
         foreign_keys="Inventory.warehouse_id",
         viewonly=True,
     )
     sku: Mapped[ProductSku] = relationship(
-        primaryjoin="Inventory.sku_id == ProductSku.id",
+        primaryjoin=(
+            "and_(Inventory.tenant_id == ProductSku.tenant_id, "
+            "Inventory.sku_id == ProductSku.id)"
+        ),
         foreign_keys="Inventory.sku_id",
         viewonly=True,
     )

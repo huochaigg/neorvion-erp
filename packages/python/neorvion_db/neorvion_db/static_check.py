@@ -194,3 +194,43 @@ def _is_query_call(node: ast.Call) -> bool:
         if isinstance(owner, ast.Attribute) and owner.attr == "session":
             return True
     return False
+
+
+_RAW_SQL_ATTRS = {"exec_driver_sql"}
+
+
+def scan_raw_connections(source: str, filename: str = "<memory>") -> tuple[Finding, ...]:
+    """标记业务代码里的裸连接执行。
+
+    Session.connection().execute、Engine.connect/begin 和 exec_driver_sql 不经过 ORM 守卫。
+    扫描结果为空，也不表示数据库控制台或迁移脚本已被覆盖。
+    """
+    tree = ast.parse(source, filename=filename)
+    findings: list[Finding] = []
+    for qualname, node in _functions(tree):
+        for child in ast.walk(node):
+            if not isinstance(child, ast.Call) or not isinstance(child.func, ast.Attribute):
+                continue
+            attr = child.func.attr
+            if attr == "execute" and _calls_connection(child.func.value):
+                findings.append(Finding(qualname, child.lineno))
+            elif attr in _RAW_SQL_ATTRS:
+                findings.append(Finding(qualname, child.lineno))
+            elif attr in {"connect", "begin"} and _rooted_at_engine(child.func.value):
+                findings.append(Finding(qualname, child.lineno))
+    return tuple(findings)
+
+
+def _calls_connection(node: ast.AST) -> bool:
+    return (
+        isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and node.func.attr == "connection"
+    )
+
+
+def _rooted_at_engine(node: ast.AST) -> bool:
+    current = node
+    while isinstance(current, ast.Attribute):
+        current = current.value
+    return isinstance(current, ast.Name) and current.id in {"engine", "bind"}
