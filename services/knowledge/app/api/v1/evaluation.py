@@ -673,10 +673,18 @@ async def compare_cases(
     meta: dict[int, dict] = {}
     for case in ((version.snapshot or {}).get("cases") or []) if version is not None else []:
         try:
+            gold = []
+            for judgment in case.get("judgments") or []:
+                if judgment.get("stale"):
+                    continue
+                if int(judgment.get("relevance") or 0) < 1:
+                    continue
+                gold.append(int(judgment["chunk_id"]))
             meta[int(case["id"])] = {
                 "question_type": case.get("question_type"),
                 "difficulty": case.get("difficulty"),
                 "tags": case.get("tags") or [],
+                "gold_chunk_ids": gold,
             }
         except (KeyError, TypeError, ValueError):
             continue

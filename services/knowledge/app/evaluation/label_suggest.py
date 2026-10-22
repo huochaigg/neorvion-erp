@@ -66,16 +66,16 @@ def finalize_label(
     """丢掉模型编造的切片，并在证据不足或与题目定义冲突时降低置信度。"""
     allowed = {item.chunk_id: item for item in candidates}
     notes: list[str] = []
-    raw_items = judge.get("items") if isinstance(judge.get("items"), list) else []
+    raw_items = judge.get("items")
     kept: list[dict] = []
     dropped = 0
-    for raw in raw_items:
+    for raw in raw_items if isinstance(raw_items, list) else []:
         if not isinstance(raw, dict):
             dropped += 1
             continue
         try:
-            chunk_id = int(raw.get("chunk_id"))
-            relevance = int(raw.get("relevance"))
+            chunk_id = int(raw.get("chunk_id") or 0)
+            relevance = int(raw.get("relevance") or 0)
         except (TypeError, ValueError):
             dropped += 1
             continue

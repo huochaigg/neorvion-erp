@@ -9,7 +9,8 @@
       "pythonPlatform": "All",
       "extraPaths": [
         "services/erp",
-        "services/erp/.venv/Lib/site-packages"
+        "services/erp/.venv/Lib/site-packages",
+        "packages/python/neorvion_security"
       ]
     },
     {
@@ -19,6 +20,7 @@
       "extraPaths": [
         "services/knowledge",
         "services/knowledge/.venv/Lib/site-packages",
+        "packages/python/neorvion_security",
         "typings"
       ]
     }

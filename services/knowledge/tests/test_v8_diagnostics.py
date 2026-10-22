@@ -101,6 +101,37 @@ def test_case_alignment_separates_recall_and_rank() -> None:
     assert by_id[2]["rank_movement"] == "IMPROVED"
     assert aligned["summary"]["recall_improved"] == 1
     assert aligned["summary"]["rank_improved"] == 1
+    assert by_id[1]["gold_chunk_ids"] == []
+    assert by_id[1]["baseline_best_rank"] is None
+    ranked = align_case_results(
+        [
+            {
+                "case_id": 1,
+                "question": "甲",
+                "retrieval_metrics": {"recall": 1.0, "mrr": 0.5, "hit_rate": 1.0, "ndcg": 0.5},
+                "retrieved": [{"chunk_id": 9}, {"chunk_id": 10}],
+                "latency_ms": 12,
+                "stages": {"RERANK": {"status": "SKIPPED"}},
+            }
+        ],
+        [
+            {
+                "case_id": 1,
+                "question": "甲",
+                "retrieval_metrics": {"recall": 1.0, "mrr": 1.0, "hit_rate": 1.0, "ndcg": 1.0},
+                "retrieved": [{"chunk_id": 10}],
+                "latency_ms": 20,
+                "stages": {"RERANK": {"status": "SUCCESS"}},
+            }
+        ],
+        case_meta={1: {"gold_chunk_ids": [10]}},
+    )
+    item = ranked["cases"][0]
+    assert item["baseline_best_rank"] == 2
+    assert item["candidate_best_rank"] == 1
+    assert item["baseline_rerank"] == "SKIPPED"
+    assert item["candidate_rerank"] == "SUCCESS"
+    assert item["baseline_latency_ms"] == 12
 
 
 def test_bootstrap_refuses_small_samples() -> None:

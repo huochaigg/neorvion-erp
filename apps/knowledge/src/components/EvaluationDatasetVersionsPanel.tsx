@@ -206,8 +206,8 @@ export function EvaluationDatasetVersionsPanel({
       >
         {detail ? (
           <div className="space-y-3">
-            <Alert type="warning" showIcon message={detail.note} />
-            <Space wrap>
+            <Alert type="warning" showIcon title={detail.note} />
+            <Space wrap className="mt-3!">
               {detail.version.is_current ? <Tag color="blue">当前最新版本</Tag> : <Tag>历史版本</Tag>}
               <Tag>题目 {detail.version.case_count}</Tag>
               <Tag>READY {detail.version.ready_count}</Tag>

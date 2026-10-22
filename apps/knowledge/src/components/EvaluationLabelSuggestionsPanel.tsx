@@ -12,7 +12,6 @@ import { useEffect, useState } from 'react';
 import {
   confirmEvalLabelSuggestions,
   deleteEvalLabelSuggestion,
-  estimateEvalLabels,
   fetchEvalLabelJob,
   fetchEvalLabelSuggestions,
   rejectEvalLabelSuggestion,

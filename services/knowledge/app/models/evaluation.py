@@ -27,35 +27,56 @@ from app.db.mixins import TenantMixin, TimestampMixin
 
 class QuestionType(StrEnum):
     FACTUAL = "FACTUAL"
+    """事实性问题"""
     MULTI_CONDITION = "MULTI_CONDITION"
+    """多条件问题"""
     MULTI_DOC = "MULTI_DOC"
+    """多文档问题"""
     PARAPHRASE = "PARAPHRASE"
+    """同义改写问题"""
     MIXED_LANG = "MIXED_LANG"
+    """混合语言问题"""
     LONG = "LONG"
+    """长文本问题"""
     UNANSWERABLE = "UNANSWERABLE"
+    """无答案问题"""
     HALLUCINATION = "HALLUCINATION"
+    """幻觉问题"""
 
 
 class AnnotationStatus(StrEnum):
     PENDING = "PENDING"
+    """标注中"""
     LABELED = "LABELED"
+    """已标注"""
     READY = "READY"
+    """已准备好"""
 
 
 class CaseSource(StrEnum):
     MANUAL = "MANUAL"
+    """人工标注"""
     IMPORT = "IMPORT"
+    """导入标注"""
     CHAT = "CHAT"
+    """聊天标注"""
     AI_SEED = "AI_SEED"
+    """AI 初标"""
 
 
 class RunStatus(StrEnum):
     QUEUED = "QUEUED"
+    """排队中"""
     RUNNING = "RUNNING"
+    """运行中"""
     PAUSED = "PAUSED"
+    """暂停中"""
     SUCCESS = "SUCCESS"
+    """成功"""
     FAILED = "FAILED"
+    """失败"""
     CANCELLED = "CANCELLED"
+    """取消"""
 
 
 ACTIVE_RUN_STATUSES = (RunStatus.QUEUED.value, RunStatus.RUNNING.value, RunStatus.PAUSED.value)

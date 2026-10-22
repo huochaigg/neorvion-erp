@@ -26,6 +26,15 @@ const METRIC_LABEL: Record<string, string> = {
 };
 const COLORS = ['#0ea5e9', '#8b5cf6', '#f59e0b', '#10b981'];
 
+function scoreText(value: unknown): string {
+  return typeof value === 'number' ? value.toFixed(3) : '无';
+}
+
+function rankText(value: unknown, hasGold: boolean): string {
+  if (!hasGold) return '无相关标注';
+  return typeof value === 'number' ? String(value) : '未进 Top-K';
+}
+
 function metricOf(run: KnowledgeEvalRun, key: string): number | null {
   const value = run.metrics?.[key];
   return typeof value === 'number' ? value : null;
@@ -173,6 +182,72 @@ export function EvaluationComparePage() {
                   排序改善 {diagnosisQuery.data.summary.rank_improved ?? 0}，退化 {diagnosisQuery.data.summary.rank_regressed ?? 0}。
                 </div>
                 <div className="text-xs text-slate-500">{diagnosisQuery.data.note}</div>
+                <div className="text-xs text-slate-500">
+                  下表只对比所选的前两次运行。有相关标注但显示「未进 Top-K」时，该相关 Chunk 没有出现在本次结果里。
+                </div>
+                <Table
+                  size="small"
+                  pagination={false}
+                  rowKey="case_id"
+                  scroll={{ x: 1100 }}
+                  dataSource={diagnosisQuery.data.cases ?? []}
+                  columns={[
+                    { title: '问题', dataIndex: 'question', ellipsis: true, width: 220 },
+                    {
+                      title: 'Ground Truth',
+                      width: 140,
+                      render: (_, record) => ((record.gold_chunk_ids as number[] | undefined) ?? []).map((id) => `#${id}`).join('、') || '无相关标注',
+                    },
+                    {
+                      title: `#${selected[0]} Top-K`,
+                      width: 140,
+                      render: (_, record) => ((record.baseline_chunk_ids as number[] | undefined) ?? []).map((id) => `#${id}`).join('、') || '无',
+                    },
+                    {
+                      title: `#${selected[1]} Top-K`,
+                      width: 140,
+                      render: (_, record) => ((record.candidate_chunk_ids as number[] | undefined) ?? []).map((id) => `#${id}`).join('、') || '无',
+                    },
+                    {
+                      title: '相关名次',
+                      width: 110,
+                      render: (_, record) => {
+                        const hasGold = ((record.gold_chunk_ids as number[] | undefined) ?? []).length > 0;
+                        return `${rankText(record.baseline_best_rank, hasGold)} → ${rankText(record.candidate_best_rank, hasGold)}`;
+                      },
+                    },
+                    {
+                      title: 'Hit',
+                      width: 110,
+                      render: (_, record) => `${scoreText(record.hit_before)} → ${scoreText(record.hit_after)}`,
+                    },
+                    {
+                      title: 'Recall',
+                      width: 110,
+                      render: (_, record) => `${scoreText(record.recall_before)} → ${scoreText(record.recall_after)}`,
+                    },
+                    {
+                      title: 'MRR',
+                      width: 110,
+                      render: (_, record) => `${scoreText(record.mrr_before)} → ${scoreText(record.mrr_after)}`,
+                    },
+                    {
+                      title: 'nDCG',
+                      width: 110,
+                      render: (_, record) => `${scoreText(record.ndcg_before)} → ${scoreText(record.ndcg_after)}`,
+                    },
+                    {
+                      title: 'Rerank',
+                      width: 140,
+                      render: (_, record) => `${record.baseline_rerank || '无'} → ${record.candidate_rerank || '无'}`,
+                    },
+                    {
+                      title: '检索耗时',
+                      width: 120,
+                      render: (_, record) => `${record.baseline_latency_ms ?? '无'} → ${record.candidate_latency_ms ?? '无'} ms`,
+                    },
+                  ]}
+                />
                 <div className="text-xs text-slate-500">
                   {diagnosisQuery.data.recall_bootstrap.available
                     ? `Recall 差值均值 ${Number(diagnosisQuery.data.recall_bootstrap.mean).toFixed(3)}，重抽样区间 ${Number(diagnosisQuery.data.recall_bootstrap.low).toFixed(3)} ~ ${Number(diagnosisQuery.data.recall_bootstrap.high).toFixed(3)}。${String(diagnosisQuery.data.recall_bootstrap.note ?? '')}`

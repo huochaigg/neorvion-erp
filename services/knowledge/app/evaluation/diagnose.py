@@ -52,7 +52,8 @@ def unanswerable_outcome(*, retrieved_nonempty: bool, answer: str | None) -> dic
 
 
 def _metric(row: dict, key: str) -> float | None:
-    metrics = row.get("retrieval_metrics") if isinstance(row.get("retrieval_metrics"), dict) else {}
+    raw = row.get("retrieval_metrics")
+    metrics = raw if isinstance(raw, dict) else {}
     value = metrics.get(key)
     if isinstance(value, (int, float)) and key in metrics:
         return float(value)
@@ -96,6 +97,9 @@ def align_case_results(baseline: list[dict], candidate: list[dict], *, case_meta
         recall_after = _metric(other, "recall")
         mrr_before = _metric(base, "mrr")
         mrr_after = _metric(other, "mrr")
+        gold = [int(item) for item in info.get("gold_chunk_ids") or []]
+        base_ids = _chunk_ids(base)
+        other_ids = _chunk_ids(other)
         rows.append(
             {
                 "case_id": case_id,
@@ -105,16 +109,29 @@ def align_case_results(baseline: list[dict], candidate: list[dict], *, case_meta
                 "question_type": info.get("question_type"),
                 "difficulty": info.get("difficulty"),
                 "tags": list(info.get("tags") or []),
+                "gold_chunk_ids": gold,
+                "hit_before": _metric(base, "hit_rate"),
+                "hit_after": _metric(other, "hit_rate"),
                 "recall_before": recall_before,
                 "recall_after": recall_after,
-                "recall_delta": None if recall_before is None or recall_after is None else recall_after - recall_before,
+                "recall_delta": None
+                if recall_before is None or recall_after is None
+                else recall_after - recall_before,
                 "mrr_before": mrr_before,
                 "mrr_after": mrr_after,
                 "mrr_delta": None if mrr_before is None or mrr_after is None else mrr_after - mrr_before,
+                "ndcg_before": _metric(base, "ndcg"),
+                "ndcg_after": _metric(other, "ndcg"),
                 "recall_movement": _movement(recall_before, recall_after),
                 "rank_movement": _movement(mrr_before, mrr_after),
-                "baseline_chunk_ids": _chunk_ids(base),
-                "candidate_chunk_ids": _chunk_ids(other),
+                "baseline_chunk_ids": base_ids,
+                "candidate_chunk_ids": other_ids,
+                "baseline_best_rank": _best_rank(base_ids, gold),
+                "candidate_best_rank": _best_rank(other_ids, gold),
+                "baseline_latency_ms": base.get("latency_ms"),
+                "candidate_latency_ms": other.get("latency_ms"),
+                "baseline_rerank": _stage_status(base, "RERANK"),
+                "candidate_rerank": _stage_status(other, "RERANK"),
                 "baseline_error": base.get("error_message"),
                 "candidate_error": other.get("error_message"),
             }
@@ -139,6 +156,27 @@ def align_case_results(baseline: list[dict], candidate: list[dict], *, case_meta
         ),
         "note": "Recall 变化表示命中集合变化；MRR 变化表示排序变化。二者可以不一致。",
     }
+
+
+def _best_rank(ranked_ids: list[int], gold_ids: list[int]) -> int | None:
+    """相关标注在本次 Top-K 中的最好名次。没标相关，或相关项未进入列表时为空。"""
+    gold = set(gold_ids)
+    if not gold:
+        return None
+    for index, chunk_id in enumerate(ranked_ids, start=1):
+        if chunk_id in gold:
+            return index
+    return None
+
+
+def _stage_status(row: dict, name: str) -> str | None:
+    stages = row.get("stages")
+    if not isinstance(stages, dict):
+        return None
+    entry = stages.get(name)
+    if isinstance(entry, dict) and entry.get("status"):
+        return str(entry["status"])
+    return None
 
 
 def _chunk_ids(row: dict) -> list[int]:

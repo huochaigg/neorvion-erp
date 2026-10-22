@@ -64,7 +64,7 @@ from app.schemas.ops import ProbeOut
 from app.services.authorization import AuthorizationService
 from app.services.chat import ChatService
 from app.services.evaluation import EvaluationService, default_experiment_config, freeze_run_config
-from app.services.retrieval import RetrievalService
+from app.services.retrieval import RetrievedHit, RetrievalService
 from app.tasks.queue import enqueue_eval_run
 
 logger = logging.getLogger(__name__)
@@ -503,7 +503,8 @@ class EvaluationRunService:
                     retrieved_nonempty=bool(row.retrieved),
                     answer=row.answer,
                 )
-                if row.generation_metrics is None:
+                current = row.generation_metrics
+                if not isinstance(current, dict):
                     stages = mark_stage(
                         stages,
                         EvalStage.JUDGE.value,
@@ -511,12 +512,13 @@ class EvaluationRunService:
                         extra={"unanswerable_outcome": outcome},
                     )
                 else:
-                    row.generation_metrics = {
-                        **row.generation_metrics,
+                    metrics: dict[str, object] = {
+                        **current,
                         "refusal_keyword_hint": outcome["refusal_keyword_hint"],
                         "unanswerable_outcome": outcome,
                     }
-                    row.generation_metrics.pop("refusal", None)
+                    metrics.pop("refusal", None)
+                    row.generation_metrics = metrics
             if judge_error:
                 stages = mark_stage(stages, EvalStage.JUDGE.value, StageStatus.FAILED.value, error=judge_error)
                 row.result_status = ResultCaseStatus.FAILED.value
@@ -716,7 +718,7 @@ class EvaluationRunService:
         )
         result = await self.session.execute(stmt)
         await self.session.commit()
-        if result.rowcount == 0:
+        if int(getattr(result, "rowcount", 0) or 0) == 0:
             return None
         return await _load_run(self.session, run_id)
 
@@ -929,20 +931,22 @@ def _hits_to_retrieved(hits, case: dict) -> list[dict]:
     return pack_retrieved_hits(hits, case, context_budget=int(settings.chat_max_context_chars))
 
 
-class _HitProxy:
-    def __init__(self, payload: dict) -> None:
-        self.chunk_id = payload.get("chunk_id")
-        self.document_id = payload.get("document_id")
-        self.filename = payload.get("filename") or ""
-        self.content = generation_text(payload)
-        self.page_no = payload.get("page_no")
-        self.heading = payload.get("heading")
-        self.version = payload.get("version")
-        self.final_rank = payload.get("final_rank") or 0
-
-
-def _hits_as_objects(hits: list[dict]):
-    return [_HitProxy(item) for item in hits]
+def _hits_as_objects(hits: list[dict]) -> list[RetrievedHit]:
+    return [
+        RetrievedHit(
+            chunk_id=int(item["chunk_id"]) if item.get("chunk_id") is not None else 0,
+            document_id=int(item["document_id"]) if item.get("document_id") is not None else 0,
+            knowledge_base_id=int(item.get("knowledge_base_id") or 0),
+            filename=str(item.get("filename") or ""),
+            content=generation_text(item),
+            page_no=item.get("page_no"),
+            heading=item.get("heading"),
+            chunk_index=int(item.get("chunk_index") or 0),
+            version=int(item.get("version") or 0),
+            final_rank=int(item.get("final_rank") or 0),
+        )
+        for item in hits
+    ]
 
 
 def _compute_metrics(case: dict, retrieved: list[dict], k: int) -> dict:
