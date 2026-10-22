@@ -2,8 +2,11 @@ import type { ApiResponse } from '@neorvion/shared';
 import { api, unwrap } from './client';
 import type { Conversation, ConversationDetail, ConversationList } from '@/types';
 
-export const listConversations = (signal?: AbortSignal) =>
-  unwrap(api.get<ApiResponse<ConversationList>>('/api/v1/conversations', { signal }));
+export const listConversations = (
+  signal?: AbortSignal,
+  params?: { page?: number; page_size?: number },
+) =>
+  unwrap(api.get<ApiResponse<ConversationList>>('/api/v1/conversations', { signal, params }));
 
 export const getConversation = (id: number, signal?: AbortSignal) =>
   unwrap(

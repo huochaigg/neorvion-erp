@@ -1,31 +1,215 @@
-import { DeleteOutlined,EditOutlined,PlusOutlined,SendOutlined,StopOutlined } from '@ant-design/icons';
-import { useMutation,useQuery,useQueryClient } from '@tanstack/react-query';
-import { Alert,Button,Collapse,Empty,Input,List,Modal,Result,Space,Spin,Tag,Typography } from 'antd';
-import { useEffect,useMemo,useRef,useState } from 'react';
-import { api,unwrap } from '@/api/client'; import { createConversation,deleteConversation,getConversation,listConversations,renameConversation } from '@/api/conversations'; import { streamChat } from '@/api/chat'; import { SafeMarkdown } from '@/components/SafeMarkdown'; import { useCopilotStore } from '@/store'; import type { Message,StreamEvent,ToolRun } from '@/types'; import type { ApiResponse } from '@neorvion/shared';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Skeleton } from 'antd';
+import { AlertCircle, RotateCcw, X } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { streamChat } from '@/api/chat';
+import { createConversation, getConversation } from '@/api/conversations';
+import { ChatComposer } from '@/components/ChatComposer';
+import { ChatEmptyState } from '@/components/ChatEmptyState';
+import { ChatMessage } from '@/components/ChatMessage';
+import { useCopilotStore } from '@/store';
+import type { Message, StreamEvent, ToolRun } from '@/types';
 
-function requestId(){return crypto.randomUUID().replaceAll('-','')}
+function requestId() {
+  return crypto.randomUUID().replaceAll('-', '');
+}
 
-export function CopilotPage(){
-  const query=useQueryClient(); const tenantId=useCopilotStore(s=>s.tenantId); const controller=useCopilotStore(s=>s.controller); const setController=useCopilotStore(s=>s.setController);
-  const [selected,setSelected]=useState<number|null>(null); const [input,setInput]=useState(''); const [lastMessage,setLastMessage]=useState(''); const [draft,setDraft]=useState(''); const [tools,setTools]=useState<ToolRun[]>([]); const [error,setError]=useState(''); const [running,setRunning]=useState(false); const bottom=useRef<HTMLDivElement>(null); const autoScroll=useRef(true); const runRef=useRef('');
-  const permission=useQuery({queryKey:['tenant',tenantId,'copilot-me'],queryFn:({signal})=>unwrap(api.get<ApiResponse<{permissions:string[]}>>('/api/v1/me',{signal})),enabled:tenantId!=null});
-  const conversations=useQuery({queryKey:['tenant',tenantId,'copilot-conversations'],queryFn:({signal})=>listConversations(signal),enabled:tenantId!=null&&permission.data?.permissions.includes('copilot:use')});
-  const detail=useQuery({queryKey:['tenant',tenantId,'copilot-conversation',selected],queryFn:({signal})=>getConversation(selected!,signal),enabled:selected!=null});
-  useEffect(()=>()=>useCopilotStore.getState().controller?.abort(),[]);
-  useEffect(()=>{if(autoScroll.current)bottom.current?.scrollIntoView({behavior:'smooth'})},[detail.data?.messages,draft,tools]);
-  const create=useMutation({mutationFn:()=>createConversation(),onSuccess:c=>{void query.invalidateQueries({queryKey:['tenant',tenantId,'copilot-conversations']});setSelected(c.id)}});
-  const remove=async(id:number)=>{await deleteConversation(id);if(selected===id)setSelected(null);void query.invalidateQueries({queryKey:['tenant',tenantId,'copilot-conversations']})};
-  const rename=async(id:number,title:string)=>{await renameConversation(id,title);void query.invalidateQueries({queryKey:['tenant',tenantId,'copilot-conversations']})};
-  const visible=useMemo(()=>{const messages=detail.data?.messages??[];return draft?[...messages,{id:-1,role:'assistant',content:draft,status:'RUNNING',request_id:'',created_at:'',updated_at:'',tool_runs:tools} as Message]:messages},[detail.data?.messages,draft,tools]);
-  const handleEvent=(item:StreamEvent,guard:string)=>{if(runRef.current!==guard)return;const d=item.data;if(item.event==='message')setDraft(v=>v+String(d.delta??''));if(item.event==='tool_start')setTools(v=>[...v,{id:-v.length-1,message_id:Number(d.message_id??0),tool_call_id:String(d.tool_call_id??''),tool_name:String(d.name??''),status:'RUNNING',duration_ms:null,input_summary:String(d.input_summary??''),output_summary:null,error_code:null,created_at:'',completed_at:null}]);if(item.event==='tool_end'||item.event==='tool_error')setTools(v=>v.map(t=>t.tool_call_id===d.tool_call_id?{...t,status:item.event==='tool_end'?'SUCCEEDED':'FAILED',duration_ms:Number(d.duration_ms??0)||null,output_summary:String(d.message??d.summary??'查询完成'),error_code:Number(d.code??0)||null}:t));if(item.event==='error')setError(String(d.message??'生成失败'));if(item.event==='done'){setDraft('');setTools([]);void query.invalidateQueries({queryKey:['tenant',tenantId,'copilot-conversation',selected]});void query.invalidateQueries({queryKey:['tenant',tenantId,'copilot-conversations']})}};
-  const send=async(retryText?:string)=>{const text=(retryText??input).trim();if(!selected||!text||running)return;const abort=new AbortController();const guard=requestId();autoScroll.current=true;runRef.current=guard;setController(abort);setLastMessage(text);setInput('');setDraft('');setTools([]);setError('');setRunning(true);try{await streamChat({conversationId:selected,message:text,clientRequestId:guard,signal:abort.signal,onEvent:e=>handleEvent(e,guard)})}catch(e){if(!abort.signal.aborted)setError(e instanceof Error?e.message:'生成失败')}finally{if(runRef.current===guard){setRunning(false);setController(null);void query.invalidateQueries({queryKey:['tenant',tenantId,'copilot-conversation',selected]})}}};
-  if(tenantId==null)return <Result status="warning" title="缺少企业上下文" subTitle="请从主应用打开 ERP Copilot"/>;
-  if(permission.isPending)return <div className="flex h-full items-center justify-center"><Spin/></div>;
-  if(permission.isError)return <Result status="error" title="Copilot 服务不可用" subTitle={permission.error instanceof Error?permission.error.message:'无法加载身份与权限'}/>;
-  if(!permission.data?.permissions.includes('copilot:use'))return <Result status="403" title="无权限" subTitle="当前企业身份缺少 copilot:use 权限"/>;
-  return <div className="flex h-full min-h-0 bg-slate-100">
-    <aside className="flex w-72 shrink-0 flex-col border-r border-slate-200 bg-white p-3"><Button type="primary" icon={<PlusOutlined/>} loading={create.isPending} onClick={()=>create.mutate()}>新建会话</Button><div className="mt-3 min-h-0 flex-1 overflow-auto">{conversations.isPending?<Spin/>:<List dataSource={conversations.data?.items??[]} locale={{emptyText:'暂无会话'}} renderItem={c=><List.Item className={`cursor-pointer rounded px-2 ${selected===c.id?'bg-blue-50':''}`} onClick={()=>setSelected(c.id)} actions={[<EditOutlined key="e" onClick={e=>{e.stopPropagation();let value=c.title;Modal.confirm({title:'重命名会话',content:<Input defaultValue={value} onChange={x=>value=x.target.value}/>,onOk:()=>rename(c.id,value)})}}/>,<DeleteOutlined key="d" onClick={e=>{e.stopPropagation();Modal.confirm({title:'删除会话？',onOk:()=>remove(c.id)})}}/>]}><Typography.Text ellipsis>{c.title}</Typography.Text></List.Item>}/>}</div></aside>
-    <main className="flex min-w-0 flex-1 flex-col"><header className="border-b bg-white px-5 py-3 font-medium">{detail.data?.title??'ERP Copilot'}</header><section onScroll={e=>{const el=e.currentTarget;autoScroll.current=el.scrollHeight-el.scrollTop-el.clientHeight<80}} className="min-h-0 flex-1 overflow-auto p-5">{!selected?<Empty description="新建或选择一个会话"/>:detail.isPending?<Spin/>:<div className="mx-auto max-w-4xl space-y-4">{visible.map(m=><div key={m.id} className={`rounded-lg p-4 ${m.role==='user'?'ml-16 bg-blue-50':'mr-16 bg-white shadow-sm'}`}><div className="mb-2 text-xs text-slate-500">{m.role==='user'?'你':'Copilot'} {m.status==='RUNNING'?<Tag color="processing">生成中</Tag>:null}</div>{m.tool_runs.length?<Collapse size="small" className="mb-3" items={[{key:'tools',label:`工具调用 ${m.tool_runs.length}`,children:<Space direction="vertical">{m.tool_runs.map(t=><div key={t.tool_call_id}><Tag color={t.status==='SUCCEEDED'?'success':t.status==='FAILED'?'error':'processing'}>{t.status}</Tag>{t.tool_name}{t.duration_ms!=null?` · ${t.duration_ms}ms`:''}<div className="text-xs text-slate-500">{t.output_summary}</div></div>)}</Space>}]} />:null}<SafeMarkdown text={m.content}/></div>)}<div ref={bottom}/></div>}</section>{error?<Alert type="error" showIcon message={error} action={<Button size="small" disabled={!lastMessage||running} onClick={()=>void send(lastMessage)}>重试</Button>} closable onClose={()=>setError('')} className="mx-5"/>:null}<footer className="border-t bg-white p-4"><div className="mx-auto flex max-w-4xl gap-2"><Input.TextArea value={input} disabled={!selected||running} autoSize={{minRows:2,maxRows:5}} placeholder="询问订单、库存、商品、采购或售后信息" onChange={e=>setInput(e.target.value)} onPressEnter={e=>{if(!e.shiftKey){e.preventDefault();void send()}}}/>{running?<Button danger icon={<StopOutlined/>} onClick={()=>controller?.abort()}>停止</Button>:<Button type="primary" icon={<SendOutlined/>} disabled={!selected||!input.trim()} onClick={()=>void send()}>发送</Button>}</div></footer></main>
-  </div>
+export function CopilotPage() {
+  const query = useQueryClient();
+  const tenantId = useCopilotStore((s) => s.tenantId);
+  const controller = useCopilotStore((s) => s.controller);
+  const setController = useCopilotStore((s) => s.setController);
+  const selected = useCopilotStore((s) => s.selectedId);
+  const setSelected = useCopilotStore((s) => s.setSelectedId);
+  const [input, setInput] = useState('');
+  const [lastMessage, setLastMessage] = useState('');
+  const [draft, setDraft] = useState('');
+  const [tools, setTools] = useState<ToolRun[]>([]);
+  const [error, setError] = useState('');
+  const [running, setRunning] = useState(false);
+  const bottom = useRef<HTMLDivElement>(null);
+  const autoScroll = useRef(true);
+  const runRef = useRef('');
+
+  const create = useMutation({
+    mutationFn: () => createConversation(),
+    onSuccess: (row) => {
+      void query.invalidateQueries({ queryKey: ['tenant', tenantId, 'copilot-conversations'] });
+      setSelected(row.id);
+    },
+  });
+  const detail = useQuery({
+    queryKey: ['tenant', tenantId, 'copilot-conversation', selected],
+    queryFn: ({ signal }) => getConversation(selected!, signal),
+    enabled: selected != null,
+  });
+
+  useEffect(() => () => useCopilotStore.getState().controller?.abort(), []);
+  useEffect(() => {
+    if (autoScroll.current) bottom.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [detail.data?.messages, draft, tools]);
+
+  const visible = useMemo(() => {
+    const messages = detail.data?.messages ?? [];
+    return draft
+      ? [
+          ...messages,
+          {
+            id: -1,
+            role: 'assistant',
+            content: draft,
+            status: 'RUNNING',
+            request_id: '',
+            created_at: '',
+            updated_at: '',
+            tool_runs: tools,
+          } as Message,
+        ]
+      : messages;
+  }, [detail.data?.messages, draft, tools]);
+
+  const handleEvent = (item: StreamEvent, guard: string) => {
+    if (runRef.current !== guard) return;
+    const data = item.data;
+    if (item.event === 'message') setDraft((value) => value + String(data.delta ?? ''));
+    if (item.event === 'tool_start') {
+      setTools((value) => [
+        ...value,
+        {
+          id: -value.length - 1,
+          message_id: Number(data.message_id ?? 0),
+          tool_call_id: String(data.tool_call_id ?? ''),
+          tool_name: String(data.name ?? ''),
+          status: 'RUNNING',
+          duration_ms: null,
+          input_summary: String(data.input_summary ?? ''),
+          output_summary: null,
+          error_code: null,
+          created_at: '',
+          completed_at: null,
+        },
+      ]);
+    }
+    if (item.event === 'tool_end' || item.event === 'tool_error') {
+      setTools((value) =>
+        value.map((run) =>
+          run.tool_call_id === data.tool_call_id
+            ? {
+                ...run,
+                status: item.event === 'tool_end' ? 'SUCCEEDED' : 'FAILED',
+                duration_ms: Number(data.duration_ms ?? 0) || null,
+                output_summary: String(data.message ?? data.summary ?? '查询完成'),
+                error_code: Number(data.code ?? 0) || null,
+              }
+            : run,
+        ),
+      );
+    }
+    if (item.event === 'error') setError(String(data.message ?? '生成失败'));
+    if (item.event === 'done') {
+      setDraft('');
+      setTools([]);
+      void query.invalidateQueries({ queryKey: ['tenant', tenantId, 'copilot-conversation', selected] });
+      void query.invalidateQueries({ queryKey: ['tenant', tenantId, 'copilot-conversations'] });
+    }
+  };
+
+  const send = async (retryText?: string) => {
+    const text = (retryText ?? input).trim();
+    if (!text || running) return;
+    let conversationId = selected;
+    if (conversationId == null) {
+      const created = await create.mutateAsync();
+      conversationId = created.id;
+    }
+    const abort = new AbortController();
+    const guard = requestId();
+    autoScroll.current = true;
+    runRef.current = guard;
+    setController(abort);
+    setLastMessage(text);
+    setInput('');
+    setDraft('');
+    setTools([]);
+    setError('');
+    setRunning(true);
+    try {
+      await streamChat({
+        conversationId,
+        message: text,
+        clientRequestId: guard,
+        signal: abort.signal,
+        onEvent: (event) => handleEvent(event, guard),
+      });
+    } catch (cause) {
+      if (!abort.signal.aborted) setError(cause instanceof Error ? cause.message : '生成失败');
+    } finally {
+      if (runRef.current === guard) {
+        setRunning(false);
+        setController(null);
+        void query.invalidateQueries({ queryKey: ['tenant', tenantId, 'copilot-conversation', conversationId] });
+      }
+    }
+  };
+
+  const empty = !selected || (!detail.isPending && visible.length === 0 && !running);
+
+  return (
+    <div className="relative flex h-full min-h-0 flex-col">
+      {selected && detail.data?.title && visible.length > 0 ? (
+        <header className="flex h-12 shrink-0 items-center justify-center border-b border-[#E2E8F0]/80 bg-white/70 px-16 text-sm font-medium text-[#0F172A] backdrop-blur">
+          <span className="truncate">{detail.data.title}</span>
+        </header>
+      ) : null}
+      <section
+        onScroll={(event) => {
+          const el = event.currentTarget;
+          autoScroll.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+        }}
+        className="copilot-scroll min-h-0 flex-1 overflow-auto px-4 pb-36 pt-6"
+      >
+        {empty ? (
+          <ChatEmptyState disabled={running || create.isPending} onPrompt={(text) => void send(text)} />
+        ) : selected && detail.isPending ? (
+          <div className="mx-auto max-w-[900px] pt-10">
+            <Skeleton active paragraph={{ rows: 8 }} />
+          </div>
+        ) : (
+          <div className="mx-auto flex max-w-[900px] flex-col gap-6">
+            {visible.map((message) => (
+              <ChatMessage key={message.id} message={message} />
+            ))}
+            <div ref={bottom} />
+          </div>
+        )}
+      </section>
+      {error ? (
+        <div className="absolute inset-x-0 bottom-28 z-10 mx-auto flex w-[min(100%-2rem,900px)] items-start gap-3 rounded-2xl border border-rose-100 bg-white px-4 py-3 text-sm text-rose-600 shadow-[0_10px_30px_rgba(15,23,42,0.08)]">
+          <AlertCircle size={16} className="mt-0.5 shrink-0" />
+          <div className="min-w-0 flex-1">{error}</div>
+          <button
+            type="button"
+            disabled={!lastMessage || running}
+            onClick={() => void send(lastMessage)}
+            className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-[#4F46E5] hover:bg-[#EEF2FF] disabled:opacity-40"
+          >
+            <RotateCcw size={12} />
+            重试
+          </button>
+          <button type="button" onClick={() => setError('')} className="text-[#94A3B8]" aria-label="关闭错误">
+            <X size={14} />
+          </button>
+        </div>
+      ) : null}
+      <ChatComposer
+        value={input}
+        running={running}
+        disabled={create.isPending}
+        placeholder={selected ? '询问订单、库存、商品、采购或售后信息' : '先提问，或选择一个快捷问题开始'}
+        onChange={setInput}
+        onSend={() => void send()}
+        onStop={() => controller?.abort()}
+      />
+    </div>
+  );
 }

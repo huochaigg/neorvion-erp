@@ -1,2 +1,20 @@
-import { describe,expect,it,vi } from 'vitest'; import { useCopilotStore } from './store';
-describe('tenant isolation',()=>{it('切租户取消旧请求并递增 epoch',()=>{const abort=vi.fn();useCopilotStore.setState({tenantId:1,epoch:0,controller:{abort} as unknown as AbortController});useCopilotStore.getState().switchTenant(2);expect(abort).toHaveBeenCalledOnce();expect(useCopilotStore.getState().tenantId).toBe(2);expect(useCopilotStore.getState().epoch).toBe(1)})});
+import { describe, expect, it, vi } from 'vitest';
+import { useCopilotStore } from './store';
+
+describe('tenant isolation', () => {
+  it('切租户取消旧请求并递增 epoch', () => {
+    const abort = vi.fn();
+    useCopilotStore.setState({
+      tenantId: 1,
+      epoch: 0,
+      selectedId: 9,
+      controller: { abort } as unknown as AbortController,
+    });
+    useCopilotStore.getState().switchTenant(2);
+    expect(abort).toHaveBeenCalledOnce();
+    expect(useCopilotStore.getState().tenantId).toBe(2);
+    expect(useCopilotStore.getState().epoch).toBe(1);
+    expect(useCopilotStore.getState().selectedId).toBeNull();
+  });
+});
+
