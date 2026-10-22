@@ -55,4 +55,4 @@ venvPath = "."
 venv = ".venv"
 pythonVersion = "3.12"
 pythonPlatform = "All"
-extraPaths = ["."]
+extraPaths = [".", "../../packages/python/neorvion_security", "../../packages/python/neorvion_db"]

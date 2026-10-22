@@ -578,7 +578,7 @@ Knowledge：
 
 ## 9. V1 已实现
 
-日期：2026-10-22。生产 `get_db` 仍返回普通 Session。下面这些只存在于 `neorvion_db` 的会话子类和三个服务的登记模块。
+日期：2026-10-22。这一节记录 V1 骨架。生产业务依赖在 V2 已改接会话子类，见第 10 节。`SessionLocal` 本身仍是普通 Session。
 
 ### 9.1 会话划分
 
@@ -591,9 +591,9 @@ Knowledge：
 
 事件只 `listen` 在这三个子类上。`sqlalchemy.orm.Session` 基类没有监听器，所以现有 `SessionLocal` 的查询不变。
 
-`TenantSession.do_orm_execute` 对非全局模型的 ORM SELECT / ORM-enabled UPDATE / DELETE 追加 `with_loader_criteria`。可空租户行的 `tenant_id IS NULL` 不会被等值条件选中。`text()` 和 Core `update(Table)` 直接拒绝。`before_flush` 拒绝写入其他租户、拒绝在已有行上改 `tenant_id`，也不自动填充 `tenant_id`。已加载且租户不一致的 relationship 会拒绝；未加载的外键仍靠数据库复合外键。
+`TenantSession.do_orm_execute` 对 SELECT 追加当前租户的 WHERE 和 `with_loader_criteria`，手写条件保留。UPDATE/DELETE 不自动补条件：WHERE 子句树里必须有与会话租户相等的 `tenant_id`，否则拒绝。比较的是 SQLAlchemy 表达式，不是 SQL 字符串。可空租户行的 `tenant_id IS NULL` 不会被等值条件选中。未审查的 `text()` 和无法证明租户的 Core DML 直接拒绝。`before_flush` 拒绝写入其他租户、拒绝在已有行上改 `tenant_id`，也不自动填充 `tenant_id`。已加载且租户不一致的 relationship 会拒绝；未加载的外键仍靠数据库复合外键。`bulk_save_objects`、`bulk_insert_mappings`、`bulk_update_mappings` 在租户会话上直接拒绝。
 
-`session.connection().execute(text())` 不进入 `do_orm_execute`。V1 用测试把这个缺口固定下来，没有重写 `Session.connection()`，因为 `Session.execute` 自己会调用它。
+`session.connection().execute(text())` 不进入 `do_orm_execute`。测试把这个缺口固定下来，没有重写 `Session.connection()`，因为 `Session.execute` 自己会调用它。特权会话在 `Session._flushing` 期间放行 flush 产生的 INSERT/UPDATE/DELETE，查询仍必须带 `PrivilegedOperation`。`SELECT GET_LOCK` / `RELEASE_LOCK` 只有同时带上 `ReviewedSql.ADVISORY_LOCK` 且文本不含业务表时才放行。
 
 ### 9.2 三服务登记
 
@@ -607,13 +607,72 @@ Knowledge 只有 `ModelProfile` 是全局。其余映射类是 `tenant_scoped`�
 
 静态检查扫描 `app/repositories`。函数出现 `Model.tenant_id` 或 `ensure_tenant`，或者直接调用同文件里这样做的函数，视为已有标记。参数名叫 `tenant_id` 不算。`session.execute` 即使语句在别处构造也会被看到。合法例外写在各服务 `app/db/query_allowlist.py`，并说明原因。这条检查不能代替运行时隔离。
 
-### 9.3 V2 前置条件
+### 9.3 接入时已经处理的点
 
-- 先用现有跨租户 API 测试确认手写 `WHERE` 仍在，再把 `get_db` 换成 `TenantSession`。不要在同一变更里删除手写条件或改状态机。
-- 监听器继续只挂子类。挂到 `Session` 基类会立刻改变生产查询。
-- Worker 领取改为在 `app.tasks.worker` 或 `app.services.snapshots` 内部调用 `open_privileged_session`。调用点若放在别的模块，白名单会拒绝。
-- 关闭 `connection().execute` 缺口时，不能包住 `Session.execute` 内部使用的连接。
-- 评测 Worker 仍在构造 `is_owner=True`。接到租户会话之前要先改为按运行行上的创建者加载快照，否则会把租户内越权带进新会话。
-- `EvaluationRepository(session, 0)` 仍把 `0` 当成有效租户。`TenantSession` 拒绝 `0`，切换时要删掉这个哨兵。
-- IAM 的 `get_tenant` 对已禁用成员的缺口、Redis 异常时跳过 `token_version`、只按 id 的 JOIN，都还在。它们不是本版本的会话骨架能单独修掉的。
+- Worker 领取在 `app.tasks.worker` 内调用 `open_privileged_session`。调用点放在别的模块时，白名单会拒绝。
+- `connection().execute` 仍是已知缺口，没有包住 `Session.execute` 内部使用的连接。
+- 评测执行改为 `load_for_principal(created_by, tenant_id)`，不再构造 `is_owner=True`。
+- `EvaluationRepository` 不再用 `tenant_id=0`。`ensure_tenant` 拒绝非正整数。
+- IAM 在有 `session_id` 时 Redis 异常不再跳过 `token_version` 校验，统一返回 503。
+
+## 10. V2 已接入
+
+日期：2026-10-22。业务路由使用租户会话。`SessionLocal` 和健康检查仍是普通 Session，避免和 `TenantContext` 循环依赖，也避免把守卫挂到基类上。
+
+### 10.1 依赖链
+
+ERP：
+
+1. `get_identity_db` 打开 `GlobalIdentitySession(DISPLAY_PROJECTION)`，不读取租户上下文。
+2. `get_tenant_context` 用这个会话写展示名并提交，再返回已校验的 `TenantContext`。
+3. `get_tenant_db` 依赖该上下文，打开 `TenantSession(context.tenant_id)`。业务路由的 `DbSession` 就是它。
+4. `/health` 自己依赖 `session.get_db`，仍是普通 Session。
+5. Worker 在 `app.tasks.worker` 里用 `WORKER_CLAIM` 领取、用 `OUTBOX_SCAN` 扫 Outbox。读到任务行上的正整数 `tenant_id` 后，另开 `TenantSession` 做业务读写。缺少租户的任务在领取事务里标失败。
+
+IAM：
+
+1. `get_identity_db` 是 `GlobalIdentitySession(IAM_DIRECTORY)`。登录、刷新、会话列表和撤销走它。
+2. 登录后的 `refresh_user` 要读该用户的全部成员。全局身份会话遇到这个方法时，改用一次普通 `SessionLocal` 做投影，不把租户表放进全局会话。
+3. `get_tenant_context` 用请求头里的租户打开短生命周期 `TenantSession` 查成员和权限，并只补刷该租户的 Outbox，然后关闭。业务路由再拿到另一个同租户的 `TenantSession`。
+4. 创建租户、我的租户列表、内部 `/authorize`、平台用户和目录审计继续用普通 `get_db`。这些事务要同时碰全局表和租户表，或者要跨租户读取。
+5. Redis 读取 `token_version` 失败时一律 503。会话行仍先做 `require_active`。登录和 Refresh 不经过 `get_current_user`。
+
+Knowledge：
+
+1. `get_request_context` 对 JWT 只读快照；对 `nk_` API Key 用普通 `SessionLocal` 按哈希定位，提交最近使用时间后关闭。
+2. `get_tenant_db` 依赖这个上下文，打开 `TenantAsyncSession`。
+3. `/health` 使用普通 `get_db`，因为探活语句是 `SELECT 1`。
+4. Worker 先用特权会话按主键读任务或评测行上的 `tenant_id`，再开租户会话执行。队列里的 id 不携带可信任的租户。
+
+### 10.2 语句覆盖
+
+| 路径 | 租户会话 | 特权会话 | 普通 Session |
+| --- | --- | --- | --- |
+| ORM SELECT | 追加本租户条件，并加 loader criteria | 必须带 `WORKER_CLAIM` 或 `OUTBOX_SCAN` | 不拦截 |
+| JOIN / 别名 / selectinload / joinedload | loader criteria；只对本层 FROM 里已有的表追加 WHERE | 同特权查询 | 不拦截 |
+| 聚合 `count()` | 本层 FROM 是租户表时追加 WHERE | 同特权查询 | 不拦截 |
+| 子查询 | 内层直接读租户表时，必须自己带本租户等值 | 同特权查询 | 不拦截 |
+| ORM UPDATE / DELETE | WHERE 必须证明本租户，否则拒绝 | 显式语句要带枚举；flush 写入在 `_flushing` 中放行 | 不拦截 |
+| `session.delete(obj)` | `before_flush` 核对对象租户 | 禁止改已有行的 `tenant_id` | 不拦截 |
+| Core INSERT | 参数里的 `tenant_id` 必须等于会话 | 未带枚举则拒绝 | 不拦截 |
+| Core UPDATE / DELETE | 表能回到登记且 WHERE 证明租户才放行 | 未带枚举则拒绝 | 不拦截 |
+| `text()` | 拒绝，除非是已审查的 `GET_LOCK` / `RELEASE_LOCK` | 拒绝 | 不拦截 |
+| `connection().execute` | 不经过守卫 | 不经过守卫 | 不拦截 |
+| bulk mapping | 拒绝 | 未单独拦截 | 不拦截 |
+| 异步 `execute` / `flush` | 转到内部同步会话的同一套守卫 | 同特权会话 | 不拦截 |
+
+### 10.3 尚未覆盖
+
+- 业务代码若拿到裸 `Connection`，仍可绕过守卫。生产路径没有把 `connection()` 包起来。
+- 普通 `SessionLocal` 仍能读写全部租户。脚本、测试、健康检查、IAM 创建租户和内部授权使用它。
+- IAM 租户请求只补刷当前租户 Outbox。其他企业的积压要等到该企业下次请求，或内部授权那条普通会话。
+- Alembic、`COPY`、数据库控制台不经过应用守卫。
+- Knowledge 导入脚本仍可自行构造所有者上下文，它不是 Worker。
+
+## 11. V3 下一步
+
+- 单列 JOIN 改为租户加主键的复合条件，并给每个聚合补跨租户测试。
+- 把可空租户表的系统查询从普通 Repository 挪到只接受特权会话的模块。
+- 评估是否把 IAM 内部授权的跨租户 Outbox 扫描改成显式特权语句，同时保持与当前事务可见性一致。
+- Knowledge RLS 仍留在 V4。应用层守卫稳定之前不加策略。
 

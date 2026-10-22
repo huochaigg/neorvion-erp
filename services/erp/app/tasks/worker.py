@@ -9,7 +9,9 @@ from __future__ import annotations
 import logging
 import time
 from datetime import datetime, timedelta
+from typing import cast
 
+from neorvion_db import PrivilegedOperation, open_privileged_session
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -22,7 +24,9 @@ from app.core.async_tasks import (
 from app.core.events import EVENT_MAX_RETRIES, AggregateType, EventSource, EventStatus, EventType
 from app.core.redis import redis_client
 from app.core.sanitize import public_error_message
-from app.db.session import SessionLocal
+from app.db.isolation import REGISTRY
+from app.db.session import engine, open_tenant_session
+from app.db.system_access import PRIVILEGED_CALLERS
 from app.models.async_task import AsyncTask
 from app.repositories.async_task import lock_task_for_worker
 from app.repositories.system_event import claim_pending_events
@@ -31,6 +35,22 @@ from app.tasks.handlers import HANDLERS, append_log
 from app.tasks.queue import pop_task
 
 logger = logging.getLogger(__name__)
+
+
+def _open_privileged(operation: PrivilegedOperation) -> Session:
+    """在本模块内打开特权会话。包装到其他模块会让调用方白名单失效。"""
+    return cast(
+        Session,
+        cast(
+            object,
+            open_privileged_session(
+                operation,
+                registry=REGISTRY,
+                allowed_callers=PRIVILEGED_CALLERS[operation],
+                bind=engine,
+            ),
+        ),
+    )
 
 
 def process_outbox(session: Session, limit: int = 20) -> int:
@@ -106,7 +126,8 @@ def execute_task(task_id: str) -> str:
     返回：最终 status。找不到可领取任务时返回 CANCELLED（表示未执行）。
     并发：FOR UPDATE SKIP LOCKED，已被其他人领取则跳过。
     """
-    claim = SessionLocal()
+    claim = _open_privileged(PrivilegedOperation.WORKER_CLAIM)
+    tenant_id: int | None = None
     try:
         task = lock_task_for_worker(claim, task_id)
         if task is None:
@@ -115,6 +136,16 @@ def execute_task(task_id: str) -> str:
         if task.status == TaskStatus.RUNNING.value:
             claim.rollback()
             return TaskStatus.RUNNING.value
+        raw_tenant = task.tenant_id
+        if type(raw_tenant) is not int or raw_tenant <= 0:
+            task.status = TaskStatus.FAILED.value
+            reason = "任务缺少有效租户，拒绝执行"
+            task.error_message = reason
+            task.finished_at = datetime.now()
+            append_log(claim, task, reason, level="ERROR")
+            claim.commit()
+            return TaskStatus.FAILED.value
+        tenant_id = raw_tenant
         task.status = TaskStatus.RUNNING.value
         task.started_at = datetime.now()
         task.progress = max(task.progress, 5)
@@ -126,7 +157,8 @@ def execute_task(task_id: str) -> str:
     finally:
         claim.close()
 
-    session = SessionLocal()
+    assert tenant_id is not None
+    session = open_tenant_session(tenant_id)
     try:
         task = _lock_running(session, task_id)
         if task is None:
@@ -141,17 +173,20 @@ def execute_task(task_id: str) -> str:
         return TaskStatus.SUCCESS.value
     except Exception as exc:
         session.rollback()
-        fail = SessionLocal()
+        fail: Session | None = None
         try:
+            fail = open_tenant_session(tenant_id)
             task = _lock_running(fail, task_id)
             if task is not None:
                 _fail_task(fail, task, exc)
                 fail.commit()
         except Exception:
-            fail.rollback()
+            if fail is not None:
+                fail.rollback()
             logger.exception("fail_task persist error task_id=%s", task_id)
         finally:
-            fail.close()
+            if fail is not None:
+                fail.close()
         return TaskStatus.FAILED.value
     finally:
         session.close()
@@ -159,7 +194,7 @@ def execute_task(task_id: str) -> str:
 
 def run_once(*, block_seconds: int = 0) -> None:
     """处理一批 Outbox，并尝试领取一条任务。block_seconds=0 时不等待 Redis。"""
-    session = SessionLocal()
+    session = _open_privileged(PrivilegedOperation.OUTBOX_SCAN)
     try:
         process_outbox(session)
     except Exception:

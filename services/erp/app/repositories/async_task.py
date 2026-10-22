@@ -1,5 +1,6 @@
 from datetime import datetime
 
+from neorvion_db import PrivilegedOperation, privileged_option
 from sqlalchemy import Select, func, or_, select
 from sqlalchemy.orm import Session
 
@@ -111,5 +112,6 @@ def lock_task_for_worker(session: Session, task_id: str) -> AsyncTask | None:
             AsyncTask.status.in_((TaskStatus.QUEUED.value, TaskStatus.PENDING.value)),
         )
         .with_for_update(skip_locked=True)
+        .execution_options(**privileged_option(PrivilegedOperation.WORKER_CLAIM))
     )
     return session.execute(stmt).scalar_one_or_none()

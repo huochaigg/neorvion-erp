@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Query
 
-from app.api.deps import CurrentUser, DbSession, TenantContextDep
+from app.api.deps import BootstrapDb, CurrentUser, DbSession, TenantContextDep
 from app.api.rbac_deps import (
     MemberCreateContext,
     MemberReadContext,
@@ -32,7 +32,7 @@ router = APIRouter(prefix="/tenants", tags=["tenants"])
 def create_tenant(
     payload: TenantCreate,
     user: CurrentUser,
-    session: DbSession,
+    session: BootstrapDb,
 ) -> ApiResponse[TenantOut]:
     """登录用户创建企业，并在同一事务中把自己写成 OWNER。不要求 X-Tenant-ID。"""
     tenant = TenantService(session).create_tenant(
@@ -44,7 +44,7 @@ def create_tenant(
 
 
 @router.get("", response_model=ApiResponse[list[TenantOut]], summary="我的租户")
-def list_tenants(user: CurrentUser, session: DbSession) -> ApiResponse[list[TenantOut]]:
+def list_tenants(user: CurrentUser, session: BootstrapDb) -> ApiResponse[list[TenantOut]]:
     """只返回当前 JWT 用户加入过的企业。"""
     return ok(TenantService(session).list_my_tenants(user))
 

@@ -1,5 +1,6 @@
 from datetime import datetime
 
+from neorvion_db import PrivilegedOperation, privileged_option
 from sqlalchemy import Select, func, or_, select
 from sqlalchemy.orm import Session
 
@@ -134,6 +135,7 @@ class SystemEventRepository(BaseRepository):
             .order_by(SystemEvent.id.asc())
             .limit(limit)
             .with_for_update(skip_locked=True)
+            .execution_options(**privileged_option(PrivilegedOperation.OUTBOX_SCAN))
         )
         return list(self.session.execute(stmt).scalars())
 

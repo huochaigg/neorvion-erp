@@ -2,6 +2,11 @@
   "pythonVersion": "3.12",
   "pythonPlatform": "All",
   "stubPath": "typings",
+  "extraPaths": [
+    "packages/python/neorvion_db/.venv/Lib/site-packages",
+    "packages/python/neorvion_security",
+    "packages/python/neorvion_db"
+  ],
   "executionEnvironments": [
     {
       "root": "services/erp",
@@ -10,7 +15,19 @@
       "extraPaths": [
         "services/erp",
         "services/erp/.venv/Lib/site-packages",
-        "packages/python/neorvion_security"
+        "packages/python/neorvion_security",
+        "packages/python/neorvion_db"
+      ]
+    },
+    {
+      "root": "services/iam",
+      "pythonVersion": "3.12",
+      "pythonPlatform": "All",
+      "extraPaths": [
+        "services/iam",
+        "services/iam/.venv/Lib/site-packages",
+        "packages/python/neorvion_security",
+        "packages/python/neorvion_db"
       ]
     },
     {
@@ -21,6 +38,7 @@
         "services/knowledge",
         "services/knowledge/.venv/Lib/site-packages",
         "packages/python/neorvion_security",
+        "packages/python/neorvion_db",
         "typings"
       ]
     }

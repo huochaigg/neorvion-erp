@@ -4,7 +4,7 @@ from fastapi import APIRouter, Header, Query
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 
-from app.api.deps import DbSession, PlatformAdmin, TenantContextDep
+from app.api.deps import BootstrapDb, PlatformAdmin, TenantContextDep
 from app.core.config import settings
 from app.core.exceptions import AppError
 from app.core.permissions import PERMISSION_CATALOG, PermissionCode
@@ -117,7 +117,7 @@ def _write_audit(session, *, actor_user_id: int, action: str, target_type: str, 
 
 
 @router.get("/applications", response_model=ApiResponse[list[ApplicationOut]], summary="应用列表")
-def list_applications(_admin: PlatformAdmin, session: DbSession) -> ApiResponse[list[ApplicationOut]]:
+def list_applications(_admin: PlatformAdmin, session: BootstrapDb) -> ApiResponse[list[ApplicationOut]]:
     rows = list(session.scalars(select(Application).order_by(Application.id.asc())).all())
     return ok([ApplicationOut.model_validate(row) for row in rows])
 
@@ -126,7 +126,7 @@ def list_applications(_admin: PlatformAdmin, session: DbSession) -> ApiResponse[
 def create_application(
     payload: ApplicationIn,
     admin: PlatformAdmin,
-    session: DbSession,
+    session: BootstrapDb,
 ) -> ApiResponse[ApplicationOut]:
     exists = session.scalars(select(Application).where(Application.code == payload.code.strip().lower())).first()
     if exists is not None:
@@ -156,7 +156,7 @@ def patch_application(
     application_id: int,
     payload: ApplicationPatchIn,
     admin: PlatformAdmin,
-    session: DbSession,
+    session: BootstrapDb,
 ) -> ApiResponse[ApplicationOut]:
     row = session.get(Application, application_id)
     if row is None:
@@ -186,7 +186,7 @@ def patch_application(
 @router.get("/menus", response_model=ApiResponse[list[MenuOut]], summary="菜单列表")
 def list_menus(
     context: TenantContextDep,
-    session: DbSession,
+    session: BootstrapDb,
     application_code: str | None = Query(default=None),
 ) -> ApiResponse[list[MenuOut]]:
     if PermissionCode.IAM_MENUS_READ.value not in context.permission_codes and not context.is_platform_admin:
@@ -205,7 +205,7 @@ def list_menus(
 def create_menu(
     payload: MenuCreateIn,
     admin: PlatformAdmin,
-    session: DbSession,
+    session: BootstrapDb,
 ) -> ApiResponse[MenuOut]:
     app = session.get(Application, payload.application_id)
     if app is None:
@@ -249,7 +249,7 @@ def update_menu(
     menu_id: int,
     payload: MenuUpdateIn,
     admin: PlatformAdmin,
-    session: DbSession,
+    session: BootstrapDb,
 ) -> ApiResponse[MenuOut]:
     row = session.get(Menu, menu_id)
     if row is None:
@@ -281,7 +281,7 @@ def update_menu(
 @router.get("/audit-logs", response_model=ApiResponse[list[AuditOut]], summary="审计日志")
 def list_audit_logs(
     admin: PlatformAdmin,
-    session: DbSession,
+    session: BootstrapDb,
     tenant_id: int | None = Query(default=None),
 ) -> ApiResponse[list[AuditOut]]:
     stmt = select(AuditLog).order_by(AuditLog.id.desc()).limit(200)
@@ -308,7 +308,7 @@ def list_audit_logs(
 @router.post("/internal/permissions/sync", response_model=ApiResponse[dict], summary="受控同步权限编码")
 def sync_permissions(
     payload: PermissionSyncIn,
-    session: DbSession,
+    session: BootstrapDb,
     x_permission_sync_key: str | None = Header(default=None, alias="X-Permission-Sync-Key"),
 ) -> ApiResponse[dict]:
     """确定性 UPSERT：已有编码只更新名称/说明/模块，绝不改 role_permissions。"""

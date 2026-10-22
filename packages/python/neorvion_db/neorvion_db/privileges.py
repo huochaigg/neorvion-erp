@@ -10,6 +10,8 @@ from neorvion_db.errors import PrivilegeError
 
 # session.execute(..., execution_options={PRIVILEGED_OPERATION_KEY: operation})
 PRIVILEGED_OPERATION_KEY = "neorvion_privileged_operation"
+# 只放行已经人工核对过、且不读取租户业务表的工具语句。不是租户隔离开关。
+REVIEWED_SQL_KEY = "neorvion_reviewed_sql"
 
 
 class PrivilegedOperation(StrEnum):
@@ -17,6 +19,12 @@ class PrivilegedOperation(StrEnum):
 
     WORKER_CLAIM = "worker_claim"
     OUTBOX_SCAN = "outbox_scan"
+
+
+class ReviewedSql(StrEnum):
+    """租户会话可以执行的非 ORM 工具语句。语句文本仍要再核对，枚举本身不是放行证。"""
+
+    ADVISORY_LOCK = "advisory_lock"
 
 
 class GlobalIdentityPurpose(StrEnum):
@@ -71,6 +79,13 @@ def authorize_caller(
         allowed = ", ".join(sorted(allowed_callers))
         raise PrivilegeError(f"模块 {caller} 不能执行 {operation.value}。允许的模块: {allowed}")
     return PrivilegeGrant(operation, _SEAL)
+
+
+def reviewed_sql_option(kind: ReviewedSql) -> dict[str, Any]:
+    """给 GET_LOCK 这类不访问业务表的语句使用。字符串值无效。"""
+    if not isinstance(kind, ReviewedSql):
+        raise PrivilegeError("已审查 SQL 必须是 ReviewedSql 枚举")
+    return {REVIEWED_SQL_KEY: kind}
 
 
 def privileged_option(operation: PrivilegedOperation) -> dict[str, Any]:

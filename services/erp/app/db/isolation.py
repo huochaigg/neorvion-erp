@@ -1,4 +1,4 @@
-"""ERP 模型隔离登记。生产 Session 仍未切换到 TenantSession。"""
+"""ERP 模型隔离登记。业务依赖注入使用 TenantSession，SessionLocal 保持普通 Session。"""
 
 from neorvion_db import build_registry
 

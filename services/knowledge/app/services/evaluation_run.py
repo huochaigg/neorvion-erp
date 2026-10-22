@@ -7,12 +7,14 @@ import os
 import uuid
 from datetime import UTC, datetime, timedelta
 
+from neorvion_security import SecurityError
 from sqlalchemy import or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.exceptions import AppError
+from app.core.iam import snapshot_store
 from app.core.permissions import PermissionCode
 from app.core.tenant import TenantContext
 from app.db.session import SessionLocal
@@ -298,15 +300,33 @@ class EvaluationRunService:
         if blocked:
             await self._pause_run(run, InterruptReason.SNAPSHOT_UNAVAILABLE.value, blocked)
             return
-        context = TenantContext(
-            user_id=run.created_by,
-            tenant_id=run.tenant_id,
-            member_id=0,
-            is_owner=True,
-            role="SYSTEM",
-            permission_codes=frozenset(item.value for item in PermissionCode),
-            token_jti="eval-worker",
-        )
+        if type(run.created_by) is not int or run.created_by <= 0:
+            await self._pause_run(
+                run,
+                InterruptReason.FORBIDDEN.value,
+                "评测缺少创建者，拒绝继续执行",
+            )
+            return
+        if type(run.tenant_id) is not int or run.tenant_id <= 0:
+            await self._pause_run(
+                run,
+                InterruptReason.FORBIDDEN.value,
+                "评测缺少租户，拒绝继续执行",
+            )
+            return
+        try:
+            context = snapshot_store().load_for_principal(
+                user_id=run.created_by,
+                tenant_id=run.tenant_id,
+            )
+        except SecurityError as exc:
+            reason = (
+                InterruptReason.FORBIDDEN.value
+                if exc.status_code == 403
+                else InterruptReason.SNAPSHOT_UNAVAILABLE.value
+            )
+            await self._pause_run(run, reason, exc.message)
+            return
         repo = EvaluationRepository(self.session, run.tenant_id)
         version = await repo.get_version(run.dataset_id, run.dataset_version)
         if version is None:
@@ -768,19 +788,22 @@ class EvaluationRunService:
         """同一 Run 同时只允许一个 Worker。租约过期后可被其他进程收回。"""
         now = datetime.now(UTC)
         until = now + timedelta(seconds=max(15, settings.eval_lease_seconds))
-        stmt = (
-            update(EvaluationRun)
-            .where(
-                EvaluationRun.id == run_id,
-                EvaluationRun.status.in_((RunStatus.QUEUED.value, RunStatus.PAUSED.value, RunStatus.RUNNING.value)),
-                or_(
-                    EvaluationRun.lease_until.is_(None),
-                    EvaluationRun.lease_until <= now,
-                    EvaluationRun.lease_owner == self.lease_owner,
-                ),
-            )
-            .values(lease_owner=self.lease_owner, lease_until=until)
-        )
+        filters = [
+            EvaluationRun.id == run_id,
+            EvaluationRun.status.in_(
+                (RunStatus.QUEUED.value, RunStatus.PAUSED.value, RunStatus.RUNNING.value)
+            ),
+            or_(
+                EvaluationRun.lease_until.is_(None),
+                EvaluationRun.lease_until <= now,
+                EvaluationRun.lease_owner == self.lease_owner,
+            ),
+        ]
+        sync = getattr(self.session, "sync_session", None)
+        bound = getattr(sync, "tenant_id", None)
+        if type(bound) is int and bound > 0:
+            filters.append(EvaluationRun.tenant_id == bound)
+        stmt = update(EvaluationRun).where(*filters).values(lease_owner=self.lease_owner, lease_until=until)
         result = await self.session.execute(stmt)
         await self.session.commit()
         if int(getattr(result, "rowcount", 0) or 0) == 0:

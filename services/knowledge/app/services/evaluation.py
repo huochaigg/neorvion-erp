@@ -890,10 +890,14 @@ class EvaluationService:
         if not ids:
             return []
         allowed = []
+        from app.services.access import AccessService
+
+        access = AccessService(self.session, self.context)
         for item in ids:
-            row = await self.bases.get_in_tenant(item)
-            if row is None:
-                raise AppError("包含无权访问或不存在的知识库", code=40450, status_code=404)
+            try:
+                row = await access.assert_readable(item)
+            except AppError as exc:
+                raise AppError("包含无权访问或不存在的知识库", code=40450, status_code=404) from exc
             allowed.append(row.id)
         return allowed
 

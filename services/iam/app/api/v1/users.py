@@ -4,7 +4,7 @@ from fastapi import APIRouter, Query
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 
-from app.api.deps import DbSession, PlatformAdmin
+from app.api.deps import BootstrapDb, PlatformAdmin
 from app.core.exceptions import AppError
 from app.models.user import User, UserStatus
 from app.schemas.auth import UserOut
@@ -21,7 +21,7 @@ class UserStatusUpdate(BaseModel):
 @router.get("", response_model=ApiResponse[list[UserOut]], summary="平台用户列表")
 def list_users(
     _admin: PlatformAdmin,
-    session: DbSession,
+    session: BootstrapDb,
     q: str | None = Query(default=None, max_length=64),
 ) -> ApiResponse[list[UserOut]]:
     stmt = select(User).order_by(User.id.asc())
@@ -37,7 +37,7 @@ def update_user_status(
     user_id: int,
     payload: UserStatusUpdate,
     admin: PlatformAdmin,
-    session: DbSession,
+    session: BootstrapDb,
 ) -> ApiResponse[UserOut]:
     if payload.status not in {UserStatus.ACTIVE.value, UserStatus.DISABLED.value}:
         raise AppError("用户状态无效", code=40040, status_code=400)

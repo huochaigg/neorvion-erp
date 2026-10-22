@@ -1,3 +1,4 @@
+from neorvion_db import ReviewedSql, reviewed_sql_option
 from sqlalchemy import func, or_, select, text
 from sqlalchemy.orm import Session
 
@@ -75,7 +76,9 @@ class WarehouseRepository(BaseRepository):
         """用 MySQL GET_LOCK 串行化「是否第一个仓库」。IAM 租户表不在本库，不能锁 tenants 行。"""
         tenant_id = self.ensure_tenant()
         result = self.session.execute(
-            text("SELECT GET_LOCK(:name, 5)"),
+            text("SELECT GET_LOCK(:name, 5)").execution_options(
+                **reviewed_sql_option(ReviewedSql.ADVISORY_LOCK)
+            ),
             {"name": f"erp:tenant:{tenant_id}"},
         ).scalar()
         return bool(result)

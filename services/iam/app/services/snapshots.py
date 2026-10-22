@@ -14,8 +14,8 @@ from app.models.tenant import MemberRole, MemberStatus, TenantStatus
 from app.models.user import UserStatus
 from app.repositories.tenant import TenantMemberRepository
 from app.repositories.user import UserRepository
-from app.services.authz_revision import current_revision
 from app.services.authorization import AuthorizationService
+from app.services.authz_revision import current_revision
 
 
 class SnapshotService:
@@ -36,6 +36,22 @@ class SnapshotService:
         return self.store.bump_token_version(user_id)
 
     def refresh_user(self, user_id: int) -> None:
+        """刷新该用户加入的每个企业快照。
+
+        全局身份会话不能读取 tenant_members。登录后的跨企业投影改用普通会话，
+        并且只在身份事务提交之后调用，这样能看到刚写入的用户行。
+        """
+        from neorvion_db import GlobalIdentitySession
+
+        from app.db.session import SessionLocal
+
+        if isinstance(self.session, GlobalIdentitySession):
+            plain = SessionLocal()
+            try:
+                SnapshotService(plain).refresh_user(user_id)
+            finally:
+                plain.close()
+            return
         user = self.users.get_by_id(user_id)
         if user is None:
             return

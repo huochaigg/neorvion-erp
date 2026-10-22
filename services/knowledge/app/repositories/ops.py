@@ -128,10 +128,13 @@ class ApiKeyRepository(BaseRepository):
     async def get_by_hash(self, key_hash: str) -> KnowledgeApiKey | None:
         return await self.session.scalar(select(KnowledgeApiKey).where(KnowledgeApiKey.key_hash == key_hash))
 
-    async def touch_used(self, key_id: int) -> None:
+    async def touch_used(self, key_id: int, tenant_id: int) -> None:
         await self.session.execute(
             update(KnowledgeApiKey)
-            .where(KnowledgeApiKey.id == key_id)
+            .where(
+                KnowledgeApiKey.id == key_id,
+                KnowledgeApiKey.tenant_id == tenant_id,
+            )
             .values(last_used_at=datetime.now(UTC))
         )
 

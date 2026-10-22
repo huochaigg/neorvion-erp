@@ -1,5 +1,6 @@
 from datetime import UTC, datetime
 
+from neorvion_db import PrivilegedOperation, privileged_option
 from sqlalchemy import and_, delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -425,14 +426,18 @@ class TaskRepository(BaseRepository):
         )
 
     async def list_queued(self) -> list[DocumentProcessingTask]:
-        stmt = select(DocumentProcessingTask).where(
-            DocumentProcessingTask.status == TaskStatus.QUEUED.value
+        stmt = (
+            select(DocumentProcessingTask)
+            .where(DocumentProcessingTask.status == TaskStatus.QUEUED.value)
+            .execution_options(**privileged_option(PrivilegedOperation.WORKER_CLAIM))
         )
         return list((await self.session.scalars(stmt)).all())
 
     async def fail_stale_running(self, *, message: str) -> list[DocumentProcessingTask]:
-        stmt = select(DocumentProcessingTask).where(
-            DocumentProcessingTask.status == TaskStatus.RUNNING.value
+        stmt = (
+            select(DocumentProcessingTask)
+            .where(DocumentProcessingTask.status == TaskStatus.RUNNING.value)
+            .execution_options(**privileged_option(PrivilegedOperation.WORKER_CLAIM))
         )
         rows = list((await self.session.scalars(stmt)).all())
         now = datetime.now(UTC)

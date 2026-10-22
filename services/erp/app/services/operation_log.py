@@ -11,7 +11,7 @@ from app.core.operations import OperationResult
 from app.core.request_id import get_request_id
 from app.core.sanitize import sanitize_payload
 from app.core.tenant import TenantContext
-from app.db.session import SessionLocal
+from app.db.session import SessionLocal, open_tenant_session
 from app.models.operation_log import OperationLog
 from app.repositories.operation_log import OperationLogRepository
 
@@ -76,7 +76,10 @@ def write_failed_operation(
     error_code: str | None = None,
 ) -> None:
     """业务事务已经 rollback 后，用独立 Session 留下 FAILED 审计。"""
-    session = SessionLocal()
+    if type(tenant_id) is int and tenant_id > 0:
+        session = open_tenant_session(tenant_id)
+    else:
+        session = SessionLocal()
     try:
         OperationLogService(session, tenant_id).write(
             action=action,

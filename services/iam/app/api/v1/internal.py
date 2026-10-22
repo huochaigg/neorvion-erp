@@ -2,7 +2,7 @@
 
 from fastapi import APIRouter, Header, Request
 
-from app.api.deps import DbSession
+from app.api.deps import BootstrapDb
 from app.core.config import settings
 from app.core.exceptions import AppError
 from app.core.security import decode_token
@@ -11,8 +11,8 @@ from app.repositories.tenant import TenantMemberRepository
 from app.repositories.user import UserRepository
 from app.schemas.common import ApiResponse, ok
 from app.schemas.session import AuthorityCheckIn, AuthorityCheckOut
-from app.services.authz_revision import current_revision
 from app.services.authorization import AuthorizationService
+from app.services.authz_revision import current_revision
 from app.services.session import SessionService
 from app.services.snapshots import SnapshotService
 
@@ -23,7 +23,7 @@ router = APIRouter(prefix="/internal", tags=["internal"])
 def authorize(
     payload: AuthorityCheckIn,
     request: Request,
-    session: DbSession,
+    session: BootstrapDb,
     x_internal_key: str | None = Header(default=None, alias="X-Internal-Key"),
     x_tenant_id: str | None = Header(default=None, alias="X-Tenant-ID"),
 ) -> ApiResponse[AuthorityCheckOut]:

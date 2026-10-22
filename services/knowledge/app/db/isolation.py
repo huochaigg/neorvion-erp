@@ -1,4 +1,4 @@
-"""Knowledge 模型隔离登记。生产 AsyncSession 仍未切换到 TenantAsyncSession。"""
+"""Knowledge 模型隔离登记。业务请求使用 TenantAsyncSession，SessionLocal 保持普通 AsyncSession。"""
 
 from neorvion_db import build_registry
 

@@ -1,4 +1,4 @@
-"""允许打开特权会话的模块。V1 的生产路径不会调用 open_privileged_session。"""
+"""允许打开特权会话的模块。只有 Worker 能领取任务和扫描 Outbox。"""
 
 from neorvion_db import PrivilegedOperation
 

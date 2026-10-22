@@ -32,10 +32,6 @@ ALLOWLIST = (
         "API Key 认证先按全局哈希定位密钥，再校验请求头与密钥租户一致",
     ),
     AllowedQuery(
-        "ops.py:ApiKeyRepository.touch_used",
-        "认证成功后按已定位的密钥主键更新最近使用时间",
-    ),
-    AllowedQuery(
         "rag.py:ModelProfileRepository.list_all",
         "平台模型配置没有 tenant_id，供各租户选择",
     ),

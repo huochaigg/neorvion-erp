@@ -1,5 +1,6 @@
 """HTTP 依赖。JWT 解析只写在这里，业务 Router 不要重复实现。"""
 
+from collections.abc import Generator
 from typing import Annotated
 
 from fastapi import Depends, Request
@@ -12,13 +13,25 @@ from app.core.exceptions import AppError
 from app.core.redis import redis_client
 from app.core.security import decode_token
 from app.core.tenant import TENANT_HEADER, TenantContext
-from app.db.session import get_db
+from app.db.session import get_db, open_identity_session, open_tenant_session
 from app.models.tenant import MemberRole, MemberStatus, TenantStatus
 from app.models.user import User, UserStatus
 from app.repositories.tenant import TenantMemberRepository
 from app.repositories.user import UserRepository
 
-DbSession = Annotated[Session, Depends(get_db)]
+BootstrapDb = Annotated[Session, Depends(get_db)]
+
+
+def get_identity_db() -> Generator[Session, None, None]:
+    """全局身份会话。不依赖租户上下文，避免和租户会话循环依赖。"""
+    session = open_identity_session()
+    try:
+        yield session
+    finally:
+        session.close()
+
+
+IdentityDb = Annotated[Session, Depends(get_identity_db)]
 
 _PASSWORD_CHANGE_ALLOWED: frozenset[tuple[str, str]] = frozenset(
     {
@@ -38,7 +51,7 @@ def _extract_bearer_token(request: Request) -> str:
     return token
 
 
-def get_current_user(request: Request, session: DbSession) -> User:
+def get_current_user(request: Request, session: IdentityDb) -> User:
     """解析 Access Token 并加载当前用户。Refresh 不得依赖本函数。"""
     token = _extract_bearer_token(request)
     claims = decode_token(token, expected_type="access")
@@ -55,8 +68,7 @@ def get_current_user(request: Request, session: DbSession) -> User:
     except AppError:
         raise
     except Exception:
-        if not claims.session_id:
-            raise AppError("授权状态暂时不可用", code=50313, status_code=503) from None
+        raise AppError("授权状态暂时不可用", code=50313, status_code=503) from None
     user = UserRepository(session).get_by_id(claims.user_id)
     if user is None:
         raise AppError("未登录", code=40100, status_code=401)
@@ -86,38 +98,49 @@ def _parse_tenant_id(raw: str | None) -> int:
     return tenant_id
 
 
-def get_tenant_context(request: Request, user: CurrentUser, session: DbSession) -> TenantContext:
-    """读取 X-Tenant-ID 后查库校验。请求头不能当作已授权身份。"""
+def get_tenant_context(request: Request, user: CurrentUser) -> TenantContext:
+    """读取 X-Tenant-ID 后用该租户自己的会话查成员。请求头不能当作已授权身份。
+
+    探测会话在返回前关闭，业务路由拿到的是另一个绑定同一 tenant_id 的 TenantSession。
+    Outbox 只补刷当前租户；其他企业的积压等到该企业下次请求或内部授权再处理。
+    """
     tenant_id = _parse_tenant_id(request.headers.get(TENANT_HEADER))
-    member = TenantMemberRepository(session).get_by_tenant_user(tenant_id, user.id)
-    if member is None or member.tenant is None:
-        raise AppError("租户不存在或不可访问", code=40410, status_code=404)
-    if member.status != MemberStatus.ACTIVE.value:
-        raise AppError("无权访问该租户", code=40310, status_code=403)
-    if member.tenant.status != TenantStatus.ACTIVE.value:
-        raise AppError("无权访问该租户", code=40310, status_code=403)
-    set_tenant_context(tenant_id=tenant_id, user_id=user.id)
-    from app.services.authorization import AuthorizationService
+    probe = open_tenant_session(tenant_id)
+    try:
+        member = TenantMemberRepository(probe).get_by_tenant_user(tenant_id, user.id)
+        if member is None or member.tenant is None:
+            raise AppError("租户不存在或不可访问", code=40410, status_code=404)
+        if member.status != MemberStatus.ACTIVE.value:
+            raise AppError("无权访问该租户", code=40310, status_code=403)
+        if member.tenant.status != TenantStatus.ACTIVE.value:
+            raise AppError("无权访问该租户", code=40310, status_code=403)
+        set_tenant_context(tenant_id=tenant_id, user_id=user.id)
+        from app.services.authorization import AuthorizationService
 
-    codes = AuthorizationService(session).permission_codes(
-        TenantContext(
-            user_id=user.id,
-            tenant_id=tenant_id,
-            member_id=member.id,
-            is_owner=member.role == MemberRole.OWNER.value,
-            role=member.role,
+        codes = AuthorizationService(probe).permission_codes(
+            TenantContext(
+                user_id=user.id,
+                tenant_id=tenant_id,
+                member_id=member.id,
+                is_owner=member.role == MemberRole.OWNER.value,
+                role=member.role,
+            )
         )
-    )
-    session_id = str(getattr(request.state, "session_id", "") or "")
-    from app.services.snapshots import SnapshotService
+        session_id = str(getattr(request.state, "session_id", "") or "")
+        is_owner = member.role == MemberRole.OWNER.value
+        role = member.role
+        member_id = member.id
+        from app.services.snapshots import SnapshotService
 
-    SnapshotService(session).drain_outbox()
+        SnapshotService(probe).drain_outbox()
+    finally:
+        probe.close()
     return TenantContext(
         user_id=user.id,
         tenant_id=tenant_id,
-        member_id=member.id,
-        is_owner=member.role == MemberRole.OWNER.value,
-        role=member.role,
+        member_id=member_id,
+        is_owner=is_owner,
+        role=role,
         permission_codes=frozenset(codes),
         is_platform_admin=bool(user.is_platform_admin),
         must_change_password=bool(user.must_change_password),
@@ -125,6 +148,20 @@ def get_tenant_context(request: Request, user: CurrentUser, session: DbSession) 
         high_risk_verified=True,
         authz_source="iam-db",
     )
+
+
+def get_tenant_db(
+    context: Annotated[TenantContext, Depends(get_tenant_context)],
+) -> Generator[Session, None, None]:
+    """租户业务会话。tenant_id 来自已经查库确认的成员关系。"""
+    session = open_tenant_session(context.tenant_id)
+    try:
+        yield session
+    finally:
+        session.close()
+
+
+DbSession = Annotated[Session, Depends(get_tenant_db)]
 
 
 TenantContextDep = Annotated[TenantContext, Depends(get_tenant_context)]

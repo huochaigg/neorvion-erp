@@ -8,6 +8,7 @@ from neorvion_db import (
     PrivilegedOperation,
     PrivilegeError,
     PrivilegeGrant,
+    ReviewedSql,
     TenantAsyncSession,
     TenantContextRequired,
     TenantIsolationError,
@@ -17,11 +18,12 @@ from neorvion_db import (
     open_privileged_session,
     privileged_option,
     require_tenant_id,
+    reviewed_sql_option,
 )
 from sqlalchemy import func, insert, select, text, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import create_async_engine
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload, selectinload
 from tests.models import Base, Job, Note, Part, Widget
 from tests.not_a_worker import steal
 
@@ -175,6 +177,8 @@ def test_privileged_session_is_not_a_bypass_flag(registry, seeded) -> None:
             execution_options=privileged_option(PrivilegedOperation.WORKER_CLAIM),
         ).all()
     )
+    session.add(Widget(tenant_id=3, name="claimed"))
+    session.commit()
     session.close()
     assert names == {"alpha", "beta"}
 
@@ -221,10 +225,17 @@ async def _async_case(registry) -> None:
     await engine.dispose()
 
 
-def test_v2_orm_update_is_limited_but_core_paths_are_not(registry, seeded) -> None:
-    """ORM-enabled UPDATE 受 with_loader_criteria 约束。text 与 Connection 不受保护。"""
+def test_update_requires_matching_tenant_predicate(registry, seeded) -> None:
+    """缺少 tenant_id 等值的 ORM UPDATE 拒绝。写对了只改本租户。"""
+    missing = TenantSession(1, registry=registry, bind=seeded)
+    with pytest.raises(TenantIsolationError):
+        missing.execute(update(Widget).where(Widget.name == Widget.name).values(name="renamed"))
+    missing.close()
+
     session = TenantSession(1, registry=registry, bind=seeded)
-    session.execute(update(Widget).where(Widget.name == Widget.name).values(name="renamed"))
+    with pytest.raises(TenantIsolationError):
+        session.execute(update(Widget).where(Widget.tenant_id == 2).values(name="stolen"))
+    session.execute(update(Widget).where(Widget.tenant_id == 1).values(name="renamed"))
     session.commit()
     session.close()
 
@@ -239,9 +250,89 @@ def test_v2_orm_update_is_limited_but_core_paths_are_not(registry, seeded) -> No
         blocked.execute(text("select tenant_id from widgets"))
     with pytest.raises(TenantIsolationError):
         blocked.execute(update(Widget.__table__).values(name="core"))
+    blocked.execute(
+        update(Widget.__table__).where(Widget.__table__.c.tenant_id == 1).values(name="core-ok")
+    )
     with pytest.raises(TenantIsolationError):
         blocked.execute(insert(Widget).values(tenant_id=2, name="insert-b"))
     blocked.execute(insert(Widget).values(tenant_id=1, name="insert-a"))
+    with pytest.raises(TenantIsolationError):
+        blocked.bulk_insert_mappings(Widget, [{"tenant_id": 1, "name": "bulk"}])
     raw = {row[0] for row in blocked.connection().execute(text("select tenant_id from widgets"))}
     blocked.close()
     assert raw == {1, 2}
+
+
+def test_join_loaders_subquery_and_refresh_stay_in_tenant(registry, seeded) -> None:
+    session = TenantSession(1, registry=registry, bind=seeded)
+    loaded = session.scalars(select(Widget).options(selectinload(Widget.parts))).unique().all()
+    assert [row.name for row in loaded] == ["alpha"]
+    assert [part.tenant_id for part in loaded[0].parts] == [1]
+
+    joined = session.scalars(select(Part).options(joinedload(Part.widget))).unique().one()
+    assert joined.widget is not None
+    assert joined.widget.name == "alpha"
+
+    scoped = (
+        select(func.count()).select_from(Widget).where(Widget.tenant_id == 1).scalar_subquery()
+    )
+    assert session.scalar(select(scoped)) == 1
+    bare = select(func.count()).select_from(Widget).scalar_subquery()
+    assert session.scalar(select(bare)) == 1
+    joined = (
+        select(Part.id, Widget.name)
+        .join(Widget, Widget.id == Part.widget_id)
+        .where(Part.tenant_id == 1)
+    )
+    assert session.scalar(select(func.count()).select_from(joined.subquery())) == 1
+
+    row = session.scalar(select(Widget).where(Widget.name == "alpha"))
+    assert row is not None
+    session.refresh(row)
+    assert row.tenant_id == 1
+    session.close()
+
+
+def test_merge_and_autoflush_reject_foreign_tenant(registry, seeded) -> None:
+    owner = Session(seeded)
+    foreign = owner.scalar(select(Widget).where(Widget.name == "beta"))
+    assert foreign is not None
+    foreign_id = foreign.id
+    owner.close()
+
+    session = TenantSession(1, registry=registry, bind=seeded)
+    session.autoflush = True
+    session.add(Widget(tenant_id=2, name="late"))
+    with pytest.raises(TenantIsolationError):
+        session.scalar(select(func.count()).select_from(Widget))
+    session.rollback()
+
+    with pytest.raises(TenantIsolationError):
+        session.merge(Widget(id=foreign_id, tenant_id=2, name="beta"))
+        session.flush()
+    session.close()
+
+
+def test_advisory_lock_text_is_reviewed_and_other_text_is_rejected(registry, engine) -> None:
+    session = TenantSession(1, registry=registry, bind=engine)
+    with pytest.raises(TenantIsolationError):
+        session.execute(
+            text("SELECT GET_LOCK(:name, 5)"),
+            {"name": "erp:tenant:1"},
+        )
+    with pytest.raises(TenantIsolationError):
+        session.execute(
+            text("SELECT GET_LOCK(:name, 5) FROM widgets").execution_options(
+                **reviewed_sql_option(ReviewedSql.ADVISORY_LOCK)
+            ),
+            {"name": "erp:tenant:1"},
+        )
+    with pytest.raises(Exception) as caught:
+        session.execute(
+            text("SELECT GET_LOCK(:name, 5)").execution_options(
+                **reviewed_sql_option(ReviewedSql.ADVISORY_LOCK)
+            ),
+            {"name": "erp:tenant:1"},
+        )
+    assert not isinstance(caught.value, TenantIsolationError)
+    session.close()

@@ -100,6 +100,18 @@ class TenantSession(Session):
     def registry(self) -> IsolationRegistry:
         return self._registry
 
+    def bulk_save_objects(self, objects: Any, **kwargs: Any) -> None:
+        """bulk 写入不一定走 before_flush。租户会话直接拒绝。"""
+        raise TenantIsolationError("租户会话拒绝 bulk_save_objects")
+
+    def bulk_insert_mappings(self, mapper: Any, mappings: Any, **kwargs: Any) -> None:
+        """无法逐行确认 tenant_id 时拒绝，而不是静默写入。"""
+        raise TenantIsolationError("租户会话拒绝 bulk_insert_mappings")
+
+    def bulk_update_mappings(self, mapper: Any, mappings: Any, **kwargs: Any) -> None:
+        """批量更新不保证每行都属于当前租户。"""
+        raise TenantIsolationError("租户会话拒绝 bulk_update_mappings")
+
 
 class GlobalIdentitySession(Session):
     """IAM 用户、权限目录、平台配置等全局资源会话。不能读取租户业务表。"""

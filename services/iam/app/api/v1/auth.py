@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Request, Response
 
-from app.api.deps import CurrentUser, DbSession
+from app.api.deps import CurrentUser, IdentityDb
 from app.core.config import settings
 from app.core.exceptions import AppError
 from app.schemas.auth import (
@@ -92,7 +92,7 @@ def _assert_refresh_origin(request: Request) -> None:
     response_model=ApiResponse[UserOut],
     summary="用户注册",
 )
-def register(payload: RegisterRequest, session: DbSession) -> ApiResponse[UserOut]:
+def register(payload: RegisterRequest, session: IdentityDb) -> ApiResponse[UserOut]:
     """注册全局用户。
 
     输入：email、encrypted_password、key_id、challenge_id、display_name。
@@ -116,7 +116,7 @@ def register(payload: RegisterRequest, session: DbSession) -> ApiResponse[UserOu
 )
 def login(
     payload: LoginRequest,
-    session: DbSession,
+    session: IdentityDb,
     request: Request,
     response: Response,
 ) -> ApiResponse[TokenResponse]:
@@ -144,7 +144,11 @@ def login(
     response_model=ApiResponse[TokenResponse],
     summary="刷新访问令牌",
 )
-def refresh(request: Request, session: DbSession, response: Response) -> ApiResponse[TokenResponse]:
+def refresh(
+    request: Request,
+    session: IdentityDb,
+    response: Response,
+) -> ApiResponse[TokenResponse]:
     """用 Refresh Cookie 换发新的 Access Token，并轮换 Refresh Token。
 
     本接口在认证白名单中，不读取、不校验 Authorization 里的 Access Token。
@@ -168,7 +172,7 @@ def refresh(request: Request, session: DbSession, response: Response) -> ApiResp
     response_model=ApiResponse[None],
     summary="退出登录",
 )
-def logout(request: Request, session: DbSession, response: Response) -> ApiResponse[None]:
+def logout(request: Request, session: IdentityDb, response: Response) -> ApiResponse[None]:
     """撤销当前 Refresh 会话并清除 Cookie。无 Cookie 时仍返回成功。"""
     AuthService(session).logout(_read_refresh_cookie(request))
     _clear_refresh_cookie(response)
@@ -181,7 +185,7 @@ def logout(request: Request, session: DbSession, response: Response) -> ApiRespo
     response_model=ApiResponse[UserOut],
     summary="当前用户",
 )
-def me(user: CurrentUser, session: DbSession) -> ApiResponse[UserOut]:
+def me(user: CurrentUser, session: IdentityDb) -> ApiResponse[UserOut]:
     """返回当前 Access Token 对应的用户资料。需要登录。"""
     return ok(AuthService(session).get_profile(user))
 
@@ -194,7 +198,7 @@ def me(user: CurrentUser, session: DbSession) -> ApiResponse[UserOut]:
 def change_password(
     payload: ChangePasswordRequest,
     user: CurrentUser,
-    session: DbSession,
+    session: IdentityDb,
 ) -> ApiResponse[UserOut]:
     """登录用户修改密码。临时账号必须走本接口后才能访问业务。"""
     profile = AuthService(session).change_password(

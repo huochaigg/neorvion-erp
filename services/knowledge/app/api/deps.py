@@ -1,24 +1,23 @@
 """HTTP 依赖。JWT 验签 + Redis 快照写在这里，业务 Router 不要重复实现。"""
 
+from collections.abc import AsyncIterator
 from datetime import UTC, datetime
 from typing import Annotated
 
 from fastapi import Depends, Request
+from neorvion_security import SecurityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.core.context import set_tenant_context
 from app.core.exceptions import AppError, from_security_error
-from app.core.config import settings
 from app.core.iam import authority_client, jwt_verifier, snapshot_store
 from app.core.permissions import PermissionCode
 from app.core.tenant import TENANT_HEADER, TenantContext
-from app.db.session import get_db
+from app.db.session import SessionLocal, open_tenant_session
 from app.repositories.ops import ApiKeyRepository
 from app.services.api_keys import enforce_rate_limit, hash_api_key
 from app.services.authorization import AuthorizationService
-from neorvion_security import SecurityError
-
-DbSession = Annotated[AsyncSession, Depends(get_db)]
 
 
 def _extract_bearer_token(request: Request) -> str:
@@ -72,7 +71,7 @@ async def _resolve_api_key(request: Request, session: AsyncSession, token: str) 
         if wanted != row.tenant_id:
             raise AppError("API Key 不能访问其他租户", code=40365, status_code=403)
     enforce_rate_limit(row.id)
-    await repo.touch_used(row.id)
+    await repo.touch_used(row.id, int(row.tenant_id))
     await session.commit()
     bound = [int(item) for item in (row.knowledge_base_ids or [])]
     context = TenantContext(
@@ -91,7 +90,8 @@ async def _resolve_api_key(request: Request, session: AsyncSession, token: str) 
     return context
 
 
-async def get_read_context(request: Request, session: DbSession) -> TenantContext:
+async def get_request_context(request: Request) -> TenantContext:
+    """JWT 走快照，API Key 用独立普通会话按哈希定位。定位完成后再打开租户会话。"""
     header = request.headers.get("Authorization") or ""
     token = ""
     if header.startswith("Bearer "):
@@ -99,9 +99,31 @@ async def get_read_context(request: Request, session: DbSession) -> TenantContex
     elif header.startswith("ApiKey "):
         token = header.removeprefix("ApiKey ").strip()
     if token.startswith("nk_"):
-        return await _resolve_api_key(request, session, token)
-    context = await get_tenant_context(request)
-    AuthorizationService().require_all(context, (PermissionCode.KNOWLEDGE_READ,))
+        async with SessionLocal() as session:
+            return await _resolve_api_key(request, session, token)
+    return await get_tenant_context(request)
+
+
+async def get_tenant_db(
+    context: Annotated[TenantContext, Depends(get_request_context)],
+) -> AsyncIterator[AsyncSession]:
+    """业务 ORM 会话。tenant_id 来自 JWT 快照或 API Key 记录，不来自未校验的请求头。"""
+    session = open_tenant_session(context.tenant_id)
+    try:
+        yield session
+    finally:
+        await session.close()
+
+
+DbSession = Annotated[AsyncSession, Depends(get_tenant_db)]
+
+
+async def get_read_context(
+    context: Annotated[TenantContext, Depends(get_request_context)],
+) -> TenantContext:
+    """读接口在已绑定租户后再检查知识库读权限。API Key 本身只带检索权限。"""
+    if context.api_key_id is None:
+        AuthorizationService().require_all(context, (PermissionCode.KNOWLEDGE_READ,))
     return context
 
 

@@ -175,3 +175,20 @@ def test_role_permission_revoke_updates_snapshot(client) -> None:
     raw = redis_client.get(snapshot_key(member_user_id, tenant_id))
     assert raw
     assert "order:read" not in json.loads(raw)["permission_codes"]
+
+
+def test_redis_outage_rejects_access_token_even_with_session(client, monkeypatch) -> None:
+    """有 session_id 时 Redis 不可用不能跳过 token_version。登录本身不走这条依赖。"""
+    token, _user_id = register_and_login(client, "redis-down@example.com", "Redis")
+    alive = client.get("/api/v1/auth/me", headers=auth_header(token))
+    assert alive.status_code == 200, alive.text
+
+    from app.core.redis import redis_client
+
+    def _redis_down(*_args: object, **_kwargs: object) -> None:
+        raise ConnectionError("redis down")
+
+    monkeypatch.setattr(redis_client, "get", _redis_down)
+    denied = client.get("/api/v1/auth/me", headers=auth_header(token))
+    assert denied.status_code == 503, denied.text
+    assert denied.json()["code"] == 50313

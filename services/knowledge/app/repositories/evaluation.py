@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
+from neorvion_db import PrivilegedOperation, privileged_option
 from sqlalchemy import Float, func, nulls_last, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -22,7 +23,7 @@ from app.repositories.base import BaseRepository
 
 
 class EvaluationRepository(BaseRepository):
-    def __init__(self, session: AsyncSession, tenant_id: int) -> None:
+    def __init__(self, session: AsyncSession, tenant_id: int | None) -> None:
         super().__init__(session, tenant_id)
 
     async def list_datasets(self, *, q: str | None, page: int, page_size: int):
@@ -418,7 +419,11 @@ class EvaluationRepository(BaseRepository):
         仍在租约窗口内的任务可能由其他 Worker 执行，不能抢。
         """
         now = datetime.now(UTC)
-        stmt = select(EvaluationRun).where(EvaluationRun.status == RunStatus.RUNNING.value)
+        stmt = (
+            select(EvaluationRun)
+            .where(EvaluationRun.status == RunStatus.RUNNING.value)
+            .execution_options(**privileged_option(PrivilegedOperation.WORKER_CLAIM))
+        )
         recovered: list[EvaluationRun] = []
         for row in list((await self.session.scalars(stmt)).all()):
             if row.lease_until is not None and row.lease_until > now:
@@ -433,7 +438,11 @@ class EvaluationRepository(BaseRepository):
         return recovered
 
     async def list_queued_runs(self) -> list[EvaluationRun]:
-        stmt = select(EvaluationRun).where(EvaluationRun.status == RunStatus.QUEUED.value)
+        stmt = (
+            select(EvaluationRun)
+            .where(EvaluationRun.status == RunStatus.QUEUED.value)
+            .execution_options(**privileged_option(PrivilegedOperation.WORKER_CLAIM))
+        )
         return list((await self.session.scalars(stmt)).all())
 
     async def request_cancel_for_knowledge_base(self, knowledge_base_id: int) -> int:

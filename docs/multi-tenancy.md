@@ -82,7 +82,7 @@ select(Product).where(Product.id == product_id, Product.tenant_id == context.ten
 
 `tenant_id` 必须来自已校验的 `TenantContext`，不能直接用前端又传一遍的值当「已授权」。
 
-`TenantMixin` 给业务表提供非空 `tenant_id`。身份表在 IAM，ERP 与 Knowledge 的这一列不建跨库外键。Repository 里的显式 `tenant_id` 条件继续保留。`neorvion_db` 的 `TenantSession` 只在新的会话子类上做后盾，V1 没有装到生产 `SessionLocal` 上，也不能代替手写条件。
+`TenantMixin` 给业务表提供非空 `tenant_id`。身份表在 IAM，ERP 与 Knowledge 的这一列不建跨库外键。Repository 里的显式 `tenant_id` 条件继续保留。业务请求使用 `neorvion_db` 的 `TenantSession` 或 `TenantAsyncSession` 作为后盾。`SessionLocal` 仍是普通 Session，供健康检查、脚本和必须同时写全局表与租户表的事务使用。租户会话不能代替手写条件。
 
 ## 联合唯一约束和联合索引
 

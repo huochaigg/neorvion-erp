@@ -16,10 +16,13 @@ from neorvion_db.errors import (
 )
 from neorvion_db.privileges import (
     PRIVILEGED_OPERATION_KEY,
+    REVIEWED_SQL_KEY,
     GlobalIdentityPurpose,
     PrivilegedOperation,
     PrivilegeGrant,
+    ReviewedSql,
     privileged_option,
+    reviewed_sql_option,
 )
 from neorvion_db.registry import (
     IsolationClass,
@@ -39,6 +42,7 @@ from neorvion_db.static_check import AllowedQuery, ScanReport, scan_repositories
 
 __all__ = [
     "PRIVILEGED_OPERATION_KEY",
+    "REVIEWED_SQL_KEY",
     "AllowedQuery",
     "GlobalIdentityAsyncSession",
     "GlobalIdentityPurpose",
@@ -53,6 +57,7 @@ __all__ = [
     "PrivilegedOperation",
     "PrivilegedSystemSession",
     "RegistryError",
+    "ReviewedSql",
     "ScanReport",
     "TenantAsyncSession",
     "TenantContextRequired",
@@ -65,5 +70,6 @@ __all__ = [
     "open_privileged_session",
     "privileged_option",
     "require_tenant_id",
+    "reviewed_sql_option",
     "scan_repositories",
 ]

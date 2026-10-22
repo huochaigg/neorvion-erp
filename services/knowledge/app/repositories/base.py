@@ -11,6 +11,7 @@ class BaseRepository:
         self.tenant_id = tenant_id
 
     def ensure_tenant(self) -> int:
-        if self.tenant_id is None:
+        """只接受已认证的正整数租户。0 不能再当作系统查询哨兵。"""
+        if type(self.tenant_id) is not int or self.tenant_id <= 0:
             raise AppError("缺少租户上下文", code=40030, status_code=400)
         return self.tenant_id
