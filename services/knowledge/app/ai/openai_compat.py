@@ -8,7 +8,7 @@ from typing import Any
 
 import httpx
 
-from app.ai.errors import classify_model_http_error, describe_embedding_transport
+from app.ai.errors import classify_model_http_error, describe_model_transport
 from app.ai.types import ChatDelta, RerankHit
 from app.core.config import settings
 from app.core.exceptions import AppError
@@ -59,9 +59,9 @@ class OpenAICompatEmbeddingClient:
                     headers={"Authorization": f"Bearer {self.api_key}"},
                 )
         except httpx.HTTPError as exc:
-            raise describe_embedding_transport(exc) from exc
+            raise describe_model_transport(exc, service="Embedding 服务") from exc
         if response.status_code >= 400:
-            raise _classify_http_error(response.status_code, response.text)
+            raise _classify_http_error(response.status_code, response.text, headers=response.headers)
         return response.json()
 
 
@@ -88,7 +88,11 @@ class OpenAICompatChatClient:
                 ) as response:
                     if response.status_code >= 400:
                         body = await response.aread()
-                        raise _classify_http_error(response.status_code, body.decode("utf-8", errors="replace"))
+                        raise _classify_http_error(
+                            response.status_code,
+                            body.decode("utf-8", errors="replace"),
+                            headers=response.headers,
+                        )
                     prompt_tokens = None
                     completion_tokens = None
                     async for line in response.aiter_lines():
@@ -123,10 +127,8 @@ class OpenAICompatChatClient:
                     )
         except AppError:
             raise
-        except httpx.TimeoutException as exc:
-            raise AppError("模型服务超时", code=50460, status_code=504) from exc
         except httpx.HTTPError as exc:
-            raise AppError("无法连接 Chat 服务，请检查 Base URL", code=50262, status_code=502) from exc
+            raise describe_model_transport(exc, service="Chat 服务") from exc
 
 
 class OpenAICompatRerankClient:
@@ -147,12 +149,10 @@ class OpenAICompatRerankClient:
                     json=payload,
                     headers={"Authorization": f"Bearer {self.api_key}"},
                 )
-        except httpx.TimeoutException as exc:
-            raise AppError("Rerank 超时", code=50460, status_code=504) from exc
         except httpx.HTTPError as exc:
-            raise AppError("无法连接 Rerank 服务", code=50262, status_code=502) from exc
+            raise describe_model_transport(exc, service="Rerank 服务") from exc
         if response.status_code >= 400:
-            raise _classify_http_error(response.status_code, response.text)
+            raise _classify_http_error(response.status_code, response.text, headers=response.headers)
         data = response.json()
         results = data.get("results") or data.get("data") or []
         hits: list[RerankHit] = []

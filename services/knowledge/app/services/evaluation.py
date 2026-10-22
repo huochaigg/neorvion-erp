@@ -1085,6 +1085,7 @@ class EvaluationService:
             progress=row.progress,
             attempt=row.attempt,
             error_message=row.error_message,
+            error_detail=getattr(row, "error_detail", None),
             interrupt_reason=getattr(row, "interrupt_reason", None),
             current_case_id=getattr(row, "current_case_id", None),
             current_stage=getattr(row, "current_stage", None),

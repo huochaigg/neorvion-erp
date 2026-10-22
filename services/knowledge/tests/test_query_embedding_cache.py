@@ -37,13 +37,13 @@ def test_transport_errors_keep_their_kind() -> None:
     refused = describe_embedding_transport(httpx.ConnectError("Connection refused"))
     timeout = describe_embedding_transport(httpx.ReadTimeout("timed out"))
     reset = describe_embedding_transport(httpx.RemoteProtocolError("connection closed"))
-    assert dns.code == 50262
+    assert dns.code == 50263
     assert "域名无法解析" in dns.message
-    assert "Base URL" not in dns.message
-    assert refused.code == 50262
+    assert "请检查 Base URL" not in dns.message
+    assert refused.code == 50265
     assert "拒绝连接" in refused.message
-    assert timeout.code == 50460
-    assert reset.code == 50262
+    assert timeout.code == 50462
+    assert reset.code == 50266
     assert "中断" in reset.message
 
 

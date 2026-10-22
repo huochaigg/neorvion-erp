@@ -43,6 +43,7 @@ class InterruptReason(StrEnum):
     SNAPSHOT_UNAVAILABLE = "SNAPSHOT_UNAVAILABLE"
     MODEL_UNAVAILABLE = "MODEL_UNAVAILABLE"
     NETWORK = "NETWORK"
+    FORBIDDEN = "FORBIDDEN"
     CANCELLED = "CANCELLED"
 
 
@@ -60,22 +61,25 @@ INTERRUPT_LABEL = {
     InterruptReason.SNAPSHOT_UNAVAILABLE.value: "原始快照或索引不可用",
     InterruptReason.MODEL_UNAVAILABLE.value: "快照中的模型配置不可用",
     InterruptReason.NETWORK.value: "模型服务暂不可用",
+    InterruptReason.FORBIDDEN.value: "模型服务拒绝访问",
     InterruptReason.CANCELLED.value: "已取消",
 }
 
-# 限流 / 超时 / 短暂网络：有限重试。余额、密钥、上下文超限：不重试。
-RETRYABLE_CODES = {42960, 50460, 50262, 50260, 50201, 50202}
-PAUSE_RUN_CODES = {40160, 40260, 50360, 50361, 50362}
+# 50262 只来自 describe_model_transport：没有 HTTP 状态码的连接或协议错误。
+# 它不是 429。DNS=50263，TLS=50264，拒绝连接=50265，响应中断=50266。
+RETRYABLE_CODES = {42960, 50460, 50461, 50462, 50262, 50263, 50264, 50265, 50266, 50260, 50201, 50202}
+PAUSE_RUN_CODES = {40160, 40360, 40260, 50360, 50361, 50362}
 CONTEXT_OVERFLOW_CODES = {40093}
 
 
 class PauseRun(Exception):
     """中断整次 Run 并保留已落库结果，等待用户或 Worker 恢复。"""
 
-    def __init__(self, reason: str, message: str) -> None:
+    def __init__(self, reason: str, message: str, *, diagnostics: dict | None = None) -> None:
         super().__init__(message)
         self.reason = reason
         self.message = message
+        self.diagnostics = diagnostics
 
 
 def empty_stages() -> dict:
@@ -131,12 +135,14 @@ def interrupt_code_reason(exc: AppError) -> str | None:
         return InterruptReason.CONTEXT_OVERFLOW.value
     if exc.code == 42960:
         return InterruptReason.RATE_LIMIT.value
-    if exc.code == 50460:
+    if exc.code in {50460, 50461, 50462}:
         return InterruptReason.TIMEOUT.value
-    if exc.code in {50262, 50260, 50201, 50202}:
+    if exc.code in {50262, 50263, 50264, 50265, 50266, 50260, 50201, 50202}:
         return InterruptReason.NETWORK.value
     if exc.code == 40260:
         return InterruptReason.INSUFFICIENT_FUNDS.value
+    if exc.code == 40360:
+        return InterruptReason.FORBIDDEN.value
     if exc.code in {40160, 50360, 50361, 50362}:
         return InterruptReason.INVALID_KEY.value
     return None

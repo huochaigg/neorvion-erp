@@ -138,15 +138,8 @@ function runDetailText(run: {
   return knowledgeEvalInterruptLabel(run.interrupt_reason);
 }
 
-function interruptCategory(run: { interrupt_reason?: string | null; error_message?: string | null }): string {
-  const message = run.error_message ?? '';
-  if (
-    run.interrupt_reason === 'RATE_LIMIT' &&
-    (message.includes('无法连接') || message.includes('无法建立') || message.includes('域名无法解析'))
-  ) {
-    return '模型服务暂不可用';
-  }
-  return knowledgeEvalInterruptLabel(run.interrupt_reason);
+function recordedException(run: { error_detail?: { exception_type?: string | null } | null }): string {
+  return run.error_detail?.exception_type || '未记录';
 }
 
 function ExperimentStatusCell({ run }: { run: KnowledgeEvalRun }) {
@@ -986,7 +979,11 @@ export function EvaluationExperimentsPage() {
                     <Descriptions.Item label={record.status === 'FAILED' ? '失败原因' : '中断说明'}>
                       {runDetailText(record) || '-'}
                     </Descriptions.Item>
-                    <Descriptions.Item label="分类">{interruptCategory(record) || '-'}</Descriptions.Item>
+                    <Descriptions.Item label="分类">{knowledgeEvalInterruptLabel(record.interrupt_reason) || '-'}</Descriptions.Item>
+                    <Descriptions.Item label="原始异常">{recordedException(record)}</Descriptions.Item>
+                    <Descriptions.Item label="重试次数">
+                      {record.error_detail?.retry_count ?? '未记录'}
+                    </Descriptions.Item>
                     <Descriptions.Item label="失败阶段">
                       {record.current_stage ? knowledgeEvalStageLabel(record.current_stage) : '-'}
                     </Descriptions.Item>
@@ -1139,11 +1136,22 @@ export function EvaluationExperimentsPage() {
                 }
                 description={
                   <div className="space-y-1 text-sm">
-                    <div>阶段：{visibleRun.current_stage ? knowledgeEvalStageLabel(visibleRun.current_stage) : '-'}</div>
-                    <div>问题 ID：{visibleRun.current_case_id ?? '-'}</div>
-                    <div>分类：{interruptCategory(visibleRun) || '-'}</div>
-                    <div>执行尝试：{visibleRun.attempt}</div>
-                    <div>异常：{visibleRun.error_message || '-'}</div>
+                    <div>阶段：{visibleRun.current_stage ? knowledgeEvalStageLabel(visibleRun.current_stage) : '未记录'}</div>
+                    <div>
+                      失败题目：
+                      {visibleRun.current_case_id == null
+                        ? '未记录'
+                        : `${visibleRun.current_case_id} ${
+                            (resultsQuery.data ?? []).find((item) => item.case_id === visibleRun.current_case_id)?.question ??
+                            ''
+                          }`}
+                    </div>
+                    <div>记录分类：{knowledgeEvalInterruptLabel(visibleRun.interrupt_reason) || '未记录'}</div>
+                    <div>原始异常：{recordedException(visibleRun)}</div>
+                    <div>重试次数：{visibleRun.error_detail?.retry_count ?? '未记录'}</div>
+                    <div>发生时间：{visibleRun.error_detail?.occurred_at ?? '未记录'}</div>
+                    <div>请求 ID：{visibleRun.error_detail?.request_id || '无'}</div>
+                    <div>异常说明：{visibleRun.error_message || '未记录'}</div>
                   </div>
                 }
               />

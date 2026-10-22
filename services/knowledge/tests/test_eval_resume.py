@@ -6,10 +6,12 @@ from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
+import httpx
+from app.ai.errors import classify_model_http_error, describe_model_transport
 from app.core.config import settings
 from app.core.exceptions import AppError
 from app.evaluation.retry import call_with_retry
-from app.evaluation.stages import InterruptReason, PauseRun
+from app.evaluation.stages import InterruptReason, PauseRun, interrupt_code_reason
 from app.repositories.evaluation import EvaluationRepository
 from app.services.evaluation_run import EvaluationRunService
 from fastapi.testclient import TestClient
@@ -344,7 +346,8 @@ async def test_timeout_retries_then_pauses_run(monkeypatch) -> None:
     except PauseRun as exc:
         assert exc.reason == InterruptReason.TIMEOUT.value
         assert "可能已产生费用" in exc.message
-        assert "已重试 2 次" in exc.message
+        assert "已尝试 2 次" in exc.message
+        assert "重试 1 次" in exc.message
     assert calls["n"] == 2
 
 
@@ -363,9 +366,82 @@ async def test_connection_error_pauses_as_network_not_rate_limit(monkeypatch) ->
     except PauseRun as exc:
         assert exc.reason == InterruptReason.NETWORK.value
         assert exc.reason != InterruptReason.RATE_LIMIT.value
-        assert "已重试 3 次" in exc.message
+        assert "已尝试 3 次" in exc.message
+        assert "重试 2 次" in exc.message
         assert "通常不会产生费用" in exc.message
+        assert exc.diagnostics["exception_type"] == "AppError"
+        assert exc.diagnostics["retry_count"] == 2
     assert calls["n"] == 3
+
+
+def test_http_errors_keep_rate_limit_for_429_only() -> None:
+    headers = httpx.Headers({"retry-after": "2", "x-request-id": "req-39", "authorization": "Bearer sk-secret"})
+    limited = classify_model_http_error(429, '{"error":{"message":"slow down"}}', headers=headers)
+    denied = classify_model_http_error(403, "forbidden", headers=headers)
+    unpaid = classify_model_http_error(402, "insufficient balance")
+    upstream = classify_model_http_error(503, "unavailable", headers=headers)
+    connect = describe_model_transport(httpx.ConnectTimeout("timed out"), service="Embedding 服务")
+    assert limited.code == 42960
+    assert interrupt_code_reason(limited) == InterruptReason.RATE_LIMIT.value
+    assert limited.data["retry_after_seconds"] == 2
+    assert limited.data["request_id"] == "req-39"
+    assert denied.code == 40360
+    assert interrupt_code_reason(denied) == InterruptReason.FORBIDDEN.value
+    assert unpaid.code == 40260
+    assert interrupt_code_reason(unpaid) == InterruptReason.INSUFFICIENT_FUNDS.value
+    assert upstream.code == 50260
+    assert interrupt_code_reason(upstream) == InterruptReason.NETWORK.value
+    assert interrupt_code_reason(connect) == InterruptReason.TIMEOUT.value
+    assert "sk-secret" not in str(limited.data)
+
+
+async def test_retry_respects_retry_after_and_skips_auth(monkeypatch) -> None:
+    slept: list[float] = []
+
+    async def fake_sleep(seconds: float) -> None:
+        slept.append(seconds)
+
+    monkeypatch.setattr("app.evaluation.retry.asyncio.sleep", fake_sleep)
+    monkeypatch.setattr(settings, "eval_model_retries", 2)
+    calls = {"n": 0}
+
+    async def limited():
+        calls["n"] += 1
+        raise AppError(
+            "模型服务限流，密钥 sk-live-secret",
+            code=42960,
+            status_code=429,
+            data={"retry_after_seconds": 1.5, "exception_type": "HTTPStatusError", "request_id": "req-1"},
+        )
+
+    try:
+        await call_with_retry(limited, what="retrieve", stage="RETRIEVE", case_id=202)
+        raise AssertionError("expected PauseRun")
+    except PauseRun as exc:
+        assert exc.reason == InterruptReason.RATE_LIMIT.value
+        assert exc.diagnostics["retry_count"] == 1
+        assert exc.diagnostics["case_id"] == 202
+        assert exc.diagnostics["stage"] == "RETRIEVE"
+        assert exc.diagnostics["request_id"] == "req-1"
+        assert "sk-live-secret" not in exc.diagnostics["last_error"]
+        assert "sk-" not in str(exc.diagnostics)
+    assert slept == [1.5]
+    assert calls["n"] == 2
+
+    auth_calls = {"n": 0}
+
+    async def invalid_key():
+        auth_calls["n"] += 1
+        raise AppError("模型服务认证失败", code=40160, status_code=502, data={"exception_type": "HTTPStatusError"})
+
+    try:
+        await call_with_retry(invalid_key, what="retrieve")
+        raise AssertionError("expected PauseRun")
+    except PauseRun as exc:
+        assert exc.reason == InterruptReason.INVALID_KEY.value
+        assert exc.diagnostics["retry_count"] == 0
+    assert auth_calls["n"] == 1
+    assert slept == [1.5]
 
 
 def test_worker_restart_requeues_expired_lease(client: TestClient, identity: FakeIdentityClient, monkeypatch) -> None:

@@ -7,7 +7,7 @@ from urllib.parse import urlparse
 
 import httpx
 
-from app.ai.errors import classify_model_http_error
+from app.ai.errors import classify_model_http_error, describe_model_transport
 from app.ai.types import RerankHit
 from app.core.config import settings
 from app.core.exceptions import AppError
@@ -59,12 +59,10 @@ class DashScopeRerankClient:
                     json=payload,
                     headers={"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"},
                 )
-        except httpx.TimeoutException as exc:
-            raise AppError("Rerank 超时", code=50460, status_code=504) from exc
         except httpx.HTTPError as exc:
-            raise AppError("无法连接 Rerank 服务，请检查 Base URL", code=50262, status_code=502) from exc
+            raise describe_model_transport(exc, service="Rerank 服务") from exc
         if response.status_code >= 400:
-            raise classify_model_http_error(response.status_code, response.text)
+            raise classify_model_http_error(response.status_code, response.text, headers=response.headers)
         data = response.json()
         if data.get("code"):
             raise classify_model_http_error(400, json.dumps(data, ensure_ascii=False))

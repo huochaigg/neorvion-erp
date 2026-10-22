@@ -38,7 +38,7 @@ from app.evaluation.metrics import (
     retrieval_metrics,
     unanswerable_retrieval_stats,
 )
-from app.evaluation.retry import call_with_retry
+from app.evaluation.retry import call_with_retry, interrupt_diagnostics
 from app.evaluation.stages import (
     CONTEXT_OVERFLOW_CODES,
     EvalStage,
@@ -49,6 +49,7 @@ from app.evaluation.stages import (
     empty_stages,
     interrupt_code_reason,
     mark_stage,
+    stage_entry,
     stage_status,
     stage_succeeded,
 )
@@ -315,6 +316,7 @@ class EvaluationRunService:
         run.pause_requested = False
         run.interrupt_reason = None
         run.error_message = None
+        run.error_detail = None
         if run.started_at is None:
             run.started_at = datetime.now(UTC)
         await self.session.commit()
@@ -352,7 +354,7 @@ class EvaluationRunService:
                 try:
                     await self._run_case_with_checkpoints(run, case, config, retrieval, chat, existing)
                 except PauseRun as exc:
-                    await self._pause_run(run, exc.reason, exc.message)
+                    await self._pause_run(run, exc.reason, exc.message, diagnostics=exc.diagnostics)
                     return
                 except AppError as exc:
                     if not await self._handle_case_error(run, case, existing, exc):
@@ -367,7 +369,7 @@ class EvaluationRunService:
                 await self.session.commit()
             await self._finalize_success(run, repo, cases)
         except PauseRun as exc:
-            await self._pause_run(run, exc.reason, exc.message)
+            await self._pause_run(run, exc.reason, exc.message, diagnostics=exc.diagnostics)
 
     async def _run_case_with_checkpoints(
         self,
@@ -402,6 +404,8 @@ class EvaluationRunService:
                     persist_log=False,
                 ),
                 what="retrieve",
+                stage=EvalStage.RETRIEVE.value,
+                case_id=int(case["id"]),
             )
             context_budget = int(settings.chat_max_context_chars)
             row.retrieved = pack_retrieved_hits(search.hits, case, context_budget=context_budget)
@@ -466,7 +470,12 @@ class EvaluationRunService:
                 stages = mark_stage(stages, EvalStage.JUDGE.value, StageStatus.SKIPPED.value)
             else:
                 prompt = chat._build_messages(str(case["question"]), _hits_as_objects(hits), [])
-                answer, usage = await call_with_retry(lambda: collect_chat(prompt), what="generate")
+                answer, usage = await call_with_retry(
+                    lambda: collect_chat(prompt),
+                    what="generate",
+                    stage=EvalStage.GENERATE.value,
+                    case_id=int(case["id"]),
+                )
                 row.answer = answer
                 row.usage = _merge_usage(row.usage, usage, estimated=usage is None or usage.get("prompt_tokens") is None)
                 stages = mark_stage(
@@ -494,6 +503,8 @@ class EvaluationRunService:
                     is_unanswerable=bool(case.get("is_unanswerable")),
                 ),
                 what="judge",
+                stage=EvalStage.JUDGE.value,
+                case_id=int(case["id"]),
             )
             row.generation_metrics = generation_metrics
             row.judge_raw = judge_raw
@@ -597,7 +608,17 @@ class EvaluationRunService:
             InterruptReason.INSUFFICIENT_FUNDS.value,
             InterruptReason.INVALID_KEY.value,
         }:
-            await self._pause_run(run, reason, exc.message)
+            await self._pause_run(
+                run,
+                reason,
+                exc.message,
+                diagnostics=interrupt_diagnostics(
+                    exc,
+                    stage=run.current_stage,
+                    case_id=int(case["id"]),
+                    attempts=1,
+                ),
+            )
             return False
         await self._save_case_failure(run, case, existing, exc.message)
         if not settings.eval_continue_on_error:
@@ -673,6 +694,7 @@ class EvaluationRunService:
         run.current_stage = None
         run.interrupt_reason = None
         run.error_message = None
+        run.error_detail = None
         run.status = RunStatus.SUCCESS.value
         run.finished_at = datetime.now(UTC)
         self._release_lease(run)
@@ -704,13 +726,43 @@ class EvaluationRunService:
         repo = EvaluationRepository(self.session, run.tenant_id)
         await self._sync_usage(run, repo)
 
-    async def _pause_run(self, run: EvaluationRun, reason: str, message: str) -> None:
+    async def _pause_run(
+        self,
+        run: EvaluationRun,
+        reason: str,
+        message: str,
+        diagnostics: dict | None = None,
+    ) -> None:
         run.status = RunStatus.PAUSED.value
         run.interrupt_reason = reason
         run.error_message = message
+        if diagnostics is not None:
+            run.error_detail = diagnostics
+        elif reason == InterruptReason.USER_PAUSE.value:
+            run.error_detail = None
         run.pause_requested = False
         self._release_lease(run)
+        await self._note_pending_error(run, message, diagnostics)
         await self.session.commit()
+
+    async def _note_pending_error(self, run: EvaluationRun, message: str, diagnostics: dict | None) -> None:
+        """把失败说明写到未完成题目上，但不把阶段标成成功，恢复时仍会重试。"""
+        if run.current_case_id is None:
+            return
+        repo = EvaluationRepository(self.session, run.tenant_id)
+        row = await repo.get_result_by_run_case(run.id, int(run.current_case_id))
+        if row is None or row.result_status == ResultCaseStatus.SUCCESS.value:
+            return
+        stage_name = run.current_stage or EvalStage.RETRIEVE.value
+        stages = dict(row.stages or empty_stages())
+        current = dict(stage_entry(stages, stage_name))
+        if stage_succeeded(str(current.get("status") or "")):
+            return
+        current["error"] = message
+        if diagnostics is not None:
+            current["diagnostics"] = diagnostics
+        stages[stage_name] = current
+        row.stages = stages
 
     async def _acquire_lease(self, run_id: int) -> EvaluationRun | None:
         """同一 Run 同时只允许一个 Worker。租约过期后可被其他进程收回。"""

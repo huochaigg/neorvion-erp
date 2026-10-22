@@ -454,6 +454,7 @@ export const KNOWLEDGE_EVAL_INTERRUPT_LABEL: Record<string, string> = {
   SNAPSHOT_UNAVAILABLE: '原始快照或索引不可用',
   MODEL_UNAVAILABLE: '快照中的模型配置不可用',
   NETWORK: '模型服务暂不可用',
+  FORBIDDEN: '模型服务拒绝访问',
   CANCELLED: '已取消',
 };
 
@@ -898,6 +899,18 @@ export interface KnowledgeEvalRun {
   progress: number;
   attempt: number;
   error_message: string | null;
+  error_detail?: {
+    exception_type?: string | null;
+    stage?: string | null;
+    case_id?: number | null;
+    attempts?: number | null;
+    retry_count?: number | null;
+    last_error?: string | null;
+    occurred_at?: string | null;
+    request_id?: string | null;
+    http_status?: number | null;
+    error_code?: number | null;
+  } | null;
   interrupt_reason?: string | null;
   current_case_id?: number | null;
   current_stage?: string | null;

@@ -342,6 +342,11 @@ class EvaluationRun(TimestampMixin, TenantMixin, Base):
     lease_owner: Mapped[str | None] = mapped_column(String(64), nullable=True, comment="持有租约的 Worker")
     lease_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    error_detail: Mapped[dict | None] = mapped_column(
+        JSONB,
+        nullable=True,
+        comment="脱敏后的中断诊断：异常类、阶段、重试次数、请求 ID",
+    )
     config_snapshot: Mapped[dict] = mapped_column(JSONB, nullable=False, comment="运行入参快照，含模型与语料版本")
     dataset_snapshot_meta: Mapped[dict] = mapped_column(
         JSONB,

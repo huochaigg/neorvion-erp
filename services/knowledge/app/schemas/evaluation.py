@@ -295,6 +295,7 @@ class RunOut(BaseModel):
     progress: int
     attempt: int
     error_message: str | None
+    error_detail: dict | None = None
     interrupt_reason: str | None = None
     current_case_id: int | None = None
     current_stage: str | None = None
