@@ -25,7 +25,7 @@ class Settings(BaseSettings):
     enable_api_docs: bool = True
 
     jwt_issuer: str = "neorvion-iam"
-    jwt_audiences: str = "neorvion-iam,neorvion-erp,neorvion-knowledge"
+    jwt_audiences: str = "neorvion-iam,neorvion-erp,neorvion-knowledge,neorvion-copilot"
     jwt_key_id: str = "jwt-v1"
     jwt_private_key_path: str = "secrets/jwt/v1/private.pem"
     jwt_public_key_path: str = "secrets/jwt/v1/public.pem"

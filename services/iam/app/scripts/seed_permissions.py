@@ -10,6 +10,7 @@ _APPS = (
     ("iam", "IAM 权限中心", "neorvion-iam", "统一身份与权限"),
     ("erp", "ERP 业务", "neorvion-erp", "跨境电商 ERP"),
     ("knowledge", "AI 知识库", "neorvion-knowledge", "企业知识检索与问答"),
+    ("copilot", "ERP Copilot", "neorvion-copilot", "受控的 ERP 智能助手"),
 )
 
 

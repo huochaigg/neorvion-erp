@@ -26,7 +26,7 @@ neorvion-erp/
 │   │   ├── alembic/
 │   │   └── tests/
 │   ├── knowledge/             # Knowledge FastAPI + PostgreSQL
-│   ├── copilot/               # 未来，尚未创建
+│   ├── copilot/               # FastAPI + LangGraph；V1-B 模型对话
 │   └── customer-service/      # 未来，尚未创建
 ├── docs/
 ├── nginx/

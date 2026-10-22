@@ -160,6 +160,8 @@ class PermissionCode(StrEnum):
     KNOWLEDGE_UPDATE = "knowledge:update"
     KNOWLEDGE_DELETE = "knowledge:delete"
 
+    COPILOT_USE = "copilot:use"
+
     IAM_USERS_READ = "iam:users:read"
     IAM_USERS_UPDATE = "iam:users:update"
     IAM_USERS_DISABLE = "iam:users:disable"
@@ -435,6 +437,7 @@ PERMISSION_CATALOG: tuple[tuple[str, str, str, str], ...] = (
         "knowledge",
         "软删除知识库，不立即清理文档与向量",
     ),
+    (PermissionCode.COPILOT_USE, "使用 ERP Copilot", "copilot", "访问租户内 ERP Copilot"),
     (PermissionCode.IAM_USERS_READ, "查看平台用户", "iam", "平台管理员查看全局用户"),
     (PermissionCode.IAM_USERS_UPDATE, "编辑平台用户", "iam", "平台管理员修改用户资料"),
     (PermissionCode.IAM_USERS_DISABLE, "停用平台用户", "iam", "平台管理员停用账号并失效会话"),
@@ -509,6 +512,7 @@ _READ_CODES: tuple[str, ...] = (
     PermissionCode.ANALYTICS_AFTER_SALE_READ,
     PermissionCode.EVENT_READ,
     PermissionCode.KNOWLEDGE_READ,
+    PermissionCode.COPILOT_USE,
 )
 
 DEFAULT_ROLE_TEMPLATES: tuple[tuple[str, str, str, tuple[str, ...]], ...] = (
@@ -578,6 +582,7 @@ DEFAULT_ROLE_TEMPLATES: tuple[tuple[str, str, str, tuple[str, ...]], ...] = (
             PermissionCode.KNOWLEDGE_READ,
             PermissionCode.KNOWLEDGE_CREATE,
             PermissionCode.KNOWLEDGE_UPDATE,
+            PermissionCode.COPILOT_USE,
         ),
     ),
     (
@@ -635,6 +640,7 @@ DEFAULT_ROLE_TEMPLATES: tuple[tuple[str, str, str, tuple[str, ...]], ...] = (
             PermissionCode.ANALYTICS_OVERVIEW_READ,
             PermissionCode.ANALYTICS_INVENTORY_READ,
             PermissionCode.KNOWLEDGE_READ,
+            PermissionCode.COPILOT_USE,
         ),
     ),
     (
@@ -1718,6 +1724,26 @@ PERMISSION_TREE: tuple[PermissionTreeDef, ...] = (
                         title="删除",
                         type="ACTION",
                         permission_code=PermissionCode.KNOWLEDGE_DELETE,
+                    ),
+                ),
+            ),
+        ),
+    ),
+    PermissionTreeDef(
+        key="dir:copilot",
+        title="ERP Copilot",
+        type="DIRECTORY",
+        children=(
+            PermissionTreeDef(
+                key="menu:copilot",
+                title="ERP Copilot",
+                type="MENU",
+                children=(
+                    PermissionTreeDef(
+                        key="action:copilot-use",
+                        title="使用",
+                        type="ACTION",
+                        permission_code=PermissionCode.COPILOT_USE,
                     ),
                 ),
             ),

@@ -210,6 +210,6 @@ docker compose up -d mysql redis postgres iam erp worker knowledge
 
 公网只开放 80/443。MySQL / Redis / Postgres / FastAPI 不直接对公网。
 
-## 未来
+## Copilot 与后续应用
 
-`services/copilot`、客服等应用在 IAM「应用注册」中增加 audience 与权限命名空间，不要改 JWT 校验代码去硬编码应用列表。
+`services/copilot` 已实现 V1-B 模型对话骨架，使用 `neorvion-copilot` audience 与 `copilot:use` 权限，当前没有业务 Tool 或写操作。客服等后续应用仍应在 IAM「应用注册」中增加 audience 与权限命名空间，不要改 JWT 校验代码去硬编码应用列表。

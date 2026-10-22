@@ -54,7 +54,7 @@ services:
       APP_HOST: 0.0.0.0
       APP_PORT: 8010
       JWT_ISSUER: neorvion-iam
-      JWT_AUDIENCES: neorvion-iam,neorvion-erp,neorvion-knowledge
+      JWT_AUDIENCES: neorvion-iam,neorvion-erp,neorvion-knowledge,neorvion-copilot
       JWT_KEY_ID: jwt-v1
       JWT_PRIVATE_KEY_PATH: secrets/jwt/v1/private.pem
       JWT_PUBLIC_KEY_PATH: secrets/jwt/v1/public.pem
@@ -240,6 +240,44 @@ services:
       sh -c "uv run --no-dev alembic upgrade head &&
              uv run --no-dev uvicorn app.main:app --host 0.0.0.0 --port 8012 --proxy-headers --forwarded-allow-ips=127.0.0.1"
 
+  copilot:
+    build:
+      context: .
+      dockerfile: services/copilot/Dockerfile
+    container_name: neorvion-copilot
+    restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_healthy
+      iam:
+        condition: service_started
+    environment:
+      APP_ENV: development
+      APP_HOST: 0.0.0.0
+      APP_PORT: 8013
+      IAM_JWT_ISSUER: neorvion-iam
+      IAM_JWT_AUDIENCE: neorvion-copilot
+      IAM_JWKS_URL: http://iam:8010/.well-known/jwks.json
+      IAM_REDIS_URL: redis://redis:6379/1
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:8015,http://localhost:8018,http://127.0.0.1:8015,http://127.0.0.1:8018}
+      MODEL_PROVIDER: ${COPILOT_MODEL_PROVIDER:-mock}
+      CHAT_BASE_URL: ${COPILOT_CHAT_BASE_URL:-https://api.deepseek.com}
+      CHAT_API_KEY: ${COPILOT_CHAT_API_KEY:-}
+      CHAT_MODEL: ${COPILOT_CHAT_MODEL:-deepseek-chat}
+    ports:
+      - "8013:8013"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8013/api/v1/health')",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
   nginx:
     image: nginx:1.27-alpine
     container_name: neorvion-nginx
@@ -248,6 +286,7 @@ services:
       - iam
       - erp
       - knowledge
+      - copilot
     ports:
       - "8080:80"
     volumes:

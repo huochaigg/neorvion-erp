@@ -1,0 +1,54 @@
+[project]
+name = "neorvion-copilot-backend"
+version = "0.1.0"
+description = "Neorvion ERP Copilot FastAPI backend"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "cryptography>=44.0.0,<47",
+    "fastapi[standard]>=0.117.1,<1",
+    "httpx>=0.28.1,<1",
+    "langgraph>=1.2.12,<1.3",
+    "neorvion-security",
+    "pydantic-settings>=2.10.1,<3",
+    "pyjwt>=2.10.1,<3",
+    "redis>=6.2.0,<8",
+    "uvicorn[standard]>=0.35.0,<1",
+]
+
+[tool.uv.sources]
+neorvion-security = { path = "../../packages/python/neorvion_security", editable = true }
+
+[dependency-groups]
+dev = [
+    "pytest>=8.4.2,<10",
+    "pytest-asyncio>=0.25.3,<2",
+    "ruff>=0.13.1,<1",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["app", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/conftest.py" = ["E402"]
+"tests/*.py" = ["E501"]
+"app/**/*.py" = ["E501"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+
+[tool.pyright]
+venvPath = "."
+venv = ".venv"
+pythonVersion = "3.12"
+pythonPlatform = "All"
+extraPaths = [".", "../../packages/python/neorvion_security"]
+

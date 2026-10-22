@@ -4,9 +4,9 @@
 
 ## 项目定位
 
-Neorvion 已拆独立 **IAM :8010**（V2：会话表、高风险回源、授权版本）。ERP :8011 与 Knowledge :8012 是业务服务，本地校验 RS256 JWT。详见根 README 与 `docs/iam-operations.md`。ERP 业务模块本身已收口到 V15。
+Neorvion 已拆独立 **IAM :8010**（V2：会话表、高风险回源、授权版本）。ERP :8011、Knowledge :8012 与 Copilot :8013 是独立服务，本地校验 RS256 JWT。详见根 README 与 `docs/iam-operations.md`。ERP 业务模块本身已收口到 V15。
 
-下一阶段才是 ERP Copilot / Agent。Agent **不直接写 ERP 数据库**。
+ERP Copilot 已实现 V1-B：OpenAI-compatible 模型 Adapter、单节点 LangGraph、非流式与 SSE 对话。尚无 ERP/Knowledge Tool、前端、会话持久化或业务写操作。Agent **不直接写 ERP 数据库**。
 
 生产：OpenCloudOS 9.2 + 宝塔 Nginx + Docker Compose。ERP 用 MySQL。Knowledge / RAG 用 PostgreSQL + pgvector。禁止自动 git commit / push / 创建 production 分支。
 
@@ -31,8 +31,9 @@ Neorvion 已拆独立 **IAM :8010**（V2：会话表、高风险回源、授权�
 
 - 后端：Python 3.12 + FastAPI + SQLAlchemy 2 + Alembic + MySQL 8 + Redis。ERP 在 `services/erp`，Knowledge 在 `services/knowledge`，不要合并成一个 FastAPI
 - 前端：React 19 + Vite + Wujie + Ant Design 6 + TanStack Query + Zustand
-- 端口：Shell 8015 / ERP 8016 / API 8011 / Knowledge 前端 8017 / Knowledge API 8012
+- 端口：Shell 8015 / ERP 8016 / API 8011 / Knowledge 前端 8017 / Knowledge API 8012 / Copilot API 8013
 - Knowledge 是独立 FastAPI + PostgreSQL，不要把 Router 注册进 ERP，也不要 import ERP Model/Repository/Service
+- Copilot 位于 `services/copilot`，不得 import ERP/Knowledge 内部模块；跨服务能力必须通过稳定 HTTP API
 
 ## 事务
 
@@ -77,4 +78,4 @@ Neorvion 已拆独立 **IAM :8010**（V2：会话表、高风险回源、授权�
 ## Agent
 
 查询可走现有只读 API。写操作必须：Tool → ERP API / Service → TenantContext → RBAC → 状态机 → DB。
-高风险写操作未来需要预览 → 用户确认 → 执行。V15 不开发 Agent。
+高风险写操作未来需要预览 → 用户确认 → 执行。V1-B 只做模型对话，禁止提前加入业务写操作。

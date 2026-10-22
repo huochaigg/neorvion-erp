@@ -42,6 +42,8 @@
 
 - [面试入口](interview/README.md)
 - [Agent 接入准备](agent-readiness.md)
+- [ERP Copilot V1–VN 路线图](copilot/roadmap.md)
+- [Copilot V1-A ChatGPT 代码生成提示词](prompts/copilot-v1a-implementation.md)
 
 ## 版本文档
 

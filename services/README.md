@@ -7,7 +7,7 @@ services/
 ├── iam/                  # FastAPI + MySQL neorvion_iam：登录、租户、RBAC、会话
 ├── erp/                  # FastAPI + MySQL neorvion_erp：业务；不持有身份表
 ├── knowledge/            # FastAPI + PostgreSQL + RAG（当前）
-├── copilot/              # FastAPI + LangGraph（未来，尚未创建）
+├── copilot/              # FastAPI + LangGraph：V1-B 模型对话（无业务 Tool / 写操作）
 └── customer-service/     # FastAPI + WebSocket（未来，尚未创建）
 ```
 
@@ -19,6 +19,7 @@ services/
 uv run --directory services/iam python -m app
 uv run --directory services/erp python -m app
 uv run --directory services/knowledge python -m app
+uv run --directory services/copilot python -m app
 ```
 
 Worker：
@@ -28,4 +29,4 @@ uv run --directory services/erp python -m app.tasks.worker
 uv run --directory services/knowledge python -m app.tasks.worker
 ```
 
-本机 ERP API 端口是 **8011**。Knowledge API 是 **8012**。
+本机 ERP API 端口是 **8011**，Knowledge API 是 **8012**，Copilot API 是 **8013**。
