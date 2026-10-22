@@ -1,8 +1,4 @@
-import type {
-  KnowledgeEvalExperiment,
-  KnowledgeEvalExperimentLatestRun,
-  KnowledgeEvalRun,
-} from '@neorvion/shared';
+import type { KnowledgeEvalRun } from '@neorvion/shared';
 
 export type EvalMetricContext = {
   status: string;
@@ -32,7 +28,7 @@ export function formatLatencyMs(value: number | null | undefined): string {
 }
 
 export function formatRunDuration(
-  run: Pick<KnowledgeEvalExperimentLatestRun, 'started_at' | 'finished_at' | 'created_at'> | null | undefined,
+  run: Pick<KnowledgeEvalRun, 'started_at' | 'finished_at' | 'created_at'> | null | undefined,
 ): string {
   if (!run) {
     return '-';
@@ -130,31 +126,33 @@ export function parseCompareRunIds(raw: string | null | undefined): number[] {
   return ids;
 }
 
-export function comparabilityWarning(items: KnowledgeEvalExperiment[]): string | null {
-  const runs = items
-    .map((item) => item.latest_run)
-    .filter((run): run is KnowledgeEvalExperimentLatestRun => run != null && run.status === 'SUCCESS');
-  if (runs.length < 2) {
+function snapshotValue(run: KnowledgeEvalRun, key: string): unknown {
+  return run.config_snapshot?.[key];
+}
+
+export function comparabilityWarning(runs: KnowledgeEvalRun[]): string | null {
+  const ready = runs.filter((run) => run.status === 'SUCCESS');
+  if (ready.length < 2) {
     return null;
   }
-  const baseline = runs[0];
+  const baseline = ready[0];
   const reasons: string[] = [];
-  if (runs.some((run) => run.dataset_id !== baseline.dataset_id)) {
-    reasons.push('所选实验使用了不同数据集');
+  if (ready.some((run) => run.dataset_id !== baseline.dataset_id)) {
+    reasons.push('所选运行使用了不同数据集');
   }
-  if (runs.some((run) => run.dataset_version !== baseline.dataset_version)) {
+  if (ready.some((run) => run.dataset_version !== baseline.dataset_version)) {
     reasons.push('数据集冻结版本不同');
   }
   if (
-    runs.some(
+    ready.some(
       (run) =>
-        run.embedding_model !== baseline.embedding_model ||
-        run.embedding_dimensions !== baseline.embedding_dimensions,
+        snapshotValue(run, 'embedding_model') !== snapshotValue(baseline, 'embedding_model') ||
+        snapshotValue(run, 'embedding_dimensions') !== snapshotValue(baseline, 'embedding_dimensions'),
     )
   ) {
     reasons.push('Embedding / 索引版本不同');
   }
-  if (runs.some((run) => run.comparable === false)) {
+  if (ready.some((run) => run.dataset_snapshot_meta?.comparable === false)) {
     reasons.push('部分运行含失效标注');
   }
   if (reasons.length === 0) {
@@ -186,9 +184,9 @@ export function evalRunMetrics(run: KnowledgeEvalRun) {
 }
 
 export const EVAL_METRIC_HELP = {
-  recall: 'Recall@K：相关切片被召回到最终 Top-K 的比例。K 为该实验的最终 Top-K。无有效监督题时显示为「-」。',
+  recall: 'Recall@K：相关切片被召回到最终 Top-K 的比例。K 为该次运行快照里的最终 Top-K。无有效监督题时显示为「-」。',
   mrr: 'MRR：第一个相关结果排名的倒数，未命中为 0。只对有相关标注的题目宏平均。',
-  ndcg: 'nDCG@K：考虑相关性等级（0–3）与排名折损。K 为该实验最终 Top-K。',
+  ndcg: 'nDCG@K：考虑相关性等级（0–3）与排名折损。K 为该次运行快照里的最终 Top-K。',
   hit_rate: 'Hit@K：Top-K 是否至少命中一个相关切片。宏平均后介于 0–1。',
   p95: 'P95 延迟：本次运行全部题目耗时的 95 分位，含检索；未成功完成时为「-」。',
   supervised: '有效题目数：参与 Recall/MRR/nDCG/Hit 宏平均的监督题。无答案题不计入。',

@@ -10,7 +10,7 @@ from dataclasses import dataclass, field
 from sqlalchemy import and_, case, func, literal, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.ai.factory import get_embedding_client, get_rerank_client
+from app.ai.factory import get_rerank_client
 from app.core.config import settings
 from app.core.exceptions import AppError
 from app.core.tenant import TenantContext
@@ -23,6 +23,7 @@ from app.models.knowledge import (
 )
 from app.models.rag import ChunkEmbedding, EmbeddingStatus, RetrievalLog, RetrievalStrategy
 from app.repositories.knowledge import KnowledgeBaseRepository
+from app.services.query_embedding_cache import embed_query
 
 logger = logging.getLogger(__name__)
 
@@ -159,16 +160,21 @@ class RetrievalService:
             stages["ready_embeddings"] = ready_n
             if ready_n == 0:
                 stages["vector_skipped"] = "no_ready_embeddings"
+                stages["embedding_api_calls"] = 0
+                stages["embedding_cache_hits"] = 0
                 vector_hits = []
             else:
                 vector_hits = await self._vector_search(
-                    text_query, allowed, vector_limit, similarity_threshold
+                    text_query, allowed, vector_limit, similarity_threshold, stages
                 )
             stages["vector_ms"] = int((time.perf_counter() - t0) * 1000)
             stages["vector_ranks"] = [
                 {"chunk_id": item.chunk_id, "rank": item.vector_rank, "similarity": item.vector_score}
                 for item in vector_hits
             ]
+        else:
+            stages["embedding_api_calls"] = 0
+            stages["embedding_cache_hits"] = 0
         if strategy_value in {RetrievalStrategy.KEYWORD.value, RetrievalStrategy.HYBRID.value}:
             t0 = time.perf_counter()
             keyword_hits = await self._keyword_search(text_query, allowed, keyword_limit)
@@ -299,11 +305,17 @@ class RetrievalService:
         base_ids: list[int],
         limit: int,
         similarity_threshold: float | None,
+        stages: dict,
     ) -> list[RetrievedHit]:
-        vectors = await get_embedding_client().embed([query])
-        if not vectors or len(vectors[0]) != settings.embedding_dimensions:
+        embedded = await embed_query(self.session, self.context.tenant_id, query)
+        stages["embedding_cache_hit"] = embedded.cache_hit
+        stages["embedding_api_calls"] = embedded.api_calls
+        stages["embedding_cache_hits"] = 1 if embedded.cache_hit else 0
+        stages["embedding_prompt_tokens"] = embedded.prompt_tokens
+        stages["embedding_tokens_estimated"] = embedded.tokens_estimated
+        query_vector = embedded.vector
+        if len(query_vector) != settings.embedding_dimensions:
             raise AppError("查询向量维度与索引不一致，请重建索引", code=40090, status_code=400)
-        query_vector = vectors[0]
         distance = ChunkEmbedding.embedding.cosine_distance(query_vector)
         similarity = (1 - distance).label("similarity")
         stmt = (

@@ -55,3 +55,7 @@
 .actions :global(.ant-btn) {
   white-space: nowrap;
 }
+
+:global(.knowledge-eval-selected) > td {
+  background: #f0f9ff !important;
+}

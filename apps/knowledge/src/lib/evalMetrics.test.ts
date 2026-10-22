@@ -11,7 +11,7 @@ import {
   metricMissingReason,
   parseCompareRunIds,
 } from './evalMetrics';
-import type { KnowledgeEvalExperiment, KnowledgeEvalRun } from '@neorvion/shared';
+import type { KnowledgeEvalRun } from '@neorvion/shared';
 
 describe('formatEvalMetric', () => {
   it('keeps missing values as dash instead of zero', () => {
@@ -55,59 +55,36 @@ describe('formatRunDuration', () => {
 });
 
 describe('comparabilityWarning', () => {
-  const run = {
+  const run: KnowledgeEvalRun = {
     id: 1,
-    status: 'SUCCESS',
-    progress: 100,
+    experiment_id: 4,
     dataset_id: 8,
     dataset_version: 1,
+    status: 'SUCCESS',
+    progress: 100,
+    attempt: 1,
     error_message: null,
-    recall: 0.5,
-    mrr: 0.5,
-    ndcg: 0.5,
-    hit_rate: 1,
-    precision: 0.2,
-    k: 5,
-    latency_p95_ms: 40,
-    supervised_count: 2,
-    unanswerable_count: 0,
-    case_count: 2,
-    comparable: true,
-    embedding_model: 'mock',
-    embedding_dimensions: 8,
+    config_snapshot: { embedding_model: 'mock', embedding_dimensions: 8, strategy: 'HYBRID', top_k: 5 },
+    dataset_snapshot_meta: { comparable: true },
+    metrics: { recall: 0.5 },
+    usage: { latency_p95_ms: 40 },
     started_at: null,
     finished_at: null,
     created_at: '2026-10-19T04:00:00.000Z',
   };
 
-  function experiment(id: number, latest: typeof run | null): KnowledgeEvalExperiment {
-    return {
-      id,
-      dataset_id: latest?.dataset_id ?? 8,
-      name: `e${id}`,
-      description: null,
-      config: {},
-      created_at: '2026-10-19T04:00:00.000Z',
-      updated_at: '2026-10-19T04:00:00.000Z',
-      latest_run: latest,
-    };
-  }
-
   it('is silent for matching successful runs', () => {
-    expect(comparabilityWarning([experiment(1, run), experiment(2, { ...run, id: 2 })])).toBeNull();
+    expect(comparabilityWarning([run, { ...run, id: 2 }])).toBeNull();
   });
 
   it('warns when dataset versions differ', () => {
-    const message = comparabilityWarning([
-      experiment(1, run),
-      experiment(2, { ...run, id: 2, dataset_version: 2 }),
-    ]);
+    const message = comparabilityWarning([run, { ...run, id: 2, dataset_version: 2 }]);
     expect(message).toContain('数据集冻结版本不同');
   });
 
-  it('ignores experiments that have not succeeded', () => {
+  it('ignores runs that have not succeeded', () => {
     expect(latestRunStatus(null)).toBe('NEVER_RUN');
-    expect(comparabilityWarning([experiment(1, null), experiment(2, run)])).toBeNull();
+    expect(comparabilityWarning([{ ...run, status: 'FAILED' }, run])).toBeNull();
   });
 });
 

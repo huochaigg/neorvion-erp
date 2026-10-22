@@ -344,7 +344,28 @@ async def test_timeout_retries_then_pauses_run(monkeypatch) -> None:
     except PauseRun as exc:
         assert exc.reason == InterruptReason.TIMEOUT.value
         assert "可能已产生费用" in exc.message
+        assert "已重试 2 次" in exc.message
     assert calls["n"] == 2
+
+
+async def test_connection_error_pauses_as_network_not_rate_limit(monkeypatch) -> None:
+    monkeypatch.setattr(settings, "eval_model_retries", 3)
+    monkeypatch.setattr(settings, "eval_retry_base_seconds", 0.01)
+    calls = {"n": 0}
+
+    async def always_connect():
+        calls["n"] += 1
+        raise AppError("无法建立到 Embedding 服务的连接（ConnectError）", code=50262, status_code=502)
+
+    try:
+        await call_with_retry(always_connect, what="retrieve")
+        raise AssertionError("expected PauseRun")
+    except PauseRun as exc:
+        assert exc.reason == InterruptReason.NETWORK.value
+        assert exc.reason != InterruptReason.RATE_LIMIT.value
+        assert "已重试 3 次" in exc.message
+        assert "通常不会产生费用" in exc.message
+    assert calls["n"] == 3
 
 
 def test_worker_restart_requeues_expired_lease(client: TestClient, identity: FakeIdentityClient, monkeypatch) -> None:

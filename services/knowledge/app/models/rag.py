@@ -263,5 +263,27 @@ class RetrievalLog(TimestampMixin, TenantMixin, Base):
     latency_ms: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
 
 
+class QueryEmbeddingCache(TimestampMixin, TenantMixin, Base):
+    """成功生成的查询向量。失败和维度不完整的结果不写入。"""
+
+    __tablename__ = "query_embedding_cache"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "cache_key", name="uq_query_embedding_cache_key"),
+        Index("ix_query_embedding_cache_tenant", "tenant_id"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    cache_key: Mapped[str] = mapped_column(String(64), nullable=False, comment="租户内查询向量缓存键")
+    provider: Mapped[str] = mapped_column(String(32), nullable=False, comment="Embedding Provider")
+    model_name: Mapped[str] = mapped_column(String(128), nullable=False, comment="Embedding 模型")
+    dimensions: Mapped[int] = mapped_column(Integer, nullable=False, comment="向量维度")
+    embedding: Mapped[list] = mapped_column(JSONB, nullable=False, comment="完整查询向量")
+    prompt_tokens: Mapped[int | None] = mapped_column(
+        Integer,
+        nullable=True,
+        comment="供应商返回的 Embedding Token；没有则留空",
+    )
+
+
 # 仅用于类型提示；实际 GIN 索引在迁移中创建。
 _ = TSVECTOR

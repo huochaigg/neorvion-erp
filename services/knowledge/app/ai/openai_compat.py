@@ -8,7 +8,7 @@ from typing import Any
 
 import httpx
 
-from app.ai.errors import classify_model_http_error
+from app.ai.errors import classify_model_http_error, describe_embedding_transport
 from app.ai.types import ChatDelta, RerankHit
 from app.core.config import settings
 from app.core.exceptions import AppError
@@ -23,6 +23,10 @@ class OpenAICompatEmbeddingClient:
         self.model = model
 
     async def embed(self, texts: list[str]) -> list[list[float]]:
+        vectors, _usage = await self.embed_with_usage(texts)
+        return vectors
+
+    async def embed_with_usage(self, texts: list[str]) -> tuple[list[list[float]], dict[str, Any] | None]:
         if not self.api_key:
             raise AppError("未配置 Embedding API Key", code=50360, status_code=503)
         if not self.base_url:
@@ -42,7 +46,8 @@ class OpenAICompatEmbeddingClient:
                 code=40090,
                 status_code=400,
             )
-        return vectors
+        usage = data.get("usage") if isinstance(data.get("usage"), dict) else None
+        return vectors, usage
 
     async def _post(self, path: str, payload: dict[str, Any]) -> dict[str, Any]:
         url = f"{self.base_url}{path}"
@@ -53,10 +58,8 @@ class OpenAICompatEmbeddingClient:
                     json=payload,
                     headers={"Authorization": f"Bearer {self.api_key}"},
                 )
-        except httpx.TimeoutException as exc:
-            raise AppError("模型服务超时", code=50460, status_code=504) from exc
         except httpx.HTTPError as exc:
-            raise AppError("无法连接 Embedding 服务，请检查 Base URL", code=50262, status_code=502) from exc
+            raise describe_embedding_transport(exc) from exc
         if response.status_code >= 400:
             raise _classify_http_error(response.status_code, response.text)
         return response.json()

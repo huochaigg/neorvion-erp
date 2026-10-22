@@ -509,7 +509,6 @@ export function knowledgeEvalExperimentsQueryKey(
   tenantId: number | null,
   filters?: {
     datasetId?: number;
-    status?: string;
     strategy?: string;
     sortBy?: string;
     sortOrder?: string;

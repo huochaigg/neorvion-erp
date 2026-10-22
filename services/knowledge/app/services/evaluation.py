@@ -50,8 +50,6 @@ from app.schemas.evaluation import (
     DatasetVersionOut,
     ExperimentConfigIn,
     ExperimentCreateIn,
-    ExperimentLatestRunOut,
-    ExperimentListItemOut,
     ExperimentListOut,
     ExperimentOut,
     ExperimentUpdateIn,
@@ -76,25 +74,6 @@ def source_key_for(document: KnowledgeDocument, chunk: DocumentChunk) -> str:
         f"kb:{chunk.knowledge_base_id}:doc:{document.id}:sha:{document.sha256}"
         f":v:{chunk.version}:i:{chunk.chunk_index}"
     )
-
-
-def _optional_float(payload: dict | None, key: str) -> float | None:
-    """JSON 缺 key 或无法转 float 时返回 None，禁止用 0 填缺失。"""
-    if not payload or key not in payload or payload[key] is None:
-        return None
-    try:
-        return float(payload[key])
-    except (TypeError, ValueError):
-        return None
-
-
-def _optional_int(payload: dict | None, key: str) -> int | None:
-    if not payload or key not in payload or payload[key] is None:
-        return None
-    try:
-        return int(payload[key])
-    except (TypeError, ValueError):
-        return None
 
 
 _RUNTIME_IDENTITY_KEYS = (
@@ -830,26 +809,21 @@ class EvaluationService:
         page: int,
         page_size: int,
         *,
-        status: str | None = None,
         strategy: str | None = None,
         sort_by: str = "id",
         sort_order: str = "desc",
     ) -> ExperimentListOut:
-        """列表一次带上最近运行状态与真实指标，避免前端 N+1 拉详情。"""
+        """返回实验参数方案。运行状态和指标由运行列表单独查询。"""
         self.auth.require_all(self.context, (PermissionCode.KNOWLEDGE_READ,))
-        allowed_status = {item.value for item in RunStatus} | {"NEVER_RUN"}
-        if status and status not in allowed_status:
-            raise AppError("不支持的运行状态筛选", code=40089, status_code=400)
         allowed_strategy = {"VECTOR", "KEYWORD", "HYBRID"}
         if strategy and strategy not in allowed_strategy:
             raise AppError("不支持的检索策略筛选", code=40090, status_code=400)
-        allowed_sort = {"id", "created_at", "recall", "mrr", "ndcg", "hit_rate", "latency_p95"}
+        allowed_sort = {"id", "created_at"}
         if sort_by not in allowed_sort:
             raise AppError("不支持的排序字段", code=40091, status_code=400)
         order = sort_order if sort_order in {"asc", "desc"} else "desc"
         rows, total = await self.repo.list_experiments(
             dataset_id=dataset_id,
-            status=status,
             strategy=strategy,
             sort_by=sort_by,
             sort_order=order,
@@ -857,7 +831,7 @@ class EvaluationService:
             page_size=page_size,
         )
         return ExperimentListOut(
-            items=[self._experiment_list_item_out(experiment, run) for experiment, run in rows],
+            items=[self._experiment_out(experiment) for experiment in rows],
             total=total,
             page=page,
             page_size=page_size,
@@ -898,8 +872,9 @@ class EvaluationService:
             page=page,
             page_size=page_size,
         )
+        names = await self.repo.experiment_names([row.experiment_id for row in rows])
         return RunListOut(
-            items=[self._run_out(row) for row in rows],
+            items=[self._run_out(row, experiment_name=names.get(row.experiment_id)) for row in rows],
             total=total,
             page=page,
             page_size=page_size,
@@ -1099,10 +1074,11 @@ class EvaluationService:
         )
 
     @staticmethod
-    def _run_out(row: EvaluationRun) -> RunOut:
+    def _run_out(row: EvaluationRun, *, experiment_name: str | None = None) -> RunOut:
         return RunOut(
             id=row.id,
             experiment_id=row.experiment_id,
+            experiment_name=experiment_name,
             dataset_id=row.dataset_id,
             dataset_version=row.dataset_version,
             status=row.status,
@@ -1122,48 +1098,6 @@ class EvaluationService:
             finished_at=row.finished_at,
             created_at=row.created_at,
         )
-
-    def _experiment_list_item_out(
-        self, row: EvaluationExperiment, run: EvaluationRun | None
-    ) -> ExperimentListItemOut:
-        base = self._experiment_out(row)
-        return ExperimentListItemOut(**base.model_dump(), latest_run=self._latest_run_out(run))
-
-    @staticmethod
-    def _latest_run_out(run: EvaluationRun | None) -> ExperimentLatestRunOut | None:
-        """只从已落库的 run.metrics / usage 取值。缺 key 保持 null。"""
-        if run is None:
-            return None
-        metrics = run.metrics if isinstance(run.metrics, dict) else None
-        usage = run.usage if isinstance(run.usage, dict) else None
-        snapshot = run.config_snapshot if isinstance(run.config_snapshot, dict) else {}
-        meta = run.dataset_snapshot_meta if isinstance(run.dataset_snapshot_meta, dict) else {}
-        success = run.status == RunStatus.SUCCESS.value
-        return ExperimentLatestRunOut(
-            id=run.id,
-            status=run.status,
-            progress=run.progress,
-            dataset_id=run.dataset_id,
-            dataset_version=run.dataset_version,
-            error_message=run.error_message,
-            recall=_optional_float(metrics, "recall") if success else None,
-            mrr=_optional_float(metrics, "mrr") if success else None,
-            ndcg=_optional_float(metrics, "ndcg") if success else None,
-            hit_rate=_optional_float(metrics, "hit_rate") if success else None,
-            precision=_optional_float(metrics, "precision") if success else None,
-            k=(_optional_int(metrics, "k") or _optional_int(snapshot, "top_k")) if success else None,
-            latency_p95_ms=_optional_float(usage, "latency_p95_ms") if success else None,
-            supervised_count=_optional_int(metrics, "supervised_count") if success else None,
-            unanswerable_count=_optional_int(metrics, "unanswerable_count") if success else None,
-            case_count=_optional_int(usage, "case_count") if success else None,
-            comparable=bool(meta["comparable"]) if success and "comparable" in meta else None,
-            embedding_model=str(snapshot["embedding_model"]) if snapshot.get("embedding_model") else None,
-            embedding_dimensions=_optional_int(snapshot, "embedding_dimensions"),
-            started_at=run.started_at,
-            finished_at=run.finished_at,
-            created_at=run.created_at,
-        )
-
 
 def select_chunk(tenant_id: int, chunk_id: int):
     from sqlalchemy import select

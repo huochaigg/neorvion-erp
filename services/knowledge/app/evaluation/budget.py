@@ -28,6 +28,26 @@ def cost_of(prompt_tokens: int, completion_tokens: int) -> float | None:
     return (prompt_tokens / 1000) * prompt_rate + (completion_tokens / 1000) * completion_rate
 
 
+def merge_embedding_usage(current: dict | None, incoming: dict | None) -> dict:
+    """累计查询向量的真实调用和缓存命中。缓存命中不记成新的 API Token。"""
+    base = dict(current or {})
+    extra = incoming or {}
+    base["embedding_api_calls"] = int(base.get("embedding_api_calls") or 0) + int(
+        extra.get("embedding_api_calls") or 0
+    )
+    base["embedding_cache_hits"] = int(base.get("embedding_cache_hits") or 0) + int(
+        extra.get("embedding_cache_hits") or 0
+    )
+    tokens = extra.get("embedding_prompt_tokens")
+    if tokens is not None:
+        base["embedding_prompt_tokens"] = int(base.get("embedding_prompt_tokens") or 0) + int(tokens)
+    elif int(extra.get("embedding_api_calls") or 0) > 0:
+        base["embedding_tokens_missing"] = True
+    if extra.get("embedding_tokens_estimated"):
+        base["embedding_tokens_estimated"] = True
+    return base
+
+
 def accumulate_results(rows: list[EvaluationResult]) -> dict:
     """从单题 usage 汇总 Run 用量，避免内存累加器在崩溃后丢失。"""
     prompt = 0
@@ -36,12 +56,25 @@ def accumulate_results(rows: list[EvaluationResult]) -> dict:
     latencies: list[int] = []
     completed = 0
     failed = 0
+    embedding_api_calls = 0
+    embedding_cache_hits = 0
+    embedding_prompt_tokens = 0
+    embedding_tokens_missing = False
+    embedding_tokens_estimated = False
     for row in rows:
-        p, c, est = tokens_of(row.usage if isinstance(row.usage, dict) else None)
+        usage = row.usage if isinstance(row.usage, dict) else None
+        p, c, est = tokens_of(usage)
         prompt += p
         completion += c
         estimated = estimated or est
         latencies.append(int(row.latency_ms or 0))
+        if usage:
+            embedding_api_calls += int(usage.get("embedding_api_calls") or 0)
+            embedding_cache_hits += int(usage.get("embedding_cache_hits") or 0)
+            if usage.get("embedding_prompt_tokens") is not None:
+                embedding_prompt_tokens += int(usage.get("embedding_prompt_tokens") or 0)
+            embedding_tokens_missing = embedding_tokens_missing or bool(usage.get("embedding_tokens_missing"))
+            embedding_tokens_estimated = embedding_tokens_estimated or bool(usage.get("embedding_tokens_estimated"))
         if row.result_status == "FAILED" or row.error_message:
             failed += 1
         elif row.result_status == "SUCCESS":
@@ -51,6 +84,11 @@ def accumulate_results(rows: list[EvaluationResult]) -> dict:
         "completion_tokens": completion,
         "token_estimated": estimated,
         "estimated_cost_usd": cost_of(prompt, completion),
+        "embedding_api_calls": embedding_api_calls,
+        "embedding_cache_hits": embedding_cache_hits,
+        "embedding_prompt_tokens": embedding_prompt_tokens,
+        "embedding_tokens_missing": embedding_tokens_missing,
+        "embedding_tokens_estimated": embedding_tokens_estimated,
         "completed_count": completed,
         "failed_count": failed,
         "latencies": latencies,

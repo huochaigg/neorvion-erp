@@ -225,7 +225,6 @@ export function importEvalFromChat(datasetId: number, payload: { conversation_id
 export function fetchEvalExperiments(
   params: {
     datasetId?: number;
-    status?: string;
     strategy?: string;
     sortBy?: string;
     sortOrder?: string;
@@ -238,7 +237,6 @@ export function fetchEvalExperiments(
     apiClient.get<ApiResponse<KnowledgeEvalExperimentList>>('/api/v1/evaluation/experiments', {
       params: {
         dataset_id: params.datasetId,
-        status: params.status || undefined,
         strategy: params.strategy || undefined,
         sort_by: params.sortBy,
         sort_order: params.sortOrder,

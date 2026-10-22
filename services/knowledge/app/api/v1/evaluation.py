@@ -441,9 +441,8 @@ async def list_experiments(
     context: KnowledgeReadContext,
     session: DbSession,
     dataset_id: int | None = None,
-    status: str | None = Query(default=None, description="最近运行状态，含 NEVER_RUN"),
     strategy: str | None = Query(default=None, description="实验参数方案中的检索策略"),
-    sort_by: str = Query(default="id", description="id / created_at / recall / mrr / ndcg / hit_rate / latency_p95"),
+    sort_by: str = Query(default="id", description="id / created_at"),
     sort_order: str = Query(default="desc"),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
@@ -453,7 +452,6 @@ async def list_experiments(
             dataset_id,
             page,
             page_size,
-            status=status.upper() if status else None,
             strategy=strategy.upper() if strategy else None,
             sort_by=sort_by,
             sort_order=sort_order.lower(),
@@ -521,7 +519,10 @@ async def list_runs(
     experiment_id: int | None = None,
     status: str | None = Query(default=None, description="运行状态"),
     strategy: str | None = Query(default=None, description="config_snapshot 中的检索策略"),
-    sort_by: str = Query(default="id", description="id / created_at / recall / mrr / ndcg / hit_rate / latency_p95"),
+    sort_by: str = Query(
+        default="created_at",
+        description="id / created_at / recall / mrr / ndcg / hit_rate / latency_p95",
+    ),
     sort_order: str = Query(default="desc"),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
@@ -547,7 +548,8 @@ async def get_run(run_id: int, context: KnowledgeReadContext, session: DbSession
         from app.core.exceptions import AppError
 
         raise AppError("评测任务不存在或不可访问", code=40483, status_code=404)
-    return ok(_run_out(row))
+    names = await repo.experiment_names([row.experiment_id])
+    return ok(EvaluationService._run_out(row, experiment_name=names.get(row.experiment_id)))
 
 
 @router.get("/evaluation/runs/{run_id}/results", response_model=ApiResponse[list[ResultOut]])

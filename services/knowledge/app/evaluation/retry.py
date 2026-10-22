@@ -20,6 +20,19 @@ from app.evaluation.stages import (
 logger = logging.getLogger(__name__)
 
 
+def _exhausted_message(exc: AppError, attempts: int) -> str:
+    """重试耗尽后的说明。只有超时才提示可能已经产生费用。"""
+    if exc.code == 50460:
+        tail = "超时请求可能已产生费用。"
+    elif exc.code == 50262:
+        tail = "连接未建立时通常不会产生费用。"
+    elif exc.code == 42960:
+        tail = "请稍后继续运行。"
+    else:
+        tail = "请求可能已到达供应商。"
+    return f"{exc.message}；已重试 {attempts} 次，可稍后继续运行。{tail}"
+
+
 async def call_with_retry[T](factory: Callable[[], Awaitable[T]], *, what: str) -> T:
     """对 429/超时/网络错误重试；上下文超限直接失败；密钥与余额暂停 Run。"""
     attempts = max(1, int(getattr(settings, "eval_model_retries", 3)))
@@ -37,15 +50,32 @@ async def call_with_retry[T](factory: Callable[[], Awaitable[T]], *, what: str) 
                 raise
             if exc.code in PAUSE_RUN_CODES:
                 raise PauseRun(reason or InterruptReason.MODEL_UNAVAILABLE.value, exc.message) from exc
+            cause_name = type(exc.__cause__).__name__ if exc.__cause__ is not None else "-"
             if exc.code in RETRYABLE_CODES and index + 1 < attempts:
-                logger.warning("%s retry %s/%s: %s", what, index + 1, attempts, exc.message)
+                logger.warning(
+                    "%s retry %s/%s code=%s cause=%s: %s",
+                    what,
+                    index + 1,
+                    attempts,
+                    exc.code,
+                    cause_name,
+                    exc.message,
+                )
                 await asyncio.sleep(delay)
                 delay *= 2
                 continue
             if exc.code in RETRYABLE_CODES:
+                logger.warning(
+                    "%s exhausted code=%s cause=%s: %s",
+                    what,
+                    exc.code,
+                    cause_name,
+                    exc.message,
+                    exc_info=exc.__cause__,
+                )
                 raise PauseRun(
-                    reason or InterruptReason.RATE_LIMIT.value,
-                    f"{exc.message}；已达最大重试次数，可稍后继续运行。超时请求可能已产生费用。",
+                    reason or InterruptReason.NETWORK.value,
+                    _exhausted_message(exc, attempts),
                 ) from exc
             raise
     assert last_error is not None

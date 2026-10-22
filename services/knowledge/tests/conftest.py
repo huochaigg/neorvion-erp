@@ -126,6 +126,7 @@ def _wipe_tables() -> None:
         connection.execute(text("DELETE FROM messages"))
         connection.execute(text("DELETE FROM conversations"))
         connection.execute(text("DELETE FROM retrieval_logs"))
+        connection.execute(text("DELETE FROM query_embedding_cache"))
         connection.execute(text("DELETE FROM chunk_embeddings"))
         connection.execute(text("DELETE FROM model_profiles"))
         connection.execute(text("DELETE FROM knowledge_audit_logs"))

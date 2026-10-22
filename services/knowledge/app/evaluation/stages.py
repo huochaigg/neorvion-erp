@@ -42,6 +42,7 @@ class InterruptReason(StrEnum):
     WORKER_CRASH = "WORKER_CRASH"
     SNAPSHOT_UNAVAILABLE = "SNAPSHOT_UNAVAILABLE"
     MODEL_UNAVAILABLE = "MODEL_UNAVAILABLE"
+    NETWORK = "NETWORK"
     CANCELLED = "CANCELLED"
 
 
@@ -58,6 +59,7 @@ INTERRUPT_LABEL = {
     InterruptReason.WORKER_CRASH.value: "Worker 异常退出",
     InterruptReason.SNAPSHOT_UNAVAILABLE.value: "原始快照或索引不可用",
     InterruptReason.MODEL_UNAVAILABLE.value: "快照中的模型配置不可用",
+    InterruptReason.NETWORK.value: "模型服务暂不可用",
     InterruptReason.CANCELLED.value: "已取消",
 }
 
@@ -131,6 +133,8 @@ def interrupt_code_reason(exc: AppError) -> str | None:
         return InterruptReason.RATE_LIMIT.value
     if exc.code == 50460:
         return InterruptReason.TIMEOUT.value
+    if exc.code in {50262, 50260, 50201, 50202}:
+        return InterruptReason.NETWORK.value
     if exc.code == 40260:
         return InterruptReason.INSUFFICIENT_FUNDS.value
     if exc.code in {40160, 50360, 50361, 50362}:

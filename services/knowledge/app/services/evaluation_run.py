@@ -21,6 +21,7 @@ from app.evaluation.budget import (
     assert_budget,
     cost_of,
     estimate_next_call,
+    merge_embedding_usage,
     tokens_of,
 )
 from app.evaluation.context_pack import generation_text, pack_retrieved_hits, retrieval_diagnostics
@@ -64,7 +65,7 @@ from app.schemas.ops import ProbeOut
 from app.services.authorization import AuthorizationService
 from app.services.chat import ChatService
 from app.services.evaluation import EvaluationService, default_experiment_config, freeze_run_config
-from app.services.retrieval import RetrievedHit, RetrievalService
+from app.services.retrieval import RetrievalService, RetrievedHit
 from app.tasks.queue import enqueue_eval_run
 
 logger = logging.getLogger(__name__)
@@ -425,6 +426,7 @@ class EvaluationRunService:
                 stages = mark_stage(stages, EvalStage.RERANK.value, StageStatus.SKIPPED.value)
             row.latency_ms = search.latency_ms
             row.stages = stages
+            row.usage = merge_embedding_usage(row.usage, _embedding_usage(search.stages))
             await self.session.commit()
 
         if not stage_succeeded(stage_status(stages, EvalStage.METRICS.value)) or row.retrieval_metrics is None:
@@ -591,6 +593,7 @@ class EvaluationRunService:
         if reason in {
             InterruptReason.RATE_LIMIT.value,
             InterruptReason.TIMEOUT.value,
+            InterruptReason.NETWORK.value,
             InterruptReason.INSUFFICIENT_FUNDS.value,
             InterruptReason.INVALID_KEY.value,
         }:
@@ -655,6 +658,11 @@ class EvaluationRunService:
             "latency_p50_ms": _percentile(summary["latencies"], 50),
             "latency_p95_ms": _percentile(summary["latencies"], 95),
             "estimated_cost_usd": summary["estimated_cost_usd"],
+            "embedding_api_calls": summary["embedding_api_calls"],
+            "embedding_cache_hits": summary["embedding_cache_hits"],
+            "embedding_prompt_tokens": summary["embedding_prompt_tokens"],
+            "embedding_tokens_missing": summary["embedding_tokens_missing"],
+            "embedding_tokens_estimated": summary["embedding_tokens_estimated"],
             "case_count": len(cases),
             "completed_count": summary["completed_count"],
             "failed_count": summary["failed_count"] or failed,
@@ -681,6 +689,11 @@ class EvaluationRunService:
             "completion_tokens": summary["completion_tokens"],
             "token_estimated": summary["token_estimated"],
             "estimated_cost_usd": summary["estimated_cost_usd"],
+            "embedding_api_calls": summary["embedding_api_calls"],
+            "embedding_cache_hits": summary["embedding_cache_hits"],
+            "embedding_prompt_tokens": summary["embedding_prompt_tokens"],
+            "embedding_tokens_missing": summary["embedding_tokens_missing"],
+            "embedding_tokens_estimated": summary["embedding_tokens_estimated"],
             "completed_count": summary["completed_count"],
             "failed_count": summary["failed_count"],
             "pending_count": max(total - summary["completed_count"] - summary["failed_count"], 0),
@@ -1010,6 +1023,17 @@ def _avg_generation(rows: list[dict]) -> dict:
         values = [float(row[key]) for row in rows if row.get(key) is not None]
         out[key] = sum(values) / len(values) if values else None
     return out
+
+
+def _embedding_usage(stages: dict | None) -> dict:
+    payload = stages if isinstance(stages, dict) else {}
+    tokens = payload.get("embedding_prompt_tokens")
+    return {
+        "embedding_api_calls": int(payload.get("embedding_api_calls") or 0),
+        "embedding_cache_hits": int(payload.get("embedding_cache_hits") or 0),
+        "embedding_prompt_tokens": None if tokens is None else int(tokens),
+        "embedding_tokens_estimated": bool(payload.get("embedding_tokens_estimated")),
+    }
 
 
 def _estimate_cost(prompt_tokens: int, completion_tokens: int) -> float | None:

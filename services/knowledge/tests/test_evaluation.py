@@ -406,7 +406,7 @@ def test_async_cancel_retry_and_limits(client: TestClient, identity: FakeIdentit
     assert retried.json()["data"]["attempt"] == 2
 
 
-def test_experiment_list_latest_run_metrics_filter_and_sort(
+def test_experiment_list_keeps_config_and_run_list_is_isolated(
     client: TestClient, identity: FakeIdentityClient, monkeypatch
 ) -> None:
     get_embedding_client.cache_clear()
@@ -443,52 +443,44 @@ def test_experiment_list_latest_run_metrics_filter_and_sort(
     listed = client.get("/api/v1/evaluation/experiments", headers=headers)
     assert listed.status_code == 200, listed.text
     by_id = {item["id"]: item for item in listed.json()["data"]["items"]}
-    assert by_id[idle_id]["latest_run"] is None
-    assert by_id[hybrid_id]["latest_run"] is None
-
-    never_run = client.get("/api/v1/evaluation/experiments", params={"status": "NEVER_RUN"}, headers=headers)
-    never_ids = {item["id"] for item in never_run.json()["data"]["items"]}
-    assert idle_id in never_ids
-    assert hybrid_id in never_ids
-
-    run = client.post(f"/api/v1/evaluation/experiments/{hybrid_id}/run", headers=headers)
-    assert run.status_code == 200, run.text
-    finished = client.get(f"/api/v1/evaluation/runs/{run.json()['data']['id']}", headers=headers).json()["data"]
-    assert finished["status"] == "SUCCESS"
-
-    listed = client.get("/api/v1/evaluation/experiments", headers=headers).json()["data"]["items"]
-    by_id = {item["id"]: item for item in listed}
-    assert by_id[idle_id]["latest_run"] is None
-    latest = by_id[hybrid_id]["latest_run"]
-    assert latest["status"] == "SUCCESS"
-    assert latest["recall"] is not None
-    assert latest["mrr"] is not None
-    assert latest["ndcg"] is not None
-    assert latest["hit_rate"] is not None
-    assert latest["supervised_count"] == 1
-    assert latest["k"] == 5
-    assert latest["latency_p95_ms"] is not None
-
-    success_only = client.get("/api/v1/evaluation/experiments", params={"status": "SUCCESS"}, headers=headers)
-    success_ids = {item["id"] for item in success_only.json()["data"]["items"]}
-    assert hybrid_id in success_ids
-    assert idle_id not in success_ids
+    assert "latest_run" not in by_id[idle_id]
+    assert by_id[idle_id]["config"]["strategy"] == "VECTOR"
+    assert by_id[hybrid_id]["config"]["top_k"] == 5
 
     vector_only = client.get("/api/v1/evaluation/experiments", params={"strategy": "VECTOR"}, headers=headers)
     vector_ids = {item["id"] for item in vector_only.json()["data"]["items"]}
     assert idle_id in vector_ids
     assert hybrid_id not in vector_ids
 
-    sorted_rows = client.get(
-        "/api/v1/evaluation/experiments",
-        params={"sort_by": "recall", "sort_order": "desc"},
-        headers=headers,
-    ).json()["data"]["items"]
-    assert sorted_rows[0]["id"] == hybrid_id
-    assert any(item["id"] == idle_id and item["latest_run"] is None for item in sorted_rows)
+    ignored_status = client.get("/api/v1/evaluation/experiments", params={"status": "SUCCESS"}, headers=headers)
+    ignored_ids = {item["id"] for item in ignored_status.json()["data"]["items"]}
+    assert idle_id in ignored_ids
+    assert hybrid_id in ignored_ids
 
-    bad = client.get("/api/v1/evaluation/experiments", params={"sort_by": "score"}, headers=headers)
+    bad = client.get("/api/v1/evaluation/experiments", params={"sort_by": "recall"}, headers=headers)
     assert bad.status_code == 400
+
+    run = client.post(f"/api/v1/evaluation/experiments/{hybrid_id}/run", headers=headers)
+    assert run.status_code == 200, run.text
+    run_id = run.json()["data"]["id"]
+    finished = client.get(f"/api/v1/evaluation/runs/{run_id}", headers=headers).json()["data"]
+    assert finished["status"] == "SUCCESS"
+    assert finished["metrics"]["recall"] is not None
+    assert finished["metrics"]["supervised_count"] == 1
+    assert finished["config_snapshot"]["top_k"] == 5
+
+    scoped = client.get("/api/v1/evaluation/runs", params={"experiment_id": hybrid_id}, headers=headers)
+    scoped_items = scoped.json()["data"]["items"]
+    assert scoped_items
+    assert {item["experiment_id"] for item in scoped_items} == {hybrid_id}
+    idle_runs = client.get("/api/v1/evaluation/runs", params={"experiment_id": idle_id}, headers=headers)
+    assert idle_runs.json()["data"]["total"] == 0
+
+    still = client.get("/api/v1/evaluation/experiments", headers=headers).json()["data"]["items"]
+    hybrid_row = next(item for item in still if item["id"] == hybrid_id)
+    assert "latest_run" not in hybrid_row
+    assert hybrid_row["config"]["strategy"] == "HYBRID"
+    assert "recall" not in hybrid_row
 
     monkeypatch.setattr(settings, "task_executor", "redis")
     monkeypatch.setattr("app.services.evaluation_run.enqueue_eval_run", AsyncMock(return_value=True))
@@ -501,12 +493,15 @@ def test_experiment_list_latest_run_metrics_filter_and_sort(
     queued_run = client.post(f"/api/v1/evaluation/experiments/{queued_id}/run", headers=headers)
     assert queued_run.status_code == 200
     assert queued_run.json()["data"]["status"] == "QUEUED"
-    queued_list = client.get("/api/v1/evaluation/experiments", params={"status": "QUEUED"}, headers=headers)
-    row = next(item for item in queued_list.json()["data"]["items"] if item["id"] == queued_id)
-    assert row["latest_run"]["status"] == "QUEUED"
-    assert row["latest_run"]["recall"] is None
-    assert row["latest_run"]["latency_p95_ms"] is None
-    assert row["latest_run"]["supervised_count"] is None
+    queued_list = client.get(
+        "/api/v1/evaluation/runs",
+        params={"experiment_id": queued_id, "status": "QUEUED"},
+        headers=headers,
+    )
+    queued_row = queued_list.json()["data"]["items"][0]
+    assert queued_row["status"] == "QUEUED"
+    assert queued_row["metrics"] is None
+    assert queued_row["usage"] is None
 
 
 def test_run_list_frozen_snapshot_sort_and_missing_metrics(
@@ -555,6 +550,18 @@ def test_run_list_frozen_snapshot_sort_and_missing_metrics(
     assert frozen["config_snapshot"]["strategy"] == "HYBRID"
     assert frozen["config_snapshot"]["top_k"] == 5
     assert frozen["config_snapshot"]["rerank"] is False
+    second = client.post(f"/api/v1/evaluation/experiments/{experiment_id}/run", headers=headers)
+    assert second.status_code == 200, second.text
+    second_id = second.json()["data"]["id"]
+    both = client.get("/api/v1/evaluation/runs", params={"experiment_id": experiment_id}, headers=headers)
+    by_run = {item["id"]: item for item in both.json()["data"]["items"]}
+    assert by_run[run_id]["config_snapshot"]["strategy"] == "HYBRID"
+    assert by_run[run_id]["config_snapshot"]["top_k"] == 5
+    assert by_run[second_id]["config_snapshot"]["strategy"] == "KEYWORD"
+    assert by_run[second_id]["config_snapshot"]["top_k"] == 8
+    assert by_run[second_id]["experiment_id"] == experiment_id
+    assert by_run[run_id]["experiment_name"] == "快照实验"
+    assert by_run[second_id]["experiment_name"] == "快照实验"
 
     listed = client.get("/api/v1/evaluation/runs", params={"strategy": "HYBRID", "sort_by": "recall"}, headers=headers)
     assert listed.status_code == 200, listed.text
@@ -578,6 +585,26 @@ def test_run_list_frozen_snapshot_sort_and_missing_metrics(
     queued_row = next(item for item in queued_list.json()["data"]["items"] if item["id"] == queued_id)
     assert queued_row["metrics"] is None
     assert queued_row["usage"] is None
+    all_runs = client.get("/api/v1/evaluation/runs", headers=headers)
+    assert all_runs.status_code == 200, all_runs.text
+    ordered = all_runs.json()["data"]["items"]
+    stamps = [item["created_at"] for item in ordered]
+    assert stamps == sorted(stamps, reverse=True)
+    assert {item["id"] for item in ordered} >= {run_id, second_id, queued_id}
+    assert all(item["experiment_name"] for item in ordered if item["id"] in {run_id, second_id, queued_id})
+    removed = client.delete(f"/api/v1/evaluation/experiments/{experiment_id}", headers=headers)
+    assert removed.status_code == 200, removed.text
+    kept = client.get("/api/v1/evaluation/runs", params={"experiment_id": experiment_id}, headers=headers)
+    kept_items = kept.json()["data"]["items"]
+    assert {item["id"] for item in kept_items} >= {run_id, second_id}
+    assert all(item["experiment_name"] == "快照实验" for item in kept_items)
+    identity.grant(3, 11, permissions=frozenset())
+    denied = client.get("/api/v1/evaluation/runs", headers=auth_header(3, 11))
+    assert denied.status_code == 403
+    identity.grant(2, 22, permissions=ALL_KNOWLEDGE_PERMS)
+    foreign = client.get("/api/v1/evaluation/runs", headers=auth_header(2, 22))
+    assert foreign.status_code == 200
+    assert all(item["id"] not in {run_id, second_id, queued_id} for item in foreign.json()["data"]["items"])
     bad = client.get("/api/v1/evaluation/runs", params={"sort_by": "score"}, headers=headers)
     assert bad.status_code == 400
 

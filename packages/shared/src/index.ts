@@ -88,7 +88,6 @@ export type {
   KnowledgeEvalCase,
   KnowledgeEvalCaseList,
   KnowledgeEvalExperimentConfig,
-  KnowledgeEvalExperimentLatestRun,
   KnowledgeEvalExperiment,
   KnowledgeEvalExperimentList,
   KnowledgeEvalRun,

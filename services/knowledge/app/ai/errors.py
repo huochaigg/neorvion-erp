@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 import re
 
+import httpx
+
 from app.core.exceptions import AppError
 
 _SECRET = re.compile(r"(sk-[A-Za-z0-9._\-]+)|(Bearer\s+\S+)", re.IGNORECASE)
@@ -83,3 +85,34 @@ def classify_model_http_error(status: int, body: str) -> AppError:
         return AppError(f"模型服务错误（{status}）：{safe_message}", code=50260, status_code=502)
     snippet = raw[:200]
     return AppError(f"模型服务错误（{status}）", code=50260, status_code=502, data={"detail": snippet})
+
+
+def describe_embedding_transport(exc: httpx.HTTPError) -> AppError:
+    """区分 DNS、拒绝连接、TLS、超时和连接中断。不把 Base URL 当成唯一原因。"""
+    name = type(exc).__name__
+    text = str(exc).lower()
+    if isinstance(exc, httpx.ConnectTimeout):
+        return AppError(f"连接 Embedding 服务超时（{name}）", code=50460, status_code=504)
+    if isinstance(exc, (httpx.ReadTimeout, httpx.WriteTimeout, httpx.PoolTimeout, httpx.TimeoutException)):
+        return AppError(f"等待 Embedding 响应超时（{name}）", code=50460, status_code=504)
+    if isinstance(exc, httpx.ConnectError):
+        if any(
+            token in text
+            for token in (
+                "getaddrinfo",
+                "name or service not known",
+                "nodename nor servname",
+                "temporary failure in name resolution",
+            )
+        ):
+            message = f"Embedding 域名无法解析（{name}）"
+        elif "connection refused" in text:
+            message = f"Embedding 端口拒绝连接（{name}）"
+        elif any(token in text for token in ("certificate", "ssl", "tls")):
+            message = f"Embedding TLS 握手失败（{name}）"
+        else:
+            message = f"无法建立到 Embedding 服务的连接（{name}）"
+        return AppError(message, code=50262, status_code=502)
+    if isinstance(exc, httpx.RemoteProtocolError):
+        return AppError(f"Embedding 服务中断了响应（{name}）", code=50262, status_code=502)
+    return AppError(f"Embedding 网络错误（{name}）", code=50262, status_code=502)

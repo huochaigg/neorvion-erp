@@ -44,6 +44,7 @@ from app.models.rag import (
     MessageStatus,
     ModelKind,
     ModelProfile,
+    QueryEmbeddingCache,
     RetrievalLog,
     RetrievalStrategy,
 )
@@ -84,6 +85,7 @@ __all__ = [
     "MessageStatus",
     "ModelKind",
     "ModelProfile",
+    "QueryEmbeddingCache",
     "RetrievalLog",
     "RetrievalStrategy",
     "TaskStatus",

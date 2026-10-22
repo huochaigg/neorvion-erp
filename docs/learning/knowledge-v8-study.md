@@ -504,7 +504,7 @@ def _score(value: object) -> float:
 【省略实现】evaluation.py:140-434 数据集/题目 list/get/create/update/delete/copy/upsert
 【省略实现】evaluation.py:554-640 import_cases / export_cases / import_from_chat
 【省略实现】evaluation.py:662-824 update/copy/list experiments、list_runs、_authorize/_require/_load_chunk
-【省略实现】evaluation.py:847-990 Schema 组装 _dataset_out / _case_out / _run_out / _latest_run_out
+【省略实现】evaluation.py Schema 组装 _dataset_out / _case_out / _run_out。实验列表不再组装 latest_run。
 ```
 
 #### 完整源码：`source_key_for` / `default_experiment_config` / `freeze_run_config`

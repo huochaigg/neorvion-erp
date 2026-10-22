@@ -276,41 +276,10 @@ class ExperimentOut(BaseModel):
     updated_at: datetime
 
 
-class ExperimentLatestRunOut(BaseModel):
-    """列表用最近一次运行摘要。指标缺失为 null，不用 0 冒充。"""
-
-    id: int
-    status: str
-    progress: int
-    dataset_id: int
-    dataset_version: int
-    error_message: str | None = None
-    recall: float | None = Field(default=None, description="Recall@K，K 为该次运行最终 Top-K")
-    mrr: float | None = None
-    ndcg: float | None = Field(default=None, description="nDCG@K")
-    hit_rate: float | None = Field(default=None, description="Hit@K")
-    precision: float | None = None
-    k: int | None = Field(default=None, description="指标截断 K，通常等于最终 Top-K")
-    latency_p95_ms: float | None = None
-    supervised_count: int | None = Field(default=None, description="参与检索指标宏平均的有效题目数")
-    unanswerable_count: int | None = None
-    case_count: int | None = Field(default=None, description="本次运行题目总数")
-    comparable: bool | None = Field(default=None, description="数据集快照是否含失效标注")
-    embedding_model: str | None = None
-    embedding_dimensions: int | None = None
-    started_at: datetime | None = None
-    finished_at: datetime | None = None
-    created_at: datetime
-
-
-class ExperimentListItemOut(ExperimentOut):
-    """实验列表行：参数方案 + 最近一次运行的状态与真实指标。"""
-
-    latest_run: ExperimentLatestRunOut | None = None
-
-
 class ExperimentListOut(BaseModel):
-    items: list[ExperimentListItemOut]
+    """实验列表只返回参数方案，不附带某次运行的状态或指标。"""
+
+    items: list[ExperimentOut]
     total: int
     page: int
     page_size: int
@@ -319,6 +288,7 @@ class ExperimentListOut(BaseModel):
 class RunOut(BaseModel):
     id: int
     experiment_id: int
+    experiment_name: str | None = None
     dataset_id: int
     dataset_version: int
     status: str

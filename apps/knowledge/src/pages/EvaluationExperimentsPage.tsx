@@ -16,19 +16,19 @@ import {
   type KnowledgeEvalRun,
 } from '@neorvion/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { App, Alert, Button, Descriptions, Drawer, Form, Input, InputNumber, Modal, Progress, Select, Space, Switch, Tag, Tooltip } from 'antd';
+import { App, Alert, Button, Descriptions, Drawer, Form, Input, InputNumber, Modal, Popconfirm, Progress, Select, Space, Switch, Tag, Tooltip } from 'antd';
 import type { TableProps } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   cancelEvalRun,
   copyEvalExperiment,
   createEvalExperiment,
+  deleteEvalExperiment,
   fetchEvalDatasets,
   fetchEvalExperiments,
   fetchEvalResults,
-  fetchEvalRun,
   fetchEvalRuns,
   pauseEvalRun,
   resumeEvalRun,
@@ -70,20 +70,32 @@ import {
 } from '@/lib/retrievalHelp';
 import { snapshotParam } from '@/lib/snapshotParam';
 
-const RUN_STATUS_FILTERS = ['NEVER_RUN', 'QUEUED', 'RUNNING', 'PAUSED', 'SUCCESS', 'FAILED', 'CANCELLED'];
 const RUN_RECORD_STATUS_FILTERS = ['QUEUED', 'RUNNING', 'PAUSED', 'SUCCESS', 'FAILED', 'CANCELLED'];
-const METRIC_SORT_KEYS = new Set(['recall', 'mrr', 'ndcg', 'hit_rate', 'latency_p95', 'id']);
+const METRIC_SORT_KEYS = new Set(['recall', 'mrr', 'ndcg', 'hit_rate', 'latency_p95', 'id', 'created_at']);
+const EXPERIMENT_SORT_KEYS = new Set(['id', 'created_at']);
 
 function metricNumber(metrics: Record<string, unknown> | null | undefined, key: string): number | null {
   const value = metrics?.[key];
   return typeof value === 'number' ? value : null;
 }
 
-function sortOrderOf(sortBy: string, sortOrder: string, key: string) {
-  if (sortBy !== key) {
+function sortOrderOf(sortBy: string | null, sortOrder: 'asc' | 'desc' | null, key: string) {
+  if (sortBy !== key || sortOrder == null) {
     return undefined;
   }
   return sortOrder === 'asc' ? 'ascend' : 'descend';
+}
+
+function readTableSort<T extends object>(
+  sorter: Parameters<NonNullable<TableProps<T>['onChange']>>[2],
+  allowed: Set<string>,
+): { sortBy: string | null; sortOrder: 'asc' | 'desc' | null } {
+  const current = Array.isArray(sorter) ? sorter[0] : sorter;
+  const columnKey = String(current?.columnKey ?? current?.field ?? '');
+  if ((current?.order === 'ascend' || current?.order === 'descend') && allowed.has(columnKey)) {
+    return { sortBy: columnKey, sortOrder: current.order === 'ascend' ? 'asc' : 'desc' };
+  }
+  return { sortBy: null, sortOrder: null };
 }
 
 function MetricCell({
@@ -109,43 +121,60 @@ function MetricCell({
   );
 }
 
-function ExperimentStatusCell({
-  run,
-}: {
-  run: { status: string; progress?: number; error_message?: string | null } | null | undefined;
-}) {
+function runDetailText(run: {
+  status?: string;
+  interrupt_reason?: string | null;
+  error_message?: string | null;
+}): string {
+  if (run.status === 'CANCELLED') {
+    return run.error_message || '已取消';
+  }
+  if (run.status === 'PAUSED' && run.interrupt_reason === 'USER_PAUSE') {
+    return run.error_message || '用户暂停';
+  }
+  if (run.error_message) {
+    return run.error_message;
+  }
+  return knowledgeEvalInterruptLabel(run.interrupt_reason);
+}
+
+function interruptCategory(run: { interrupt_reason?: string | null; error_message?: string | null }): string {
+  const message = run.error_message ?? '';
+  if (
+    run.interrupt_reason === 'RATE_LIMIT' &&
+    (message.includes('无法连接') || message.includes('无法建立') || message.includes('域名无法解析'))
+  ) {
+    return '模型服务暂不可用';
+  }
+  return knowledgeEvalInterruptLabel(run.interrupt_reason);
+}
+
+function ExperimentStatusCell({ run }: { run: KnowledgeEvalRun }) {
   const status = latestRunStatus(run);
   const progressStatus =
-    run?.status === 'FAILED'
+    run.status === 'FAILED'
       ? 'exception'
-      : run?.status === 'SUCCESS'
+      : run.status === 'SUCCESS'
         ? 'success'
-        : run?.status === 'QUEUED' || run?.status === 'RUNNING'
+        : run.status === 'QUEUED' || run.status === 'RUNNING'
           ? 'active'
           : 'normal';
-  const error = run && 'error_message' in run ? run.error_message : null;
-  const interrupt =
-    run && 'interrupt_reason' in run && typeof run.interrupt_reason === 'string'
-      ? knowledgeEvalInterruptLabel(run.interrupt_reason)
-      : '';
+  const detail = runDetailText(run);
+  const detailClass =
+    run.status === 'FAILED' ? 'text-red-500' : run.status === 'CANCELLED' ? 'text-slate-500' : 'text-amber-600';
   return (
     <div className="flex min-w-[110px] flex-col gap-1">
-      <Tooltip title={error || interrupt || undefined}>
+      <Tooltip title={detail || undefined}>
         <Tag color={knowledgeRunStatusColor(status)}>{knowledgeRunStatusLabel(status)}</Tag>
       </Tooltip>
-      {run && typeof run.progress === 'number' ? (
+      {typeof run.progress === 'number' ? (
         <Progress percent={run.progress} size="small" status={progressStatus} />
       ) : (
         <span className="text-xs text-slate-400">未开始</span>
       )}
-      {run?.status === 'PAUSED' && (interrupt || error) ? (
-        <span className="line-clamp-2 text-xs text-amber-600" title={error || interrupt}>
-          {interrupt || error}
-        </span>
-      ) : null}
-      {run?.status === 'FAILED' && error ? (
-        <span className="line-clamp-2 text-xs text-red-500" title={error}>
-          {error}
+      {detail && (run.status === 'PAUSED' || run.status === 'FAILED' || run.status === 'CANCELLED') ? (
+        <span className={`line-clamp-2 text-xs ${detailClass}`} title={detail}>
+          {detail}
         </span>
       ) : null}
     </div>
@@ -158,18 +187,18 @@ export function EvaluationExperimentsPage() {
   const queryClient = useQueryClient();
   const { tenantId } = usePermissions();
   const [datasetId, setDatasetId] = useState<number | undefined>();
-  const [status, setStatus] = useState<string | undefined>();
   const [strategy, setStrategy] = useState<string | undefined>();
-  const [sortBy, setSortBy] = useState('id');
-  const [sortOrder, setSortOrder] = useState('desc');
+  const [selectedExperiment, setSelectedExperiment] = useState<KnowledgeEvalExperiment | undefined>();
+  const [selectedRunMap, setSelectedRunMap] = useState<Record<number, KnowledgeEvalRun>>({});
+  const [sortBy, setSortBy] = useState<string | null>(null);
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc' | null>(null);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
   const [runsPage, setRunsPage] = useState(1);
   const [runsPageSize, setRunsPageSize] = useState(DEFAULT_PAGE_SIZE);
   const [runsStatus, setRunsStatus] = useState<string | undefined>();
-  const [runsSortBy, setRunsSortBy] = useState('id');
-  const [runsSortOrder, setRunsSortOrder] = useState('desc');
-  const [selectedMap, setSelectedMap] = useState<Record<number, KnowledgeEvalExperiment>>({});
+  const [runsSortBy, setRunsSortBy] = useState<string | null>(null);
+  const [runsSortOrder, setRunsSortOrder] = useState<'asc' | 'desc' | null>(null);
   const [creating, setCreating] = useState(false);
   const [activeRun, setActiveRun] = useState<KnowledgeEvalRun | null>(null);
   const [activeResult, setActiveResult] = useState<KnowledgeEvalResult | null>(null);
@@ -177,24 +206,26 @@ export function EvaluationExperimentsPage() {
   const [form] = Form.useForm();
   const [resumeForm] = Form.useForm();
 
-  useEffect(() => {
+  const [scopedTenantId, setScopedTenantId] = useState(tenantId);
+  if (scopedTenantId !== tenantId) {
+    setScopedTenantId(tenantId);
     setDatasetId(undefined);
-    setStatus(undefined);
     setStrategy(undefined);
-    setSortBy('id');
-    setSortOrder('desc');
+    setSelectedExperiment(undefined);
+    setSelectedRunMap({});
+    setSortBy(null);
+    setSortOrder(null);
     setPage(1);
     setPageSize(DEFAULT_PAGE_SIZE);
     setRunsPage(1);
     setRunsPageSize(DEFAULT_PAGE_SIZE);
     setRunsStatus(undefined);
-    setRunsSortBy('id');
-    setRunsSortOrder('desc');
-    setSelectedMap({});
+    setRunsSortBy(null);
+    setRunsSortOrder(null);
     setActiveRun(null);
     setActiveResult(null);
     setResumeTarget(null);
-  }, [tenantId]);
+  }
 
   const defaultsQuery = useQuery({
     queryKey: ['tenant', tenantId, 'knowledge-retrieval-defaults'],
@@ -211,35 +242,39 @@ export function EvaluationExperimentsPage() {
   const listQuery = useQuery({
     queryKey: knowledgeEvalExperimentsQueryKey(tenantId, {
       datasetId,
-      status,
       strategy,
-      sortBy,
-      sortOrder,
+      sortBy: sortBy ?? 'id',
+      sortOrder: sortOrder ?? 'desc',
       page,
       pageSize,
     }),
     queryFn: ({ signal }) =>
-      fetchEvalExperiments({ datasetId, status, strategy, sortBy, sortOrder, page, pageSize }, signal),
+      fetchEvalExperiments(
+        { datasetId, strategy, sortBy: sortBy ?? 'id', sortOrder: sortOrder ?? 'desc', page, pageSize },
+        signal,
+      ),
     enabled: tenantId != null,
-    refetchInterval: (current) => {
-      const items = current.state.data?.items ?? [];
-      return items.some((item) => item.latest_run?.status === 'QUEUED' || item.latest_run?.status === 'RUNNING')
-        ? 2000
-        : false;
-    },
   });
 
   const runsQuery = useQuery({
     queryKey: knowledgeEvalRunsQueryKey(tenantId, {
+      experimentId: selectedExperiment?.id,
       status: runsStatus,
-      sortBy: runsSortBy,
-      sortOrder: runsSortOrder,
+      sortBy: runsSortBy ?? 'created_at',
+      sortOrder: runsSortOrder ?? 'desc',
       page: runsPage,
       pageSize: runsPageSize,
     }),
     queryFn: ({ signal }) =>
       fetchEvalRuns(
-        { status: runsStatus, sortBy: runsSortBy, sortOrder: runsSortOrder, page: runsPage, pageSize: runsPageSize },
+        {
+          experimentId: selectedExperiment?.id,
+          status: runsStatus,
+          sortBy: runsSortBy ?? 'created_at',
+          sortOrder: runsSortOrder ?? 'desc',
+          page: runsPage,
+          pageSize: runsPageSize,
+        },
         signal,
       ),
     enabled: tenantId != null,
@@ -249,16 +284,32 @@ export function EvaluationExperimentsPage() {
     },
   });
 
+  const visibleRun = useMemo(() => {
+    if (activeRun == null) {
+      return null;
+    }
+    return (runsQuery.data?.items ?? []).find((item) => item.id === activeRun.id) ?? activeRun;
+  }, [activeRun, runsQuery.data]);
+
   const resultsQuery = useQuery({
-    queryKey: knowledgeEvalResultsQueryKey(tenantId, activeRun?.id ?? null),
-    queryFn: ({ signal }) => fetchEvalResults(activeRun!.id, signal),
-    enabled: tenantId != null && activeRun != null,
+    queryKey: [...knowledgeEvalResultsQueryKey(tenantId, visibleRun?.id ?? null), visibleRun?.status ?? null],
+    queryFn: ({ signal }) => fetchEvalResults(visibleRun!.id, signal),
+    enabled: tenantId != null && visibleRun != null,
   });
 
-  const invalidate = () => {
+  const invalidateExperiments = () => {
     void queryClient.invalidateQueries({ queryKey: ['tenant', tenantId, 'knowledge-eval-experiments'] });
+  };
+
+  const invalidateRuns = () => {
     void queryClient.invalidateQueries({ queryKey: ['tenant', tenantId, 'knowledge-eval-runs'] });
     void queryClient.invalidateQueries({ queryKey: ['tenant', tenantId, 'knowledge-eval-results'] });
+  };
+
+  const selectExperiment = (experiment: KnowledgeEvalExperiment | undefined) => {
+    setSelectedExperiment(experiment);
+    setRunsPage(1);
+    setSelectedRunMap({});
   };
 
   const createMutation = useMutation({
@@ -266,58 +317,47 @@ export function EvaluationExperimentsPage() {
     onSuccess: () => {
       message.success('已创建实验');
       setCreating(false);
-      invalidate();
+      invalidateExperiments();
     },
     onError: (error: Error) => message.error(error.message),
   });
 
-  const selectedIds = useMemo(() => Object.keys(selectedMap).map(Number), [selectedMap]);
-  const selectedExperiments = useMemo(
+  const selectedRunIds = useMemo(() => Object.keys(selectedRunMap).map(Number), [selectedRunMap]);
+  const selectedRuns = useMemo(
     () =>
-      selectedIds
-        .map((id) => (listQuery.data?.items ?? []).find((item) => item.id === id) ?? selectedMap[id])
-        .filter((item): item is KnowledgeEvalExperiment => item != null),
-    [listQuery.data?.items, selectedIds, selectedMap],
+      selectedRunIds
+        .map((id) => (runsQuery.data?.items ?? []).find((item) => item.id === id) ?? selectedRunMap[id])
+        .filter((item): item is KnowledgeEvalRun => item != null),
+    [runsQuery.data?.items, selectedRunIds, selectedRunMap],
   );
-  const compareHint = comparabilityWarning(selectedExperiments);
+  const compareHint = comparabilityWarning(selectedRuns);
   const datasetName = (id: number) =>
     datasetsQuery.data?.items.find((item) => item.id === id)?.name ?? `数据集 #${id}`;
 
   const goCompare = () => {
-    const ready = selectedExperiments.filter((item) => item.latest_run?.status === 'SUCCESS' && item.latest_run.id);
-    if (ready.length < 2 || ready.length > 3 || ready.length !== selectedExperiments.length) {
-      message.warning('请选择 2～3 个评测成功的实验');
+    const ready = selectedRuns.filter((item) => item.status === 'SUCCESS');
+    if (ready.length < 2 || ready.length > 3 || ready.length !== selectedRuns.length) {
+      message.warning('请选择 2～3 次已成功的运行');
       return;
     }
-    const runIds = ready.map((item) => item.latest_run!.id).join(',');
-    navigate(`/experiments/compare?run_ids=${runIds}`);
+    navigate(`/experiments/compare?run_ids=${ready.map((item) => item.id).join(',')}`);
   };
 
   const handleRunsTableChange: TableProps<KnowledgeEvalRun>['onChange'] = (pagination, _filters, sorter) => {
-    const current = Array.isArray(sorter) ? sorter[0] : sorter;
-    const columnKey = String(current?.columnKey ?? current?.field ?? 'id');
-    if ((current?.order === 'ascend' || current?.order === 'descend') && METRIC_SORT_KEYS.has(columnKey)) {
-      setRunsSortBy(columnKey);
-      setRunsSortOrder(current.order === 'ascend' ? 'asc' : 'desc');
-    } else {
-      setRunsSortBy('id');
-      setRunsSortOrder('desc');
-    }
-    setRunsPage(pagination.current ?? 1);
+    const next = readTableSort(sorter, METRIC_SORT_KEYS);
+    const sortChanged = next.sortBy !== runsSortBy || next.sortOrder !== runsSortOrder;
+    setRunsSortBy(next.sortBy);
+    setRunsSortOrder(next.sortOrder);
+    setRunsPage(sortChanged ? 1 : (pagination.current ?? 1));
     setRunsPageSize(pagination.pageSize ?? DEFAULT_PAGE_SIZE);
   };
 
   const handleTableChange: TableProps<KnowledgeEvalExperiment>['onChange'] = (pagination, _filters, sorter) => {
-    const current = Array.isArray(sorter) ? sorter[0] : sorter;
-    const columnKey = String(current?.columnKey ?? current?.field ?? 'id');
-    if ((current?.order === 'ascend' || current?.order === 'descend') && METRIC_SORT_KEYS.has(columnKey)) {
-      setSortBy(columnKey);
-      setSortOrder(current.order === 'ascend' ? 'asc' : 'desc');
-    } else {
-      setSortBy('id');
-      setSortOrder('desc');
-    }
-    setPage(pagination.current ?? 1);
+    const next = readTableSort(sorter, EXPERIMENT_SORT_KEYS);
+    const sortChanged = next.sortBy !== sortBy || next.sortOrder !== sortOrder;
+    setSortBy(next.sortBy);
+    setSortOrder(next.sortOrder);
+    setPage(sortChanged ? 1 : (pagination.current ?? 1));
     setPageSize(pagination.pageSize ?? DEFAULT_PAGE_SIZE);
   };
 
@@ -328,6 +368,7 @@ export function EvaluationExperimentsPage() {
       key: 'id',
       width: 70,
       sorter: true,
+      sortDirections: ['ascend', 'descend'],
       sortOrder: sortOrderOf(sortBy, sortOrder, 'id'),
     },
     {
@@ -339,11 +380,10 @@ export function EvaluationExperimentsPage() {
       render: (value: string) => <EllipsisCell value={value} />,
     },
     {
-      title: '状态',
-      width: 140,
-      render: (_, record) => <div className="pr-10 pb-2">
-        <ExperimentStatusCell run={record.latest_run} />
-      </div>,
+      title: '数据集',
+      width: 160,
+      ellipsis: true,
+      render: (_, record) => <EllipsisCell value={datasetName(record.dataset_id)} />,
     },
     {
       title: '策略',
@@ -356,106 +396,31 @@ export function EvaluationExperimentsPage() {
     { title: '最终 Top-K', width: 100, render: (_, record) => snapshotParam(record.config, 'top_k') },
     { title: 'Rerank', width: 80, render: (_, record) => snapshotParam(record.config, 'rerank') },
     {
-      title: <FormLabelHelp label="Recall@K">{EVAL_METRIC_HELP.recall}</FormLabelHelp>,
-      key: 'recall',
-      width: 110,
-      sorter: true,
-      sortDirections: ['descend', 'ascend'],
-      sortOrder: sortOrderOf(sortBy, sortOrder, 'recall'),
-      render: (_, record) => <MetricCell value={record.latest_run?.recall} run={record.latest_run} help={EVAL_METRIC_HELP.recall} />,
-    },
-    {
-      title: <FormLabelHelp label="MRR">{EVAL_METRIC_HELP.mrr}</FormLabelHelp>,
-      key: 'mrr',
-      width: 90,
-      sorter: true,
-      sortDirections: ['descend', 'ascend'],
-      sortOrder: sortOrderOf(sortBy, sortOrder, 'mrr'),
-      render: (_, record) => <MetricCell value={record.latest_run?.mrr} run={record.latest_run} help={EVAL_METRIC_HELP.mrr} />,
-    },
-    {
-      title: <FormLabelHelp label="nDCG@K">{EVAL_METRIC_HELP.ndcg}</FormLabelHelp>,
-      key: 'ndcg',
-      width: 110,
-      sorter: true,
-      sortDirections: ['descend', 'ascend'],
-      sortOrder: sortOrderOf(sortBy, sortOrder, 'ndcg'),
-      render: (_, record) => <MetricCell value={record.latest_run?.ndcg} run={record.latest_run} help={EVAL_METRIC_HELP.ndcg} />,
-    },
-    {
-      title: <FormLabelHelp label="Hit@K">{EVAL_METRIC_HELP.hit_rate}</FormLabelHelp>,
-      key: 'hit_rate',
-      width: 90,
-      sorter: true,
-      sortDirections: ['descend', 'ascend'],
-      sortOrder: sortOrderOf(sortBy, sortOrder, 'hit_rate'),
-      render: (_, record) => (
-        <MetricCell value={record.latest_run?.hit_rate} run={record.latest_run} help={EVAL_METRIC_HELP.hit_rate} />
-      ),
-    },
-    {
-      title: <FormLabelHelp label="P95">{EVAL_METRIC_HELP.p95}</FormLabelHelp>,
-      key: 'latency_p95',
-      width: 90,
+      title: '创建时间',
+      dataIndex: 'created_at',
+      key: 'created_at',
+      width: 170,
       sorter: true,
       sortDirections: ['ascend', 'descend'],
-      sortOrder: sortOrderOf(sortBy, sortOrder, 'latency_p95'),
-      render: (_, record) => (
-        <Tooltip
-          title={
-            record.latest_run?.latency_p95_ms == null
-              ? metricMissingReason(record.latest_run)
-              : EVAL_METRIC_HELP.p95
-          }
-        >
-          <span>{formatLatencyMs(record.latest_run?.latency_p95_ms)}</span>
-        </Tooltip>
-      ),
-    },
-    {
-      title: <FormLabelHelp label="有效题">{EVAL_METRIC_HELP.supervised}</FormLabelHelp>,
-      width: 80,
-      render: (_, record) => formatEvalCount(record.latest_run?.supervised_count),
-    },
-    {
-      title: '执行时间',
-      width: 100,
-      render: (_, record) => (
-        <Tooltip
-          title={
-            record.latest_run?.started_at && record.latest_run.finished_at
-              ? `${formatDateTime(record.latest_run.started_at)} → ${formatDateTime(record.latest_run.finished_at)}`
-              : metricMissingReason(record.latest_run)
-          }
-        >
-          <span>{formatRunDuration(record.latest_run)}</span>
-        </Tooltip>
-      ),
+      sortOrder: sortOrderOf(sortBy, sortOrder, 'created_at'),
+      render: (value: string) => formatDateTime(value),
     },
     {
       title: '操作',
-      width: 210,
+      width: 250,
       fixed: 'right',
       render: (_, record) => (
         <ActionCell>
-          {record.latest_run ? (
-            <Button
-              type="link"
-              size="small"
-              onClick={() => {
-                const cached = (runsQuery.data?.items ?? []).find((item) => item.id === record.latest_run?.id);
-                if (cached) {
-                  setActiveRun(cached);
-                  return;
-                }
-                void fetchEvalRun(record.latest_run!.id)
-                  .then((run) => setActiveRun(run))
-                  .catch((error: Error) => message.error(error.message));
-              }}
-            >
-              明细
-            </Button>
-          ) : null}
+          <Button
+            type="link"
+            size="small"
+            onClick={(event) => {
+              event.stopPropagation();
+              selectExperiment(selectedExperiment?.id === record.id ? undefined : record);
+            }}
+          >
+            {selectedExperiment?.id === record.id ? '取消筛选' : '筛选运行记录'}
+          </Button>
           <Can permission={PERMISSION_CODE.knowledgeCreate}>
             <Button
               type="link"
@@ -469,8 +434,9 @@ export function EvaluationExperimentsPage() {
                     } else {
                       message.success('已开始评测');
                     }
-                    setRunsPage(1);
-                    invalidate();
+                    setRunsStatus(undefined);
+                    selectExperiment(record);
+                    invalidateRuns();
                   })
                   .catch((error: Error) => message.error(error.message));
               }}
@@ -484,13 +450,34 @@ export function EvaluationExperimentsPage() {
                 copyEvalExperiment(record.id)
                   .then(() => {
                     message.success('已复制');
-                    invalidate();
+                    invalidateExperiments();
                   })
                   .catch((error: Error) => message.error(error.message))
               }
             >
               复制
             </Button>
+          </Can>
+          <Can permission={PERMISSION_CODE.knowledgeDelete}>
+            <Popconfirm
+              title="删除这个实验？已有运行记录会保留。"
+              onConfirm={() =>
+                deleteEvalExperiment(record.id)
+                  .then(() => {
+                    message.success('已删除实验');
+                    if (selectedExperiment?.id === record.id) {
+                      selectExperiment(undefined);
+                    }
+                    invalidateExperiments();
+                    invalidateRuns();
+                  })
+                  .catch((error: Error) => message.error(error.message))
+              }
+            >
+              <Button type="link" size="small" danger>
+                删除
+              </Button>
+            </Popconfirm>
           </Can>
         </ActionCell>
       ),
@@ -504,7 +491,22 @@ export function EvaluationExperimentsPage() {
       key: 'id',
       width: 80,
       sorter: true,
+      sortDirections: ['ascend', 'descend'],
       sortOrder: sortOrderOf(runsSortBy, runsSortOrder, 'id'),
+    },
+    {
+      title: '实验 ID',
+      dataIndex: 'experiment_id',
+      width: 90,
+    },
+    {
+      title: '实验名称',
+      dataIndex: 'experiment_name',
+      width: 160,
+      ellipsis: true,
+      render: (value: string | null | undefined, record) => (
+        <EllipsisCell value={value || `实验 #${record.experiment_id}`} />
+      ),
     },
     {
       title: '状态',
@@ -678,7 +680,7 @@ export function EvaluationExperimentsPage() {
                 pauseEvalRun(record.id)
                   .then(() => {
                     message.success('已请求暂停');
-                    invalidate();
+                    invalidateRuns();
                   })
                   .catch((error: Error) => message.error(error.message))
               }
@@ -694,7 +696,7 @@ export function EvaluationExperimentsPage() {
                 cancelEvalRun(record.id)
                   .then(() => {
                     message.success('已请求取消');
-                    invalidate();
+                    invalidateRuns();
                   })
                   .catch((error: Error) => message.error(error.message))
               }
@@ -732,7 +734,7 @@ export function EvaluationExperimentsPage() {
                       setActiveRun(run);
                     }
                     setRunsPage(1);
-                    invalidate();
+                    invalidateRuns();
                   })
                   .catch((error: Error) => message.error(error.message))
               }
@@ -817,8 +819,8 @@ export function EvaluationExperimentsPage() {
         description="选择数据集、配置检索参数并异步跑批。指标由代码计算，不使用 LLM 给 Recall/nDCG 打分。生成质量评测可选，以避免额外费用。"
         extra={
           <Space>
-            <Button disabled={selectedIds.length < 2} onClick={goCompare}>
-              对比已选（{selectedIds.length}）
+            <Button disabled={selectedRunIds.length < 2} onClick={goCompare}>
+              对比已选运行（{selectedRunIds.length}）
             </Button>
             <Button onClick={() => navigate('/experiments/compare')}>实验对比</Button>
             <Can permission={PERMISSION_CODE.knowledgeCreate}>
@@ -845,17 +847,6 @@ export function EvaluationExperimentsPage() {
           />
           <Select
             allowClear
-            placeholder="运行状态"
-            style={{ width: 140 }}
-            value={status}
-            onChange={(value) => {
-              setStatus(value);
-              setPage(1);
-            }}
-            options={RUN_STATUS_FILTERS.map((value) => ({ value, label: knowledgeRunStatusLabel(value) }))}
-          />
-          <Select
-            allowClear
             placeholder="检索策略"
             style={{ width: 140 }}
             value={strategy}
@@ -878,49 +869,25 @@ export function EvaluationExperimentsPage() {
             columns={experimentColumns}
             dataSource={listQuery.data?.items ?? []}
             onChange={handleTableChange}
-            rowSelection={{
-              preserveSelectedRowKeys: true,
-              selectedRowKeys: selectedIds,
-              onChange: (keys, rows) => {
-                const nextKeys = (keys as number[]).slice(0, 3);
-                if (keys.length > 3) {
-                  message.warning('最多选择 3 个实验对比');
-                }
-                setSelectedMap((prev) => {
-                  const next: Record<number, KnowledgeEvalExperiment> = {};
-                  for (const id of nextKeys) {
-                    next[id] = rows.find((row) => row.id === id) ?? prev[id];
-                  }
-                  return next;
-                });
-              },
-            }}
+            rowClassName={(record) => (record.id === selectedExperiment?.id ? 'knowledge-eval-selected' : '')}
             expandable={{
-              expandedRowRender: (record) => {
-                const run = record.latest_run;
-                return (
-                  <Descriptions size="small" column={4} bordered>
-                    <Descriptions.Item label="数据集">{datasetName(record.dataset_id)}</Descriptions.Item>
-                    <Descriptions.Item label="数据集版本">{run?.dataset_version ?? '-'}</Descriptions.Item>
-                    <Descriptions.Item label="Vector Top-K">{snapshotParam(record.config, 'vector_k')}</Descriptions.Item>
-                    <Descriptions.Item label="Keyword Top-K">{snapshotParam(record.config, 'keyword_k')}</Descriptions.Item>
-                    <Descriptions.Item label="RRF k">{snapshotParam(record.config, 'rrf_k')}</Descriptions.Item>
-                    <Descriptions.Item label="候选召回">{snapshotParam(record.config, 'candidate_k')}</Descriptions.Item>
-                    <Descriptions.Item label="相似度阈值">{snapshotParam(record.config, 'similarity_threshold')}</Descriptions.Item>
-                    <Descriptions.Item label="Embedding">{snapshotParam(record.config, 'embedding_model')}</Descriptions.Item>
-                    <Descriptions.Item label="维度">{snapshotParam(record.config, 'embedding_dimensions')}</Descriptions.Item>
-                    <Descriptions.Item label="Chat">{snapshotParam(record.config, 'chat_model')}</Descriptions.Item>
-                    <Descriptions.Item label="指标版本">{snapshotParam(record.config, 'metric_version')}</Descriptions.Item>
-                    <Descriptions.Item label="生成评测">{snapshotParam(record.config, 'evaluate_generation')}</Descriptions.Item>
-                    <Descriptions.Item label="有效题 / 总题">
-                      {formatEvalCount(run?.supervised_count)} / {formatEvalCount(run?.case_count)}
-                    </Descriptions.Item>
-                    <Descriptions.Item label="无答案题">{formatEvalCount(run?.unanswerable_count)}</Descriptions.Item>
-                    <Descriptions.Item label="最近运行">{run ? `#${run.id}` : '尚未运行'}</Descriptions.Item>
-                    <Descriptions.Item label="失败原因">{run?.error_message || '-'}</Descriptions.Item>
-                  </Descriptions>
-                );
-              },
+              expandedRowRender: (record) => (
+                <Descriptions size="small" column={4} bordered>
+                  <Descriptions.Item label="数据集">{datasetName(record.dataset_id)}</Descriptions.Item>
+                  <Descriptions.Item label="描述">{record.description || '-'}</Descriptions.Item>
+                  <Descriptions.Item label="Vector Top-K">{snapshotParam(record.config, 'vector_k')}</Descriptions.Item>
+                  <Descriptions.Item label="Keyword Top-K">{snapshotParam(record.config, 'keyword_k')}</Descriptions.Item>
+                  <Descriptions.Item label="RRF k">{snapshotParam(record.config, 'rrf_k')}</Descriptions.Item>
+                  <Descriptions.Item label="候选召回">{snapshotParam(record.config, 'candidate_k')}</Descriptions.Item>
+                  <Descriptions.Item label="相似度阈值">{snapshotParam(record.config, 'similarity_threshold')}</Descriptions.Item>
+                  <Descriptions.Item label="Embedding">{snapshotParam(record.config, 'embedding_model')}</Descriptions.Item>
+                  <Descriptions.Item label="维度">{snapshotParam(record.config, 'embedding_dimensions')}</Descriptions.Item>
+                  <Descriptions.Item label="Chat">{snapshotParam(record.config, 'chat_model')}</Descriptions.Item>
+                  <Descriptions.Item label="Rerank 模型">{snapshotParam(record.config, 'rerank_model')}</Descriptions.Item>
+                  <Descriptions.Item label="指标版本">{snapshotParam(record.config, 'metric_version')}</Descriptions.Item>
+                  <Descriptions.Item label="生成评测">{snapshotParam(record.config, 'evaluate_generation')}</Descriptions.Item>
+                </Descriptions>
+              ),
             }}
             pagination={{
               current: page,
@@ -931,7 +898,21 @@ export function EvaluationExperimentsPage() {
         </ListTableArea>
         <ListTableArea>
           <div className="mb-2 flex shrink-0 items-center justify-between gap-2">
-            <span className="text-sm text-slate-600">运行记录</span>
+            <Space size={8} wrap>
+              <Button
+                size="small"
+                type={selectedExperiment == null ? 'primary' : 'default'}
+                onClick={() => selectExperiment(undefined)}
+              >
+                全部运行记录
+              </Button>
+              <span className="text-sm text-slate-600">
+                {selectedExperiment
+                  ? `当前筛选：实验 #${selectedExperiment.id} ${selectedExperiment.name}`
+                  : '当前筛选：全部运行记录'}
+                {runsSortBy == null ? ' · 按创建时间倒序' : ''}
+              </span>
+            </Space>
             <Select
               allowClear
               placeholder="运行状态"
@@ -948,11 +929,29 @@ export function EvaluationExperimentsPage() {
             />
           </div>
           <AppTable
+            key={selectedExperiment?.id ?? 'all-runs'}
             rowKey="id"
             loading={runsQuery.isLoading}
             columns={runColumns}
-            dataSource={runsQuery.data?.items ?? []}
+            dataSource={runsQuery.isLoading || runsQuery.isPlaceholderData ? [] : (runsQuery.data?.items ?? [])}
             onChange={handleRunsTableChange}
+            rowSelection={{
+              preserveSelectedRowKeys: true,
+              selectedRowKeys: selectedRunIds,
+              onChange: (keys, rows) => {
+                const nextKeys = (keys as number[]).slice(0, 3);
+                if (keys.length > 3) {
+                  message.warning('最多选择 3 次运行对比');
+                }
+                setSelectedRunMap((prev) => {
+                  const next: Record<number, KnowledgeEvalRun> = {};
+                  for (const id of nextKeys) {
+                    next[id] = rows.find((row) => row.id === id) ?? prev[id];
+                  }
+                  return next;
+                });
+              },
+            }}
             expandable={{
               expandedRowRender: (record) => {
                 const snapshot = record.config_snapshot;
@@ -984,8 +983,19 @@ export function EvaluationExperimentsPage() {
                       {formatEvalCount(view.supervised_count)} / {formatEvalCount(view.case_count)}
                     </Descriptions.Item>
                     <Descriptions.Item label="尝试次数">{record.attempt}</Descriptions.Item>
-                    <Descriptions.Item label="中断原因">
-                      {knowledgeEvalInterruptLabel(record.interrupt_reason) || record.error_message || '-'}
+                    <Descriptions.Item label={record.status === 'FAILED' ? '失败原因' : '中断说明'}>
+                      {runDetailText(record) || '-'}
+                    </Descriptions.Item>
+                    <Descriptions.Item label="分类">{interruptCategory(record) || '-'}</Descriptions.Item>
+                    <Descriptions.Item label="失败阶段">
+                      {record.current_stage ? knowledgeEvalStageLabel(record.current_stage) : '-'}
+                    </Descriptions.Item>
+                    <Descriptions.Item label="问题 ID">{record.current_case_id ?? '-'}</Descriptions.Item>
+                    <Descriptions.Item label="Embedding 调用">
+                      {usageNumber(record.usage, 'embedding_api_calls') ?? 0}
+                    </Descriptions.Item>
+                    <Descriptions.Item label="向量缓存命中">
+                      {usageNumber(record.usage, 'embedding_cache_hits') ?? 0}
                     </Descriptions.Item>
                     <Descriptions.Item label="进度">{evalRunProgressText(record) || '-'}</Descriptions.Item>
                     <Descriptions.Item label="Token 预算">{record.token_budget ?? '未限制'}</Descriptions.Item>
@@ -1091,49 +1101,75 @@ export function EvaluationExperimentsPage() {
           </Button>
         </Form>
       </Drawer>
-      <Drawer title={`运行 #${activeRun?.id ?? ''}`} open={activeRun != null} width={720} onClose={() => setActiveRun(null)}>
-        {activeRun ? (
+      <Drawer title={`运行 #${visibleRun?.id ?? ''}`} open={visibleRun != null} width={720} onClose={() => setActiveRun(null)}>
+        {visibleRun ? (
           <div className="space-y-4">
             <Space wrap>
-              <Tag color={knowledgeRunStatusColor(activeRun.status)}>{knowledgeRunStatusLabel(activeRun.status)}</Tag>
-              <Tag>数据集版本 {activeRun.dataset_version}</Tag>
+              <Tag color={knowledgeRunStatusColor(visibleRun.status)}>{knowledgeRunStatusLabel(visibleRun.status)}</Tag>
+              <Tag>数据集版本 {visibleRun.dataset_version}</Tag>
               <Button
                 type="link"
                 size="small"
-                onClick={() => navigate(`/datasets/${activeRun.dataset_id}?tab=versions&version=${activeRun.dataset_version}`)}
+                onClick={() => navigate(`/datasets/${visibleRun.dataset_id}?tab=versions&version=${visibleRun.dataset_version}`)}
               >
                 查看冻结快照
               </Button>
-              <Tag>{knowledgeRetrievalStrategyLabel(String(activeRun.config_snapshot.strategy ?? ''))}</Tag>
-              {activeRun.dataset_snapshot_meta.comparable === false ? <Tag color="warning">含失效标注，非严格可比</Tag> : null}
-              <Tag>最终 Top-K {snapshotParam(activeRun.config_snapshot, 'top_k')}</Tag>
-              <Tag>Vector {snapshotParam(activeRun.config_snapshot, 'vector_k')}</Tag>
-              <Tag>Keyword {snapshotParam(activeRun.config_snapshot, 'keyword_k')}</Tag>
-              <Tag>RRF k {snapshotParam(activeRun.config_snapshot, 'rrf_k')}</Tag>
-              <Tag>候选 {snapshotParam(activeRun.config_snapshot, 'candidate_k')}</Tag>
-              <Tag>Rerank {snapshotParam(activeRun.config_snapshot, 'rerank')}</Tag>
+              <Tag>{knowledgeRetrievalStrategyLabel(String(visibleRun.config_snapshot.strategy ?? ''))}</Tag>
+              {visibleRun.dataset_snapshot_meta.comparable === false ? <Tag color="warning">含失效标注，非严格可比</Tag> : null}
+              <Tag>最终 Top-K {snapshotParam(visibleRun.config_snapshot, 'top_k')}</Tag>
+              <Tag>Vector {snapshotParam(visibleRun.config_snapshot, 'vector_k')}</Tag>
+              <Tag>Keyword {snapshotParam(visibleRun.config_snapshot, 'keyword_k')}</Tag>
+              <Tag>RRF k {snapshotParam(visibleRun.config_snapshot, 'rrf_k')}</Tag>
+              <Tag>候选 {snapshotParam(visibleRun.config_snapshot, 'candidate_k')}</Tag>
+              <Tag>Rerank {snapshotParam(visibleRun.config_snapshot, 'rerank')}</Tag>
             </Space>
-            {evalRunProgressText(activeRun) ? <div className="text-sm text-slate-600">{evalRunProgressText(activeRun)}</div> : null}
-            {activeRun.interrupt_reason || activeRun.error_message ? (
-              <div className="text-sm text-amber-700">
-                中断原因：{knowledgeEvalInterruptLabel(activeRun.interrupt_reason) || activeRun.error_message}
-              </div>
+            {evalRunProgressText(visibleRun) ? <div className="text-sm text-slate-600">{evalRunProgressText(visibleRun)}</div> : null}
+            {visibleRun.status === 'FAILED' || visibleRun.status === 'PAUSED' || visibleRun.status === 'CANCELLED' ? (
+              <Alert
+                type={visibleRun.status === 'FAILED' ? 'error' : visibleRun.status === 'CANCELLED' ? 'info' : 'warning'}
+                showIcon
+                message={
+                  visibleRun.status === 'FAILED'
+                    ? '运行失败'
+                    : visibleRun.status === 'CANCELLED'
+                      ? '已取消'
+                      : visibleRun.interrupt_reason === 'USER_PAUSE'
+                        ? '用户暂停'
+                        : '已暂停，可从断点继续'
+                }
+                description={
+                  <div className="space-y-1 text-sm">
+                    <div>阶段：{visibleRun.current_stage ? knowledgeEvalStageLabel(visibleRun.current_stage) : '-'}</div>
+                    <div>问题 ID：{visibleRun.current_case_id ?? '-'}</div>
+                    <div>分类：{interruptCategory(visibleRun) || '-'}</div>
+                    <div>执行尝试：{visibleRun.attempt}</div>
+                    <div>异常：{visibleRun.error_message || '-'}</div>
+                  </div>
+                }
+              />
             ) : null}
             <div className="text-xs text-slate-500">
-              Token {(usageNumber(activeRun.usage, 'prompt_tokens') ?? 0) + (usageNumber(activeRun.usage, 'completion_tokens') ?? 0)}
-              {activeRun.token_budget != null ? ` / ${activeRun.token_budget}` : ''}
-              {activeRun.usage?.token_estimated === true ? '（估算）' : ''}
-              {usageNumber(activeRun.usage, 'estimated_cost_usd') != null
-                ? ` · 费用 $${usageNumber(activeRun.usage, 'estimated_cost_usd')}`
+              Token {(usageNumber(visibleRun.usage, 'prompt_tokens') ?? 0) + (usageNumber(visibleRun.usage, 'completion_tokens') ?? 0)}
+              {visibleRun.token_budget != null ? ` / ${visibleRun.token_budget}` : ''}
+              {visibleRun.usage?.token_estimated === true ? '（估算）' : ''}
+              {usageNumber(visibleRun.usage, 'estimated_cost_usd') != null
+                ? ` · 费用 $${usageNumber(visibleRun.usage, 'estimated_cost_usd')}`
                 : ''}
+              {` · Embedding 调用 ${usageNumber(visibleRun.usage, 'embedding_api_calls') ?? 0} 次`}
+              {` · 缓存命中 ${usageNumber(visibleRun.usage, 'embedding_cache_hits') ?? 0} 次`}
+              {visibleRun.usage?.embedding_tokens_missing === true
+                ? ' · Embedding Token 供应商未返回，未估算费用'
+                : usageNumber(visibleRun.usage, 'embedding_prompt_tokens') != null
+                  ? ` · Embedding Token ${usageNumber(visibleRun.usage, 'embedding_prompt_tokens')}${visibleRun.usage?.embedding_tokens_estimated === true ? '（估算）' : ''}`
+                  : ''}
             </div>
             <MetricBars
               items={[
-                { label: 'Hit Rate', value: metricNumber(activeRun.metrics, 'hit_rate') },
-                { label: 'Recall', value: metricNumber(activeRun.metrics, 'recall') },
-                { label: 'Precision', value: metricNumber(activeRun.metrics, 'precision') },
-                { label: 'MRR', value: metricNumber(activeRun.metrics, 'mrr') },
-                { label: 'nDCG', value: metricNumber(activeRun.metrics, 'ndcg') },
+                { label: 'Hit Rate', value: metricNumber(visibleRun.metrics, 'hit_rate') },
+                { label: 'Recall', value: metricNumber(visibleRun.metrics, 'recall') },
+                { label: 'Precision', value: metricNumber(visibleRun.metrics, 'precision') },
+                { label: 'MRR', value: metricNumber(visibleRun.metrics, 'mrr') },
+                { label: 'nDCG', value: metricNumber(visibleRun.metrics, 'ndcg') },
               ]}
             />
             <div className="text-xs text-slate-500">粒度：Chunk。LLM Judge 具有主观性与波动，失败时不会伪造分数。</div>
@@ -1163,7 +1199,7 @@ export function EvaluationExperimentsPage() {
               latency_ms: activeResult.latency_ms,
               usage: activeResult.usage,
               stages: activeResult.stages,
-              strategy: activeRun ? String(activeRun.config_snapshot.strategy ?? '') : null,
+              strategy: visibleRun ? String(visibleRun.config_snapshot.strategy ?? '') : null,
               raw: activeResult,
             }}
           />
@@ -1186,7 +1222,7 @@ export function EvaluationExperimentsPage() {
                 message.success('已在同一 Run 继续');
                 setResumeTarget(null);
                 setActiveRun(run);
-                invalidate();
+                invalidateRuns();
               })
               .catch((error: Error) => message.error(error.message));
           })

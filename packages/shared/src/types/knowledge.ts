@@ -453,6 +453,7 @@ export const KNOWLEDGE_EVAL_INTERRUPT_LABEL: Record<string, string> = {
   WORKER_CRASH: 'Worker 异常退出',
   SNAPSHOT_UNAVAILABLE: '原始快照或索引不可用',
   MODEL_UNAVAILABLE: '快照中的模型配置不可用',
+  NETWORK: '模型服务暂不可用',
   CANCELLED: '已取消',
 };
 
@@ -870,31 +871,6 @@ export interface KnowledgeEvalExperimentConfig {
   knowledge_base_ids?: number[] | null;
 }
 
-export interface KnowledgeEvalExperimentLatestRun {
-  id: number;
-  status: string;
-  progress: number;
-  dataset_id: number;
-  dataset_version: number;
-  error_message: string | null;
-  recall: number | null;
-  mrr: number | null;
-  ndcg: number | null;
-  hit_rate: number | null;
-  precision: number | null;
-  k: number | null;
-  latency_p95_ms: number | null;
-  supervised_count: number | null;
-  unanswerable_count: number | null;
-  case_count: number | null;
-  comparable: boolean | null;
-  embedding_model: string | null;
-  embedding_dimensions: number | null;
-  started_at: string | null;
-  finished_at: string | null;
-  created_at: string;
-}
-
 export interface KnowledgeEvalExperiment {
   id: number;
   dataset_id: number;
@@ -903,7 +879,6 @@ export interface KnowledgeEvalExperiment {
   config: Record<string, unknown>;
   created_at: string;
   updated_at: string;
-  latest_run?: KnowledgeEvalExperimentLatestRun | null;
 }
 
 export interface KnowledgeEvalExperimentList {
@@ -916,6 +891,7 @@ export interface KnowledgeEvalExperimentList {
 export interface KnowledgeEvalRun {
   id: number;
   experiment_id: number;
+  experiment_name?: string | null;
   dataset_id: number;
   dataset_version: number;
   status: string;

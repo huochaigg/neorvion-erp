@@ -237,13 +237,11 @@ Document 粒度单独计算并标记 `granularity=document`，不得与 Chunk �
 
 ### 实验列表
 
-`GET /evaluation/experiments` 一次返回参数方案和 `latest_run`（该实验最近一次运行摘要），避免前端再逐条拉详情。`latest_run` 为 `null` 表示尚未运行。指标只在最近运行 `SUCCESS` 时从已落库的 `metrics` / `usage` 读取；未执行、运行中、失败、无有效监督题时字段为 `null`，**不用 0 冒充缺失**。`supervised_count` 是实际参与宏平均的有效题目数。
-
-支持 `status`（含 `NEVER_RUN`）、`strategy`、`sort_by=id|created_at|recall|mrr|ndcg|hit_rate|latency_p95`。Vector/Keyword Top-K、RRF、候选召回、阈值、模型版本等放在展开行，不挤占默认列。对比入口携带 `?run_ids=` 复用现有 compare API；数据集或 Embedding/索引版本不同时列表与对比页都会提示不可严格比较。
+`GET /evaluation/experiments` 只返回实验参数方案：名称、数据集、策略、Top-K、Rerank 和创建时间。不附带运行状态或指标。支持 `strategy` 和 `sort_by=id|created_at`。Vector/Keyword Top-K、RRF、候选召回、阈值、模型版本放在展开行。选中一个实验后，运行列表按 `experiment_id` 过滤。对比从运行记录勾选，入口仍携带 `?run_ids=`。
 
 ### 运行记录列表
 
-`GET /evaluation/runs` 返回每次运行自己的 `config_snapshot`、`metrics`、`usage`。页面下方运行表只读这份快照，不回填实验当前配置。启动评测时会把当时的 Embedding/Chat/Rerank/指标版本写入快照；历史记录缺 key 显示「未记录」，不用系统默认值冒充。未完成运行的指标为 `null`。支持按 `status` / `strategy` 筛选，按 Recall/MRR/nDCG/Hit/P95 排序。
+`GET /evaluation/runs` 返回每次运行自己的 `config_snapshot`、`metrics`、`usage`。页面下方运行表只读这份快照，不回填实验当前配置。同一实验多次运行各自保留当时的参数和指标。启动评测时会把当时的 Embedding/Chat/Rerank/指标版本写入快照；历史记录缺 key 显示「未记录」，不用系统默认值冒充。未完成运行的指标为 `null`，不用 0 冒充缺失。`supervised_count` 是实际参与宏平均的有效题目数。支持按 `experiment_id` / `status` / `strategy` 筛选，按 Recall/MRR/nDCG/Hit/P95 排序。进行中的运行才轮询进度；暂停、取消和恢复仍作用于这一次 Run。数据集或 Embedding/索引版本不同时，对比前提示不可严格比较。
 
 ### 实验可复现
 
