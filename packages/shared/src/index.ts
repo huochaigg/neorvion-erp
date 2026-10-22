@@ -4,6 +4,7 @@ export {
   ERP_APP_NAME,
   IAM_APP_NAME,
   KNOWLEDGE_APP_NAME,
+  COPILOT_APP_NAME,
 } from './constants/app';
 export {
   ERP_BASENAME,
@@ -12,6 +13,8 @@ export {
   IAM_DEFAULT_PATH,
   KNOWLEDGE_BASENAME,
   KNOWLEDGE_DEFAULT_PATH,
+  COPILOT_BASENAME,
+  COPILOT_DEFAULT_PATH,
   SHELL_ROUTES,
 } from './constants/routes';
 export type { ApiResponse, HealthCheckData } from './types/api';

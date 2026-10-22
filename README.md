@@ -49,6 +49,7 @@ flowchart LR
 | Shell | 8015 | — | 登录、Refresh 单飞、租户切换、Wujie 宿主 |
 | ERP 微前端 | 8016 | — | 业务页面 |
 | Knowledge 微前端 | 8017 | — | 知识库页面 |
+| Copilot 微前端 | 8019 | — | ERP Copilot 会话页面 |
 | IAM 微前端 | 8018 | — | 用户/租户/角色/应用/审计 |
 
 禁止跨库 JOIN 用户与订单/文档。业务表保留整数 `user_id` / `tenant_id` / `member_id` 作为 ID 契约，**没有**指向 IAM 的外键。ERP 只保留 `identity_name_snapshots`（`user_id` → 展示名），由 JWT 上下文 upsert，供单据列表 JOIN，不能登录。
@@ -59,6 +60,7 @@ flowchart LR
 apps/shell              登录与 Wujie 宿主
 apps/erp                ERP 业务微前端
 apps/knowledge          Knowledge 微前端
+apps/copilot            ERP Copilot 微前端
 apps/iam                权限管理微前端
 packages/shared         Query Key / ApiError / 权限编码
 packages/python/neorvion_security   JWT / JWKS / TenantContext / 快照

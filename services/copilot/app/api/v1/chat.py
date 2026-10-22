@@ -1,24 +1,34 @@
 from __future__ import annotations
 
 import json
+from typing import cast
+from uuid import uuid4
 
 from fastapi import APIRouter, Request
 from fastapi.responses import StreamingResponse
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import CopilotContext, WorkflowDep
+from app.ai.types import ModelMessage
+from app.api.deps import CopilotContext, DbSession, WorkflowDep
 from app.core.config import settings
 from app.core.exceptions import AppError
 from app.graph.workflow import AgentRuntime
 from app.schemas.chat import ChatRequest, ChatResponse, TokenUsageOut
 from app.schemas.common import ApiResponse, ok
 from app.services.chat import ChatService
+from app.services.persistent_chat import PersistentChatService
 from app.tools.executor import ToolRuntime
 
 router = APIRouter(prefix="/chat", tags=["copilot-chat"])
 
 
-def _messages(payload: ChatRequest) -> list[dict[str, str]]:
-    return [item.model_dump() for item in payload.messages]
+def _messages(payload: ChatRequest) -> list[ModelMessage]:
+    return [{"role": item.role, "content": item.content} for item in payload.messages]
+
+
+def _event_data(event: dict) -> dict:
+    raw = event.get("data")
+    return raw if isinstance(raw, dict) else {}
 
 
 def _sse(event: str, data: dict) -> str:
@@ -43,7 +53,27 @@ async def chat(
     request: Request,
     context: CopilotContext,
     workflow: WorkflowDep,
+    db: DbSession,
 ) -> ApiResponse[ChatResponse]:
+    if payload.conversation_id is not None:
+        service = PersistentChatService(cast(AsyncSession, db), context, workflow)
+        turn = await service.prepare(
+            payload.conversation_id,
+            payload.message or "",
+            payload.client_request_id or "",
+            str(getattr(request.state, "request_id", "") or uuid4().hex),
+        )
+        answer = ""
+        usage = None
+        async for event in service.events(turn, _runtime(request, context), lambda: _false()):
+            if event["event"] == "done":
+                answer = str(event["data"].get("answer") or "")
+                usage = event["data"].get("usage")
+        return ok(ChatResponse(
+            answer=answer, model=settings.chat_model,
+            usage=TokenUsageOut(**usage) if isinstance(usage, dict) else None,
+            conversation_id=turn.conversation_id, message_id=turn.message_id, request_id=turn.request_id,
+        ))
     answer, usage = await ChatService(workflow).complete(
         _messages(payload), context=_runtime(request, context)
     )
@@ -62,21 +92,48 @@ async def chat_stream(
     request: Request,
     context: CopilotContext,
     workflow: WorkflowDep,
+    db: DbSession,
 ) -> StreamingResponse:
     async def event_stream():
+        persistent_turn = None
         try:
-            async for event in ChatService(workflow).stream_events(
-                _messages(payload),
-                disconnected=request.is_disconnected,
-                context=_runtime(request, context),
-            ):
+            if payload.conversation_id is not None:
+                service = PersistentChatService(cast(AsyncSession, db), context, workflow)
+                turn = await service.prepare(
+                    payload.conversation_id, payload.message or "", payload.client_request_id or "",
+                    str(getattr(request.state, "request_id", "") or uuid4().hex),
+                )
+                persistent_turn = turn
+                events = service.events(turn, _runtime(request, context), request.is_disconnected)
+            else:
+                events = ChatService(workflow).stream_events(
+                    _messages(payload), disconnected=request.is_disconnected, context=_runtime(request, context)
+                )
+            async for event in events:
                 name = str(event.get("event") or "message")
-                data = event.get("data") if isinstance(event.get("data"), dict) else {}
-                yield _sse(name, data)
+                yield _sse(name, _event_data(event))
         except AppError as exc:
-            yield _sse("error", {"code": exc.code, "message": exc.message})
+            ids = (
+                {
+                    "request_id": persistent_turn.request_id,
+                    "conversation_id": persistent_turn.conversation_id,
+                    "message_id": persistent_turn.message_id,
+                }
+                if persistent_turn is not None
+                else {}
+            )
+            yield _sse("error", {"code": exc.code, "message": exc.message} | ids)
         except Exception:
-            yield _sse("error", {"code": 50268, "message": "模型生成失败"})
+            ids = (
+                {
+                    "request_id": persistent_turn.request_id,
+                    "conversation_id": persistent_turn.conversation_id,
+                    "message_id": persistent_turn.message_id,
+                }
+                if persistent_turn is not None
+                else {}
+            )
+            yield _sse("error", {"code": 50268, "message": "模型生成失败"} | ids)
 
     return StreamingResponse(
         event_stream(),
@@ -87,3 +144,7 @@ async def chat_stream(
             "X-Accel-Buffering": "no",
         },
     )
+
+
+async def _false() -> bool:
+    return False

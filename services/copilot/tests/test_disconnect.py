@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+from typing import cast
+
 import pytest
 from app.ai.types import ModelMessage
-from app.graph.workflow import AgentRuntime
+from app.graph.workflow import AgentRuntime, CopilotWorkflow
 from app.services.chat import ChatService
 
 
@@ -27,7 +29,7 @@ async def test_disconnect_closes_graph_stream() -> None:
 
     events = [
         event
-        async for event in ChatService(workflow).stream_events(
+        async for event in ChatService(cast(CopilotWorkflow, workflow)).stream_events(
             [{"role": "user", "content": "hello"}],
             disconnected=disconnected,
             context=AgentRuntime(),

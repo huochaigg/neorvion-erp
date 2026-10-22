@@ -1,11 +1,17 @@
 from __future__ import annotations
 
+import asyncio
 import os
+import sys
 from collections.abc import Iterator
 
 os.environ["APP_ENV"] = "test"
 os.environ["MODEL_PROVIDER"] = "mock"
 os.environ["IAM_JWKS_URL"] = "http://127.0.0.1:9/.well-known/jwks.json"
+os.environ.setdefault(
+    "DATABASE_URL",
+    "postgresql+psycopg://neorvion_copilot:test-only@127.0.0.1:5432/neorvion_copilot_test",
+)
 
 import pytest
 from app.api.deps import get_tenant_context, get_workflow
@@ -15,6 +21,21 @@ from app.core.tenant import TenantContext
 from app.main import app
 from fastapi import Request
 from fastapi.testclient import TestClient
+
+
+def pytest_asyncio_loop_factories(config, item):
+    """让 Windows 的所有异步测试使用 psycopg 兼容的 SelectorEventLoop。"""
+    del config, item
+    if sys.platform == "win32":
+        return {"selector": asyncio.SelectorEventLoop}
+    return {"default": asyncio.new_event_loop}
+
+
+def _testclient_backend_options() -> dict[str, object]:
+    """Windows 上 psycopg 异步驱动无法使用 ProactorEventLoop。"""
+    if sys.platform != "win32":
+        return {}
+    return {"loop_factory": asyncio.SelectorEventLoop}
 
 
 def make_context(
@@ -40,7 +61,7 @@ def make_context(
 @pytest.fixture
 def client(monkeypatch: pytest.MonkeyPatch) -> Iterator[TestClient]:
     monkeypatch.setattr("app.api.v1.health.ping_iam_store", lambda: False)
-    with TestClient(app) as test_client:
+    with TestClient(app, backend_options=_testclient_backend_options()) as test_client:
         yield test_client
     app.dependency_overrides.clear()
 

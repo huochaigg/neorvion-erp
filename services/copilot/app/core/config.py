@@ -23,7 +23,8 @@ class Settings(BaseSettings):
     git_sha: str = ""
     enable_api_docs: bool = True
     cors_origins: str = (
-        "http://localhost:8015,http://localhost:8018,http://127.0.0.1:8015,http://127.0.0.1:8018"
+        "http://localhost:8015,http://localhost:8018,http://localhost:8019,"
+        "http://127.0.0.1:8015,http://127.0.0.1:8018,http://127.0.0.1:8019"
     )
 
     iam_jwt_issuer: str = "neorvion-iam"
@@ -33,6 +34,18 @@ class Settings(BaseSettings):
     iam_jwt_public_key_path: str = ""
     iam_snapshot_ttl_seconds: int = 3600
     iam_redis_url: str = "redis://127.0.0.1:6379/1"
+    iam_redis_connect_timeout_seconds: float = 1.5
+    iam_redis_read_timeout_seconds: float = 1.5
+    iam_auth_timeout_seconds: float = 4.0
+    database_url: str
+    database_pool_size: int = 5
+    database_max_overflow: int = 5
+    database_pool_timeout_seconds: float = 3.0
+    database_connect_timeout_seconds: int = 3
+    database_statement_timeout_ms: int = 5000
+    conversation_page_size_max: int = 100
+    conversation_context_tokens: int = 6000
+    stale_run_seconds: int = 900
 
     model_provider: str = "openai_compat"
     chat_base_url: str = "https://api.deepseek.com"
@@ -85,7 +98,8 @@ class Settings(BaseSettings):
 
 @lru_cache
 def get_settings() -> Settings:
-    return Settings()
+    # 必填项来自环境变量 / .env；构造函数静态类型看不到这些来源。
+    return Settings()  # type: ignore[call-arg]
 
 
 settings = get_settings()

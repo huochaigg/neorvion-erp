@@ -1,0 +1,3 @@
+import { create } from 'zustand'; import { shellProps } from './runtime';
+interface State{tenantId:number|null;epoch:number;controller:AbortController|null;setController:(value:AbortController|null)=>void;switchTenant:(id:number|null)=>void;reset:()=>void}
+export const useCopilotStore=create<State>((set,get)=>({tenantId:shellProps().tenantId,epoch:0,controller:null,setController:(controller)=>set({controller}),switchTenant:(tenantId)=>{get().controller?.abort();set(s=>({tenantId,epoch:s.epoch+1,controller:null}))},reset:()=>{get().controller?.abort();set(s=>({epoch:s.epoch+1,controller:null}))}}));

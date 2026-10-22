@@ -1,4 +1,5 @@
-# 腾讯云生产 Compose。ERP 数据库仍是 MySQL。Postgres 只给未来 Agent。
+# 腾讯云生产 Compose。ERP 数据库仍是 MySQL；Knowledge 与 Copilot 在同一 PostgreSQL
+# 实例内使用相互独立的数据库。
 # 不要把 3306 / 5432 / 6379 映射到 0.0.0.0。
 # FastAPI 仅绑定 127.0.0.1:8011 给宝塔 Nginx。真实应用端口是 8011，不是 8001。
 
@@ -94,10 +95,14 @@ services:
     image: pgvector/pgvector:pg16
     container_name: neorvion-postgres
     restart: unless-stopped
+    <<: *app-env
     environment:
-      POSTGRES_DB: ${POSTGRES_DB:-neorvion_agent}
-      POSTGRES_USER: ${POSTGRES_USER:-neorvion_agent}
+      POSTGRES_DB: ${POSTGRES_DB:-neorvion_knowledge}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      COPILOT_POSTGRES_DB: ${COPILOT_POSTGRES_DB:-neorvion_copilot}
+      COPILOT_POSTGRES_USER: ${COPILOT_POSTGRES_USER:-neorvion_copilot}
+      COPILOT_POSTGRES_PASSWORD: ${COPILOT_POSTGRES_PASSWORD}
     command:
       - postgres
       - -c
@@ -106,6 +111,7 @@ services:
       - max_connections=30
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      - ../postgres/init-databases.sh:/docker-entrypoint-initdb.d/00-databases.sh:ro
       - ../postgres/init-vector.sql:/docker-entrypoint-initdb.d/01-vector.sql:ro
     networks:
       - internal

@@ -106,6 +106,45 @@ jobs:
       - name: Pytest
         run: uv run pytest -q --tb=short
 
+  copilot:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: neorvion_copilot
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: neorvion_copilot_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U neorvion_copilot -d neorvion_copilot_test"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+    defaults:
+      run:
+        working-directory: services/copilot
+    env:
+      APP_ENV: test
+      MODEL_PROVIDER: mock
+      DATABASE_URL: postgresql+psycopg://neorvion_copilot:test@127.0.0.1:5432/neorvion_copilot_test
+      COPILOT_TEST_DATABASE_URL: postgresql+psycopg://neorvion_copilot:test@127.0.0.1:5432/neorvion_copilot_test
+      IAM_JWKS_URL: http://127.0.0.1:9/.well-known/jwks.json
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v4
+        with:
+          enable-cache: true
+      - name: Install Python deps
+        run: uv sync --frozen
+      - name: Ruff
+        run: uv run ruff check app tests
+      - name: Alembic upgrade
+        run: uv run alembic upgrade head
+      - name: Pytest
+        run: uv run pytest -q --tb=short
+
   frontend:
     runs-on: ubuntu-latest
     steps:

@@ -1,15 +1,18 @@
+from collections.abc import AsyncIterator
 from functools import lru_cache
 from typing import Annotated
 
 from fastapi import Depends, Request
 from neorvion_security import SecurityError
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.ai.factory import get_chat_adapter
 from app.core.context import set_tenant_context
 from app.core.exceptions import AppError, from_security_error
-from app.core.iam import jwt_verifier, snapshot_store
+from app.core.iam import verify_tenant_access
 from app.core.permissions import PermissionCode
 from app.core.tenant import TENANT_HEADER, TenantContext
+from app.db.session import open_tenant_session
 from app.erp.client import get_erp_client
 from app.graph.workflow import CopilotWorkflow
 from app.services.authorization import AuthorizationService
@@ -44,8 +47,9 @@ async def get_tenant_context(request: Request) -> TenantContext:
     token = _extract_bearer_token(request)
     tenant_id = _parse_tenant_id(request.headers.get(TENANT_HEADER))
     try:
-        claims = jwt_verifier().verify_access(token)
-        context = snapshot_store().load(claims=claims, tenant_id=tenant_id)
+        claims, context = await verify_tenant_access(token, tenant_id)
+    except TimeoutError as exc:
+        raise AppError("身份授权服务响应超时", code=50313, status_code=503) from exc
     except SecurityError as exc:
         raise from_security_error(exc) from exc
     set_tenant_context(tenant_id=context.tenant_id, user_id=context.user_id)
@@ -63,6 +67,18 @@ async def get_copilot_context(context: TenantContextDep) -> TenantContext:
 
 
 CopilotContext = Annotated[TenantContext, Depends(get_copilot_context)]
+
+
+async def get_db(context: CopilotContext) -> AsyncIterator[AsyncSession]:
+    """只为已认证租户打开带 SQL 守卫的会话。"""
+    session = open_tenant_session(context.tenant_id)
+    try:
+        yield session
+    finally:
+        await session.close()
+
+
+DbSession = Annotated[AsyncSession, Depends(get_db)]
 
 
 @lru_cache

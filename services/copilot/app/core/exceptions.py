@@ -5,6 +5,8 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from neorvion_security import SecurityError
 from pydantic import BaseModel
+from sqlalchemy.exc import OperationalError
+from sqlalchemy.exc import TimeoutError as SqlAlchemyTimeoutError
 
 
 class AppError(Exception):
@@ -34,6 +36,27 @@ def from_security_error(exc: SecurityError) -> AppError:
 
 
 def register_exception_handlers(app: FastAPI) -> None:
+    @app.exception_handler(SqlAlchemyTimeoutError)
+    async def handle_database_pool_timeout(
+        _request: Request, _exc: SqlAlchemyTimeoutError
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=503,
+            content=ErrorBody(
+                code=50380,
+                message="会话数据库连接繁忙，请稍后重试",
+            ).model_dump(),
+        )
+
+    @app.exception_handler(OperationalError)
+    async def handle_database_unavailable(
+        _request: Request, _exc: OperationalError
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=503,
+            content=ErrorBody(code=50381, message="会话数据库暂时不可用").model_dump(),
+        )
+
     @app.exception_handler(SecurityError)
     async def handle_security_error(_request: Request, exc: SecurityError) -> JSONResponse:
         return JSONResponse(

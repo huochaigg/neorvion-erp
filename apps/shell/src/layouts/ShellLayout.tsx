@@ -1,6 +1,7 @@
 import {
   AppstoreOutlined,
   BookOutlined,
+  RobotOutlined,
   LogoutOutlined,
   MenuFoldOutlined,
   MenuUnfoldOutlined,
@@ -13,6 +14,7 @@ import {
   ERP_APP_NAME,
   IAM_APP_NAME,
   KNOWLEDGE_APP_NAME,
+  COPILOT_APP_NAME,
   SHELL_ROUTES,
 } from '@neorvion/shared';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -21,6 +23,7 @@ import type { ReactNode } from 'react';
 import { useMemo } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { fetchCurrentUser, logoutAccount } from '@/api/auth';
+import { fetchMyPermissions, myPermissionsQueryKey } from '@/api/permissions';
 import { TenantSwitcher } from '@/components/TenantSwitcher';
 import { AppLogo } from '@/components/AppLogo';
 import { getMicroApp, getMicroAppEntryHref } from '@/micro/apps';
@@ -47,17 +50,25 @@ export function ShellLayout({ children }: ShellLayoutProps) {
   const resetAuth = useAuthStore((state) => state.reset);
   const resetTenant = useTenantStore((state) => state.reset);
   const isSwitching = useTenantStore((state) => state.isSwitching);
+  const currentTenantId = useTenantStore((state) => state.currentTenantId);
 
   const { data: currentUser } = useQuery({
     queryKey: currentUserQueryKey(),
     queryFn: fetchCurrentUser,
     enabled: Boolean(accessToken),
   });
+  const { data: myPermissions } = useQuery({
+    queryKey: myPermissionsQueryKey(currentTenantId),
+    queryFn: ({ signal }) => fetchMyPermissions(signal),
+    enabled: Boolean(accessToken && currentTenantId && !isSwitching),
+  });
 
   const selectedKey = location.pathname.startsWith(SHELL_ROUTES.erp)
     ? SHELL_ROUTES.erp
     : location.pathname.startsWith(SHELL_ROUTES.knowledge)
       ? SHELL_ROUTES.knowledge
+      : location.pathname.startsWith(SHELL_ROUTES.copilot)
+        ? SHELL_ROUTES.copilot
       : location.pathname.startsWith(SHELL_ROUTES.iam)
         ? SHELL_ROUTES.iam
         : location.pathname.startsWith(SHELL_ROUTES.workspaces)
@@ -70,9 +81,12 @@ export function ShellLayout({ children }: ShellLayoutProps) {
       { key: SHELL_ROUTES.workspaces, icon: <TeamOutlined />, label: '工作空间' },
       { key: SHELL_ROUTES.erp, icon: <TeamOutlined />, label: 'ERP 业务' },
       { key: SHELL_ROUTES.knowledge, icon: <BookOutlined />, label: 'AI 知识库' },
+      ...(myPermissions?.permissions.includes('copilot:use')
+        ? [{ key: SHELL_ROUTES.copilot, icon: <RobotOutlined />, label: 'ERP Copilot' }]
+        : []),
       { key: SHELL_ROUTES.iam, icon: <SafetyCertificateOutlined />, label: '权限中心' },
     ],
-    [],
+    [myPermissions?.permissions],
   );
 
   const onLogout = async () => {
@@ -145,6 +159,11 @@ export function ShellLayout({ children }: ShellLayoutProps) {
                 }
                 if (key === SHELL_ROUTES.iam) {
                   const app = getMicroApp(IAM_APP_NAME);
+                  navigate(getMicroAppEntryHref(app, getLastMicroHref(app.name)));
+                  return;
+                }
+                if (key === SHELL_ROUTES.copilot) {
+                  const app = getMicroApp(COPILOT_APP_NAME);
                   navigate(getMicroAppEntryHref(app, getLastMicroHref(app.name)));
                   return;
                 }

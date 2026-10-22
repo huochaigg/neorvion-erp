@@ -4,6 +4,7 @@ import asyncio
 import json
 import time
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from typing import Any
 
 from pydantic import ValidationError
@@ -75,7 +76,11 @@ class ToolExecutor:
         truncated = len(serialized) > settings.tool_max_result_chars
         if truncated:
             serialized = serialized[: settings.tool_max_result_chars]
-        content = "<untrusted_erp_tool_result>\n" + serialized + "\n</untrusted_erp_tool_result>"
+        content = (
+            f"<untrusted_erp_tool_result queried_at=\"{datetime.now(UTC).isoformat()}\">\n"
+            + serialized
+            + "\n</untrusted_erp_tool_result>"
+        )
         return ToolExecutionResult(
             content=content,
             event={

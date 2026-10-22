@@ -9,6 +9,7 @@ export const SHELL_ROUTES = {
   erp: '/erp',
   knowledge: '/knowledge',
   iam: '/iam',
+  copilot: '/copilot',
 } as const;
 
 /** 主应用里的子应用挂载前缀。ERP 内部业务路径不放在本文件。 */
@@ -28,3 +29,6 @@ export const IAM_BASENAME = '/iam';
 
 /** 主应用打开 IAM 时的默认落地页。 */
 export const IAM_DEFAULT_PATH = '/dashboard';
+
+export const COPILOT_BASENAME = '/copilot';
+export const COPILOT_DEFAULT_PATH = '/chat';

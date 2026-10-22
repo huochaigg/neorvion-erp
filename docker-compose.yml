@@ -60,7 +60,7 @@ services:
       JWT_PUBLIC_KEY_PATH: secrets/jwt/v1/public.pem
       JWT_ACCESS_EXPIRE_MINUTES: 30
       JWT_REFRESH_EXPIRE_DAYS: 7
-      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:8015,http://localhost:8016,http://localhost:8017,http://localhost:8018,http://127.0.0.1:8015,http://127.0.0.1:8016,http://127.0.0.1:8017,http://127.0.0.1:8018}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:8015,http://localhost:8016,http://localhost:8017,http://localhost:8018,http://localhost:8019,http://127.0.0.1:8015,http://127.0.0.1:8016,http://127.0.0.1:8017,http://127.0.0.1:8018,http://127.0.0.1:8019}
       MYSQL_HOST: mysql
       MYSQL_PORT: 3306
       MYSQL_USER: ${MYSQL_USER:-neorvion}
@@ -185,10 +185,14 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me}
       POSTGRES_DB: ${POSTGRES_DB:-neorvion_knowledge}
+      COPILOT_POSTGRES_USER: ${COPILOT_POSTGRES_USER:-neorvion_copilot}
+      COPILOT_POSTGRES_PASSWORD: ${COPILOT_POSTGRES_PASSWORD:-change-me}
+      COPILOT_POSTGRES_DB: ${COPILOT_POSTGRES_DB:-neorvion_copilot}
     ports:
       - "${POSTGRES_PORT:-5432}:5432"
     volumes:
       - neorvion_postgres_data:/var/lib/postgresql/data
+      - ./deploy/postgres/init-databases.sh:/docker-entrypoint-initdb.d/00-databases.sh:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 5s
@@ -249,6 +253,8 @@ services:
     depends_on:
       redis:
         condition: service_healthy
+      postgres:
+        condition: service_healthy
       iam:
         condition: service_started
     environment:
@@ -259,7 +265,8 @@ services:
       IAM_JWT_AUDIENCE: neorvion-copilot
       IAM_JWKS_URL: http://iam:8010/.well-known/jwks.json
       IAM_REDIS_URL: redis://redis:6379/1
-      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:8015,http://localhost:8018,http://127.0.0.1:8015,http://127.0.0.1:8018}
+      DATABASE_URL: postgresql+psycopg://${COPILOT_POSTGRES_USER:-neorvion_copilot}:${COPILOT_POSTGRES_PASSWORD:-change-me}@postgres:5432/${COPILOT_POSTGRES_DB:-neorvion_copilot}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:8015,http://localhost:8018,http://localhost:8019,http://127.0.0.1:8015,http://127.0.0.1:8018,http://127.0.0.1:8019}
       MODEL_PROVIDER: ${COPILOT_MODEL_PROVIDER:-mock}
       CHAT_BASE_URL: ${COPILOT_CHAT_BASE_URL:-https://api.deepseek.com}
       CHAT_API_KEY: ${COPILOT_CHAT_API_KEY:-}

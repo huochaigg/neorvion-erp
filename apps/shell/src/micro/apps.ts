@@ -8,6 +8,9 @@ import {
   KNOWLEDGE_APP_NAME,
   KNOWLEDGE_BASENAME,
   KNOWLEDGE_DEFAULT_PATH,
+  COPILOT_APP_NAME,
+  COPILOT_BASENAME,
+  COPILOT_DEFAULT_PATH,
   childPathFromHost,
 } from '@neorvion/shared';
 import type { plugin } from 'wujie';
@@ -47,6 +50,21 @@ export const MICRO_APPS: MicroAppDefinition[] = [
       tailwindV4ShadowCssPlugin(),
       viteDevPublicPathPlugin(
         () => (import.meta.env.VITE_KNOWLEDGE_ENTRY || 'http://localhost:8017').replace(/\/$/, ''),
+      ),
+    ],
+  },
+  {
+    name: COPILOT_APP_NAME,
+    basename: COPILOT_BASENAME,
+    defaultPath: COPILOT_DEFAULT_PATH,
+    getEntry: () => (import.meta.env.VITE_COPILOT_ENTRY || 'http://localhost:8019').replace(/\/$/, ''),
+    fiber: false,
+    degrade: false,
+    alive: true,
+    plugins: [
+      tailwindV4ShadowCssPlugin(),
+      viteDevPublicPathPlugin(
+        () => (import.meta.env.VITE_COPILOT_ENTRY || 'http://localhost:8019').replace(/\/$/, ''),
       ),
     ],
   },

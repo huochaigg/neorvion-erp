@@ -31,7 +31,7 @@ services/copilot (FastAPI, port 8013)
         +---- model provider: OpenAI-compatible chat API
 ```
 
-前端作为 Wujie 子应用挂到 Shell `/copilot`，建议开发端口 `8018`。后端使用独立 `services/copilot`，建议 API 端口 `8013`，使用独立 PostgreSQL 数据库 `neorvion_copilot`。不要把 Copilot Router 注册进 ERP 或 Knowledge。
+前端作为 Wujie 子应用挂到 Shell `/copilot`，开发端口 `8019`。后端使用独立 `services/copilot`，API 端口 `8013`。当前只复用 Knowledge 所在 PostgreSQL 实例；Knowledge 使用 `neorvion_knowledge`，Copilot 使用独立的 `neorvion_copilot` 数据库、专用角色和 `copilot_alembic_version`。不要把 Copilot Router 注册进 ERP 或 Knowledge。
 
 ## 3. 版本路线
 
@@ -62,23 +62,23 @@ services/copilot (FastAPI, port 8013)
 - 建立离线评测集：Tool 选择正确率、参数正确率、回答事实性、租户隔离和拒答。
 - 支持会话标题、历史搜索、反馈与重新生成。
 
-### V3：草稿型低风险动作
+### V3：会话持久化与 Copilot 微前端
 
-目标：允许创建“尚未生效”的业务草稿，不允许模型直接改变库存或关键状态。
+目标：将 V2 的只读 Agent 做成可刷新恢复、可多轮使用的完整业务入口。
 
-- 引入 Action Proposal：模型提出结构化草稿，服务端重新校验 Schema、权限和资源归属。
-- 首批只支持低风险动作，例如创建草稿销售单/采购单、补充备注；具体范围以现有 ERP API 能力为准。
-- 预览差异、明确展示将调用的动作与参数，由用户确认后执行。
-- 每次执行携带幂等键；Proposal 有过期时间、参数哈希和一次性确认令牌。
-- 用户修改任何关键参数后必须重新预览和确认。
+- PostgreSQL 保存用户私有会话、消息、模型工具协议与脱敏 ToolRun 摘要。
+- 会话行锁、数据库唯一约束和 `client_request_id` 保证并发与幂等边界。
+- 服务端从可信历史重建上下文，按完整 turn 裁剪，不接受客户端伪造持久化历史。
+- React/Wujie 微前端提供会话 CRUD、POST SSE、工具过程、停止生成和租户切换清理。
+- 本版仍只注册 ERP 只读工具，不引入 Knowledge RAG、写操作或 Checkpointer。
 
-### V4：高风险动作与审批
+### V4：动作提案与审批
 
-目标：在强约束下支持会影响库存、资金或状态机的动作。
+目标：先支持低风险草稿，再在强约束下逐项开放会影响库存、资金或状态机的动作。
 
-- 接入 IAM 高风险实时回源授权，不能只依赖缓存快照。
-- 对确认订单、确认收货、确认出库、退款、盘点、调拨等动作逐个建立策略。
-- 强制“服务端预览 → 人工确认 → 服务端执行”，预览结果与执行参数通过哈希绑定。
+- 引入 Action Proposal；模型只能提出结构化草稿，服务端重新校验 Schema、权限和资源归属。
+- 强制“服务端预览 → 人工确认 → 服务端执行”，预览结果与执行参数通过哈希和幂等键绑定。
+- 首批只开放草稿销售单/采购单等低风险动作；高风险动作还需 IAM 实时回源授权与独立策略。
 - 二人审批或职责分离作为可配置策略；执行前再次读取当前资源状态，过期预览拒绝执行。
 - 审计记录包含操作者、租户、Proposal、确认、下游 request id 和最终结果，但不记录密钥与敏感正文。
 
@@ -173,4 +173,25 @@ Copilot 最终应成为“受策略控制的 ERP 操作入口”：默认只读�
 - SSE 新增 `tool_start` / `tool_end` / `tool_error`，保留 `message` / `done` / `error`。
 - 未注册低库存工具：现有阈值不是持久化的可信安全库存配置，V2 不生成补货结论。
 - 仍未实现前端、会话持久化、Knowledge/RAG、多 Agent、写操作或审批。
+
+### V3：会话与微前端已实现
+
+- 新增独立 `copilot_*` PostgreSQL 表与 `copilot_alembic_version` 迁移版本表。
+- 会话访问同时约束已验证租户和当前用户；复合租户外键与 `TenantAsyncSession` 双重守卫。
+- 持久化 Chat 支持幂等 `client_request_id`、会话行锁、单会话单生成和异常 RUNNING 恢复。
+- 完整保存用户消息、助手消息、模型协议消息与脱敏 ToolRun 摘要。
+- 服务端按完整 turn 裁剪上下文，避免拆散 tool_calls/tool 消息，并给 ERP 结果标记查询时间。
+- 新增 `apps/copilot`，支持历史会话、安全文本渲染、POST SSE、工具状态、停止生成和租户切换清理。
+- Shell 注册 `/copilot` Wujie 保活微前端，继续使用 Shell Token、租户和刷新契约。
+
+### V4 启动前修复：已完成代码与本地数据库验证
+
+- Copilot 已从 `neorvion_knowledge` 迁到同实例的独立 `neorvion_copilot`，使用最小权限专用角色；
+  新环境由初始化脚本建库，已有环境按“备份—迁移—校验—切换”执行。
+- 旧 Knowledge 数据库中的 Copilot 表暂时保留作为回滚副本；任何清理都需要再次核对数据并取得明确授权。
+- 数据库连接池等待、建连、SQL 和 IAM Redis 快照读取均有可配置的有限超时，并返回明确 503。
+- 持久化 Chat 使用短事务和 `FOR NO KEY UPDATE` 串行化同一会话；所有异常/取消路径立即回滚，
+  LLM 与 ERP 调用不持有数据库事务，避免 `idle in transaction` 长时间占锁。
+- 已增加独立数据库、真实 PostgreSQL CRUD/ToolRun/租户隔离/幂等/并发/池耗尽，以及 GET、普通 Chat、
+  SSE 与断开清理测试。V4 仍需在目标部署环境完成备份校验、灰度切换和监控观察后再启动。
 

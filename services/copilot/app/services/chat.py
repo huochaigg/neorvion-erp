@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import AsyncIterator, Awaitable, Callable
+from collections.abc import AsyncGenerator, Awaitable, Callable
 
 from app.ai.types import ModelMessage
 from app.graph.workflow import AgentRuntime, CopilotWorkflow
@@ -19,7 +19,7 @@ class ChatService:
         *,
         disconnected: Callable[[], Awaitable[bool]],
         context: AgentRuntime,
-    ) -> AsyncIterator[dict]:
+    ) -> AsyncGenerator[dict, None]:
         """消费图事件；客户端断开时主动关闭图迭代器以释放上游 HTTP 流。"""
         context.disconnected = disconnected
         stream = self.workflow.stream(messages, context=context)

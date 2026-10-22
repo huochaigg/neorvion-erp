@@ -86,15 +86,6 @@ def _classifications(
     return found
 
 
-def _tenant_clause(tenant_id: int):
-    """生成追加到 ORM 语句上的租户条件。闭包只捕获这一个整数。"""
-
-    def _clause(cls: type):
-        return cls.tenant_id == tenant_id
-
-    return _clause
-
-
 def _reviewed_utility(execute_state: Any) -> bool:
     """只放行带 ReviewedSql 枚举、且 SQL 本身是咨询锁的语句。
 
@@ -310,13 +301,14 @@ def guard_tenant_execute(execute_state: Any) -> None:
             continue
         if execute_state.is_select and model.__tablename__ in direct_tables:
             statement = statement.where(model.tenant_id == tenant_id)
-        statement = statement.options(
-            with_loader_criteria(
-                model,
-                _tenant_clause(tenant_id),
-                include_aliases=True,
+        if execute_state.is_select:
+            statement = statement.options(
+                with_loader_criteria(
+                    model,
+                    model.tenant_id == tenant_id,
+                    include_aliases=True,
+                )
             )
-        )
     execute_state.statement = statement
 
 
