@@ -157,6 +157,6 @@ returnable_quantity = outbound_quantity - 有效售后已占用数量
 
 退货入库复用 `InventoryService.inbound_within_transaction`，`tx_type=RETURN_INBOUND`，不要另写一套加法。流水 `reference_type=RETURN_ORDER`。预占前后相同。两个请求同时确认同一张退货单，只能成功一次。
 
-售后审核权限 `after_sale:approve` / `after_sale:reject`。拒绝后占用释放，不改库存。取消待审核同样释放。已经进入 `WAITING_RETURN` 后能否取消，以当前 `AfterSaleService` 实现为准；一旦退货入库改了 `quantity`，不能靠取消售后把库存倒扣回去，应继续用库存调整或后续业务流程处理。换货重新发货本版不做。
+售后审核权限 `after_sale:approve` / `after_sale:reject`。拒绝后占用释放，不改库存。取消接口只允许 `PENDING_APPROVAL`：源码 `cancel_after_sale()` 在状态不是待审核时返回 `AFTER_SALE_CANNOT_CANCEL`。已经进入 `WAITING_RETURN` 后不能靠取消售后把库存倒扣回去；一旦退货入库改了 `quantity`，应继续用库存调整或后续业务流程处理。换货重新发货本版不做。
 
 

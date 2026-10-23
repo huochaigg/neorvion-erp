@@ -1,0 +1,88 @@
+{
+  "case_count": 120,
+  "bucket_counts": {
+    "factual": 15,
+    "hard": 20,
+    "multi": 20,
+    "precision": 15,
+    "long": 15,
+    "unanswerable": 15,
+    "hallucination": 15,
+    "regression": 5
+  },
+  "bucket_target": {
+    "factual": 15,
+    "hard": 20,
+    "multi": 20,
+    "precision": 15,
+    "long": 15,
+    "unanswerable": 15,
+    "hallucination": 15,
+    "regression": 5
+  },
+  "difficulty_counts": {
+    "EASY": 25,
+    "MEDIUM": 45,
+    "HARD": 35,
+    "EXTREME": 15
+  },
+  "difficulty_target": {
+    "EASY": 25,
+    "MEDIUM": 45,
+    "HARD": 35,
+    "EXTREME": 15
+  },
+  "question_type_counts": {
+    "FACTUAL": 37,
+    "PARAPHRASE": 3,
+    "MULTI_CONDITION": 2,
+    "MULTI_DOC": 18,
+    "MIXED_LANG": 15,
+    "LONG": 15,
+    "UNANSWERABLE": 15,
+    "HALLUCINATION": 15
+  },
+  "confidence_counts": {
+    "high": 84,
+    "medium": 35,
+    "low": 1
+  },
+  "label_status_counts": {
+    "labeled": 105,
+    "unanswerable-no-judgment": 15
+  },
+  "relevance_counts": {
+    "3": 130
+  },
+  "needs_human_review": 120,
+  "gold_chunk_count": 54,
+  "active_chunk_count": 80,
+  "gold_document_count": 8,
+  "gold_by_filename": {
+    "01-sales-outbound.md": 36,
+    "03-inventory-reserve-transfer.md": 15,
+    "02-purchase-receipt-return.md": 18,
+    "08-shipment-stocktake.md": 11,
+    "06-knowledge-rag-evaluation.md": 14,
+    "04-after-sale-refund.md": 13,
+    "05-iam-tenant-rbac.md": 15,
+    "07-cross-domain-state-collisions.md": 8
+  },
+  "files_with_gold": [
+    "01-sales-outbound.md",
+    "02-purchase-receipt-return.md",
+    "03-inventory-reserve-transfer.md",
+    "04-after-sale-refund.md",
+    "05-iam-tenant-rbac.md",
+    "06-knowledge-rag-evaluation.md",
+    "07-cross-domain-state-collisions.md",
+    "08-shipment-stocktake.md"
+  ],
+  "near_duplicates": [],
+  "disputed_waiting_return_cancel": [],
+  "stale_chunk_ids": [],
+  "items_with_issues": [],
+  "overuse_07": 8,
+  "freeze_ready": false,
+  "freeze_blocker": "全部 needs_human_review=True，工作稿未 READY，本轮不冻结"
+}

@@ -1,0 +1,722 @@
+[
+  {
+    "id": 62,
+    "document_id": 38,
+    "filename": "01-sales-outbound.md",
+    "chunk_index": 0,
+    "char_count": 766,
+    "heading": "销售订单与出库履约",
+    "content": "# 销售订单与出库履约\n\n本文转写 Neorvion ERP 当前已实现的销售订单、出库单和物流发货边界。状态名、字段名和错误码均来自源码与对应测试，不引入平台同步或未实现的换货流程。\n\n销售订单回答「卖给客户什么、是否已经预占」。出库单回答「这次仓库实际发出多少」。物流单回答「货是否已经交给承运商」。三张单据不能互相替代。\n\n## 销售订单状态机\n\n`SalesOrderStatus` 只能经提交、确认、取消以及后续出库/发货动作流转，不要直接改 `status` 列。\n\n| 状态 | 英文标识 | 代码注释中的含义 | 库存 |\n| --- | --- | --- | --- |\n| 草稿 | `DRAFT` | 可改客户、仓库、收货信息和明细；可提交或取消 | 未预占 |\n| 待确认 | `PENDING_CONFIRMATION` | 已提交、等待审核。确认才会预占；也可取消且不动库存 | 未预占 |\n| 待出库 | `WAITING_OUTBOUND` | 已确认并预占。尚未正式出库时可以整单取消并释放预占 | 已预占 |\n| 部分出库 | `PARTIALLY_OUTBOUND` | 已经扣过库存，不能整单取消 | 部分已出库 |\n| 已出库 | `OUTBOUNDED` | 购买数量都已离开库存账面，尚未全部交给承运商 | 已出库 |\n| 部分发货 | `PARTIALLY_SHIPPED` | 已经有物流单确认发货 | 库存不再变化 |\n| 已发货 | `SHIPPED` | 订单数量都已交给承运商 | 库存不再变化 |\n| 已完成 | `COMPLETED` | 全部物流单都已签收 | 库存不再变化 |\n| 已取消 | `CANCELLED` | 终态，不能再流转 | 若曾预占则已释放 |"
+  },
+  {
+    "id": 63,
+    "document_id": 38,
+    "filename": "01-sales-outbound.md",
+    "chunk_index": 1,
+    "char_count": 760,
+    "heading": "销售订单与出库履约",
+    "content": "来源枚举 `SalesOrderSource` 只做标记：`MANUAL` / `AMAZON` / `SHOPIFY` / `TIKTOK` / `OTHER`。当前版本不连接这些平台的 API。\n\n## 为什么草稿和提交都不预占\n\n用户可能先建单，再去补货。创建和保存 `DRAFT` 只写订单自己的表。库存不足可以提示，不能阻止保存草稿。\n\n提交（`DRAFT` → `PENDING_CONFIRMATION`）同样不预占。提交只表示业务上可以交给审核人，仓库还没有被这张单占住。权限是 `order:submit`。\n\n真正的库存校验发生在确认。确认接口是 `POST /sales-orders/{id}/confirm`，权限 `order:audit`。可用库存不足时，接口数据里的 `error` 为 `INSUFFICIENT_AVAILABLE_INVENTORY`。该错误码也出现在调拨确认调出、采购退货出库等「只能动可用库存」的路径，不要把它理解成出库超额。\n\n## 确认时库存怎么变\n\n确认表示订单已经成立，对应数量不能再卖给别人。货还没有离开仓库，所以：\n\n- `Inventory.quantity` 不变\n- `Inventory.reserved_quantity` 增加购买数量\n- 明细 `SalesOrderItem.reserved_quantity = quantity`\n- 流水类型 `RESERVE`，`reference_type = SALES_ORDER`，`reference_id` 为订单 id\n\n可用库存不单独落库，查询时计算：\n\n```text\navailable_quantity = quantity - reserved_quantity\n```"
+  },
+  {
+    "id": 64,
+    "document_id": 38,
+    "filename": "01-sales-outbound.md",
+    "chunk_index": 2,
+    "char_count": 794,
+    "heading": "销售订单与出库履约",
+    "content": "可用库存不单独落库，查询时计算：\n\n```text\navailable_quantity = quantity - reserved_quantity\n```\n\n例：确认前实际 100、预占 0、可用 100。购买 10 件后：实际仍 100，预占 10，可用 90。货仍在仓里。\n\n订单号在 flush 拿到 id 后写成 `SO` + 年份 + 6 位 id，租户内唯一，不用 `MAX+1`。收货人、电话、国家、省、城市、地址写在订单自己的列上，是下单当时的快照。客户以后改档案，已保存的订单仍显示当时的收件信息。\n\n明细同一订单同一 SKU 只能一行。约束包括 `reserved_quantity + outbound_quantity <= quantity`，以及后续发货的 `shipped_quantity <= outbound_quantity`。\n\n## 哪些状态可以整单取消\n\n`DRAFT` 和 `PENDING_CONFIRMATION` 可以取消，库存未被预占，取消不动库存。\n\n`WAITING_OUTBOUND` 尚未正式出库，可以整单取消并释放预占。释放走库存 `release`，流水类型 `RELEASE`。释放数量超过 `reserved_quantity` 时，错误码是 `INSUFFICIENT_RESERVED_INVENTORY`。那是库存释放路径，不是出库路径。\n\n`PARTIALLY_OUTBOUND` 已经扣过库存，不能整单取消。后续退货走独立售后领域，不回退本表的购买数量，也不把状态改回 `WAITING_OUTBOUND`。\n\n停用客户不能创建新订单，错误数据为 `CUSTOMER_DISABLED`。客户已被销售订单引用时不能删除，只能停用，错误数据为 `CUSTOMER_IN_USE`。\n\n## 出库单是仓库动作"
+  },
+  {
+    "id": 65,
+    "document_id": 38,
+    "filename": "01-sales-outbound.md",
+    "chunk_index": 3,
+    "char_count": 711,
+    "heading": "销售订单与出库履约",
+    "content": "停用客户不能创建新订单，错误数据为 `CUSTOMER_DISABLED`。客户已被销售订单引用时不能删除，只能停用，错误数据为 `CUSTOMER_IN_USE`。\n\n## 出库单是仓库动作\n\n一张销售订单可以有多张出库单，对应多次部分出库。确认销售订单时，同一事务自动生成第一张出库单，计划数量等于当时的预占。历史数据里已经是待出库但没有出库单的订单，用 `POST /api/v1/outbound-orders` 补一张。\n\n`OutboundOrderStatus`：\n\n| 状态 | 英文标识 | 库存 | 能否取消 |\n| --- | --- | --- | --- |\n| 待拣货 | `PENDING_PICKING` | 仍只是销售预占 | 可以 |\n| 已拣货 | `PICKED` | 仍只是销售预占 | 可以 |\n| 已确认出库 | `CONFIRMED` | 已扣 `quantity` 并释放预占 | 不能，退货走售后 |\n| 已取消 | `CANCELLED` | 不碰库存；预占仍挂在销售订单上 | 终态 |\n\n出库单号：`OUT` + 年份 + 6 位 id。权限：`outbound:read/create/pick/confirm/cancel`。业务确认不要求操作人再同时拥有 `inventory:outbound`。\n\n未确认的出库单会占用计划数量。同一订单剩余可分配 = 明细 `reserved_quantity` − 未完成出库单的 `planned_quantity`。第一张如果计划了全部预占，必须等它确认或取消后，才能为剩余量再开一张。\n\n## 为什么拣货不扣库存"
+  },
+  {
+    "id": 66,
+    "document_id": 38,
+    "filename": "01-sales-outbound.md",
+    "chunk_index": 4,
+    "char_count": 711,
+    "heading": "销售订单与出库履约",
+    "content": "## 为什么拣货不扣库存\n\n拣货只记录仓库把货拿到了发货区，货还在账上。同一次出库可以分多次拣：计划 5 件时先拣 3、再拣 2，明细上的 `picked_quantity` 仍是累计 5，另外每次都会追加一条拣货记录。\n\n未点「完成拣货」且还没拣满时，出库单保持 `PENDING_PICKING`。拣满或完成拣货后才变成 `PICKED`。确认出库仍按累计 `picked_quantity` 扣库存，不按单条记录再扣一次。\n\n拣货数量超过计划时，接口数据里的 `error` 为 `OUTBOUND_PICK_EXCEEDS_PLAN`。它和出库超额、释放超额不是同一个码。\n\n## 确认出库时库存怎么变\n\n确认出库使用拣货数量作为本次 `outbound_quantity`。拣少了的部分仍留在销售订单的预占上，确认后可以再开出库单。\n\n出库前：实际 100、预占 10、可用 90。本次发出此前已经预占的 6 件：\n\n```text\nquantity 100 → 94\nreserved 10 → 4\navailable 90 → 90\n```\n\n可用量不变，是因为这 6 件在确认订单时已经从可用量里划走。现在只是从「还在仓库、但已被订单占用」变成「正式离开仓库」。如果只减 `quantity`、不减 `reserved`，预占会大于实际库存。\n\n流水：`type=OUTBOUND`，`change_quantity` 为负，`reference_type=OUTBOUND_ORDER`。全部预占出完后，销售订单进入 `OUTBOUNDED`；只出一部分则进入 `PARTIALLY_OUTBOUND`。"
+  },
+  {
+    "id": 67,
+    "document_id": 38,
+    "filename": "01-sales-outbound.md",
+    "chunk_index": 5,
+    "char_count": 512,
+    "heading": "销售订单与出库履约",
+    "content": "出库数量超过已预占数量时，接口数据里的 `error` 为 `OUTBOUND_EXCEEDS_RESERVED`。该码不是 `INSUFFICIENT_RESERVED_INVENTORY`，后者出现在释放预占超过 `reserved_quantity` 的库存路径。\n\n## 发货不再改库存\n\n物流单表示货交给承运商。出库已经把账面库存扣掉，确认发货、更新轨迹、签收都不再改 `Inventory`。\n\n`ShipmentStatus`：`DRAFT` / `SHIPPED` / `IN_TRANSIT` / `DELIVERED` / `CANCELLED`。发货数量不能超过已出库数量，超额时 `error` 为 `SHIPMENT_EXCEEDS_OUTBOUND`。\n\n权限：`shipment:read/create/update/confirm/tracking:update/deliver/cancel` 与独立的 `carrier:*`。销售订单在有物流单确认发货后进入 `PARTIALLY_SHIPPED` 或 `SHIPPED`，全部签收后进入 `COMPLETED`。\n\n## 权限与编号对照"
+  },
+  {
+    "id": 68,
+    "document_id": 38,
+    "filename": "01-sales-outbound.md",
+    "chunk_index": 6,
+    "char_count": 681,
+    "heading": "销售订单与出库履约",
+    "content": "## 权限与编号对照\n\n| 动作 | 权限码 | 单号前缀 |\n| --- | --- | --- |\n| 查看 / 创建 / 修改销售订单 | `order:read` / `order:create` / `order:update` | `SO` |\n| 提交 | `order:submit` | 同上 |\n| 确认（预占） | `order:audit` | 同上 |\n| 取消订单 | `order:cancel` | 同上 |\n| 出库拣货 / 确认 / 取消 | `outbound:pick` / `outbound:confirm` / `outbound:cancel` | `OUT` |\n| 确认发货 | `shipment:confirm` | 物流单独立编号 |\n\n不要用 `SalesOrder.status` 代替仓库是否已经拣货。计划和实物分开，才能做部分出库，以及失败时整单回滚。\n\n## 明细字段与约束\n\n同一订单同一 SKU 只能一行：`UNIQUE(tenant_id, sales_order_id, sku_id)`。前后端都拒绝重复 SKU。\n\n| 字段 | 说明 |\n| --- | --- |\n| `quantity` | 购买数量，必须大于 0 |\n| `reserved_quantity` | 当前已预占、尚未正式出库 |\n| `outbound_quantity` | 累计仓库已出库 |\n| `shipped_quantity` | 累计已交给承运商 |\n| `unit_price` | 可空 |"
+  },
+  {
+    "id": 69,
+    "document_id": 38,
+    "filename": "01-sales-outbound.md",
+    "chunk_index": 7,
+    "char_count": 760,
+    "heading": "销售订单与出库履约",
+    "content": "约束：`reserved_quantity + outbound_quantity <= quantity`，`shipped_quantity <= outbound_quantity`。买 10、出 6、发 4 之后可以是预占 4、已出库 6、已发货 4。\n\n金额不落库。行金额和订单总额在读出时计算。不做税、折扣、运费。`currency_code` 默认 `CNY`，本版不做汇率。\n\n## 允许和不允许的流转\n\n允许：\n\n- `DRAFT` → `PENDING_CONFIRMATION`（提交）\n- `PENDING_CONFIRMATION` → `WAITING_OUTBOUND`（确认并预占，并生成第一张出库单）\n- `WAITING_OUTBOUND` → `PARTIALLY_OUTBOUND` 或 `OUTBOUNDED`（确认出库）\n- `PARTIALLY_OUTBOUND` / `OUTBOUNDED` → `PARTIALLY_SHIPPED` 或 `SHIPPED`（确认发货）\n- `PARTIALLY_SHIPPED` → `SHIPPED` → `COMPLETED`（全部签收）\n- `DRAFT` / `PENDING_CONFIRMATION` / `WAITING_OUTBOUND` → `CANCELLED`（已有出库数量时不能取消）\n\n不允许任意 `PATCH status`。不能 `PATCH status = COMPLETED`，完成只能由签收结果决定。已取消不能再确认。待确认之后不能改客户、仓库、收货信息和明细。没有驳回或撤回提交。\n\n只有草稿可以编辑。改明细时锁订单、校验 SKU 与重复行、删掉旧明细、插入新明细。草稿还没预占，所以不碰库存。"
+  },
+  {
+    "id": 70,
+    "document_id": 38,
+    "filename": "01-sales-outbound.md",
+    "chunk_index": 8,
+    "char_count": 689,
+    "heading": "销售订单与出库履约",
+    "content": "只有草稿可以编辑。改明细时锁订单、校验 SKU 与重复行、删掉旧明细、插入新明细。草稿还没预占，所以不碰库存。\n\n提交前检查：客户启用、仓库启用、至少一条明细、SKU 有效、数量大于 0、收件人和详细地址已填。\n\n## 多 SKU 原子预占\n\n确认整单是一个事务，由 `SalesOrderService.confirm_order()` 提交。`InventoryService.reserve_within_transaction()` 使用条件 UPDATE（`quantity - reserved_quantity >= qty`，看 `rowcount`），自己不 commit，也不要求 `inventory:adjust`。对外的手动预占测试接口仍检查 `inventory:adjust` 并自行提交，库存页面行为不变。\n\n任一 SKU 可用不足，整单回滚，订单仍停在 `PENDING_CONFIRMATION`，不会出现只预占了部分明细的中间态。明细按 `sku_id` 排序后再预占，降低与其他单据交叉锁的死锁概率。\n\n`SALES_ORDER_REFERENCE` 常量值为 `SALES_ORDER`，写在预占流水的 `reference_type` 上，用来区分「这次预占来自哪张销售订单」。出库流水的 `reference_type` 则是 `OUTBOUND_ORDER`。\n\n## 部分出库的剩余可分配\n\n确认订单购买 10 件后，第一张出库单计划数量等于当时预占 10。未确认时这 10 已经占住可分配额度。仓库如果只拣了 6 并确认出库："
+  },
+  {
+    "id": 71,
+    "document_id": 38,
+    "filename": "01-sales-outbound.md",
+    "chunk_index": 9,
+    "char_count": 715,
+    "heading": "销售订单与出库履约",
+    "content": "## 部分出库的剩余可分配\n\n确认订单购买 10 件后，第一张出库单计划数量等于当时预占 10。未确认时这 10 已经占住可分配额度。仓库如果只拣了 6 并确认出库：\n\n- 销售明细 `outbound_quantity = 6`，`reserved_quantity = 4`\n- 订单进入 `PARTIALLY_OUTBOUND`\n- 剩余可再开出库单的数量是仍挂在订单上的预占 4\n\n不能在第一张仍是 `PENDING_PICKING` 时再开一张也计划 10 的出库单。取消未完成出库单后，计划占用释放，预占仍在销售订单上。\n\n拣货记录是追加的。计划 5 件时先拣 3、再拣 2，累计 `picked_quantity` 为 5。确认出库按累计拣货数量扣库存，不按每条拣货记录再扣一次。超过计划返回 `OUTBOUND_PICK_EXCEEDS_PLAN`。\n\n## 仓库停用与客户停用\n\n创建或确认销售订单时，仓库必须 `ACTIVE`。停用仓失败：HTTP 业务码 `40097`，`data.error = WAREHOUSE_DISABLED`，中文「只能使用启用中的仓库」。客户停用是另一条路径：`CUSTOMER_DISABLED`。客户已被引用不能删除，只能停用：`CUSTOMER_IN_USE`。\n\n物流发货阶段的超额是 `SHIPMENT_EXCEEDS_OUTBOUND`，发生在 `shipped_quantity` 将要超过 `outbound_quantity` 时。那时库存早已在出库确认时扣过，发货接口不再碰 `Inventory`。详细状态见物流与盘点文档。\n\n## 确认失败必须整单回滚"
+  },
+  {
+    "id": 72,
+    "document_id": 38,
+    "filename": "01-sales-outbound.md",
+    "chunk_index": 10,
+    "char_count": 541,
+    "heading": "销售订单与出库履约",
+    "content": "## 确认失败必须整单回滚\n\n订单含 SKU-A × 8 和 SKU-B × 5。仓内 A 可用 20、B 可用 3。确认时按 `sku_id` 排序预占。B 可用不足时，A 即使已经在本事务里预占成功，也会随事务回滚。接口返回 `INSUFFICIENT_AVAILABLE_INVENTORY`。订单仍停在 `PENDING_CONFIRMATION`，没有出库单，流水里不应留下半截 `RESERVE`。\n\n这与出库确认失败相同：拣货已记录但确认出库发现预占不足时，不能只扣一部分 SKU。出库超额码是 `OUTBOUND_EXCEEDS_RESERVED`，不要写成库存释放码 `INSUFFICIENT_RESERVED_INVENTORY`。\n\n`WAITING_OUTBOUND` 整单取消会释放预占。`PARTIALLY_OUTBOUND` 不能走这条取消。已经出库的 6 件若要回来，只能开售后，不能把订单状态改回待出库。\n\n出库确认权限是 `outbound:confirm`。库存目录里的 `inventory:outbound` 是预留编码，业务确认出库不要求操作人同时拥有它。手动库存调整走 `inventory:adjust`，与出库确认不是同一条路径。"
+  },
+  {
+    "id": 73,
+    "document_id": 39,
+    "filename": "02-purchase-receipt-return.md",
+    "chunk_index": 0,
+    "char_count": 799,
+    "heading": "采购、收货与采购退货",
+    "content": "# 采购、收货与采购退货\n\n采购单是计划，收货单是仓库实际收到多少，采购退货是收货之后把货退给供应商。三张单据独立，确认收货才增加 `quantity`，确认采购退货出库才减少 `quantity`。审核通过不改库存。\n\n## 采购单状态机\n\n`PurchaseOrderStatus` 只能经提交、审核、收货、取消流转，不要直接改 `status` 列。\n\n| 状态 | 英文标识 | 含义 | 库存 |\n| --- | --- | --- | --- |\n| 草稿 | `DRAFT` | 可改供应商、仓库和明细；可提交审核或取消 | 未入库 |\n| 待审核 | `PENDING_APPROVAL` | 可批准进入待收货、驳回，或取消 | 未入库 |\n| 待收货 | `WAITING_RECEIPT` | 审核已通过，等待收货入库。可部分收货或一次收完；本版本不可取消 | 仍未入库 |\n| 部分收货 | `PARTIALLY_RECEIVED` | 已有收货单入库，但仍有未收完的明细 | 已部分入库 |\n| 已收货 | `RECEIVED` | 全部明细收齐。终态 | 已入库 |\n| 已驳回 | `REJECTED` | 可改单后重新提交，或取消 | 未入库 |\n| 已取消 | `CANCELLED` | 终态 | 未入库 |\n\n批准同事务直达待收货，**无单独 `APPROVED`**。采购单批准和销售订单确认不是同一件事：采购批准不增加库存，销售确认才预占库存。\n\n权限：`purchase:read/create/update/submit/audit/cancel`。供应商是独立资源，使用 `supplier:*`，不要把供应商权限写进采购单接口凑数。\n\n采购单号：`PO` + 年份 + 6 位 id，租户内唯一。仓库和供应商必须属于同一租户，复合外键拒绝跨企业挂载。"
+  },
+  {
+    "id": 74,
+    "document_id": 39,
+    "filename": "02-purchase-receipt-return.md",
+    "chunk_index": 1,
+    "char_count": 714,
+    "heading": "采购、收货与采购退货",
+    "content": "采购单号：`PO` + 年份 + 6 位 id，租户内唯一。仓库和供应商必须属于同一租户，复合外键拒绝跨企业挂载。\n\n## 收货单\n\n只有 `WAITING_RECEIPT` 和 `PARTIALLY_RECEIVED` 能创建收货单。仓库必须是采购单上的仓库，不能在收货时换成别的仓。\n\n`PurchaseReceiptStatus`：\n\n| 状态 | 英文标识 | 能否改数量 | 库存 |\n| --- | --- | --- | --- |\n| 草稿 | `DRAFT` | 可以，也可作废 | 不改 |\n| 已确认 | `CONFIRMED` | 不能再改、不能取消 | 已增加 `quantity` |\n| 已作废 | `CANCELLED` | 不能再确认 | 不改 |\n\n收货单号：`PR` + 年份 + 6 位 id。权限：`purchase:receipt:read/create/update/confirm/cancel`。业务确认不要求再同时拥有 `inventory:inbound`。\n\n不能在前端直接改 `PurchaseOrderItem.received_quantity`。已收数量只在确认收货的同一事务里更新。\n\n## 部分收货与超额\n\n采购 SKU-A × 100。第一次实收 60：明细 `received_quantity` 从 0 变成 60，采购单进入 `PARTIALLY_RECEIVED`。第二次再收 40：`received_quantity = 100`，采购单进入 `RECEIVED`。一次收满则从 `WAITING_RECEIPT` 直接到 `RECEIVED`。"
+  },
+  {
+    "id": 75,
+    "document_id": 39,
+    "filename": "02-purchase-receipt-return.md",
+    "chunk_index": 2,
+    "char_count": 702,
+    "heading": "采购、收货与采购退货",
+    "content": "累计已收不能超过采购数量。两张草稿各收 60、同时确认时，会锁采购明细重新读已收数量，只有一张能成功。超额时 `error` 为 `PURCHASE_RECEIPT_EXCEEDS_REMAINING`。\n\n重复确认已入库的收货单返回 `PURCHASE_RECEIPT_ALREADY_CONFIRMED`，库存只加一次。\n\n## 确认收货时库存怎么变\n\n当前实际 100、预占 30、可用 70。采购入库 50：\n\n```text\nquantity 100 → 150\nreserved 30 → 30\navailable 70 → 120\n```\n\n入库的是新到的货，不是把已经卖出预占的货还回去，所以 `reserved_quantity` 不动。确认时只加 `quantity`，不改 `reserved`。确认逻辑不自己 `commit`，由调用方与采购进度同一事务提交。\n\n流水：`type=INBOUND`，`change_quantity` 为正，`reference_type=PURCHASE_RECEIPT`。\n\n仓库 + SKU 还没有库存行时，确认收货会创建 `quantity=实收`、`reserved=0`。创建使用保存点：先插入，若撞上 `UNIQUE(tenant_id, warehouse_id, sku_id)` 就回滚保存点，再走增加数量。不能只靠「先 SELECT 没有再 INSERT」，两个请求会同时认为不存在。\n\n草稿收货单不入库。这与销售订单确认不同：销售确认写的是预占，采购收货确认增加的是 `quantity`。\n\n## 采购退货是独立逆向领域"
+  },
+  {
+    "id": 76,
+    "document_id": 39,
+    "filename": "02-purchase-receipt-return.md",
+    "chunk_index": 3,
+    "char_count": 669,
+    "heading": "采购、收货与采购退货",
+    "content": "草稿收货单不入库。这与销售订单确认不同：销售确认写的是预占，采购收货确认增加的是 `quantity`。\n\n## 采购退货是独立逆向领域\n\n采购退货不修改原 `PurchaseOrderItem.quantity` / `received_quantity`，也不把已收货采购单改回其他收货状态。`quantity` 是当初计划采购多少的事实，`received_quantity` 是后来实际入库多少。退 20 件记在 `PurchaseReturnItem`，原采购明细仍是计划 100、已收 100。\n\n可退数量：\n\n```text\nreturnable_quantity = received_quantity - 有效采购退货占用\n```\n\n上限是已经成功收货入库的数量，不是采购计划数量。计划 100、只收到 60，最多退 60。超过时 `error` 为 `PURCHASE_RETURN_EXCEEDS_RETURNABLE`。\n\n占用状态：`PENDING_APPROVAL`、`WAITING_OUTBOUND`、`PARTIALLY_RETURNED`、`WAITING_REFUND`、`COMPLETED`。`DRAFT` 不占用。`REJECTED` / `CANCELLED` 不占用。审核前按申请数量占用；审核后按批准数量占用。批准数量不能超过申请数量，否则 `APPROVED_RETURN_EXCEEDS_REQUESTED`。\n\n## 采购退货状态机\n\n`PurchaseReturnStatus`："
+  },
+  {
+    "id": 77,
+    "document_id": 39,
+    "filename": "02-purchase-receipt-return.md",
+    "chunk_index": 4,
+    "char_count": 708,
+    "heading": "采购、收货与采购退货",
+    "content": "## 采购退货状态机\n\n`PurchaseReturnStatus`：\n\n```text\nDRAFT → PENDING_APPROVAL → WAITING_OUTBOUND → PARTIALLY_RETURNED / WAITING_REFUND / COMPLETED\n                          ↘ REJECTED\nDRAFT / PENDING_APPROVAL → CANCELLED\n```\n\n审核通过不保留 `APPROVED`：同事务进入 `WAITING_OUTBOUND`。这里的 `WAITING_OUTBOUND` 表示等待把货退给供应商，不是销售订单确认后的待出库。两个英文标识相同，业务对象不同。\n\n结算类型 `PurchaseReturnSettlementType`：\n\n| 类型 | 英文标识 | 全部出库后 |\n| --- | --- | --- |\n| 需要供应商退款 | `REFUND` | 进入 `WAITING_REFUND` |\n| 只退货 | `NO_REFUND` | 直接 `COMPLETED`，`refund_status=NONE` |\n\n单号：采购退货 `PRT`，退货出库 `PRO`，供应商退款 `SRF`，均为年份 + 6 位 id。\n\n权限：`purchase_return:read/create/update/submit/approve/reject/cancel/outbound` 与 `supplier_refund:read/create/confirm`。\n\n## 退供应商只能动 available"
+  },
+  {
+    "id": 78,
+    "document_id": 39,
+    "filename": "02-purchase-receipt-return.md",
+    "chunk_index": 5,
+    "char_count": 783,
+    "heading": "采购、收货与采购退货",
+    "content": "## 退供应商只能动 available\n\n采购退货没有销售预占。账面 100、预占 60、可用 40 时，最多退 40。那 60 已经承诺给客户，采购退货不能释放销售订单预占。可用不足必须失败，错误码是 `INSUFFICIENT_AVAILABLE_INVENTORY`，与销售确认不足是同一码，原因都是「只能动可用库存」。\n\n确认出库后：\n\n```text\nquantity 100 → 80\nreserved 30 → 30\navailable 70 → 50\n```\n\n流水：`type=PURCHASE_RETURN_OUTBOUND`，`change_quantity` 为负，`reference_type=PURCHASE_RETURN`。复用 `InventoryService.deduct_available_within_transaction`。\n\n采购退货单回答「计划退多少」。退货出库单回答「这次仓库实际退走多少」。批准 10、第一次出库 6、第二次 4，各有独立 `purchase_return_outbounds` 记录。草稿出库不改库存。确认出库才扣减。未确认可取消。本次出库超过剩余批准量时，`error` 为 `PURCHASE_RETURN_OUTBOUND_EXCEEDS_REMAINING`。\n\n## 供应商退款\n\n`settlement_type=REFUND` 时，全部批准数量出库后进入 `WAITING_REFUND`。每一次尝试是 `supplier_refund_records` 里的一行。失败后新建，不能覆盖失败历史。确认退款不修改库存。超过批准金额时 `error` 为 `SUPPLIER_REFUND_EXCEEDS_APPROVED`。\n\n本版只做 ERP 内人工确认，不接银行或应付结算。"
+  },
+  {
+    "id": 79,
+    "document_id": 39,
+    "filename": "02-purchase-receipt-return.md",
+    "chunk_index": 6,
+    "char_count": 791,
+    "heading": "采购、收货与采购退货",
+    "content": "本版只做 ERP 内人工确认，不接银行或应付结算。\n\n## 和销售链路不要合成一句\n\n| 动作 | 是否改 `quantity` | 是否改 `reserved_quantity` |\n| --- | --- | --- |\n| 采购批准 | 否 | 否 |\n| 采购收货确认 | 增加 | 否 |\n| 采购退货出库确认 | 减少 | 否 |\n| 销售订单确认 | 否 | 增加 |\n| 销售出库确认 | 减少 | 减少 |\n\n「确认」在采购收货、采购退货出库、销售订单上的库存效果不同，不能写成一条通用规则。\n\n## 采购单字段与审核\n\n`expected_arrival_date` 可空。`remark` 最长 255。提交后记录 `submitted_at`。批准记录 `approved_at` / `approved_by`。驳回记录 `rejected_at` / `rejected_by` / `reject_reason`。取消记录 `cancelled_at` / `cancelled_by` / `cancel_reason`。\n\n`WAITING_RECEIPT` 本版本不可取消：审核已通过，仓库可能已经按这张单准备收货。要退供应商必须走采购退货，不能把待收货单直接改回取消。\n\n`REJECTED` 可改单后重新提交。改单仍只动采购单自己的表，不碰库存。没有单独的「撤回提交」动作把 `PENDING_APPROVAL` 退回 `DRAFT`。\n\n不要开放 `PATCH status`。批准不是把状态写成一个不存在的 `APPROVED` 再另一步变待收货。\n\n## 收货单明细\n\n收货单仓库在创建时从采购单拷贝，确认时再次校验仍是同一仓。明细 `received_quantity` 是本次实收，不是采购累计。累计写在采购明细上，由确认事务更新。"
+  },
+  {
+    "id": 80,
+    "document_id": 39,
+    "filename": "02-purchase-receipt-return.md",
+    "chunk_index": 7,
+    "char_count": 742,
+    "heading": "采购、收货与采购退货",
+    "content": "## 收货单明细\n\n收货单仓库在创建时从采购单拷贝，确认时再次校验仍是同一仓。明细 `received_quantity` 是本次实收，不是采购累计。累计写在采购明细上，由确认事务更新。\n\n收货草稿可以改本次数量或作废。作废后不能再确认。已确认不能取消，退货必须另开采购退货单。这与销售出库已确认不能取消、退货走售后是同一类边界：正向确认一旦改了库存，逆向用独立单据。\n\n确认收货时锁采购明细，按当前 `received_quantity` 计算剩余可收，再累加本次实收。并发两张收货单抢最后 40 件时，只有一张能把采购单推到 `RECEIVED`。\n\n## 采购退货占用与出库拆分\n\n草稿不占用可退数量，所以同一采购单上可以同时存在多张退货草稿。一旦提交进入 `PENDING_APPROVAL`，申请数量开始占用。审核通过后改按批准数量占用。\n\n退货出库单是另一张表。不能只改采购退货明细上的累计出库字段而丢掉「第一次退 6、第二次退 4」的过程。未确认的退货出库占用剩余批准量，确认后才扣 `Inventory.quantity`。\n\n`NO_REFUND` 在全部批准数量出库后直接完成。`REFUND` 必须再走供应商退款记录。确认供应商退款不回补库存；货已经退走。\n\n## 采购单与供应商\n\n供应商是独立主数据，权限 `supplier:*`。采购单上的供应商和仓库必须属于同一租户，复合外键拒绝跨企业挂载。停用供应商后不能再创建指向它的新采购单；历史采购单仍保存当时的供应商 id。\n\n采购明细同一采购单同一 SKU 通常一行。数量必须大于 0。已收数量不能在页面上直接改，只能通过确认收货累加。采购计划数量在收货后也不因采购退货而回写。\n\n## 收货确认的幂等与并发"
+  },
+  {
+    "id": 81,
+    "document_id": 39,
+    "filename": "02-purchase-receipt-return.md",
+    "chunk_index": 8,
+    "char_count": 758,
+    "heading": "采购、收货与采购退货",
+    "content": "采购明细同一采购单同一 SKU 通常一行。数量必须大于 0。已收数量不能在页面上直接改，只能通过确认收货累加。采购计划数量在收货后也不因采购退货而回写。\n\n## 收货确认的幂等与并发\n\n已确认收货单再次确认：`PURCHASE_RECEIPT_ALREADY_CONFIRMED`，`quantity` 只加一次。两张草稿同时抢最后 40 件：锁采购明细后重新读 `received_quantity`，超额的那张得到 `PURCHASE_RECEIPT_EXCEEDS_REMAINING`。\n\n仓库 + SKU 尚无库存行时，确认收货会插入新行。插入使用保存点：撞上 `UNIQUE(tenant_id, warehouse_id, sku_id)` 只回滚保存点，再走增加数量。两个收货请求同时为新 SKU 建行时，不能先 SELECT 判断不存在再 INSERT。\n\n采购退货出库超额是 `PURCHASE_RETURN_OUTBOUND_EXCEEDS_REMAINING`。它限制的是「这次退走多少不能超过剩余批准量」，不是收货剩余，也不是销售出库预占。\n\n## 待收货不能当销售待出库取消\n\n销售 `WAITING_OUTBOUND` 可以整单取消并释放预占。采购 `WAITING_RECEIPT` 本版本不可取消。两个状态都表示「下一步是仓库动作」，取消规则相反。\n\n原因：采购批准不预占、不扣库存，但仓库可能已经按这张单准备收货；要退供应商必须等货入过库再走采购退货。销售待出库则已经预占，取消是把还没发出的承诺还回去。\n\n因此「待收货能不能取消」的证据应落在采购文档，而不是销售取消章节。把两个 `WAITING_*` 拼成一句「等待仓库时都可以取消」是错误结论。\n\n## 供应商退款与客户退款"
+  },
+  {
+    "id": 82,
+    "document_id": 39,
+    "filename": "02-purchase-receipt-return.md",
+    "chunk_index": 9,
+    "char_count": 386,
+    "heading": "采购、收货与采购退货",
+    "content": "因此「待收货能不能取消」的证据应落在采购文档，而不是销售取消章节。把两个 `WAITING_*` 拼成一句「等待仓库时都可以取消」是错误结论。\n\n## 供应商退款与客户退款\n\n供应商退款记录挂在采购退货上，单号前缀 `SRF`。权限 `supplier_refund:read/create/confirm`。`supplier_refund:confirm` 属于 ERP 高风险集合，回源 IAM。客户退款权限是 `refund:confirm`，也是高风险，但是另一条码。\n\n超额码：供应商 `SUPPLIER_REFUND_EXCEEDS_APPROVED`，客户 `REFUND_EXCEEDS_APPROVED`。两者都是「超过批准剩余」，单据不同。失败后新建一行，不覆盖失败历史。确认退款无论客户还是供应商都不回补 `Inventory.quantity`。"
+  },
+  {
+    "id": 83,
+    "document_id": 40,
+    "filename": "03-inventory-reserve-transfer.md",
+    "chunk_index": 0,
+    "char_count": 728,
+    "heading": "库存、预占、释放与调拨",
+    "content": "# 库存、预占、释放与调拨\n\n库存维度是 `Tenant + Warehouse + SKU`，不是 SKU 单独一个数字。同一 SKU 在深圳仓、广州仓可以有完全不同的数量。唯一约束是 `UNIQUE(tenant_id, warehouse_id, sku_id)`。\n\n## 三个数量\n\n| 字段 | 存库 | 含义 |\n| --- | --- | --- |\n| `quantity` | 是 | 实际账面库存，货还在仓里的数字 |\n| `reserved_quantity` | 是 | 已被业务预占、尚未正式出库 |\n| `available_quantity` | 否 | `quantity - reserved_quantity`，查询时计算 |\n\n不把可用库存存成第三列，避免三个数字互相打架。数据库 CHECK 与 Service 双重校验：\n\n- `quantity >= 0`\n- `reserved_quantity >= 0`\n- `reserved_quantity <= quantity`\n\nMySQL 8.0.16+ 会执行 CHECK。即便如此，业务校验仍必须做。\n\n## 台账与流水\n\n`Inventory` 是当前状态。`InventoryTransaction` 是变化历史，只追加，普通业务不允许改或删。如果盘点把 100 错加到 120，不要改历史，再做一笔调整回到 100。\n\n库存数字和流水必须在同一个事务里提交：锁住或条件更新库存行，修改 `Inventory`，插入流水，然后提交。任一步失败回滚。不能先提交库存再插流水。\n\n`InventoryTransactionType` 当前已写入的类型："
+  },
+  {
+    "id": 84,
+    "document_id": 40,
+    "filename": "03-inventory-reserve-transfer.md",
+    "chunk_index": 1,
+    "char_count": 746,
+    "heading": "库存、预占、释放与调拨",
+    "content": "库存数字和流水必须在同一个事务里提交：锁住或条件更新库存行，修改 `Inventory`，插入流水，然后提交。任一步失败回滚。不能先提交库存再插流水。\n\n`InventoryTransactionType` 当前已写入的类型：\n\n| 类型 | 英文标识 | 谁写入 |\n| --- | --- | --- |\n| 初始化 | `INITIALIZE` | 库存初始化 |\n| 盘盈 / 盘亏调整 | `ADJUST_IN` / `ADJUST_OUT` | 库存调整 |\n| 预占 / 释放 | `RESERVE` / `RELEASE` | 销售确认 / 取消待出库 |\n| 采购入库 | `INBOUND` | 确认收货 |\n| 销售出库 | `OUTBOUND` | 确认出库 |\n| 盘点调整 | `STOCKTAKE_ADJUSTMENT` | 确认盘点 |\n| 调出 / 调入 | `TRANSFER_OUT` / `TRANSFER_IN` | 调拨确认调出 / 调入 |\n| 销售退货入库 | `RETURN_INBOUND` | 退货确认入库 |\n| 采购退货出库 | `PURCHASE_RETURN_OUTBOUND` | 确认采购退货出库 |\n\n`reserve` / `release` / `deduct_within_transaction` / `inbound_within_transaction` / `apply_delta_within_transaction` / `deduct_available_within_transaction` 由业务 Service 在同一事务里调用。ERP 菜单没有「手动预占」按钮。\n\n## 预占、释放与可用不足"
+  },
+  {
+    "id": 85,
+    "document_id": 40,
+    "filename": "03-inventory-reserve-transfer.md",
+    "chunk_index": 2,
+    "char_count": 727,
+    "heading": "库存、预占、释放与调拨",
+    "content": "## 预占、释放与可用不足\n\n销售订单确认调用预占：可用不足则 `INSUFFICIENT_AVAILABLE_INVENTORY`。待出库整单取消调用释放：释放数量超过 `reserved_quantity` 则 `INSUFFICIENT_RESERVED_INVENTORY`。\n\n两个码都带 `INSUFFICIENT_`，路径不同：\n\n| 错误码 | 典型场景 | 卡住的数字 |\n| --- | --- | --- |\n| `INSUFFICIENT_AVAILABLE_INVENTORY` | 销售确认、调拨调出、采购退货出库、可用不足的调整 | `quantity - reserved` |\n| `INSUFFICIENT_RESERVED_INVENTORY` | 释放预占超过账面预占 | `reserved_quantity` |\n| `OUTBOUND_EXCEEDS_RESERVED` | 销售出库超过该订单已预占 | 订单明细预占 |\n| `STOCKTAKE_CONFLICT_WITH_RESERVED_INVENTORY` | 盘点要把实际库存调到低于现有预占 | `reserved_quantity <= quantity` |\n\n测试 `test_inventory.py` 断言释放超额是 `INSUFFICIENT_RESERVED_INVENTORY`。测试 `test_stocktake.py` 断言盘点冲突是 `STOCKTAKE_CONFLICT_WITH_RESERVED_INVENTORY`。这两个码不能互换，也不能写成出库超额的 `OUTBOUND_EXCEEDS_RESERVED`。"
+  },
+  {
+    "id": 86,
+    "document_id": 40,
+    "filename": "03-inventory-reserve-transfer.md",
+    "chunk_index": 3,
+    "char_count": 602,
+    "heading": "库存、预占、释放与调拨",
+    "content": "库存行带乐观锁 `version`。条件 UPDATE 保证不能让 `quantity < reserved`。明细按 `sku_id` 排序后再处理库存，降低死锁概率。Repository 不自行 commit。\n\n## 盘点\n\n`StocktakeOrderStatus`：创建后本版直接进入 `COUNTING`（`DRAFT` 保留给以后「先建任务再开始」）→ `PENDING_CONFIRMATION` → `CONFIRMED`。确认前可取消。\n\n盘点中可填写实盘数量；不锁库存行，避免盘点持续几小时占着数据库锁。创建时只拍账面快照，确认时才按差异调整 `Inventory`，流水类型 `STOCKTAKE_ADJUSTMENT`。\n\n范围：`ALL` 或 `SELECTED_SKU`。权限：`stocktake:read/create/update/submit/confirm/cancel`。\n\n确认后如果调整结果会打破 `reserved_quantity <= quantity`，失败码是 `STOCKTAKE_CONFLICT_WITH_RESERVED_INVENTORY`。盘点不能悄悄释放销售预占。\n\n## 调拨状态机\n\n调拨是同一租户两个启用仓库之间移动库存。不支持跨租户；跨公司应走采购或销售。源仓不能等于目标仓。\n\n`StockTransferStatus`："
+  },
+  {
+    "id": 87,
+    "document_id": 40,
+    "filename": "03-inventory-reserve-transfer.md",
+    "chunk_index": 4,
+    "char_count": 681,
+    "heading": "库存、预占、释放与调拨",
+    "content": "## 调拨状态机\n\n调拨是同一租户两个启用仓库之间移动库存。不支持跨租户；跨公司应走采购或销售。源仓不能等于目标仓。\n\n`StockTransferStatus`：\n\n| 状态 | 英文标识 | 库存 | 能否普通取消 |\n| --- | --- | --- | --- |\n| 草稿 | `DRAFT` | 不改。库存不足也可以先保存 | 可以 |\n| 待调出 | `PENDING_OUTBOUND` | 核心字段锁定；确认调出才扣源仓 | 可以 |\n| 在途 | `IN_TRANSIT` | 源仓已扣，目标仓尚未增加 | 不能 |\n| 已完成 | `COMPLETED` | 目标仓已增加 | 终态 |\n| 已取消 | `CANCELLED` | 仅草稿和待调出 | 终态 |\n\n提交调拨：`DRAFT` → `PENDING_OUTBOUND`。代码注释写明仍然不改库存。因此调拨草稿和调拨提交都还没有改库存数量。不要把它说成确认销售订单那样的预占。\n\n确认调出：源仓 `quantity` 减少，写 `TRANSFER_OUT`。目标仓不变。货物已离开源仓，尚未进入目标仓。第一版不建独立 `inventory_in_transit` 表，用 `IN_TRANSIT` + `outbound_quantity` 表示。\n\n确认调入：目标仓 `quantity` 增加，写 `TRANSFER_IN`。`received_quantity` 默认等于 `outbound_quantity`，暂不处理运输损耗。在途后不能普通取消；撤回应创建反向调拨。"
+  },
+  {
+    "id": 88,
+    "document_id": 40,
+    "filename": "03-inventory-reserve-transfer.md",
+    "chunk_index": 5,
+    "char_count": 750,
+    "heading": "库存、预占、释放与调拨",
+    "content": "确认调入：目标仓 `quantity` 增加，写 `TRANSFER_IN`。`received_quantity` 默认等于 `outbound_quantity`，暂不处理运输损耗。在途后不能普通取消；撤回应创建反向调拨。\n\n调拨单号：`TR` + 年份 + 6 位 id。权限：`stock_transfer:read/create/update/submit/outbound/receive/cancel`。调出和调入单独授权。不要开放 `PATCH status`。\n\n## 调拨只能动 available\n\n账面 100、预占 80、可用 20。那 80 已经卖给销售订单。最多只能调 20。调拨不能释放源仓预占，也不能给目标仓增加预占。\n\n确认调出使用 `InventoryService.deduct_available_within_transaction`：条件 UPDATE 要求 `quantity - reserved >= 调拨数量`。不足时仍是 `INSUFFICIENT_AVAILABLE_INVENTORY`。测试 `test_stock_transfer.py` 断言该码。\n\n目标仓第一次调入某 SKU 时，复用收货入库的安全创建：先插入 `quantity=0`，撞上唯一约束只回滚保存点，再增加数量。\n\n重复确认调出 → `STOCK_TRANSFER_ALREADY_OUTBOUND`。重复确认调入 → `STOCK_TRANSFER_ALREADY_RECEIVED`。\n\n调出：调拨单、明细、源仓库存、`TRANSFER_OUT` 流水同一事务。任一 SKU 不足整单回滚。调入同理。\n\n## `PENDING_OUTBOUND` 不是销售待出库"
+  },
+  {
+    "id": 89,
+    "document_id": 40,
+    "filename": "03-inventory-reserve-transfer.md",
+    "chunk_index": 6,
+    "char_count": 462,
+    "heading": "库存、预占、释放与调拨",
+    "content": "调出：调拨单、明细、源仓库存、`TRANSFER_OUT` 流水同一事务。任一 SKU 不足整单回滚。调入同理。\n\n## `PENDING_OUTBOUND` 不是销售待出库\n\n销售订单确认后的待出库英文是 `WAITING_OUTBOUND`，此时已经预占。调拨提交后的待调出英文是 `PENDING_OUTBOUND`，此时尚未扣库存。采购退货审核通过后也进入名为 `WAITING_OUTBOUND` 的状态，那是等待退给供应商，同样还没有扣库存，扣减发生在确认采购退货出库。\n\n三个「等待出库」不能共用一条库存规则。\n\n## 初始化与调整权限\n\n`inventory:read` 查看台账。`inventory:initialize` 初始化。`inventory:adjust` 调整。`inventory:transaction:read` 看流水。`inventory:inbound` / `inventory:outbound` 是预留编码，收货和销售出库的业务确认不要求再同时拥有它们。\n\n## 流水字段"
+  },
+  {
+    "id": 90,
+    "document_id": 40,
+    "filename": "03-inventory-reserve-transfer.md",
+    "chunk_index": 7,
+    "char_count": 786,
+    "heading": "库存、预占、释放与调拨",
+    "content": "## 流水字段\n\n| 列 | 含义 |\n| --- | --- |\n| `type` | `InventoryTransactionType` |\n| `change_quantity` | 实际库存变化；预占和释放为 0 |\n| `before_quantity` / `after_quantity` | 变化前后实际库存 |\n| `before_reserved_quantity` / `after_reserved_quantity` | 变化前后预占 |\n| `reference_type` / `reference_id` | 关联单据 |\n| `remark` | 备注，销售预占会写订单号 |\n| `operator_user_id` | 操作人，用户删除后 SET NULL |\n| `created_at` | 流水时间，无 `updated_at` |\n\n预占：`change_quantity = 0`，`after_reserved` 增加。释放相反。销售出库：`change_quantity` 为负，实际和预占同时下降。采购入库：`change_quantity` 为正，预占前后相等。\n\n## 仓库与 SKU 必须启用\n\n库存行挂在启用中的仓库和有效 SKU 上。停用仓库后不能再对该仓做入库、出库、调拨、盘点确认等改库存动作。查询历史台账仍按 `tenant_id + warehouse_id + sku_id` 读，不因为仓库停用而删除行。\n\n初始化给某仓某 SKU 写第一笔 `quantity`，流水 `INITIALIZE`。调整用 `ADJUST_IN` / `ADJUST_OUT`。调整同样不能打破 `reserved_quantity <= quantity`，也不能把可用调成负数。\n\n## 调拨提交之后还能改什么"
+  },
+  {
+    "id": 91,
+    "document_id": 40,
+    "filename": "03-inventory-reserve-transfer.md",
+    "chunk_index": 8,
+    "char_count": 668,
+    "heading": "库存、预占、释放与调拨",
+    "content": "## 调拨提交之后还能改什么\n\n`PENDING_OUTBOUND` 锁定核心字段：源仓、目标仓、明细数量。备注类字段是否可改以当前 Service 为准，库存一定还没动。确认调出后进入 `IN_TRANSIT`，源仓 `quantity` 已减少，目标仓仍没有这批货。此时账面总和小于调出前，差额就是在途。第一版用状态和 `outbound_quantity` 表达在途，不另建在途表。\n\n确认调入默认按调出数量加到目标仓。本版不在调入时填损耗。若实际少到，需要后续用库存调整或反向调拨处理，不要在本调拨单上改写已发生的 `TRANSFER_OUT`。\n\n## 条件 UPDATE 与乐观锁\n\n预占、扣可用、出库扣减都用带条件的 UPDATE，看 `rowcount`。可用不足时 `rowcount = 0`，对应 `INSUFFICIENT_AVAILABLE_INVENTORY`。不要先读出数字再在 Python 里相减后写回：两个请求会读到同一快照。\n\n库存行有 `version`。条件失败时整单回滚。明细按 `sku_id` 排序后再锁，降低销售出库、调拨调出、采购退货出库交叉锁的死锁概率。Repository 不自行 commit，由调用方业务事务提交。\n\n## 盘点差异加在当前账面\n\n盘点确认走 `apply_delta_within_transaction`。创建时的 `system_quantity` 只用于计算差异，不用于覆盖当前 `quantity`。期间若采购入库已经加过库存，确认盘点仍只加减差异。"
+  },
+  {
+    "id": 92,
+    "document_id": 40,
+    "filename": "03-inventory-reserve-transfer.md",
+    "chunk_index": 9,
+    "char_count": 741,
+    "heading": "库存、预占、释放与调拨",
+    "content": "盘点确认走 `apply_delta_within_transaction`。创建时的 `system_quantity` 只用于计算差异，不用于覆盖当前 `quantity`。期间若采购入库已经加过库存，确认盘点仍只加减差异。\n\n盘亏后如果 `quantity` 将低于 `reserved_quantity`，失败码是 `STOCKTAKE_CONFLICT_WITH_RESERVED_INVENTORY`，不是释放路径的 `INSUFFICIENT_RESERVED_INVENTORY`。盘点文档与物流文档展开状态机；库存文档只保留与三个数量有关的约束。\n\n调拨源仓与目标仓都必须启用。停用仓调拨失败业务码 `40097`，中文「只能使用启用中的仓库调拨」。这与销售订单 `WAREHOUSE_DISABLED` 是同一类仓库启用校验，但是否带 `data.error` 以各 Service 为准。\n\n## 在途之后只能反向调拨\n\n重复确认调出：`STOCK_TRANSFER_ALREADY_OUTBOUND`。重复确认调入：`STOCK_TRANSFER_ALREADY_RECEIVED`。进入 `IN_TRANSIT` 后不能普通取消，因为源仓 `quantity` 已减少。要把货调回去，应新建一张方向相反的调拨单，而不是改写已发生的 `TRANSFER_OUT`。\n\n调拨确认调出失败时整单回滚，源仓数字不变。可用 20、明细却写 30，错误码仍是 `INSUFFICIENT_AVAILABLE_INVENTORY`。不要把它解释成销售出库超额：调拨从未预占过这 30 件。\n\n源仓等于目标仓必须拒绝。跨租户没有调拨接口。跨公司应走销售或采购，而不是调拨。"
+  },
+  {
+    "id": 93,
+    "document_id": 40,
+    "filename": "03-inventory-reserve-transfer.md",
+    "chunk_index": 10,
+    "char_count": 215,
+    "heading": "库存、预占、释放与调拨",
+    "content": "源仓等于目标仓必须拒绝。跨租户没有调拨接口。跨公司应走销售或采购，而不是调拨。\n\n调拨单号前缀 `TR`。权限拆开：`stock_transfer:submit` 只进入 `PENDING_OUTBOUND`，`stock_transfer:outbound` 才扣源仓，`stock_transfer:receive` 才加目标仓。不要用销售的 `order:audit` 或 `outbound:confirm` 去描述调拨。"
+  },
+  {
+    "id": 94,
+    "document_id": 41,
+    "filename": "04-after-sale-refund.md",
+    "chunk_index": 0,
+    "char_count": 748,
+    "heading": "销售售后、退货入库与退款",
+    "content": "# 销售售后、退货入库与退款\n\n售后是独立领域，不改 `SalesOrderItem.quantity`，也不回退销售履约状态。客户买 10 件、后来退 3 件，历史购买数量仍是 10。本次售后记在 `AfterSaleItem.return_quantity`，原购买数量快照在 `original_quantity`。\n\n正向销售订单仍然是：订单 → 预占 → 出库 → 发货 → 签收 → 完成。售后挂在旁边。\n\n## 三种类型\n\n`AfterSaleType`：\n\n| 类型 | 英文标识 | 审核后 | 是否改库存 | 是否退款 |\n| --- | --- | --- | --- | --- |\n| 仅退款 | `REFUND_ONLY` | 进入待退款 | 否 | 是 |\n| 退货并退款 | `RETURN_AND_REFUND` | 生成退货单 | 入库时 `GOOD` 增加 `quantity` | 退货处理完成后再退款 |\n| 只回收商品 | `RETURN_ONLY` | 生成退货单 | 同上 | 否 |\n\n不要把退款和退货当成一件事。少量补偿走 `REFUND_ONLY`。换货重新发货本版不做。\n\n## 哪些订单可以申请\n\n只允许已经产生实际履约的销售订单：\n\n`PARTIALLY_OUTBOUND` / `OUTBOUNDED` / `PARTIALLY_SHIPPED` / `SHIPPED` / `COMPLETED`\n\n`DRAFT` / `PENDING_CONFIRMATION` / `WAITING_OUTBOUND` 应取消订单、释放预占，不能创建退货售后。尚未出库的货还在预占里，正确动作是取消销售订单，不是开售后。\n\n## 可退数量与并发"
+  },
+  {
+    "id": 95,
+    "document_id": 41,
+    "filename": "04-after-sale-refund.md",
+    "chunk_index": 1,
+    "char_count": 700,
+    "heading": "销售售后、退货入库与退款",
+    "content": "`DRAFT` / `PENDING_CONFIRMATION` / `WAITING_OUTBOUND` 应取消订单、释放预占，不能创建退货售后。尚未出库的货还在预占里，正确动作是取消销售订单，不是开售后。\n\n## 可退数量与并发\n\n```text\nreturnable_quantity = outbound_quantity - 有效售后已占用数量\n```\n\n上限是已经正式出库的数量，不是购买数量，也不是 `reserved_quantity`。只出库 6 件，最多退 6。超过时 `error` 为 `AFTER_SALE_EXCEEDS_RETURNABLE`。测试 `test_after_sales.py` 断言该码。\n\n占用状态：`PENDING_APPROVAL`、`WAITING_RETURN`、`WAITING_REFUND`、`COMPLETED`。拒绝或取消后释放。待审核就占用，避免两张单同时各退 8、订单只有 10。\n\n审核前按申请数量占用；审核后按批准数量占用。批准数量或金额超过申请时，`error` 为 `AFTER_SALE_APPROVED_EXCEEDS_REQUESTED`。\n\n`create_after_sale()` 先锁销售订单，再按 `sku_id` 稳定顺序 `SELECT FOR UPDATE` 相关 `SalesOrderItem`，重新汇总有效售后占用，再判断 `existing + requested <= outbound_quantity`。两个请求同时退 8 只能成功一个。创建售后不改库存、不改原销售明细。\n\n## 金额"
+  },
+  {
+    "id": 96,
+    "document_id": 41,
+    "filename": "04-after-sale-refund.md",
+    "chunk_index": 2,
+    "char_count": 707,
+    "heading": "销售售后、退货入库与退款",
+    "content": "## 金额\n\n没有复杂优惠分摊。可退金额约等于 `outbound_quantity × unit_price`，再减去有效售后已占用金额。币种沿用 `SalesOrder.currency_code`，售后单保存快照，不允许改币种。超过可退金额时 `error` 为 `AFTER_SALE_EXCEEDS_REFUNDABLE`。\n\n申请金额 `requested_refund_amount`；审核金额 `approved_refund_amount` 可以更小，不能更大。真正退款不能超过批准剩余，否则 `REFUND_EXCEEDS_APPROVED`。\n\n售后单号：`AS` + 年份 + 6 位 id。权限：`after_sale:read/create/approve/reject/cancel`。\n\n## 售后状态机\n\n`AfterSaleStatus`：`PENDING_APPROVAL` / `REJECTED` / `WAITING_RETURN` / `WAITING_REFUND` / `COMPLETED` / `CANCELLED`。\n\n仅退款：`PENDING_APPROVAL` → `WAITING_REFUND` → `COMPLETED`（拒绝或取消可离开待审核）。\n\n退货退款：`PENDING_APPROVAL` → `WAITING_RETURN` →（收货入库）→ `WAITING_REFUND` → `COMPLETED`。\n\n仅退货：`PENDING_APPROVAL` → `WAITING_RETURN` →（收货入库）→ `COMPLETED`。"
+  },
+  {
+    "id": 97,
+    "document_id": 41,
+    "filename": "04-after-sale-refund.md",
+    "chunk_index": 3,
+    "char_count": 791,
+    "heading": "销售售后、退货入库与退款",
+    "content": "仅退货：`PENDING_APPROVAL` → `WAITING_RETURN` →（收货入库）→ `COMPLETED`。\n\n`refund_status` 是汇总：`NONE` / `PENDING` / `SUCCESS`。`FAILED` 记在 `RefundRecord` 上，售后仍保持待退款，不把汇总改成失败终态。\n\n## 退货单：收到不等于入库\n\n需要退货的售后在审核通过时创建退货单。一张售后对应一张退货单，唯一约束在 `(tenant_id, after_sale_order_id)`。\n\n退货单号：`RT` + 年份 + 6 位 id。必须选择当前租户的启用仓库，可以和原履约仓不同，不能跨租户。停用仓会失败，错误码 `40097`。\n\n`ReturnOrderStatus`：`WAITING_RETURN` → `PARTIALLY_RECEIVED` / `RECEIVED` → `PARTIALLY_INBOUNDED` / `INBOUNDED`。允许分多次收货。累计 `received_quantity` 不能超过 `expected_quantity`。\n\n权限：`return_order:read/receive/inbound`。\n\n## 质量状态决定能否入普通库存\n\n`ReturnCondition`：\n\n| 值 | 含义 | 是否进入普通 `Inventory.quantity` |\n| --- | --- | --- |\n| `GOOD` | 正常可售 | 可以，`inbound_quantity` 对应已收的良品 |\n| `DAMAGED` | 损坏 | 可记已收，默认不入普通库存 |\n| `UNSELLABLE` | 不可销售 | 不入普通库存 |\n| `OTHER` | 其他 | 同残次品，本版不入普通库存 |"
+  },
+  {
+    "id": 98,
+    "document_id": 41,
+    "filename": "04-after-sale-refund.md",
+    "chunk_index": 4,
+    "char_count": 748,
+    "heading": "销售售后、退货入库与退款",
+    "content": "当前 `Inventory` 只有 `quantity` / `reserved_quantity`，没有残次品台账。V11 不把库存扩成 WMS 多维度。\n\n客户退回的是已经正式出库的商品。原订单预占在确认出库时已经和实际库存一起扣掉。退货回来只补 `quantity`，`reserved_quantity` 不变。如果把 reserved 加回去，会凭空制造待出库库存。\n\n流水：`type=RETURN_INBOUND`，`reference_type=RETURN_ORDER`。\n\n## 退款记录不能覆盖失败历史\n\n`RefundRecord` 是一次具体退款动作。V11 只做 ERP 内人工确认，不接支付宝、微信或 Stripe。第一次失败、第二次成功必须两条记录。\n\n`RefundRecordStatus`：`PENDING` / `SUCCESS` / `FAILED`。权限：`refund:read/create/confirm`。高风险确认退款回源 IAM `internal/authorize`，不是只信 Redis 快照。\n\n`RETURN_ONLY` 不创建退款。`RETURN_AND_REFUND` 必须先完成退货入库，才能进入待退款。\n\n## 和采购退货的相似点\n\n销售售后占用的是已出库数量；采购退货占用的是已收货数量。两者都不改正向单据的计划数量。两者都可能出现「EXCEEDS_RETURNABLE」家族错误码，前缀不同：`AFTER_SALE_EXCEEDS_RETURNABLE` 对客户退货，`PURCHASE_RETURN_EXCEEDS_RETURNABLE` 对供应商退货。检索时命中其中一个不能当成另一个的证据。\n\n## 售后明细占用"
+  },
+  {
+    "id": 99,
+    "document_id": 41,
+    "filename": "04-after-sale-refund.md",
+    "chunk_index": 5,
+    "char_count": 672,
+    "heading": "销售售后、退货入库与退款",
+    "content": "## 售后明细占用\n\n`AfterSaleItem` 保存 `original_quantity` 快照和本次 `return_quantity`。有效占用按 SKU 汇总后与该销售明细的 `outbound_quantity` 比较。审核把申请数量改小时，占用跟着批准数量走，多出来的可退份额立即还给后续售后。\n\n拒绝或取消后占用释放，销售订单履约状态不变。`PARTIALLY_OUTBOUND` 不会因为售后完成而变回 `WAITING_OUTBOUND`。\n\n`AFTER_SALE_REFERENCE` 值为 `AFTER_SALE`。退货入库流水的 `reference_type` 是 `RETURN_ORDER`。退款记录是 `REFUND`。不要把售后单 id 写进库存流水却用错 reference。\n\n## 收货与入库是两步\n\n仓库先把客户退回的货记为实收，再决定哪些以 `GOOD` 入普通库存。实收可以分多次。残次品可以记在 `received_quantity` 里，同时 `inbound_quantity` 保持 0。当前没有残次品仓，残次数量不会出现在 `inventories.quantity` 里。\n\n入库确认只增加目标仓 `quantity`。目标仓可以和原销售履约仓不同，但仍必须是本租户启用仓库。跨租户退货入库没有接口。\n\n退货退款类型必须等退货单到达已入库（所需良品入库完成）后，售后才进入 `WAITING_REFUND`。未入库完成就去确认退款，应被 Service 拒绝。\n\n## 退款尝试"
+  },
+  {
+    "id": 100,
+    "document_id": 41,
+    "filename": "04-after-sale-refund.md",
+    "chunk_index": 6,
+    "char_count": 736,
+    "heading": "销售售后、退货入库与退款",
+    "content": "退货退款类型必须等退货单到达已入库（所需良品入库完成）后，售后才进入 `WAITING_REFUND`。未入库完成就去确认退款，应被 Service 拒绝。\n\n## 退款尝试\n\n`RefundRecord` 有独立 `refund_no`。状态 `PENDING` 表示 ERP 内已登记、等待人工确认外部已退。`SUCCESS` 表示确认成功。`FAILED` 保留失败原因，下一次再插入新行。售后汇总 `refund_status` 在存在未完成或失败尝试时保持 `PENDING`，全部成功后才到 `SUCCESS`。\n\n确认退款是高风险动作，走 IAM `internal/authorize`，权限 `refund:confirm`。\n\n## 三种类型对库存和退款的交叉\n\n| 问题 | `REFUND_ONLY` | `RETURN_AND_REFUND` | `RETURN_ONLY` |\n| --- | --- | --- | --- |\n| 审核通过后 | 待退款 | 生成退货单 `RT` | 生成退货单 `RT` |\n| 是否必须收货入库 | 否 | 是，良品入完才能待退款 | 是，入完即完成 |\n| `Inventory.quantity` | 不变 | 仅 `GOOD` 增加 | 仅 `GOOD` 增加 |\n| `reserved_quantity` | 不变 | 不变 | 不变 |\n| 退款记录 | 需要 | 入库完成后需要 | 不创建 |\n\n尚未出库的订单应取消销售订单。售后占用的是 `outbound_quantity`。因此「买了 10、只出了 6、预占还剩 4」时，最多退 6；那 4 仍应通过取消待出库来释放，而不是开售后。"
+  },
+  {
+    "id": 101,
+    "document_id": 41,
+    "filename": "04-after-sale-refund.md",
+    "chunk_index": 7,
+    "char_count": 661,
+    "heading": "销售售后、退货入库与退款",
+    "content": "尚未出库的订单应取消销售订单。售后占用的是 `outbound_quantity`。因此「买了 10、只出了 6、预占还剩 4」时，最多退 6；那 4 仍应通过取消待出库来释放，而不是开售后。\n\n退货仓停用：售后服务抛出业务码 `40097`，中文「只能退回到启用中的仓库」。销售创建订单时停用仓会带 `WAREHOUSE_DISABLED`。检索「40097」必须看中文消息和 `data.error`，不能把售后退货仓和承运商类型错误当成同一证据。\n\n已 `INBOUNDED` 的退货单再次确认入库必须拒绝，库存不能加两次。`confirm_return_inbound()` 锁退货单，明细按 `sku_id` 排序，`GOOD` 的 `received - inbound` 增量入库，残次品 `inbound_quantity` 保持 0。\n\n## 正向履约状态不被售后改写\n\n客户买 10、出 10、发 10、签收完成后订单是 `COMPLETED`。之后退 3 件：\n\n- 销售明细 `quantity` 仍是 10，`outbound_quantity` 仍是 10，`shipped_quantity` 仍是 10\n- 订单状态仍是 `COMPLETED`\n- 售后单记录退 3；退货入库后目标仓 `quantity` 增加 3（若为 `GOOD`）\n\n不要把完成态销售订单改回 `PARTIALLY_OUTBOUND` 或 `WAITING_OUTBOUND`。详情页可以展示售后列表，那是旁路单据。"
+  },
+  {
+    "id": 102,
+    "document_id": 41,
+    "filename": "04-after-sale-refund.md",
+    "chunk_index": 8,
+    "char_count": 757,
+    "heading": "销售售后、退货入库与退款",
+    "content": "不要把完成态销售订单改回 `PARTIALLY_OUTBOUND` 或 `WAITING_OUTBOUND`。详情页可以展示售后列表，那是旁路单据。\n\n`RETURN_AND_REFUND` 在退货入库完成前不能确认客户退款。`REFUND_ONLY` 不生成 `RT` 单。供应商退款走 `SRF` 记录，权限是 `supplier_refund:confirm`，与客户 `refund:confirm` 不是同一个高风险码。\n\n## 退货单状态不要写成采购收货\n\n`ReturnOrderStatus`：`WAITING_RETURN` / `PARTIALLY_RECEIVED` / `RECEIVED` / `PARTIALLY_INBOUNDED` / `INBOUNDED` / `CANCELLED`。\n\n采购收货单只有 `DRAFT` / `CONFIRMED` / `CANCELLED`，没有「已收货再入库」两段。销售退货先实收再入库，所以会出现 `RECEIVED` 但仍未 `INBOUNDED`。检索「PARTIALLY_RECEIVED」必须看单据：采购正向收货进度，或售后退货实收进度。\n\n`expected_quantity` 是审核批准后预期客户退回的数量。累计实收不能超过它。`inbound_quantity` 不能超过已收的良品数量。残次品可以实收，默认不入普通库存。\n\n退货入库复用 `InventoryService.inbound_within_transaction`，`tx_type=RETURN_INBOUND`，不要另写一套加法。流水 `reference_type=RETURN_ORDER`。预占前后相同。两个请求同时确认同一张退货单，只能成功一次。"
+  },
+  {
+    "id": 103,
+    "document_id": 41,
+    "filename": "04-after-sale-refund.md",
+    "chunk_index": 9,
+    "char_count": 193,
+    "heading": "销售售后、退货入库与退款",
+    "content": "售后审核权限 `after_sale:approve` / `after_sale:reject`。拒绝后占用释放，不改库存。取消待审核同样释放。已经进入 `WAITING_RETURN` 后能否取消，以当前 `AfterSaleService` 实现为准；一旦退货入库改了 `quantity`，不能靠取消售后把库存倒扣回去，应继续用库存调整或后续业务流程处理。换货重新发货本版不做。"
+  },
+  {
+    "id": 104,
+    "document_id": 42,
+    "filename": "05-iam-tenant-rbac.md",
+    "chunk_index": 0,
+    "char_count": 627,
+    "heading": "IAM、多租户与功能 RBAC",
+    "content": "# IAM、多租户与功能 RBAC\n\n身份、租户、功能 RBAC 以 IAM 为权威来源。ERP 与 Knowledge 普通接口消费 Redis 授权快照；高风险接口回源 IAM。资源级 ACL 仍在各业务服务。内部 SSO 不是 OIDC。\n\n## 四层不要混为一谈\n\n1. Authentication：你是不是这个用户？密码、JWT、Refresh Cookie。\n2. Tenant Membership：现在代表哪家企业？`tenant_members` + `X-Tenant-ID` + Redis 快照。\n3. RBAC：允不允许这个操作？角色上的权限码，例如 `knowledge:read`。\n4. ACL：允不允许动这一本知识库？Knowledge 的 `KnowledgeBaseGrant`。\n\n「JWT 验过了所以有权限」「Header 里写了租户所以安全」都不是当前实现。\n\n## User、成员、角色、权限\n\n```text\nUser（全局人）\n  └── TenantMember（这个人在这家企业的身份）\n        └── MemberRoleGrant\n              └── Role（这家企业自己的角色）\n                    └── RolePermission\n                          └── Permission（平台统一权限目录）\n```"
+  },
+  {
+    "id": 105,
+    "document_id": 42,
+    "filename": "05-iam-tenant-rbac.md",
+    "chunk_index": 1,
+    "char_count": 766,
+    "heading": "IAM、多租户与功能 RBAC",
+    "content": "`User` 有邮箱、密码和全局显示名，没有 `tenant_id`。一个人可以加入多家企业。`TenantMember.role` 仍表示所有权（`OWNER` / `MEMBER`），不是细粒度权限。`Role` 属于具体租户：Acme 的 `ADMIN` 和 Beta 的 `ADMIN` 是两行。`Permission` 是平台统一定义的操作编码。`RolePermission` 才表示某个租户角色实际拥有哪些目录项。\n\n最终权限 = 当前租户下该成员所有有效角色权限的并集。OWNER 列另外表示所有权：目录里已登记的权限，所有者全部拥有。\n\n不要把角色写进 `users` 表。不要用全局用户角色代替租户角色。企业管理员不能通过成员接口改邮箱、密码或 User 全局名称。\n\n`UNIQUE(tenant_id, code)`：同一企业角色编码不重复；不同企业可以都叫 `ADMIN`。查询、更新、删除角色时必须带已校验的 `TenantContext.tenant_id`。只凭 URL 里的 `role_id` 会越权读到别的企业。\n\n`member_roles` 用复合外键同时指向 `(tenant_id, member_id)` 和 `(tenant_id, role_id)`。即使应用层写错，数据库也会拒绝把租户 A 的成员挂到租户 B 的角色。\n\n## 权限目录是全局的\n\n`tenant:member:create`、`order:audit`、`knowledge:read` 对所有企业含义相同。租户不能 CRUD 权限目录。用户自行创建的 code 若从未被 `require_permission` 使用，则没有任何实际意义。未知 code 是服务端配置错误（`50021`），不能悄悄放行。"
+  },
+  {
+    "id": 106,
+    "document_id": 42,
+    "filename": "05-iam-tenant-rbac.md",
+    "chunk_index": 2,
+    "char_count": 750,
+    "heading": "IAM、多租户与功能 RBAC",
+    "content": "`PermissionCode` 表示代码真实支持的能力，不是某个角色的固定清单。角色授权界面是 DIRECTORY → MENU → ACTION 树。树只是 UI；真正授权仍写入 `role_permissions`。React 路由由各应用 `routes.ts` 驱动，不能由租户在数据库里随便新增前端页面。\n\n部分历史粗粒度码保留兼容，例如 `tenant:member:manage`、`tenant:role:manage`，不再用于新接口校验。\n\n## Knowledge 功能权限\n\nIAM 与 Knowledge 服务都声明了同一组编码：\n\n| 编码 | 含义 |\n| --- | --- |\n| `knowledge:read` | 查看当前企业知识库列表与详情、检索、问答、读评测 |\n| `knowledge:create` | 创建知识库、启动评测运行等写入口 |\n| `knowledge:update` | 修改知识库、重建索引、模型连通测试 |\n| `knowledge:delete` | 删除知识库；高风险，回源 IAM |\n\n这是 IAM 权限枚举中的字符串，不是 ERP 销售订单状态，也不是 `order:read`。Knowledge 删除属于高风险权限集合。\n\n## `X-Tenant-ID` 只是意愿\n\n前端传入的 `X-Tenant-ID` 必须与 JWT / Redis 快照中的成员关系交叉验证。产品代码不能只信这个请求头。Knowledge API 在 `AuthorizationService.require_all` 之后还要核对租户成员。测试与脚本若模拟租户上下文，必须带齐 `user_id`、`tenant_id` 与权限集合。"
+  },
+  {
+    "id": 107,
+    "document_id": 42,
+    "filename": "05-iam-tenant-rbac.md",
+    "chunk_index": 3,
+    "char_count": 752,
+    "heading": "IAM、多租户与功能 RBAC",
+    "content": "ERP 与 Knowledge 的业务表带 `tenant_id`。复合外键始终带租户，避免把 A 企业的仓库挂到 B 企业的订单。跨库没有外键，隔离靠每个服务自己的查询条件。禁止先全局召回再在 Python 里丢弃其他租户。\n\n## JWT、快照与撤销\n\nAccess Token 为 RS256，响应体 `access_token`。Refresh Token 走 HttpOnly Cookie 与 Redis GETDEL，`auth_sessions` 存 jti 哈希，明文 Refresh 不入库。密码传输使用与 JWT 分离的 RSA-OAEP；口令哈希为 Argon2id。\n\nKnowledge 本地校验 IAM RS256 JWT，读 Redis 授权快照。普通读接口崩溃窗口仍可达快照 TTL，不是跨库两阶段提交，不是强一致。撤权后短期窗口内旧 Access 仍可能让普通读成功。\n\n高风险操作（删除仓库、删除知识库、确认退款等）调用 IAM `internal/authorize`，以数据库为准，不用过期快照放行。生产必须配置 `IAM_AUTHORIZE_URL`。\n\n登录失败不区分邮箱是否存在。内部多微前端共享同一 Access 与 Cookie，这不是 OIDC，不能对接企业 IdP。\n\n## 默认角色模板不是安全边界\n\nOWNER / ADMIN 默认拥有已登记的全部功能权限。OPERATOR、WAREHOUSE、VIEWER 的默认集合随版本补齐，例如 VIEWER 可 `event:read`，不可 `operation_log:read`。按钮组件无权限则隐藏或禁用，那不是安全边界；真正拒绝发生在 API 的 `require_permission`。"
+  },
+  {
+    "id": 108,
+    "document_id": 42,
+    "filename": "05-iam-tenant-rbac.md",
+    "chunk_index": 4,
+    "char_count": 334,
+    "heading": "IAM、多租户与功能 RBAC",
+    "content": "菜单表未驱动 ERP 运行时菜单。Shell 顶栏不按权限藏入口。面试或文档若把「菜单自动按权限消失」说成已实现，与源码不符。\n\n## 资源 ACL 与租户隔离同时存在\n\nKnowledge 知识库另有 grants：非所有者即使有 `knowledge:read`，也不一定能读某一本库。ERP 订单主要靠租户隔离和归属字段，不是独立 ACL 引擎，本版无 ABAC。\n\n会话可列出、撤销、全退。JWT 带 `sid`。撤销会话后，Access 短期窗口内普通读接口仍可能成功，直到过期。\n\n## 业务权限码分组\n\n下列编码来自 `services/iam/app/core/permissions.py` 的 `PermissionCode`，不是某租户私有目录。"
+  },
+  {
+    "id": 109,
+    "document_id": 42,
+    "filename": "05-iam-tenant-rbac.md",
+    "chunk_index": 5,
+    "char_count": 735,
+    "heading": "IAM、多租户与功能 RBAC",
+    "content": "| 领域 | 编码前缀 | 例子 |\n| --- | --- | --- |\n| 租户与成员 | `tenant:` | `tenant:member:create`、`tenant:role:permission:update` |\n| 商品 | `product:` | `product:read` / `create` / `update` / `delete` |\n| 销售订单 | `order:` | `order:submit`、`order:audit`、`order:cancel` |\n| 客户 | `customer:` | `customer:disable` |\n| 库存 | `inventory:` | `inventory:initialize`、`inventory:adjust` |\n| 仓库 | `warehouse:` | `warehouse:disable` |\n| 采购与收货 | `purchase:` | `purchase:audit`、`purchase:receipt:confirm` |\n| 出库 | `outbound:` | `outbound:pick`、`outbound:confirm` |\n| 物流 | `shipment:` / `carrier:` | `shipment:deliver` |\n| 盘点 / 调拨 | `stocktake:` / `stock_transfer:` | `stock_transfer:outbound` |\n| 售后 | `after_sale:` / `return_order:` / `refund:` | `refund:confirm` |"
+  },
+  {
+    "id": 110,
+    "document_id": 42,
+    "filename": "05-iam-tenant-rbac.md",
+    "chunk_index": 6,
+    "char_count": 244,
+    "heading": "IAM、多租户与功能 RBAC",
+    "content": "| 售后 | `after_sale:` / `return_order:` / `refund:` | `refund:confirm` |\n| 采购退货 | `purchase_return:` / `supplier_refund:` | `purchase_return:outbound` |\n| 分析 | `analytics:` | `analytics:inventory:read` |\n| 知识库 | `knowledge:` | `knowledge:read` |"
+  },
+  {
+    "id": 111,
+    "document_id": 42,
+    "filename": "05-iam-tenant-rbac.md",
+    "chunk_index": 7,
+    "char_count": 774,
+    "heading": "IAM、多租户与功能 RBAC",
+    "content": "`order:audit` 是销售确认。`purchase:audit` 是采购批准。两者都叫审核，库存效果不同。`outbound:confirm` 才是销售出库扣库存。\n\n## 快照版本\n\nIAM 在授权变更时更新 `authz_revisions`，Redis 键与账号版本、租户版本相关（文档中的 `iam:aver` / `iam:tver` 一类加速键）。ERP 与 Knowledge 读快照加速普通接口。高风险接口忽略过期快照，回源 IAM 库。没有跨库 2PC，撤权不是全局瞬时强一致。\n\nKnowledge 校验 JWT 的 issuer、audience、算法。`alg=none` 与错误 issuer 必须拒绝。业务进程可缓存 JWKS，缓存过期后重新拉取。\n\n## 高风险权限集合分服务\n\nKnowledge 服务 `HIGH_RISK_PERMISSION_CODES` 目前是 `{knowledge:delete}`。删除知识库走 IAM `internal/authorize`，不用过期 Redis 快照放行。\n\nERP 服务的高风险集合是另一份名单，包括 `warehouse:delete`、`product:delete`、`customer:delete`、`refund:confirm`、`supplier_refund:confirm`、`purchase_return:approve`。不要把 Knowledge 的删除码写进 ERP 集合，也不要把 ERP 的退款确认写进 Knowledge 集合。\n\n两边都通过 `high_risk_verified` 判断本次请求是否已经回源。普通 `knowledge:read` 检索、问答、读评测仍走快照。\n\n## Redis 键不要改租户语义"
+  },
+  {
+    "id": 112,
+    "document_id": 42,
+    "filename": "05-iam-tenant-rbac.md",
+    "chunk_index": 8,
+    "char_count": 658,
+    "heading": "IAM、多租户与功能 RBAC",
+    "content": "两边都通过 `high_risk_verified` 判断本次请求是否已经回源。普通 `knowledge:read` 检索、问答、读评测仍走快照。\n\n## Redis 键不要改租户语义\n\n| 键 | 是否带租户 | 含义 |\n| --- | --- | --- |\n| `iam:snap:{user}:{tenant}` | 是 | 授权快照 |\n| `iam:aver:{user}:{tenant}` | 是 | 授权版本 |\n| `iam:tver:{user}` | 否 | 令牌版本，失效的是这个人的登录 |\n| `iam:refresh:{jti}` | 否 | Refresh 一次性读取 |\n| `iam:csrf:{jti}` | 否 | CSRF |\n\n`iam:tver` 和 Refresh 不带租户：注销的是这个人，不是某一家企业。授权失效用 `iam:aver`。变更在同一 MySQL 事务内递增 `authz_revisions` 并写 outbox；Pub/Sub 不是正确性保证。\n\nOWNER 拥有目录里已登记的全部功能权限。按钮隐藏不是安全边界。未知权限码是服务端配置错误 `50021`，不能悄悄放行。\n\n## 成员接口不能改全局 User\n\n企业管理员给成员授角色、停用成员、调整 `OWNER` / `MEMBER` 所有权标记，都不能通过成员接口改邮箱、密码或 User 全局显示名。密码与 JWT 使用分离的 RSA-OAEP 传输，口令哈希 Argon2id。"
+  },
+  {
+    "id": 113,
+    "document_id": 42,
+    "filename": "05-iam-tenant-rbac.md",
+    "chunk_index": 9,
+    "char_count": 521,
+    "heading": "IAM、多租户与功能 RBAC",
+    "content": "企业管理员给成员授角色、停用成员、调整 `OWNER` / `MEMBER` 所有权标记，都不能通过成员接口改邮箱、密码或 User 全局显示名。密码与 JWT 使用分离的 RSA-OAEP 传输，口令哈希 Argon2id。\n\n登录失败不区分邮箱是否存在。内部多微前端共享同一 Access 与 Cookie，这不是 OIDC，不能对接企业 IdP。Refresh Token 走 HttpOnly Cookie 与 Redis GETDEL；`auth_sessions` 存 jti 哈希，明文 Refresh 不入库。\n\nKnowledge 与 ERP 都在 `require_all` 之后核对租户成员。脚本模拟上下文必须带齐 `user_id`、`tenant_id` 与权限集合，不能只设 `X-Tenant-ID`。\n\n生产必须配置 `IAM_AUTHORIZE_URL`。高风险校验失败应拒绝，不能回退成只信快照。JWT audience 必须包含本服务：Knowledge 为 `neorvion-knowledge`，ERP 为 `neorvion-erp`。错误 audience 或 `alg=none` 必须拒绝。"
+  },
+  {
+    "id": 114,
+    "document_id": 43,
+    "filename": "06-knowledge-rag-evaluation.md",
+    "chunk_index": 0,
+    "char_count": 743,
+    "heading": "知识库检索、切片与评测边界",
+    "content": "# 知识库检索、切片与评测边界\n\nNeorvion Knowledge 是独立服务。身份以 IAM 为权威来源。模型密钥只在 Knowledge 服务端环境变量中，不返回前端，也不写入 Git。评测不修改线上 Chunk 或向量索引。\n\n## 文档处理任务\n\n`PARSE` / `CHUNK` / `EMBED` 是不同任务。PostgreSQL 是真相；Redis List 只投递 `task_id` 或 `eval:{run_id}`。\n\n| 类型 | 库 | 说明 |\n| --- | --- | --- |\n| PDF | pypdf | 无文本视为扫描版，明确失败，错误码 40075，不做 OCR |\n| DOCX | python-docx | 保留 Heading 与段落 |\n| Markdown | 文本 + 标题识别 | 保留 ATX 标题 |\n| TXT | charset-normalizer | 常见编码 |\n\n上传单文件上限 `max_upload_bytes` 默认为 20MB，单次最多 `max_upload_files` 10 个。超过 `pdf_page_warn`（默认 80）只在 warning 中提示，没有页数硬拒绝。\n\n`PARSE` / `CHUNK` 失败会影响文档状态。`EMBED` 失败不回滚已完成的原文和切片。文档 RUNNING 任务在 Worker 重启后标失败；评测 RUNNING 在租约过期后改为 QUEUED，保留已落库题目并从中断阶段续跑。\n\n## 切片参数\n\n切片单位是字符（Python `len`），不是 Token。策略：`FIXED` 或 `RECURSIVE`。默认 `RECURSIVE`。"
+  },
+  {
+    "id": 115,
+    "document_id": 43,
+    "filename": "06-knowledge-rag-evaluation.md",
+    "chunk_index": 1,
+    "char_count": 768,
+    "heading": "知识库检索、切片与评测边界",
+    "content": "## 切片参数\n\n切片单位是字符（Python `len`），不是 Token。策略：`FIXED` 或 `RECURSIVE`。默认 `RECURSIVE`。\n\n| 参数 | 默认 | 约束 |\n| --- | --- | --- |\n| `default_chunk_size` | 800 | `chunk_size_min` 100 到 `chunk_size_max` 8000 |\n| `default_chunk_overlap` | 120 | 必须小于 `chunk_size`，且不能为负 |\n\n`RECURSIVE` 分隔符顺序为空行、单行换行、中文句号、叹号、问号、分号、逗号、空格，最后才按字符切开。重新切片写入新 `version`，成功后再把旧 `ACTIVE` 标为 `SUPERSEDED`。禁用切片不删向量，但检索 SQL 排除 `enabled=false`。\n\n## 向量索引\n\n查询与文档必须同一 Embedding 模型与维度。默认 `text-embedding-v4`，1024 维。更换模型后旧向量不参与检索，需重建索引。更换维度必须重建迁移或新开库。\n\n检索只使用当前模型、当前维度、`READY`、且 `chunk_version` 与文档 `active_chunk_version` 匹配的行。当前数据规模走精确余弦 kNN（`cosine_distance`），不建 HNSW。小数据加多租户 `WHERE` 过滤时 HNSW 容易降低召回。\n\n关键词路是 PostgreSQL `simple` FTS + `pg_trgm` + 中文 `ILIKE`，不是 BM25。`search_tsv` 为 `to_tsvector('simple', content)` 生成列。"
+  },
+  {
+    "id": 116,
+    "document_id": 43,
+    "filename": "06-knowledge-rag-evaluation.md",
+    "chunk_index": 2,
+    "char_count": 791,
+    "heading": "知识库检索、切片与评测边界",
+    "content": "关键词路是 PostgreSQL `simple` FTS + `pg_trgm` + 中文 `ILIKE`，不是 BM25。`search_tsv` 为 `to_tsvector('simple', content)` 生成列。\n\n查询向量按 `provider + base_url + model + dimensions + 规范化查询文本` 缓存。失败或长度不对的向量不入库。`KEYWORD` 策略不调用 Embedding。\n\n## 三种检索策略\n\n三种策略共用 `RetrievalService.search`。智能搜索、检索测试、问答、评测不得分叉实现。\n\n| 策略 | 英文标识 | 实现 |\n| --- | --- | --- |\n| 向量 | `VECTOR` | 查询 Embedding + pgvector 余弦，相似度 = `1 - distance` |\n| 关键词 | `KEYWORD` | FTS / trigram / ILIKE，不生成查询向量 |\n| 混合 | `HYBRID` | 两路召回后 RRF（默认 `rrf_k=60`）按 `chunk_id` 去重 |\n\n默认最终 `top_k=8`，候选 `candidate_k=24`。候选不会小于最终 Top-K。租户、知识库 `ACTIVE`、切片 `ACTIVE+enabled`、当前版本全部在 SQL `WHERE` 中过滤。\n\n可选 Rerank：在融合后的候选上调用独立 Rerank 模型，再截取最终 Top-K。模型不可用或抛错时降级到融合结果，并标记 `rerank_degraded`。`rerank_applied` 表示真正完成了模型重排。\n\n分数不要混用：向量相似度、关键词分、RRF、Rerank 各自独立。阈值只作用在对应一路。\n\n## 问答与拒答"
+  },
+  {
+    "id": 117,
+    "document_id": 43,
+    "filename": "06-knowledge-rag-evaluation.md",
+    "chunk_index": 3,
+    "char_count": 735,
+    "heading": "知识库检索、切片与评测边界",
+    "content": "分数不要混用：向量相似度、关键词分、RRF、Rerank 各自独立。阈值只作用在对应一路。\n\n## 问答与拒答\n\n无命中时明确拒答，不把猜测当知识库事实。文档正文包在 `<untrusted_document>` 中，系统提示要求忽略其中的指令。证据字符上限 `chat_max_context_chars`。LLM 调用期间不持有长事务。\n\nSSE 事件：`status` / `token` / `citation` / `done` / `error`。切租户必须 abort 旧 EventStream。前端取消的是浏览器请求，不会取消服务端已落库的解析、索引或评测任务。\n\n## 评测指标由代码计算\n\n`metrics.py` 的 `METRIC_VERSION` 为 `v4-chunk-ndcg-exp`。Hit、Recall、Precision、MRR、nDCG 由代码计算，禁止用 LLM 给这些指标打分。\n\n相关性 0–3 级。`relevance >= 1` 视为相关，会进入 Recall 分母。nDCG 使用增益 `2^rel - 1`。弱相关标签会改变 Recall，标注时必须解释 1 分是否值得纳入正式评测。\n\n无答案题不要调用 `retrieval_metrics`。`false_recall` 只表示 Top-K 非空，定义标记为 `top_k_nonempty_not_hallucination_rate`。它不是幻觉率，也不是错误证据率。\n\nLLM Judge 只产生主观的 Faithfulness、Answer Relevancy、Answer Correctness。Judge 失败时不得伪造分数。\n\n## 实验与运行"
+  },
+  {
+    "id": 118,
+    "document_id": 43,
+    "filename": "06-knowledge-rag-evaluation.md",
+    "chunk_index": 4,
+    "char_count": 752,
+    "heading": "知识库检索、切片与评测边界",
+    "content": "LLM Judge 只产生主观的 Faithfulness、Answer Relevancy、Answer Correctness。Judge 失败时不得伪造分数。\n\n## 实验与运行\n\n实验保存可复用参数，不保存数据集版本。点击运行时把当时的冻结版本钉到 `EvaluationRun.dataset_version`，并把配置拷进 `config_snapshot`。软删除实验不删除历史 Run。\n\nRun 状态：`QUEUED` / `RUNNING` / `PAUSED` / `SUCCESS` / `FAILED` / `CANCELLED`。中断后保留 checkpoint：已成功题目跳过，未完成阶段可续跑。评测 `persist_log=false`，不写线上检索日志。生成评测默认关闭。\n\n同一实验同时只允许一个 `QUEUED` / `RUNNING` / `PAUSED` 的 Run。Worker 通过 `lease_owner` / `lease_until` 保证同一时刻只有一个进程执行。\n\n数据集冻结快照保证历史实验可复现。含失效标注时仍可冻结，但标记非严格可比。已有 Run 的版本不能删除。\n\n## 模型错误不要都叫限流\n\n只有 HTTP 429 或明确的供应商限流文本才能归类 `RATE_LIMIT`。连接失败、DNS、TLS、读超时、5xx、401/403、余额不足各自有错误码。鉴权与配置错误不重试。429 尊重 `Retry-After`。临时网络错误有限指数退避，耗尽后 Run 保持 `PAUSED`，允许人工恢复。\n\n诊断信息保存异常类名、阶段、重试次数、脱敏后的最后错误和请求追踪 ID，不保存 API Key 或请求正文。\n\n## 查询向量缓存"
+  },
+  {
+    "id": 119,
+    "document_id": 43,
+    "filename": "06-knowledge-rag-evaluation.md",
+    "chunk_index": 5,
+    "char_count": 750,
+    "heading": "知识库检索、切片与评测边界",
+    "content": "诊断信息保存异常类名、阶段、重试次数、脱敏后的最后错误和请求追踪 ID，不保存 API Key 或请求正文。\n\n## 查询向量缓存\n\n缓存键是 `provider`、解析后的 Base URL、模型名、维度，以及经过 NFKC、空白折叠后的查询文本的 SHA256。不把失败向量、长度不对或含非有限值的向量写入缓存。命中缓存不增加本次 API Token。并发未命中用事务内咨询锁串行化，避免同一查询打两次收费接口。\n\n`KEYWORD` 不得走这条缓存，因为关键词路根本不生成查询向量。文档切片的 Embedding 也不走查询缓存表。\n\n## 实验列表与运行列表\n\n实验列表只展示配置，不把最近一次 Run 的指标写进实验行。运行记录默认按创建时间倒序，可用可选的 `experiment_id` 筛选。软删除实验后，历史 Run 仍显示当时的实验名称。\n\n对比页最多选 2–3 个 `SUCCESS` Run。数据集版本或 Embedding 模型、维度不一致时标记为非严格可比，不给出误导性提升结论。同题诊断按 `case_id` 对齐。有相关标注但未出现在本次 `retrieved` 里，显示「未进 Top-K」。\n\n## Ground Truth 与冻结\n\n工作稿改标注不会改写已经冻结的快照，也不会改写历史 `EvaluationResult`。新 Run 钉的是点击运行时的 `current_version`。因此第一轮 A/B（例如钉在某一版 Hard-Cases 上的 Run）与后来修正过的工作稿可以并存。\n\n`relevance = 0` 的切片会保存在标注表里，但不进入 Recall 分母。SYNTHETIC 噪声文档不得标成 `>=1`。无答案题的相关集合必须为空。"
+  },
+  {
+    "id": 120,
+    "document_id": 43,
+    "filename": "06-knowledge-rag-evaluation.md",
+    "chunk_index": 6,
+    "char_count": 788,
+    "heading": "知识库检索、切片与评测边界",
+    "content": "`relevance = 0` 的切片会保存在标注表里，但不进入 Recall 分母。SYNTHETIC 噪声文档不得标成 `>=1`。无答案题的相关集合必须为空。\n\n评测 Worker 跳过 `result_status=SUCCESS` 的题目。生成关闭时 `GENERATE` / `JUDGE` 阶段为 `SKIPPED`。Rerank 未启用时 `RERANK` 为 `SKIPPED`。\n\n## 任务失败边界\n\n| 任务 | 失败之后 |\n| --- | --- |\n| `PARSE` | 文档不能切片 |\n| `CHUNK` | 没有可检索正文切片 |\n| `EMBED` | 原文和切片保留；该版向量不可用于 VECTOR / HYBRID |\n\n扫描 PDF 无文本：错误码 40075，明确失败，不做 OCR。切片参数不合法：40076。没有可切片文本：40077。重叠长度必须小于切片长度。\n\n默认 Embedding 模型 `text-embedding-v4`、1024 维。测试库使用更低维度。更换维度必须重建迁移或新开库。Rerank 默认 `qwen3-rerank`，走 DashScope 原生 rerank 接口，不是 Chat Completions。\n\n评测运行不写线上 `retrieval_logs`（`persist_log=False`）。召回调优页面的检索可以写日志。两套入口共用 `RetrievalService.search`，不得分叉实现。\n\nEvidence Coverage（多段证据是否被同一道题的 Top-K 覆盖）是后续评测维度建议，当前 `metrics.py` 计算的是 Hit / Recall / Precision / MRR / nDCG，不要把尚未落地的 Coverage 指标说成已有列。"
+  },
+  {
+    "id": 121,
+    "document_id": 43,
+    "filename": "06-knowledge-rag-evaluation.md",
+    "chunk_index": 7,
+    "char_count": 748,
+    "heading": "知识库检索、切片与评测边界",
+    "content": "第一轮测试知识库上每个文档往往只有 1 个 ACTIVE 切片，Top-K 8 容易饱和。多 Chunk 语料应导入独立知识库，不要覆盖已冻结 Run 使用的库。\n\n## 模型配置与密钥\n\n平台级 Chat / Embedding / Rerank 来自环境变量。API 只返回 `has_api_key` 与 `api_key_env`，永不返回密钥。普通租户管理员不能覆盖平台密钥。连通测试需要 `knowledge:update`。\n\n`CHAT_API_KEY` 可回退 `DEEPSEEK_API_KEY`；`EMBEDDING_API_KEY` / `RERANK_API_KEY` 可回退 `DASHSCOPE_API_KEY`。测试默认 `MODEL_PROVIDER=mock`，不产生计费。连通失败会区分密钥缺失、URL 错误、模型不存在、余额不足、维度不一致。摘要不含密钥。\n\n问答只保留最近若干轮历史，证据字符上限 `chat_max_context_chars`。LLM 调用期间不持有长事务：先落库用户/助手消息并 commit，再流式生成，最后再写结果与 citation。\n\n知识库另有资源 ACL：`KnowledgeBaseGrant`。非所有者即使有 `knowledge:read`，也不一定能读某一本库。检索 SQL 的租户与授权过滤全部在 `WHERE` 中完成，禁止先全局召回再在 Python 里丢弃其他租户。\n\n评测数据集冻结后，历史 Run 钉住 `dataset_version`。工作稿改标注不影响已冻结快照。第一轮 V8-01～V8-07 的冻结版本和 Run 39～42 应保持只读。\n\n## 切片长度实验为什么需要多 Chunk 语料"
+  },
+  {
+    "id": 122,
+    "document_id": 43,
+    "filename": "06-knowledge-rag-evaluation.md",
+    "chunk_index": 8,
+    "char_count": 494,
+    "heading": "知识库检索、切片与评测边界",
+    "content": "评测数据集冻结后，历史 Run 钉住 `dataset_version`。工作稿改标注不影响已冻结快照。第一轮 V8-01～V8-07 的冻结版本和 Run 39～42 应保持只读。\n\n## 切片长度实验为什么需要多 Chunk 语料\n\n默认 `chunk_size=800`、`chunk_overlap=120`。后续有效字符大约每片 680。短文档会整篇落进 1 个切片，VECTOR / KEYWORD / HYBRID / Rerank 的差异会被「候选池只有十几行」淹没。\n\n多 Chunk 导入后，同一结论可能落在相邻切片的重叠区，也可能被标题切开。评测应观察：精确错误码是否仍能被 KEYWORD 命中；跨章节规则是否需要更大 overlap 或 Rerank 才能同时进入 Top-K。不要为了把切片数凑到某个整数而复制段落。\n\n标注相关性 0–3。只有 `>=1` 进入 Recall 分母。nDCG 增益为 `2^rel - 1`。把噪声文档标成 1 会扩大分母、压低 Recall。把本应相关的切片漏标会让真正命中的结果看起来像失败。工作稿修正不得改写已冻结版本。"
+  },
+  {
+    "id": 123,
+    "document_id": 44,
+    "filename": "07-cross-domain-state-collisions.md",
+    "chunk_index": 0,
+    "char_count": 578,
+    "heading": "跨领域相似状态与错误码对照",
+    "content": "# 跨领域相似状态与错误码对照\n\n本文把销售、采购、调拨、售后里容易撞车的英文标识放到同一份文档里，便于后续做相似状态检索和精确标识评测。每一条都能回到对应领域文档和源码，不引入新规则。\n\n## 三种 DRAFT\n\n| 单据 | 状态 | 保存草稿时库存 | 下一步真正改库存的动作 |\n| --- | --- | --- | --- |\n| 销售订单 | `DRAFT` | 未预占 | 确认订单：增加 `reserved_quantity` |\n| 采购单 | `DRAFT` | 未入库 | 确认收货：增加 `quantity` |\n| 调拨单 | `DRAFT` | 不改。库存不足也可保存 | 确认调出：减少源仓 `quantity` |\n| 采购退货 | `DRAFT` | 不占用可退、不改库存 | 确认退货出库：减少 `quantity` |\n| 出库单 | 无 DRAFT，创建即为 `PENDING_PICKING` | 仍是销售预占 | 确认出库：同时减少 `quantity` 与 `reserved` |\n| 收货单 | `DRAFT` | 不改 | 确认收货：增加 `quantity` |\n\n「草稿不改库存」在多个章节成立，但下一步动作完全不同。检索命中「DRAFT 不改库存」时，必须看它属于哪张单据。\n\n## 三种等待出库"
+  },
+  {
+    "id": 124,
+    "document_id": 44,
+    "filename": "07-cross-domain-state-collisions.md",
+    "chunk_index": 1,
+    "char_count": 585,
+    "heading": "跨领域相似状态与错误码对照",
+    "content": "「草稿不改库存」在多个章节成立，但下一步动作完全不同。检索命中「DRAFT 不改库存」时，必须看它属于哪张单据。\n\n## 三种等待出库\n\n| 单据 | 英文标识 | 到达该状态时库存已经怎样 | 取消 |\n| --- | --- | --- | --- |\n| 销售订单 | `WAITING_OUTBOUND` | 已经预占 | 可以整单取消并释放预占 |\n| 调拨单 | `PENDING_OUTBOUND` | 尚未扣源仓 | 可以取消，仍不改库存 |\n| 采购退货 | `WAITING_OUTBOUND` | 已占用可退数量，尚未扣库存 | 视实现中的取消规则；扣库存发生在退货出库确认 |\n\n销售 `WAITING_OUTBOUND` 和采购退货 `WAITING_OUTBOUND` 字符串相同。调拨用的是 `PENDING_OUTBOUND`。不要用「待出库」三个汉字把三者合成一条库存规则。\n\n销售部分出库后的状态是 `PARTIALLY_OUTBOUND`，已经扣过库存，不能整单取消。采购部分收货是 `PARTIALLY_RECEIVED`。采购退货部分出库是 `PARTIALLY_RETURNED`。售后退货部分收货是 `PARTIALLY_RECEIVED`。后两个「部分收货」一个在采购正向、一个在销售退货，单据不同。\n\n## 三种「确认」"
+  },
+  {
+    "id": 125,
+    "document_id": 44,
+    "filename": "07-cross-domain-state-collisions.md",
+    "chunk_index": 2,
+    "char_count": 616,
+    "heading": "跨领域相似状态与错误码对照",
+    "content": "## 三种「确认」\n\n| 动作 | 权限 | `quantity` | `reserved_quantity` |\n| --- | --- | --- | --- |\n| 销售订单确认 | `order:audit` | 不变 | 增加 |\n| 采购单批准 | `purchase:audit` | 不变 | 不变 |\n| 采购收货确认 | `purchase:receipt:confirm` | 增加 | 不变 |\n| 销售出库确认 | `outbound:confirm` | 减少 | 减少 |\n| 调拨确认调出 | `stock_transfer:outbound` | 源仓减少 | 不变 |\n| 调拨确认调入 | `stock_transfer:receive` | 目标仓增加 | 不变 |\n| 退货入库确认 | `return_order:inbound` | 增加（仅 `GOOD`） | 不变 |\n| 采购退货出库确认 | `purchase_return:outbound` | 减少 | 不变 |\n| 物流确认发货 | `shipment:confirm` | 不变 | 不变 |\n\n同一结论「确认不改 quantity」至少出现在：销售订单确认、采购批准、物流确认发货。同一结论「确认才增加 quantity」出现在：采购收货、调拨调入、销售退货良品入库。评测时必须指定是哪一种确认。\n\n## 错误码家族"
+  },
+  {
+    "id": 126,
+    "document_id": 44,
+    "filename": "07-cross-domain-state-collisions.md",
+    "chunk_index": 3,
+    "char_count": 795,
+    "heading": "跨领域相似状态与错误码对照",
+    "content": "| 错误码 | 服务 | 含义 |\n| --- | --- | --- |\n| `INSUFFICIENT_AVAILABLE_INVENTORY` | `inventory.py` / 销售确认 / 调拨 / 采购退货出库 | 可用库存不够 |\n| `INSUFFICIENT_RESERVED_INVENTORY` | `inventory.py` 释放路径 | 释放数量超过 `reserved_quantity` |\n| `STOCKTAKE_CONFLICT_WITH_RESERVED_INVENTORY` | `inventory.py` 盘点 | 调整后会打破预占不超过实际 |\n| `OUTBOUND_EXCEEDS_RESERVED` | `outbound.py` | 出库超过该订单已预占 |\n| `OUTBOUND_PICK_EXCEEDS_PLAN` | `outbound.py` | 拣货超过本张出库单计划 |\n| `SHIPMENT_EXCEEDS_OUTBOUND` | `shipment.py` | 发货超过已出库 |\n| `PURCHASE_RECEIPT_EXCEEDS_REMAINING` | `purchase_receipt.py` | 收货超过未收完数量 |\n| `PURCHASE_RETURN_EXCEEDS_RETURNABLE` | `purchase_return.py` | 采购退货超过已收可退 |\n| `PURCHASE_RETURN_OUTBOUND_EXCEEDS_REMAINING` | `purchase_return_outbound.py` | 本次退货出库超过剩余批准 |\n| `AFTER_SALE_EXCEEDS_RETURNABLE` | `after_sale.py` | 售后超过已出库可退 |"
+  },
+  {
+    "id": 127,
+    "document_id": 44,
+    "filename": "07-cross-domain-state-collisions.md",
+    "chunk_index": 4,
+    "char_count": 259,
+    "heading": "跨领域相似状态与错误码对照",
+    "content": "| `AFTER_SALE_EXCEEDS_RETURNABLE` | `after_sale.py` | 售后超过已出库可退 |\n| `AFTER_SALE_EXCEEDS_REFUNDABLE` | `after_sale.py` | 售后超过可退金额 |\n| `REFUND_EXCEEDS_APPROVED` | `refund.py` | 退款超过批准剩余 |\n| `SUPPLIER_REFUND_EXCEEDS_APPROVED` | `supplier_refund.py` | 供应商退款超过批准 |"
+  },
+  {
+    "id": 128,
+    "document_id": 44,
+    "filename": "07-cross-domain-state-collisions.md",
+    "chunk_index": 5,
+    "char_count": 766,
+    "heading": "跨领域相似状态与错误码对照",
+    "content": "这些字符串必须精确检索。同义改写成「库存不够」或「超出预占」不足以区分路径。\n\n英文标识速查（源码中的字面量）：\n\n- `SalesOrderStatus` 包括 `PARTIALLY_OUTBOUND` 和 `WAITING_OUTBOUND`\n- 出库超额：`OUTBOUND_EXCEEDS_RESERVED`\n- 释放超额：`INSUFFICIENT_RESERVED_INVENTORY`\n- IAM 知识库读取：`knowledge:read`\n- 售后类型：`REFUND_ONLY` / `RETURN_AND_REFUND` / `RETURN_ONLY`\n- 退货质量：`GOOD` / `DAMAGED` / `UNSELLABLE` / `OTHER`\n\n中英混合提问时，仍应命中上述标识，而不是同义改写后的中文状态名。\n\n## 同一结论出现在多个章节\n\n下列句子在本语料的不同文档里用不同上下文重复，这是有意设计的多段证据，不是复制填充。\n\n1. 销售订单 `DRAFT` 未预占库存。出现在销售文档的状态表，也出现在本对照的 DRAFT 表。\n2. 采购单审核通过不改库存；收货确认才增加 `quantity`。出现在采购文档，也出现在本对照的确认表。\n3. 调拨从 `DRAFT` 提交到 `PENDING_OUTBOUND` 仍然不改库存。出现在库存调拨文档，也出现在本对照的等待出库表。\n4. 可用库存 = `quantity - reserved_quantity`，不单独落库。出现在库存文档，也约束调拨和采购退货「只能动 available」。\n5. 评测指标由代码计算，禁止用 LLM 给 Recall 打分。只写在知识库评测文档；本对照不重复展开，避免把评测规则误写成 ERP 库存规则。"
+  },
+  {
+    "id": 129,
+    "document_id": 44,
+    "filename": "07-cross-domain-state-collisions.md",
+    "chunk_index": 6,
+    "char_count": 678,
+    "heading": "跨领域相似状态与错误码对照",
+    "content": "单个问题如果问「确认会不会改库存」，必须同时看到是哪一种确认，单靠一个章节的「确认」二字不够。\n\n## 明确不存在的能力\n\n下列内容不得当成 Ground Truth，因为当前源码没有实现：\n\n- 销售订单状态里没有 `FAST_WAREHOUSE_TIMEOUT`\n- 出库服务没有 `MAGIC_STOCK_OVERFLOW`\n- 采购单没有单独 `APPROVED`\n- 内部 SSO 不是 OIDC\n- 关键词检索不是 BM25\n- 当前向量检索不建 HNSW\n- 换货重新发货未做\n- 调拨第一版不处理运输损耗，也没有独立在途库存表\n- 残次品没有单独库存台账\n\n若后续评测需要无答案题或抗噪声题，应单独标记 SYNTHETIC，不要把本节的「不存在」清单改成肯定答案。\n\n## 单号前缀\n\n编号都在 flush 拿到 id 后生成，租户内唯一，不用 `MAX+1`。不同企业可以出现不连续的序号。\n\n| 前缀 | 单据 |\n| --- | --- |\n| `SO` | 销售订单 |\n| `OUT` | 销售出库单 |\n| `PO` | 采购单 |\n| `PR` | 采购收货单 |\n| `PRT` | 采购退货单 |\n| `PRO` | 采购退货出库单 |\n| `SRF` | 供应商退款 |\n| `TR` | 调拨单 |\n| `AS` | 售后单 |\n| `RT` | 销售退货单 |\n| `CUS` | 客户编码（若未手填） |\n| `SHP` | 物流单 |\n| `ST` | 盘点单 |\n| `CAR` | 物流商编码（若未手填） |"
+  },
+  {
+    "id": 130,
+    "document_id": 44,
+    "filename": "07-cross-domain-state-collisions.md",
+    "chunk_index": 7,
+    "char_count": 761,
+    "heading": "跨领域相似状态与错误码对照",
+    "content": "问「OUT 和 PRT 哪一个会扣销售预占」时：`OUT` 确认出库同时减 `quantity` 和 `reserved`；`PRT`/`PRO` 只减 `quantity`，不释放销售预占。`SHP` 确认发货不改库存。`ST` 确认盘点才按差异改 `quantity`。\n\n## 权限同名审核\n\n| 权限 | 单据动作 | 库存 |\n| --- | --- | --- |\n| `order:audit` | 销售确认 | 预占 |\n| `purchase:audit` | 采购批准 | 不改 |\n| `purchase:receipt:confirm` | 收货确认 | 加 `quantity` |\n| `outbound:confirm` | 销售出库确认 | 减 `quantity` 与 `reserved` |\n| `stock_transfer:outbound` | 调拨调出 | 减源仓 `quantity` |\n| `stocktake:confirm` | 盘点确认 | 按差异调整，可能与预占冲突 |\n| `refund:confirm` | 确认外部退款 | 不改库存 |\n| `knowledge:update` | 重建索引、模型连通 | 不改 ERP 库存 |\n\n「audit」和「confirm」在权限名里反复出现。检索必须连权限码一起看，不能只看中文「审核通过」。\n\n## 两种 IN_TRANSIT 与 40097\n\n物流单 `IN_TRANSIT`：包裹在承运商手里，库存早已在出库时扣过。调拨单 `IN_TRANSIT`：源仓已扣 `quantity`，目标仓未加。轨迹事件里也有 `IN_TRANSIT`，那是承运商节点，不是调拨状态。\n\n业务码 `40097` 出现在："
+  },
+  {
+    "id": 131,
+    "document_id": 44,
+    "filename": "07-cross-domain-state-collisions.md",
+    "chunk_index": 8,
+    "char_count": 766,
+    "heading": "跨领域相似状态与错误码对照",
+    "content": "业务码 `40097` 出现在：\n\n- 销售订单：停用仓，`WAREHOUSE_DISABLED`\n- 采购单 / 调拨 / 盘点 / 售后：仓库未启用，中文消息不同\n- 物流商：状态或类型不合法\n\n`40097` 不是唯一的「仓库停用」标识码。精确字段题应优先用 `data.error` 字符串或完整中文消息，而不是只搜数字码。\n\n`SHIPMENT_ALREADY_CONFIRMED` 与 `STOCKTAKE_ALREADY_CONFIRMED`、`PURCHASE_RECEIPT_ALREADY_CONFIRMED`、`STOCK_TRANSFER_ALREADY_OUTBOUND` 都表示「这张单已经确认过，不要再改库存或再累加一次」。命中其中一个不能当作另一个单据的证据。\n\n## 多段证据题应该怎么拆\n\n下列问题在后续标注时预计需要跨文档取证，现在只作为语料设计说明，不在本轮生成题目。\n\n1. 「确认会不会改库存」：必须同时看到销售确认、采购批准、收货确认、出库确认、发货确认中的至少两类。\n2. 「INSUFFICIENT_ 开头的错误码有何不同」：可用不足、预占释放不足、盘点预占冲突要分章。\n3. 「WAITING_OUTBOUND 能不能取消」：销售可以释放预占；采购退货同名状态扣库存发生在出库确认；采购正向待收货反而不可取消。\n4. 「knowledge:read 是否等于能读任意知识库」：IAM 功能权限加上 Knowledge ACL grants。\n5. 「SHIPPED 是仓库出库还是物流发货」：V9 之后销售订单 `SHIPPED` 表示已交给承运商；出库完成是 `OUTBOUNDED`。\n\n同一结论在领域文档和本对照文档各出现一次，是为了测 Coverage，不是为了凑切片数。"
+  },
+  {
+    "id": 132,
+    "document_id": 44,
+    "filename": "07-cross-domain-state-collisions.md",
+    "chunk_index": 9,
+    "char_count": 196,
+    "heading": "跨领域相似状态与错误码对照",
+    "content": "同一结论在领域文档和本对照文档各出现一次，是为了测 Coverage，不是为了凑切片数。\n\n`inventory:outbound` 与 `outbound:confirm` 同时出现在权限目录里。真正扣销售库存的是后者。`inventory:inbound` 与 `purchase:receipt:confirm` 同理。检索「inbound 权限」时不要把预留编码当成收货确认所需权限。"
+  },
+  {
+    "id": 133,
+    "document_id": 45,
+    "filename": "08-shipment-stocktake.md",
+    "chunk_index": 0,
+    "char_count": 790,
+    "heading": "物流发货与库存盘点",
+    "content": "# 物流发货与库存盘点\n\n物流单回答「货是否已经交给承运商」。盘点单回答「账面和实盘差多少、确认时怎么改当前库存」。两者都会出现 `IN_TRANSIT`、`DRAFT`、`confirm` 之类容易撞车的词，但库存效果完全不同。\n\n本文转写 `docs/shipping.md`、`docs/stocktake.md` 以及对应 Model / Service / 测试，不接入真实承运商 API，也不把盘点做成 WMS 库位盘点。\n\n## 出库已经离开账面，发货只是交给承运商\n\n16:00 仓库确认出库，17:30 快递员揽收，是两个时间点。`confirm_outbound()` 不能代表物流已发货。确认发货不再调用 `InventoryService`。\n\n| 单据 | 回答的问题 | 库存 |\n| --- | --- | --- |\n| 销售订单 | 客户买了什么、是否已预占 | 确认时增加预占；出库时才扣实际库存 |\n| 出库单 | 仓库实际拣了、出了什么 | 拣货不改；确认出库同时减 `quantity` 和 `reserved_quantity` |\n| 物流单 | 这次交给承运商发走了什么 | 不改。货在出库时已经离开账面 |\n\nV9 第一版：一张物流单对应一张出库单。同一张出库单可以拆成多张物流单（部分发货）。以后才考虑合并多张出库到一张物流单。\n\n销售链路在出库之后：\n\n```text\n创建 Shipment 草稿（不改库存、不推进销售发货状态）\n  → 填写物流商 / 运单号\n  → 确认发货（累加 shipped_quantity，不改 Inventory）\n  → 手工追加物流轨迹\n  → 确认签收\n  → 全部签收后 SalesOrder COMPLETED\n```\n\n## 物流单状态与轨迹\n\n`ShipmentStatus`："
+  },
+  {
+    "id": 134,
+    "document_id": 45,
+    "filename": "08-shipment-stocktake.md",
+    "chunk_index": 1,
+    "char_count": 795,
+    "heading": "物流发货与库存盘点",
+    "content": "## 物流单状态与轨迹\n\n`ShipmentStatus`：\n\n| 状态 | 英文标识 | 能否改承运商 / 运单号 / 数量 | 库存 |\n| --- | --- | --- | --- |\n| 草稿 | `DRAFT` | 可以 | 不改 |\n| 已发货 | `SHIPPED` | 不能 | 不改 |\n| 运输中 | `IN_TRANSIT` | 不能 | 不改 |\n| 已签收 | `DELIVERED` | 不能 | 不改 |\n| 已取消 | `CANCELLED` | 仅发货前允许 | 不改 |\n\n物流单号：`SHP` + 年份 + 6 位 id，例如 `SHP2026000001`。租户内唯一。这不是出库单的 `OUT` 前缀，也不是调拨单的 `TR`。\n\n`tracking_no` 是承运商运单号。草稿可空，确认发货前必须有。唯一约束是 `(tenant_id, carrier_id, tracking_no)`。MySQL 把多个 NULL 视为互不相等，多张草稿可以暂时不填运单号。\n\n`TrackingEventStatus`：`PICKED_UP` / `IN_TRANSIT` / `ARRIVED_AT_HUB` / `OUT_FOR_DELIVERY` / `DELIVERED` / `EXCEPTION` / `OTHER`。轨迹只追加。只有 `SHIPPED` / `IN_TRANSIT` 可以添加轨迹。签收不要走轨迹接口，走 `POST /shipments/{id}/deliver`。\n\n物流单上的 `IN_TRANSIT` 表示包裹在承运商手里。调拨单上的 `IN_TRANSIT` 表示货已离开源仓、尚未进入目标仓，源仓 `quantity` 已经减少。两个英文标识相同，一个不改库存，一个已经改了源仓库存。\n\n## 确认发货不扣库存"
+  },
+  {
+    "id": 135,
+    "document_id": 45,
+    "filename": "08-shipment-stocktake.md",
+    "chunk_index": 2,
+    "char_count": 697,
+    "heading": "物流发货与库存盘点",
+    "content": "## 确认发货不扣库存\n\n`confirm_shipment()` 会：\n\n1. `SELECT FOR UPDATE` 锁物流单，必须仍是 `DRAFT`。重复确认返回 `SHIPMENT_ALREADY_CONFIRMED`，不再累加 `shipped_quantity`。\n2. 必须有运单号，承运商必须启用。\n3. 锁出库明细，按 `sku_id` 升序。\n4. 重新计算已 `SHIPPED` / `IN_TRANSIT` / `DELIVERED` 的数量，本次不能超过剩余已出库数量。\n5. 增加 `SalesOrderItem.shipped_quantity`。\n6. 物流单变成 `SHIPPED`。按数量更新销售订单为 `PARTIALLY_SHIPPED` 或 `SHIPPED`。一次 commit。\n\n超额时 `error` 为 `SHIPMENT_EXCEEDS_OUTBOUND`。测试 `test_shipping.py` 断言该码。它不是 `OUTBOUND_EXCEEDS_RESERVED`（出库超过订单预占），也不是 `OUTBOUND_PICK_EXCEEDS_PLAN`（拣货超过本张出库单计划）。\n\n创建草稿时草稿数量也占用剩余可发，避免把出库 10 件计划成两张各 6 的草稿。失败则整单 rollback，草稿仍是草稿。\n\n权限：`shipment:read/create/update/confirm/tracking:update/deliver/cancel`。物流商是独立资源 `carrier:*`。\n\n## 物流商 Carrier"
+  },
+  {
+    "id": 136,
+    "document_id": 45,
+    "filename": "08-shipment-stocktake.md",
+    "chunk_index": 3,
+    "char_count": 728,
+    "heading": "物流发货与库存盘点",
+    "content": "权限：`shipment:read/create/update/confirm/tracking:update/deliver/cancel`。物流商是独立资源 `carrier:*`。\n\n## 物流商 Carrier\n\n基础资料，不调用顺丰 / DHL / UPS API。类型：`DOMESTIC_EXPRESS` / `INTERNATIONAL_EXPRESS` / `FREIGHT_FORWARDER` / `PLATFORM_LOGISTICS` / `OTHER`。\n\n编码不填时 flush 拿到 id，写成 `CAR` + 10 位数字。创建后只读。未被物流单引用可删除。已经产生物流单只能停用。停用后不能新建或确认物流单，历史单据仍显示当时的物流商名称。\n\n承运商状态或类型不合法时，Carrier 服务使用 HTTP 业务码 `40097`。销售、采购、调拨、盘点、售后在仓库未启用时也会返回 `40097`，销售路径还会带 `data.error = WAREHOUSE_DISABLED`。同一数字码不是同一业务结论，检索必须连错误数据和中文消息一起看。\n\n本版不做：真实承运商 API、电子面单、自动拉轨迹、平台发货回传、运费结算、退货物流。\n\n## 盘点比较的是快照，不是实时账面\n\n盘点任务创建时把当时的 `Inventory.quantity` 写入明细 `system_quantity`，把当时的预占写入账面预占快照。仓库人员填写 `counted_quantity`。差异：\n\n```text\ndifference_quantity = counted_quantity - system_quantity\n```"
+  },
+  {
+    "id": 137,
+    "document_id": 45,
+    "filename": "08-shipment-stocktake.md",
+    "chunk_index": 4,
+    "char_count": 764,
+    "heading": "物流发货与库存盘点",
+    "content": "```text\ndifference_quantity = counted_quantity - system_quantity\n```\n\n不能只在页面上实时读当前 `Inventory.quantity`。10:00 创建时账面 100，10:05 采购入库变成 120，10:10 实盘 100。如果用实时账面计算，会得到错误的 -20。\n\n## 确认时把差异加到当前账面\n\n确认时库存可能已经变了。创建快照 100，期间入库 +20，当前 120，实盘 98，差异 -2。\n\n正确结果：`120 + (-2) = 118`。\n\n如果执行 `Inventory.quantity = 98`，会把正常入库的 20 件也抹掉。因此 `confirm_stocktake()` 只把 `difference_quantity` 加到**当前**账面，流水类型 `STOCKTAKE_ADJUSTMENT`。\n\n盘点期间不锁库存行。盘点可能持续几小时，`SELECT ... FOR UPDATE` 只能用于短事务。确认才锁盘点单和对应库存行，同一事务改库存、写流水、改状态。保存实盘不改库存。\n\n## 盘点状态机\n\n`StocktakeOrderStatus`：\n\n```text\nCOUNTING → PENDING_CONFIRMATION → CONFIRMED\nCOUNTING / PENDING_CONFIRMATION → CANCELLED\n```\n\n本版创建后直接进入 `COUNTING`。枚举里保留 `DRAFT`，注释写明留给以后「先建任务再开始」。当前创建接口不要把它理解成销售订单那种可编辑、未预占的草稿。\n\n已确认不能取消。重复确认返回 `STOCKTAKE_ALREADY_CONFIRMED`。"
+  },
+  {
+    "id": 138,
+    "document_id": 45,
+    "filename": "08-shipment-stocktake.md",
+    "chunk_index": 5,
+    "char_count": 792,
+    "heading": "物流发货与库存盘点",
+    "content": "已确认不能取消。重复确认返回 `STOCKTAKE_ALREADY_CONFIRMED`。\n\n范围：`ALL`（整仓）或 `SELECTED_SKU`。不做库区、库位、批次盘点。单号：`ST` + 年份 + 6 位 id。权限：`stocktake:read/create/update/submit/confirm/cancel`。\n\n## 盘点不能破坏预占\n\n调整后必须 `new_quantity >= reserved_quantity`。账面 100、预占 80、实盘 70：差异会把实际调到低于预占，确认失败。错误码是 `STOCKTAKE_CONFLICT_WITH_RESERVED_INVENTORY`。测试 `test_stocktake.py` 断言该码。\n\n盘点不能悄悄调用销售订单的释放路径。释放超额是另一个码 `INSUFFICIENT_RESERVED_INVENTORY`。出库超额是 `OUTBOUND_EXCEEDS_RESERVED`。三个码都和「预占」有关，路径不同。\n\n停用仓库不能新建或确认盘点，业务码 `40097`，中文「只能对启用中的仓库做盘点」。\n\n## 物流 IN_TRANSIT 和调拨 IN_TRANSIT\n\n| 对象 | 状态 | 到达该状态时库存 |\n| --- | --- | --- |\n| 物流单 | `IN_TRANSIT` | 出库时已经扣过；轨迹阶段不再改 |\n| 调拨单 | `IN_TRANSIT` | 源仓 `quantity` 已减少，目标仓尚未增加 |\n\n问「IN_TRANSIT 会不会改库存」时，必须指定单据。单靠英文标识不够。\n\n问「DRAFT 能不能改数量」时：物流草稿可以改发货数量；盘点枚举虽有 `DRAFT`，本版任务创建后已在 `COUNTING`；销售草稿改的是购买数量且尚未预占。"
+  },
+  {
+    "id": 139,
+    "document_id": 45,
+    "filename": "08-shipment-stocktake.md",
+    "chunk_index": 6,
+    "char_count": 725,
+    "heading": "物流发货与库存盘点",
+    "content": "问「DRAFT 能不能改数量」时：物流草稿可以改发货数量；盘点枚举虽有 `DRAFT`，本版任务创建后已在 `COUNTING`；销售草稿改的是购买数量且尚未预占。\n\n## 一张出库明细拆成多个包裹\n\n出库 SKU-A × 10 后，Shipment A 可以发 6，Shipment B 发 4。`ShipmentItem.quantity > 0`。同一出库明细上所有未取消物流单的数量合计，不能超过该出库明细的 `outbound_quantity`。\n\nV9 曾经历字段迁移：V8 把 `shipped_quantity` 当成已出库数量，`PARTIALLY_SHIPPED` / `SHIPPED` 当时表示仓库出库。V9 把旧值拷到 `outbound_quantity`，`shipped_quantity` 清零；历史状态改成 `PARTIALLY_OUTBOUND` / `OUTBOUNDED`。现在的 `PARTIALLY_SHIPPED` / `SHIPPED` 只表示物流。检索「SHIPPED」时必须看它写在销售订单上还是物流单上。\n\n销售订单进入 `COMPLETED` 只能由系统根据履约结果决定，前端不能 `PATCH status = COMPLETED`。必须：所有购买数量都已出库、都已发货，并且所有正式物流单都已签收。两张物流单只签收一张时，订单仍是部分发货或已发货。\n\n签收锁物流单，写成 `DELIVERED`，自动追加一条签收轨迹。整张物流单签收，不做某个 SKU 部分签收。已发货后不能改承运商、运单号、数量，也不能取消。撤回以后走异常物流或售后退货，不在本物流单上倒扣库存。\n\n## 盘点明细字段"
+  },
+  {
+    "id": 140,
+    "document_id": 45,
+    "filename": "08-shipment-stocktake.md",
+    "chunk_index": 7,
+    "char_count": 678,
+    "heading": "物流发货与库存盘点",
+    "content": "签收锁物流单，写成 `DELIVERED`，自动追加一条签收轨迹。整张物流单签收，不做某个 SKU 部分签收。已发货后不能改承运商、运单号、数量，也不能取消。撤回以后走异常物流或售后退货，不在本物流单上倒扣库存。\n\n## 盘点明细字段\n\n| 字段 | 含义 |\n| --- | --- |\n| `system_quantity` | 创建任务时的账面 `quantity` 快照 |\n| 账面预占快照 | 当时的 `reserved_quantity` |\n| `counted_quantity` | 仓库实盘 |\n| `difference_quantity` | 实盘减快照 |\n\n范围 `ALL` 会为该仓当时有库存行的 SKU 生成明细。`SELECTED_SKU` 只包含选中的 SKU。保存实盘走 `PUT /stocktakes/{id}/items` 或单行 PATCH，都不改 `Inventory`。\n\n提交后进入 `PENDING_CONFIRMATION`，普通盘点人员不能再改数量。确认权限 `stocktake:confirm` 单独授予，因为确认会改库存。\n\n盘盈：差异 > 0，确认后 `quantity` 增加。盘亏：差异 < 0，确认后减少，但仍须 `new_quantity >= reserved_quantity`。一致：差异 = 0，仍写流水或按实现跳过零差异，以 Service 为准；状态会变成 `CONFIRMED`。\n\n停用仓不能盘点。查询历史已确认盘点单不因为仓库后来停用而删除。\n\n## 接口与幂等"
+  },
+  {
+    "id": 141,
+    "document_id": 45,
+    "filename": "08-shipment-stocktake.md",
+    "chunk_index": 8,
+    "char_count": 438,
+    "heading": "物流发货与库存盘点",
+    "content": "停用仓不能盘点。查询历史已确认盘点单不因为仓库后来停用而删除。\n\n## 接口与幂等\n\n盘点：`GET/POST /api/v1/stocktakes`，`GET/PATCH /api/v1/stocktakes/{id}`，批量保存实盘 `PUT /api/v1/stocktakes/{id}/items`，提交 / 确认 / 取消走 `POST .../submit|confirm|cancel`。保存实盘不改库存。重复确认 `STOCKTAKE_ALREADY_CONFIRMED`。\n\n物流确认发货、追加轨迹、签收都是物流单自己的 POST。轨迹接口不能代替签收。同一张物流单两个请求同时确认：行锁保证只成功一次。两张物流单竞争同一出库明细：创建时草稿占用剩余，确认时再按 `sku_id` 升序锁明细。\n\n承运商编码前缀 `CAR`，物流单 `SHP`，盘点 `ST`。不要把 `ST` 当成库存流水类型；流水类型是 `STOCKTAKE_ADJUSTMENT`。"
+  }
+]

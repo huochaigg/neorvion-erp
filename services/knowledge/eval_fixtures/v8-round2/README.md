@@ -1,6 +1,17 @@
 # V8 第二轮：多 Chunk 测试语料
 
-本目录只准备语料，**尚未导入任何知识库**。不执行 PARSE / CHUNK / EMBED，不调用收费模型，不生成评测题目，不冻结新数据集。
+本目录存放 V8 第二轮语料与 120 题综合评测工作稿。
+
+语料已导入租户 3 知识库 **#8 `V8-R2-Multi-Chunk`**（8 份 Markdown，80 ACTIVE Chunk）。题目工作稿导入数据集 **`V8-R2-120-Comprehensive`**（#10），全部 `needs_human_review=True`，未冻结。
+
+重复导入：
+
+```text
+uv run python -m app.scripts.import_v8_r2_120 --dry-run
+uv run python -m app.scripts.import_v8_r2_120
+```
+
+只读写评测题和确定性标注，不调用 Embedding / Chat / Judge / Rerank，不修改知识库 #7 与 Run 39～42。
 
 ## 为什么不能写入知识库 #7
 
