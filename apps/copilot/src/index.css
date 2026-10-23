@@ -84,3 +84,57 @@ body {
 .copilot-scroll::-webkit-scrollbar-track {
   background: transparent;
 }
+
+/* Wujie Shadow DOM 里 Tailwind v4 渐变变量不生效，主色按钮用普通 linear-gradient。 */
+.copilot-accent-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  color: #fff;
+  background: linear-gradient(135deg, #4f8cff 0%, #8b5cf6 100%);
+  box-shadow: 0 8px 18px rgba(99, 102, 241, 0.28);
+  border: 0;
+  cursor: pointer;
+}
+
+.copilot-accent-btn:hover:not(:disabled) {
+  opacity: 0.9;
+}
+
+.copilot-accent-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+  box-shadow: none;
+}
+
+.copilot-stop-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  color: #dc2626;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.copilot-stop-btn:hover {
+  background: #fee2e2;
+}
+
+.copilot-composer-fade {
+  background: linear-gradient(to top, #f8fafc 0%, rgba(248, 250, 252, 0.92) 55%, transparent 100%);
+}
+
+.copilot-prompt-icon {
+  background: #eef2ff;
+  color: #6366f1;
+}
+
+.group:hover .copilot-prompt-icon {
+  color: #fff;
+  background: linear-gradient(135deg, #4f8cff 0%, #8b5cf6 100%);
+}

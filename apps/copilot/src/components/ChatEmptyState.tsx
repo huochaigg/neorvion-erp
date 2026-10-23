@@ -33,7 +33,7 @@ export function ChatEmptyState({
             onClick={() => onPrompt(item.text)}
             className="group flex items-start gap-3 rounded-[16px] border border-[#E2E8F0] bg-white px-4 py-4 text-left shadow-[0_6px_18px_rgba(15,23,42,0.04)] transition hover:-translate-y-0.5 hover:border-[#C7D2FE] hover:shadow-[0_10px_24px_rgba(99,102,241,0.12)] disabled:cursor-not-allowed disabled:opacity-50"
           >
-            <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#EEF2FF] text-[#6366F1] transition group-hover:bg-gradient-to-br group-hover:from-[#4F8CFF] group-hover:to-[#8B5CF6] group-hover:text-white">
+            <span className="copilot-prompt-icon mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl">
               <item.icon size={18} />
             </span>
             <span className="text-sm font-medium leading-6 text-[#0F172A]">{item.text}</span>

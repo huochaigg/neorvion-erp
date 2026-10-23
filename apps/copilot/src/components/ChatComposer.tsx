@@ -19,7 +19,7 @@ export function ChatComposer({
 }) {
   const canSend = Boolean(value.trim()) && !disabled && !running;
   return (
-    <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-[#F8FAFC] via-[#F8FAFC]/95 to-transparent px-4 pb-5 pt-10">
+    <div className="copilot-composer-fade pointer-events-none absolute inset-x-0 bottom-0 px-4 pb-5 pt-10">
       <div className="pointer-events-auto mx-auto flex w-full max-w-[900px] items-end gap-2 rounded-[20px] border border-[#E2E8F0] bg-white p-3 shadow-[0_12px_40px_rgba(15,23,42,0.08)]">
         <textarea
           value={value}
@@ -39,20 +39,29 @@ export function ChatComposer({
           <button
             type="button"
             onClick={onStop}
-            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-[#FECACA] bg-[#FEF2F2] text-[#DC2626] transition hover:bg-[#FEE2E2]"
+            className="copilot-stop-btn shrink-0"
+            style={{ color: '#dc2626', background: '#fef2f2', border: '1px solid #fecaca' }}
             aria-label="停止生成"
           >
-            <Square size={14} fill="currentColor" />
+            <Square size={14} color="#dc2626" fill="#dc2626" />
           </button>
         ) : (
           <button
             type="button"
             disabled={!canSend}
             onClick={onSend}
-            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[#4F8CFF] to-[#8B5CF6] text-white shadow-[0_8px_18px_rgba(99,102,241,0.35)] transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40 disabled:shadow-none"
+            className="copilot-accent-btn h-10 w-10 shrink-0 rounded-full"
+            style={{
+              color: '#fff',
+              background: 'linear-gradient(135deg, #4F8CFF 0%, #8B5CF6 100%)',
+            }}
             aria-label="发送"
           >
-            {disabled ? <LoaderCircle size={16} className="animate-spin" /> : <Send size={16} />}
+            {disabled ? (
+              <LoaderCircle size={16} color="#fff" className="animate-spin" />
+            ) : (
+              <Send size={16} color="#fff" />
+            )}
           </button>
         )}
       </div>

@@ -136,9 +136,13 @@ export function Sidebar({
             type="button"
             title="新建对话"
             onClick={() => create.mutate()}
-            className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-[#4F8CFF] to-[#8B5CF6] text-white shadow-[0_8px_16px_rgba(99,102,241,0.28)] transition hover:opacity-90"
+            className="copilot-accent-btn h-10 w-10 rounded-xl"
+            style={{
+              color: '#fff',
+              background: 'linear-gradient(135deg, #4F8CFF 0%, #8B5CF6 100%)',
+            }}
           >
-            <Plus size={18} />
+            <Plus size={18} color="#fff" />
           </button>
         </div>
       ) : (
@@ -147,9 +151,13 @@ export function Sidebar({
             type="button"
             onClick={() => create.mutate()}
             disabled={create.isPending}
-            className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#4F8CFF] to-[#8B5CF6] px-3 py-2.5 text-sm font-medium text-white shadow-[0_8px_18px_rgba(99,102,241,0.25)] transition hover:opacity-90 disabled:opacity-60"
+            className="copilot-accent-btn w-full rounded-xl px-3 py-2.5 text-sm font-medium"
+            style={{
+              color: '#fff',
+              background: 'linear-gradient(135deg, #4F8CFF 0%, #8B5CF6 100%)',
+            }}
           >
-            <Plus size={16} />
+            <Plus size={16} color="#fff" />
             新建对话
           </button>
           <label className="mt-3 flex items-center gap-2 rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] px-3 py-2 text-[#94A3B8]">

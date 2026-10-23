@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Skeleton } from 'antd';
 import { AlertCircle, RotateCcw, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -42,6 +42,7 @@ export function CopilotPage() {
     queryKey: ['tenant', tenantId, 'copilot-conversation', selected],
     queryFn: ({ signal }) => getConversation(selected!, signal),
     enabled: selected != null,
+    placeholderData: keepPreviousData,
   });
 
   useEffect(() => () => useCopilotStore.getState().controller?.abort(), []);
@@ -109,8 +110,6 @@ export function CopilotPage() {
     if (item.event === 'done') {
       setDraft('');
       setTools([]);
-      void query.invalidateQueries({ queryKey: ['tenant', tenantId, 'copilot-conversation', selected] });
-      void query.invalidateQueries({ queryKey: ['tenant', tenantId, 'copilot-conversations'] });
     }
   };
 

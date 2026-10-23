@@ -1,5 +1,6 @@
 import { ApiError } from '@neorvion/shared';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { isCancel } from 'axios';
 import { App as AntApp, ConfigProvider } from 'antd';
 import zhCN from 'antd/locale/zh_CN';
 import { useState } from 'react';
@@ -33,7 +34,7 @@ export function App() {
       new QueryClient({
         defaultOptions: {
           queries: {
-            retry: (n, e) => !(e instanceof ApiError && [401, 403].includes(e.status)) && n < 1,
+            retry: (n, e) => !(e instanceof ApiError && [401, 403].includes(e.status)) && !isCancel(e) && n < 1,
             refetchOnWindowFocus: false,
           },
         },
