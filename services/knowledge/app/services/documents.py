@@ -50,7 +50,13 @@ from app.schemas.documents import (
     UploadBatchOut,
     UploadItemOut,
 )
-from app.schemas.ops import RecycleBatchOut, RecycleItemOut, RecycleListOut, RevisionListOut, RevisionOut
+from app.schemas.ops import (
+    RecycleBatchOut,
+    RecycleItemOut,
+    RecycleListOut,
+    RevisionListOut,
+    RevisionOut,
+)
 from app.services.access import AccessService
 from app.services.audit import write_audit
 from app.services.authorization import AuthorizationService
@@ -316,6 +322,7 @@ class DocumentService:
         row = await self.chunks.get_in_tenant(chunk_id)
         if row is None or row.status != "ACTIVE":
             raise AppError(_UNAVAILABLE_CHUNK, code=40453, status_code=404)
+        await self.access.assert_readable(row.knowledge_base_id)
         return self._chunk_out(row)
 
     async def update_chunk(self, chunk_id: int, payload: ChunkUpdateIn) -> ChunkOut:

@@ -9,13 +9,16 @@ from app.ai.types import ModelToolDefinition
 from app.core.permissions import PermissionCode
 from app.erp.client import ErpApiClient
 from app.tools.schemas import (
+    AnalyzeInventoryCoverageArgs,
     GetAfterSaleArgs,
     GetInventoryArgs,
     GetProductArgs,
     GetSalesOrderArgs,
     GetWarehouseArgs,
+    ListKnowledgeBasesArgs,
     ListPurchaseOrdersArgs,
     ListSalesOrdersArgs,
+    SearchKnowledgeArgs,
     SearchProductsArgs,
 )
 
@@ -110,6 +113,8 @@ class ToolSpec:
     permission: str
     path: str
     detail_arg: str | None = None
+    source: str = "ERP"
+    additional_permissions: tuple[str, ...] = ()
 
     def definition(self) -> ModelToolDefinition:
         return {
@@ -155,7 +160,10 @@ class ToolRegistry:
 
     def definitions(self, permissions: frozenset[str]) -> list[ModelToolDefinition]:
         return [
-            spec.definition() for spec in self._specs.values() if spec.permission in permissions
+            spec.definition()
+            for spec in self._specs.values()
+            if spec.permission in permissions
+            and all(item in permissions for item in spec.additional_permissions)
         ]
 
 
@@ -223,6 +231,30 @@ def build_tool_registry() -> ToolRegistry:
                 PermissionCode.AFTER_SALE_READ.value,
                 "/api/v1/after-sales",
                 "after_sale_id",
+            ),
+            ToolSpec(
+                "list_knowledge_bases",
+                "列出当前用户有权访问的知识库，用于在检索前确定明确范围；多个候选含义不清时应请用户选择。",
+                ListKnowledgeBasesArgs,
+                PermissionCode.KNOWLEDGE_READ.value,
+                "/api/v1/knowledge-bases",
+                source="KNOWLEDGE",
+            ),
+            ToolSpec(
+                "search_knowledge",
+                "在用户明确选择且当前有权访问的知识库中检索制度、流程和业务规则。引用答案时必须使用结果中的 citation_id。",
+                SearchKnowledgeArgs,
+                PermissionCode.KNOWLEDGE_READ.value,
+                "/api/v1/search",
+                source="KNOWLEDGE",
+            ),
+            ToolSpec(
+                "analyze_inventory_coverage",
+                "按明确日期区间计算指定 SKU 的可用库存覆盖天数。公式由服务端固定执行：可用库存 / 日均有效销量；不等同于补货建议。",
+                AnalyzeInventoryCoverageArgs,
+                PermissionCode.ANALYTICS_SALES_READ.value,
+                "/api/v1/analytics/sales/sku",
+                additional_permissions=(PermissionCode.INVENTORY_READ.value,),
             ),
         ]
     )

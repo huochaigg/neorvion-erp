@@ -531,6 +531,22 @@ def test_sales_purchase_inventory_after_sale_口径(client: TestClient) -> None:
     assert top_skus[0]["sales_quantity"] == 5
     assert top_skus[0]["sales_amount"] == 500.0
 
+    sku_sales = client.get(
+        "/api/v1/analytics/sales/sku",
+        params={
+            "sku_code": product["skus"][0]["sku_code"],
+            "start_date": start,
+            "end_date": end,
+        },
+        headers=header,
+    )
+    assert sku_sales.status_code == 200, sku_sales.text
+    sku_stats = sku_sales.json()["data"]
+    assert sku_stats["sku_id"] == sku_a
+    assert sku_stats["sales_quantity"] == 5
+    assert sku_stats["period_days"] == 1
+    assert sku_stats["average_daily_sales"] == 5.0
+
     top_customers = client.get(
         "/api/v1/analytics/sales/top-customers",
         params={"start_date": start, "end_date": end},

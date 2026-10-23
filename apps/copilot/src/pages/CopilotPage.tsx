@@ -8,7 +8,7 @@ import { ChatComposer } from '@/components/ChatComposer';
 import { ChatEmptyState } from '@/components/ChatEmptyState';
 import { ChatMessage } from '@/components/ChatMessage';
 import { useCopilotStore } from '@/store';
-import type { Message, StreamEvent, ToolRun } from '@/types';
+import type { Evidence, Message, StreamEvent, ToolRun } from '@/types';
 
 function requestId() {
   return crypto.randomUUID().replaceAll('-', '');
@@ -25,6 +25,8 @@ export function CopilotPage() {
   const [lastMessage, setLastMessage] = useState('');
   const [draft, setDraft] = useState('');
   const [tools, setTools] = useState<ToolRun[]>([]);
+  const [evidences, setEvidences] = useState<Evidence[]>([]);
+  const [analysisStatus, setAnalysisStatus] = useState('');
   const [error, setError] = useState('');
   const [running, setRunning] = useState(false);
   const bottom = useRef<HTMLDivElement>(null);
@@ -52,7 +54,7 @@ export function CopilotPage() {
 
   const visible = useMemo(() => {
     const messages = detail.data?.messages ?? [];
-    return draft
+    return running
       ? [
           ...messages,
           {
@@ -64,14 +66,17 @@ export function CopilotPage() {
             created_at: '',
             updated_at: '',
             tool_runs: tools,
+            evidences,
+            analysis_status: analysisStatus,
           } as Message,
         ]
       : messages;
-  }, [detail.data?.messages, draft, tools]);
+  }, [analysisStatus, detail.data?.messages, draft, evidences, running, tools]);
 
   const handleEvent = (item: StreamEvent, guard: string) => {
     if (runRef.current !== guard) return;
     const data = item.data;
+    if (item.event === 'analysis_status') setAnalysisStatus(String(data.message ?? ''));
     if (item.event === 'message') setDraft((value) => value + String(data.delta ?? ''));
     if (item.event === 'tool_start') {
       setTools((value) => [
@@ -107,9 +112,14 @@ export function CopilotPage() {
       );
     }
     if (item.event === 'error') setError(String(data.message ?? '生成失败'));
+    if (item.event === 'evidence') {
+      setEvidences((value) => [...value, { ...data, access_status: 'ACTIVE' } as unknown as Evidence]);
+    }
     if (item.event === 'done') {
       setDraft('');
       setTools([]);
+      setEvidences([]);
+      setAnalysisStatus('');
     }
   };
 
@@ -130,6 +140,8 @@ export function CopilotPage() {
     setInput('');
     setDraft('');
     setTools([]);
+    setEvidences([]);
+    setAnalysisStatus('');
     setError('');
     setRunning(true);
     try {
@@ -204,7 +216,7 @@ export function CopilotPage() {
         value={input}
         running={running}
         disabled={create.isPending}
-        placeholder={selected ? '询问订单、库存、商品、采购或售后信息' : '先提问，或选择一个快捷问题开始'}
+        placeholder={selected ? '询问 ERP 数据，或指定知识库 ID 查询制度与流程' : '先提问，或选择一个快捷问题开始'}
         onChange={setInput}
         onSend={() => void send()}
         onStop={() => controller?.abort()}

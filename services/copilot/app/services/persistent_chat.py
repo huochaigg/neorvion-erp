@@ -116,6 +116,9 @@ class PersistentChatService:
                 if name.startswith("tool_"):
                     await self.repo.record_tool_event(turn.conversation_id, turn.message_id, name, data)
                     await self.session.commit()
+                elif name == "evidence":
+                    await self.repo.record_evidence(turn.conversation_id, turn.message_id, data)
+                    await self.session.commit()
                 enriched = data | self._ids(turn)
                 if name == "done":
                     await self.repo.finish_message(

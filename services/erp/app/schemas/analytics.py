@@ -79,6 +79,18 @@ class TopSkuOut(BaseModel):
     order_count: int = Field(..., description="包含该 SKU 的有效销售订单数")
 
 
+class SkuSalesOut(BaseModel):
+    sku_id: int
+    sku_code: str
+    sku_name: str
+    start_date: str = Field(description="统计开始日期，含当天")
+    end_date: str = Field(description="统计结束日期，含当天")
+    period_days: int = Field(description="统计自然日天数，平均日销量的固定分母")
+    sales_quantity: int = Field(description="区间内有效销售订单的目标 SKU 销量")
+    order_count: int = Field(description="区间内包含目标 SKU 的有效订单数")
+    average_daily_sales: float = Field(description="sales_quantity / period_days；无销量时为 0")
+
+
 class TopProductOut(BaseModel):
     product_id: int
     product_name: str

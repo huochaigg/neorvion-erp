@@ -19,7 +19,7 @@ class Settings(BaseSettings):
     app_env: str = "development"
     app_host: str = "0.0.0.0"
     app_port: int = 8013
-    app_version: str = "2.0.0"
+    app_version: str = "4.0.0"
     git_sha: str = ""
     enable_api_docs: bool = True
     cors_origins: str = (
@@ -61,6 +61,14 @@ class Settings(BaseSettings):
     erp_jwt_audience: str = "neorvion-erp"
     erp_connect_timeout_seconds: float = 3.0
     erp_read_timeout_seconds: float = 10.0
+    knowledge_base_url: str = "http://127.0.0.1:8012"
+    knowledge_jwt_audience: str = "neorvion-knowledge"
+    knowledge_connect_timeout_seconds: float = 3.0
+    knowledge_read_timeout_seconds: float = 12.0
+    knowledge_top_k_max: int = 8
+    knowledge_evidence_excerpt_chars: int = 600
+    evidence_history_limit: int = 40
+    knowledge_history_revalidation_timeout_seconds: float = 5.0
     tool_max_rounds: int = 5
     tool_max_calls: int = 8
     tool_total_timeout_seconds: float = 30.0

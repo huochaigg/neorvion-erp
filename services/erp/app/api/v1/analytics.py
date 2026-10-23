@@ -23,6 +23,7 @@ from app.schemas.analytics import (
     PurchaseTrendPoint,
     SalesSummaryOut,
     SalesTrendPoint,
+    SkuSalesOut,
     StatusCountOut,
     TopCustomerOut,
     TopProductOut,
@@ -136,6 +137,26 @@ def sales_top_skus(
 ) -> ApiResponse[list[TopSkuOut]]:
     return ok(
         AnalyticsService(session, context).top_skus(start_date, end_date, limit, warehouse_id)
+    )
+
+
+@router.get(
+    "/sales/sku",
+    response_model=ApiResponse[SkuSalesOut | None],
+    summary="指定 SKU 销量统计",
+)
+def sales_sku(
+    sku_code: Annotated[str, Query(min_length=1, max_length=64, description="精确 SKU 编码")],
+    context: AnalyticsSalesReadContext,
+    session: DbSession,
+    start_date: StartDate = None,
+    end_date: EndDate = None,
+    warehouse_id: WarehouseId = None,
+) -> ApiResponse[SkuSalesOut | None]:
+    return ok(
+        AnalyticsService(session, context).sku_sales(
+            sku_code, start_date, end_date, warehouse_id
+        )
     )
 
 

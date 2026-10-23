@@ -61,6 +61,9 @@ class FakeRepo:
     async def record_tool_event(self, conversation_id, message_id, event, data):
         self.events.append((event, data))
 
+    async def record_evidence(self, conversation_id, message_id, data):
+        self.events.append(("evidence", data))
+
     async def finish_message(self, message_id, **values):
         self.finished.append(values)
 
@@ -70,6 +73,7 @@ class FakeWorkflow:
         context.protocol_messages.extend([{"role": "assistant", "content": "完成"}])
         yield {"event": "tool_start", "data": {"tool_call_id": "c1", "name": "get_inventory"}}
         yield {"event": "tool_end", "data": {"tool_call_id": "c1", "name": "get_inventory", "duration_ms": 3}}
+        yield {"event": "evidence", "data": {"tool_call_id": "c1", "citation_id": "E1"}}
         yield {"event": "message", "data": {"delta": "完成"}}
         yield {"event": "done", "data": {"answer": "完成"}}
 
@@ -104,10 +108,11 @@ async def test_persistent_stream_records_tool_run_and_message() -> None:
         "run_start",
         "tool_start",
         "tool_end",
+        "evidence",
         "message",
         "done",
     ]
-    assert [item[0] for item in service.repo.events] == ["tool_start", "tool_end"]
+    assert [item[0] for item in service.repo.events] == ["tool_start", "tool_end", "evidence"]
     assert service.repo.finished[-1]["status"] == "COMPLETED"
 
 

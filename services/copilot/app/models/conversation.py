@@ -133,3 +133,43 @@ class ToolRun(TenantMixin, Base):
     error_code: Mapped[int | None] = mapped_column()
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=text("now()"))
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class Evidence(TenantMixin, Base):
+    __tablename__ = "copilot_evidences"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["tenant_id", "conversation_id"],
+            ["copilot_conversations.tenant_id", "copilot_conversations.id"],
+            ondelete="CASCADE",
+            name="fk_copilot_evidences_conversation_tenant",
+        ),
+        ForeignKeyConstraint(
+            ["tenant_id", "message_id"],
+            ["copilot_messages.tenant_id", "copilot_messages.id"],
+            ondelete="CASCADE",
+            name="fk_copilot_evidences_message_tenant",
+        ),
+        UniqueConstraint("tenant_id", "message_id", "citation_id", name="uq_copilot_evidence_citation"),
+        Index("ix_copilot_evidences_message", "tenant_id", "message_id"),
+        CheckConstraint("source_type IN ('ERP', 'KNOWLEDGE')", name="ck_copilot_evidences_source"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    conversation_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    message_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    user_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    tool_call_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    citation_id: Mapped[str] = mapped_column(String(32), nullable=False)
+    source_type: Mapped[str] = mapped_column(String(16), nullable=False)
+    resource_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    resource_id: Mapped[str | None] = mapped_column(String(128))
+    knowledge_base_id: Mapped[int | None] = mapped_column(BigInteger)
+    document_id: Mapped[int | None] = mapped_column(BigInteger)
+    chunk_id: Mapped[int | None] = mapped_column(BigInteger)
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    excerpt: Mapped[str | None] = mapped_column(Text)
+    source_version: Mapped[int | None] = mapped_column()
+    evidence_metadata: Mapped[dict[str, Any]] = mapped_column("metadata", JSONB, nullable=False, server_default="{}")
+    observed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=text("now()"))

@@ -15,6 +15,7 @@ from app.core.tenant import TENANT_HEADER, TenantContext
 from app.db.session import open_tenant_session
 from app.erp.client import get_erp_client
 from app.graph.workflow import CopilotWorkflow
+from app.knowledge.client import get_knowledge_client
 from app.services.authorization import AuthorizationService
 from app.tools.executor import ToolExecutor
 from app.tools.registry import build_tool_registry
@@ -85,7 +86,7 @@ DbSession = Annotated[AsyncSession, Depends(get_db)]
 def get_workflow() -> CopilotWorkflow:
     return CopilotWorkflow(
         get_chat_adapter(),
-        ToolExecutor(build_tool_registry(), get_erp_client()),
+        ToolExecutor(build_tool_registry(), get_erp_client(), get_knowledge_client()),
     )
 
 

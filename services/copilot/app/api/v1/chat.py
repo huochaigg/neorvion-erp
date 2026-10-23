@@ -42,6 +42,7 @@ def _runtime(request: Request, context: CopilotContext) -> AgentRuntime:
             tenant=context,
             access_token=str(getattr(request.state, "access_token", "")),
             erp_audience_authorized=settings.erp_jwt_audience in audiences,
+            knowledge_audience_authorized=settings.knowledge_jwt_audience in audiences,
             request_id=str(getattr(request.state, "request_id", "")),
         )
     )
@@ -94,6 +95,8 @@ async def chat_stream(
     workflow: WorkflowDep,
     db: DbSession,
 ) -> StreamingResponse:
+    stream_request_id = str(getattr(request.state, "request_id", "") or uuid4().hex)
+
     async def event_stream():
         persistent_turn = None
         try:
@@ -101,7 +104,7 @@ async def chat_stream(
                 service = PersistentChatService(cast(AsyncSession, db), context, workflow)
                 turn = await service.prepare(
                     payload.conversation_id, payload.message or "", payload.client_request_id or "",
-                    str(getattr(request.state, "request_id", "") or uuid4().hex),
+                    stream_request_id,
                 )
                 persistent_turn = turn
                 events = service.events(turn, _runtime(request, context), request.is_disconnected)
@@ -111,7 +114,9 @@ async def chat_stream(
                 )
             async for event in events:
                 name = str(event.get("event") or "message")
-                yield _sse(name, _event_data(event))
+                data = _event_data(event)
+                data.setdefault("request_id", stream_request_id)
+                yield _sse(name, data)
         except AppError as exc:
             ids = (
                 {
@@ -122,7 +127,7 @@ async def chat_stream(
                 if persistent_turn is not None
                 else {}
             )
-            yield _sse("error", {"code": exc.code, "message": exc.message} | ids)
+            yield _sse("error", {"code": exc.code, "message": exc.message, "request_id": stream_request_id} | ids)
         except Exception:
             ids = (
                 {
@@ -133,7 +138,7 @@ async def chat_stream(
                 if persistent_turn is not None
                 else {}
             )
-            yield _sse("error", {"code": 50268, "message": "模型生成失败"} | ids)
+            yield _sse("error", {"code": 50268, "message": "模型生成失败", "request_id": stream_request_id} | ids)
 
     return StreamingResponse(
         event_stream(),

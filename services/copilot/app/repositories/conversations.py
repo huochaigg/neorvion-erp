@@ -7,7 +7,15 @@ from sqlalchemy import func, select, update
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.conversation import Conversation, Message, MessageStatus, ToolRun, ToolRunStatus
+from app.core.config import settings
+from app.models.conversation import (
+    Conversation,
+    Evidence,
+    Message,
+    MessageStatus,
+    ToolRun,
+    ToolRunStatus,
+)
 
 
 class ConversationRepository:
@@ -89,6 +97,41 @@ class ConversationRepository:
                 )
             ).all()
         )
+
+    async def evidences(self, conversation_id: int) -> list[Evidence]:
+        return list((await self.session.scalars(
+            select(Evidence)
+            .join(Message, (Message.id == Evidence.message_id) & (Message.tenant_id == Evidence.tenant_id))
+            .where(
+                Evidence.tenant_id == self.tenant_id,
+                Evidence.conversation_id == conversation_id,
+                Message.user_id == self.user_id,
+            )
+            .order_by(Evidence.created_at, Evidence.id)
+            .limit(settings.evidence_history_limit)
+        )).all())
+
+    async def record_evidence(self, conversation_id: int, message_id: int, data: dict) -> None:
+        """证据字段采用白名单落库，客户端和模型均不能指定租户、用户或消息归属。"""
+        self.session.add(Evidence(
+            tenant_id=self.tenant_id,
+            conversation_id=conversation_id,
+            message_id=message_id,
+            user_id=self.user_id,
+            tool_call_id=str(data.get("tool_call_id") or "")[:128],
+            citation_id=str(data.get("citation_id") or "")[:32],
+            source_type=str(data.get("source_type") or "")[:16],
+            resource_type=str(data.get("resource_type") or "")[:64],
+            resource_id=str(data["resource_id"])[:128] if data.get("resource_id") is not None else None,
+            knowledge_base_id=data.get("knowledge_base_id"),
+            document_id=data.get("document_id"),
+            chunk_id=data.get("chunk_id"),
+            title=str(data.get("title") or "来源")[:255],
+            excerpt=str(data.get("excerpt") or "")[: settings.knowledge_evidence_excerpt_chars],
+            source_version=data.get("source_version"),
+            evidence_metadata=data.get("metadata") if isinstance(data.get("metadata"), dict) else {},
+            observed_at=datetime.fromisoformat(str(data.get("observed_at"))),
+        ))
 
     async def running_message(self, conversation_id: int) -> Message | None:
         return await self.session.scalar(

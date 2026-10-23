@@ -72,17 +72,20 @@ services/copilot (FastAPI, port 8013)
 - React/Wujie 微前端提供会话 CRUD、POST SSE、工具过程、停止生成和租户切换清理。
 - 本版仍只注册 ERP 只读工具，不引入 Knowledge RAG、写操作或 Checkpointer。
 
-### V4：动作提案与审批
+### V4：Knowledge RAG 与可追溯分析（当前）
 
-目标：先支持低风险草稿，再在强约束下逐项开放会影响库存、资金或状态机的动作。
+目标：在保持只读边界的前提下，把 ERP 实时事实与企业制度、流程知识联合回答，并让结论可追溯。
 
-- 引入 Action Proposal；模型只能提出结构化草稿，服务端重新校验 Schema、权限和资源归属。
-- 强制“服务端预览 → 人工确认 → 服务端执行”，预览结果与执行参数通过哈希和幂等键绑定。
-- 首批只开放草稿销售单/采购单等低风险动作；高风险动作还需 IAM 实时回源授权与独立策略。
-- 二人审批或职责分离作为可配置策略；执行前再次读取当前资源状态，过期预览拒绝执行。
-- 审计记录包含操作者、租户、Proposal、确认、下游 request id 和最终结果，但不记录密钥与敏感正文。
+- 复用 Knowledge 的 HYBRID/VECTOR/KEYWORD、RRF 与 Rerank，不在 Copilot 复制向量库。
+- 用户显式指定知识库范围；Knowledge 独立执行租户、权限和知识库 Grant 校验。
+- ERP 与 Knowledge 结果形成服务端证据登记，SSE 提供状态和 evidence 事件。
+- 历史 Knowledge 证据展示前重新鉴权；权限撤销、来源删除和版本变化有明确状态。
+- 外部知识只作为不可信事实材料，服务端拒绝模型伪造的引用编号。
+- 继续禁止 ERP 写操作、多 Agent、Checkpointer 和自由 URL/SQL/Shell 工具。
 
-### V5：可恢复的长流程
+### V5：动作提案与审批
+
+### V6：可恢复的长流程
 
 目标：支持需要等待、重试和人工介入的工作流。
 
@@ -90,9 +93,9 @@ services/copilot (FastAPI, port 8013)
 - 支持暂停、恢复、取消、有限重试、超时、补偿与人工接管。
 - PostgreSQL 是流程状态真相；队列只传递任务 ID。
 - 典型场景：缺货排查、待出库异常核对、采购收货差异处理建议。
-- 任何自动执行仍受 V3/V4 的 Proposal、确认和策略约束。
+- 任何自动执行仍受 V5 的 Proposal、确认和策略约束。
 
-### V6：事件驱动的主动洞察
+### V7：事件驱动的主动洞察
 
 目标：从“用户提问”扩展到“系统发现值得关注的异常”。
 
@@ -101,7 +104,7 @@ services/copilot (FastAPI, port 8013)
 - 租户级订阅、静默时段、去重、节流和通知偏好。
 - 只在有意义变化、失败或需要用户动作时通知，避免噪声。
 
-### V7：企业治理与运营
+### V8：企业治理与运营
 
 目标：让 Copilot 可度量、可控、可运营。
 
@@ -111,7 +114,7 @@ services/copilot (FastAPI, port 8013)
 - 数据保留、脱敏、导出、删除和合规审计策略。
 - 灰度发布、功能开关、租户白名单与紧急停用开关。
 
-### V8：领域技能与生态
+### V9：领域技能与生态
 
 目标：在稳定平台上扩展可治理的 ERP 技能，而不是无限制自由 Agent。
 
@@ -194,4 +197,14 @@ Copilot 最终应成为“受策略控制的 ERP 操作入口”：默认只读�
   LLM 与 ERP 调用不持有数据库事务，避免 `idle in transaction` 长时间占锁。
 - 已增加独立数据库、真实 PostgreSQL CRUD/ToolRun/租户隔离/幂等/并发/池耗尽，以及 GET、普通 Chat、
   SSE 与断开清理测试。V4 仍需在目标部署环境完成备份校验、灰度切换和监控观察后再启动。
+
+### V4：Knowledge RAG 与证据引用已实现
+
+- 新增 `search_knowledge` 只读工具，直接调用 Knowledge 现有 `/api/v1/search`，复用混合检索、RRF 与 Rerank。
+- 知识库 ID 必须显式提供；Copilot 检查 `knowledge:read` 与 audience，Knowledge 再执行租户和知识库 Grant 复核。
+- ERP 与 Knowledge 工具结果由服务端登记为 `[E数字]` / `[K数字]` 证据；模型伪造编号不会进入最终答案。
+- 新增 `copilot_evidences` 迁移；SSE 提供 `analysis_status` 与 `evidence`，会话详情返回分类来源。
+- 历史 Knowledge 证据会并发重新鉴权并受整批超时保护；失权或删除后不返回旧摘录，版本变化标记为 `STALE`。
+- 前端支持工具过程、实时分析状态、ERP/Knowledge 来源卡片和安全文本详情展示。
+- 保持单 LangGraph 受控循环、只读边界和服务端安全校验；未引入写操作、多 Agent 或 Checkpointer。
 

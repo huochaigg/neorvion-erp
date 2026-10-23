@@ -9,3 +9,5 @@ class PermissionCode(StrEnum):
     WAREHOUSE_READ = "warehouse:read"
     PURCHASE_READ = "purchase:read"
     AFTER_SALE_READ = "after_sale:read"
+    ANALYTICS_SALES_READ = "analytics:sales:read"
+    KNOWLEDGE_READ = "knowledge:read"

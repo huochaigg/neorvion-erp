@@ -11,6 +11,9 @@ const LABELS: Record<string, string> = {
   list_purchase_orders: '查询采购订单',
   get_warehouse: '查询仓库',
   get_after_sale: '查询售后',
+  search_knowledge: '检索知识库',
+  list_knowledge_bases: '确认知识库范围',
+  analyze_inventory_coverage: '分析库存覆盖天数',
 };
 
 function StatusIcon({ status }: { status: string }) {
@@ -32,7 +35,7 @@ export function ToolRunCard({ runs }: { runs: ToolRun[] }) {
       >
         <span className="flex items-center gap-2">
           <Wrench size={14} className="text-[#6366F1]" />
-          {running ? '正在查询业务数据' : `已完成 ${runs.length} 项工具调用`}
+          {running ? '正在收集业务证据' : `已完成 ${runs.length} 项工具调用`}
         </span>
         <ChevronDown size={14} className={`transition ${open ? 'rotate-180' : ''}`} />
       </button>

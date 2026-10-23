@@ -291,6 +291,47 @@ class SalesAnalyticsRepository(BaseRepository):
         )
         return list(self.session.execute(stmt).all())
 
+    def sku_sales(
+        self,
+        sku_code: str,
+        start: datetime,
+        end_exclusive: datetime,
+        warehouse_id: int | None = None,
+    ) -> tuple | None:
+        """按 SKU 精确聚合有效订单销量，避免用 Top-N 结果冒充目标 SKU 统计。"""
+        created_ge, created_lt = self._in_range(SalesOrder.created_at, start, end_exclusive)
+        tenant_id = self.ensure_tenant()
+        stmt = (
+            select(
+                ProductSku.id,
+                ProductSku.sku_code,
+                ProductSku.name,
+                func.coalesce(
+                    func.sum(case((SalesOrder.id.is_not(None), SalesOrderItem.quantity), else_=0)),
+                    0,
+                ).label("sales_quantity"),
+                func.count(func.distinct(SalesOrder.id)).label("order_count"),
+            )
+            .select_from(ProductSku)
+            .outerjoin(
+                SalesOrderItem,
+                (SalesOrderItem.tenant_id == ProductSku.tenant_id)
+                & (SalesOrderItem.sku_id == ProductSku.id),
+            )
+            .outerjoin(
+                SalesOrder,
+                (SalesOrderItem.tenant_id == SalesOrder.tenant_id)
+                & (SalesOrderItem.sales_order_id == SalesOrder.id)
+                & created_ge
+                & created_lt
+                & self._valid_status()
+                & self._warehouse(warehouse_id),
+            )
+            .where(ProductSku.tenant_id == tenant_id, ProductSku.sku_code == sku_code)
+            .group_by(ProductSku.id, ProductSku.sku_code, ProductSku.name)
+        )
+        return self.session.execute(stmt).one_or_none()
+
     def top_products(
         self,
         start: datetime,

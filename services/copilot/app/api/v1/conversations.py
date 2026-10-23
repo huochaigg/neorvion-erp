@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import CopilotContext, DbSession, WorkflowDep
 from app.api.v1.chat import chat_stream
 from app.core.config import settings
+from app.knowledge.client import get_knowledge_client
 from app.schemas.chat import ChatRequest
 from app.schemas.common import ApiResponse, ok
 from app.schemas.conversation import (
@@ -38,8 +39,17 @@ async def list_conversations(
 
 
 @router.get("/{conversation_id}", response_model=ApiResponse[ConversationDetailOut], summary="加载会话详情")
-async def get_conversation(conversation_id: int, context: CopilotContext, db: DbSession):
-    return ok(await ConversationService(cast(AsyncSession, db), context).get(conversation_id))
+async def get_conversation(conversation_id: int, request: Request, context: CopilotContext, db: DbSession):
+    audiences = frozenset(getattr(request.state, "jwt_audiences", ()))
+    service = ConversationService(
+        cast(AsyncSession, db),
+        context,
+        knowledge_client=get_knowledge_client(),
+        access_token=str(getattr(request.state, "access_token", "")),
+        knowledge_audience_authorized=settings.knowledge_jwt_audience in audiences,
+        request_id=str(getattr(request.state, "request_id", "")),
+    )
+    return ok(await service.get(conversation_id))
 
 
 @router.post("/{conversation_id}/messages", summary="发送消息（SSE）")

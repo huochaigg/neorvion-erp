@@ -35,6 +35,7 @@ from app.schemas.analytics import (
     PurchaseTrendPoint,
     SalesSummaryOut,
     SalesTrendPoint,
+    SkuSalesOut,
     StatusCountOut,
     TopCustomerOut,
     TopProductOut,
@@ -163,6 +164,32 @@ class AnalyticsService:
             )
             for row in rows
         ]
+
+    def sku_sales(
+        self,
+        sku_code: str,
+        start_date: str | None,
+        end_date: str | None,
+        warehouse_id: int | None = None,
+    ) -> SkuSalesOut | None:
+        """返回精确 SKU 的显式区间统计，覆盖天数计算不得依赖 Top-N 报表。"""
+        start, end_ex, start_d, end_d = self._range(start_date, end_date)
+        row = self.sales.sku_sales(sku_code.strip(), start, end_ex, warehouse_id)
+        if row is None:
+            return None
+        period_days = (end_d - start_d).days + 1
+        sales_quantity = int(row[3] or 0)
+        return SkuSalesOut(
+            sku_id=int(row[0]),
+            sku_code=str(row[1]),
+            sku_name=str(row[2] or ""),
+            start_date=start_d.isoformat(),
+            end_date=end_d.isoformat(),
+            period_days=period_days,
+            sales_quantity=sales_quantity,
+            order_count=int(row[4] or 0),
+            average_daily_sales=float(Decimal(sales_quantity) / Decimal(period_days)),
+        )
 
     def top_products(
         self,

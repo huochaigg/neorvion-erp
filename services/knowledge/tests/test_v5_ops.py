@@ -105,6 +105,18 @@ def test_grants_restrict_non_owner(client: TestClient, identity: FakeIdentityCli
     assert hidden.json()["data"]["items"] == []
     forbidden = client.get(f"/api/v1/knowledge-bases/{base_id}", headers=auth_header(3, 11))
     assert forbidden.status_code == 404
+    uploaded = client.post(
+        f"/api/v1/knowledge-bases/{base_id}/documents",
+        files=[("files", ("grant.txt", "仅授权成员可读的规则。".encode(), "text/plain"))],
+        headers=auth_header(1, 11),
+    )
+    document_id = uploaded.json()["data"]["items"][0]["document"]["id"]
+    chunks = client.get(
+        "/api/v1/chunks", params={"document_id": document_id}, headers=auth_header(1, 11)
+    ).json()["data"]["items"]
+    chunk_id = chunks[0]["id"]
+    assert client.get(f"/api/v1/chunks/{chunk_id}", headers=auth_header(2, 11)).status_code == 200
+    assert client.get(f"/api/v1/chunks/{chunk_id}", headers=auth_header(3, 11)).status_code == 404
 
 
 def test_api_key_search_revoke_and_tenant_bind(client: TestClient, identity: FakeIdentityClient) -> None:

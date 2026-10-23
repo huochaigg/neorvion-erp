@@ -1,6 +1,6 @@
-# Neorvion ERP Copilot V3
+# Neorvion ERP Copilot V4
 
-独立 FastAPI + LangGraph 服务，默认端口 `8013`。V3 增加 PostgreSQL 会话、消息、ToolRun 持久化和 `apps/copilot` 微前端；ERP 数据仍只通过只读 HTTP Tool 获取。
+独立 FastAPI + LangGraph 服务，默认端口 `8013`。V4 在 V3 会话基础上增加 Knowledge 混合检索、ERP/Knowledge 证据引用和历史来源重新鉴权；两个下游都只通过只读 HTTP Tool 获取数据。
 
 ## API 与事件
 
@@ -9,10 +9,10 @@
 | `GET /api/v1/health` | 公开健康检查 |
 | `GET /api/v1/me` | 已验证的租户上下文和权限 |
 | `POST /api/v1/chat` | 多轮工具循环后的完整回答 |
-| `POST /api/v1/chat/stream` | SSE：`message`、`tool_start`、`tool_end`、`tool_error`、`done`、`error` |
+| `POST /api/v1/chat/stream` | SSE：`analysis_status`、`message`、`tool_start`、`tool_end`、`tool_error`、`evidence`、`done`、`error` |
 | `POST /api/v1/conversations` | 创建当前用户私有会话 |
 | `GET /api/v1/conversations` | 分页查询当前用户会话 |
-| `GET /api/v1/conversations/{id}` | 加载消息与 ToolRun |
+| `GET /api/v1/conversations/{id}` | 加载消息、ToolRun 与经当前权限复核的证据 |
 | `POST /api/v1/conversations/{id}/messages` | 向已有会话发送消息（SSE） |
 | `PATCH /api/v1/conversations/{id}` | 重命名会话 |
 | `DELETE /api/v1/conversations/{id}` | 软删除会话 |
@@ -54,7 +54,7 @@ CREATE DATABASE neorvion_copilot OWNER neorvion_copilot
 uv run --directory services/copilot alembic upgrade head
 ```
 
-应用启动不会自动执行迁移。会话、消息和 ToolRun 通过复合租户外键关联；Repository 还会同时约束当前 `user_id`。
+应用启动不会自动执行迁移。会话、消息、ToolRun 和 Evidence 通过复合租户外键关联；Repository 还会同时约束当前 `user_id`。V4 迁移 `20261023_0002` 新增 `copilot_evidences`，降级会删除该表，因此降级前应先备份证据记录。
 每次开始持久化对话时会把超过 `STALE_RUN_SECONDS` 的本用户异常 RUNNING 记录恢复为失败终态；生产环境后续可把同一规则放入周期性维护任务。软删除会话当前不自动物理清理。
 
 ### 已有环境从 Knowledge 数据库迁出
@@ -90,12 +90,16 @@ uv run --directory services/copilot alembic upgrade head
 - `list_purchase_orders`
 - `get_warehouse`
 - `get_after_sale`
+- `list_knowledge_bases`、`search_knowledge`（先确认当前用户可见范围，检索必须显式提供一个或多个知识库 ID）
+- `analyze_inventory_coverage`（精确 SKU + 显式日期区间；服务端固定公式计算）
 
 没有注册 `list_low_stock_skus`：现有 ERP 库存 API 的 `threshold` 是调用方临时查询参数，不是可信、持久化的 SKU 安全库存配置。V2 只返回客观库存数量，不把临时阈值包装成补货结论。
 
 ## 身份与安全边界
 
-IAM 当前 Access Token 同时包含 `neorvion-copilot` 和 `neorvion-erp` audience。Copilot 先校验 JWT、租户快照与 `copilot:use`，工具执行时再检查 ERP audience，然后只把原始用户 Token 与已验证的 `X-Tenant-ID` 转发到 ERP。ERP 会独立验证 JWT、租户成员关系和具体 `*:read` 权限。
+IAM 当前 Access Token 同时包含 `neorvion-copilot`、`neorvion-erp` 和 `neorvion-knowledge` audience。Copilot 先校验 JWT、租户快照与 `copilot:use`，工具执行时再检查对应 audience 和 `*:read` 权限，然后只把原始用户 Token 与已验证的 `X-Tenant-ID` 转发到下游。ERP 与 Knowledge 会分别独立验证 JWT、租户成员关系和具体权限；Knowledge 还会按现有知识库 Grant 复核每个知识库及引用切片。
+
+知识文档按不可信外部输入处理。模型只能引用服务端登记的 `[K数字]` / `[E数字]`，未知编号会被替换为“来源不可验证”。证据表保存检索时的有限快照和版本；加载历史会话时，Knowledge 来源会再次调用切片详情鉴权。权限撤销或来源删除后正文不再返回；版本变化标记为 `STALE`，不会把新内容冒充旧证据。
 
 工具调用还会执行：服务端白名单、Pydantic `extra=forbid` 参数校验、最大轮次/调用数/总时限、结果字段白名单、大小截断。ERP 结果用不可信数据边界包裹后才交给模型；Token、租户参数、客户电话/地址、仓库联系方式不会进入模型上下文。
 
@@ -120,6 +124,12 @@ ERP_BASE_URL=http://127.0.0.1:8011
 ERP_JWT_AUDIENCE=neorvion-erp
 ERP_CONNECT_TIMEOUT_SECONDS=3
 ERP_READ_TIMEOUT_SECONDS=10
+KNOWLEDGE_BASE_URL=http://127.0.0.1:8012
+KNOWLEDGE_JWT_AUDIENCE=neorvion-knowledge
+KNOWLEDGE_CONNECT_TIMEOUT_SECONDS=3
+KNOWLEDGE_READ_TIMEOUT_SECONDS=12
+KNOWLEDGE_TOP_K_MAX=8
+KNOWLEDGE_EVIDENCE_EXCERPT_CHARS=600
 TOOL_MAX_ROUNDS=5
 TOOL_MAX_CALLS=8
 TOOL_TOTAL_TIMEOUT_SECONDS=30
@@ -169,6 +179,8 @@ curl -N -X POST http://localhost:8013/api/v1/chat/stream \
   -d '{"messages":[{"role":"user","content":"订单 123 当前状态是什么？"}]}'
 ```
 
-## V3 明确不做
+Knowledge 问答必须在消息中明确给出已授权的知识库 ID，例如“在知识库 11 中查询 DRAFT 是否预占库存”。服务端工具请求固定发送到 Knowledge `/api/v1/search`，不会接受模型提供的 URL。库存覆盖分析还需 `analytics:sales:read` 与 `inventory:read`，并要求明确 SKU 与日期区间；公式为 `可用库存 / 区间有效销量日均值`，日均销量为 0 时返回无法计算，不转化为补货建议。
 
-Knowledge RAG、任意 URL/SQL/Shell 工具、多 Agent、Checkpointer、写操作、审批、断线续传和自动补货均不在本版本范围内。
+## V4 明确不做
+
+任意 URL/SQL/Shell 工具、多 Agent、Checkpointer、ERP 写操作、审批、断线续传和自动补货均不在本版本范围内。当前 Knowledge 权限粒度沿用 Knowledge 服务现有的知识库 Grant，不虚构文档级 ACL；调用方必须显式选择知识库 ID，不会默认跨全部知识库检索。

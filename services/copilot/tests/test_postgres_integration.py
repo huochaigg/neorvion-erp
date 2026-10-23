@@ -79,6 +79,21 @@ async def test_postgres_owner_and_tenant_isolation() -> None:
                     "input_summary": "sku=SKU-001",
                 },
             )
+            await repo.record_evidence(
+                conversation_id,
+                assistant.id,
+                {
+                    "tool_call_id": "tool-1",
+                    "citation_id": "E1",
+                    "source_type": "ERP",
+                    "resource_type": "get_inventory",
+                    "resource_id": "SKU-001",
+                    "title": "ERP 库存查询",
+                    "excerpt": "SKU-001 可用库存 7",
+                    "metadata": {},
+                    "observed_at": datetime.now(UTC).isoformat(),
+                },
+            )
             await owner.commit()
             await repo.record_tool_event(
                 conversation_id,
@@ -97,6 +112,8 @@ async def test_postgres_owner_and_tenant_isolation() -> None:
             detail = await service.get(conversation_id)
             assert [item.role for item in detail.messages] == ["user", "assistant"]
             assert detail.messages[-1].tool_runs[0].status == "SUCCEEDED"
+            assert detail.messages[-1].evidences[0].citation_id == "E1"
+            assert detail.messages[-1].evidences[0].excerpt == "SKU-001 可用库存 7"
         finally:
             await owner.close()
 

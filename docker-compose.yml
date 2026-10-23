@@ -257,6 +257,10 @@ services:
         condition: service_healthy
       iam:
         condition: service_started
+      erp:
+        condition: service_healthy
+      knowledge:
+        condition: service_healthy
     environment:
       APP_ENV: development
       APP_HOST: 0.0.0.0
@@ -273,6 +277,10 @@ services:
       CHAT_MODEL: ${COPILOT_CHAT_MODEL:-deepseek-chat}
       ERP_BASE_URL: http://erp:8011
       ERP_JWT_AUDIENCE: neorvion-erp
+      KNOWLEDGE_BASE_URL: ${COPILOT_KNOWLEDGE_BASE_URL:-http://knowledge:8012}
+      KNOWLEDGE_JWT_AUDIENCE: neorvion-knowledge
+      KNOWLEDGE_TOP_K_MAX: ${COPILOT_KNOWLEDGE_TOP_K_MAX:-8}
+      KNOWLEDGE_EVIDENCE_EXCERPT_CHARS: ${COPILOT_KNOWLEDGE_EVIDENCE_EXCERPT_CHARS:-600}
       TOOL_MAX_ROUNDS: ${COPILOT_TOOL_MAX_ROUNDS:-5}
       TOOL_MAX_CALLS: ${COPILOT_TOOL_MAX_CALLS:-8}
       TOOL_TOTAL_TIMEOUT_SECONDS: ${COPILOT_TOOL_TOTAL_TIMEOUT_SECONDS:-30}

@@ -30,6 +30,22 @@ class ToolRunOut(BaseModel):
     completed_at: datetime | None
 
 
+class EvidenceOut(BaseModel):
+    citation_id: str = Field(description="服务端登记的稳定引用编号，例如 K1 或 E1")
+    source_type: str = Field(description="ERP 或 KNOWLEDGE")
+    resource_type: str = Field(description="来源资源类型或只读工具名")
+    resource_id: str | None = Field(description="来源资源标识；来源无法精确定位时为空")
+    knowledge_base_id: int | None = None
+    document_id: int | None = None
+    chunk_id: int | None = None
+    title: str
+    excerpt: str | None = Field(description="经当前权限复核后可展示的历史证据快照")
+    source_version: int | None = Field(description="检索时的 Knowledge 文档版本")
+    metadata: dict = Field(default_factory=dict, description="页码、标题及检索分数等非敏感元数据")
+    observed_at: datetime
+    access_status: str = Field(description="ACTIVE、STALE、FORBIDDEN、MISSING 或 UNAVAILABLE")
+
+
 class MessageOut(BaseModel):
     id: int = Field(description="消息 ID")
     role: str = Field(description="面向用户的 user 或 assistant 角色")
@@ -39,6 +55,7 @@ class MessageOut(BaseModel):
     created_at: datetime
     updated_at: datetime
     tool_runs: list[ToolRunOut] = Field(default_factory=list)
+    evidences: list[EvidenceOut] = Field(default_factory=list)
 
 
 class ConversationOut(BaseModel):

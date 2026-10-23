@@ -11,6 +11,7 @@ from app.core.logging import setup_logging
 from app.core.request_id import REQUEST_ID_HEADER, RequestIdMiddleware
 from app.db.session import close_database
 from app.erp.client import close_erp_client
+from app.knowledge.client import close_knowledge_client
 
 
 @asynccontextmanager
@@ -21,6 +22,7 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
         yield
     finally:
         await close_erp_client()
+        await close_knowledge_client()
         await close_database()
 
 
@@ -29,7 +31,7 @@ def create_app() -> FastAPI:
     app = FastAPI(
         title=settings.app_name,
         version=settings.app_version,
-        description="受 IAM 权限约束、支持持久化会话且仅通过 ERP API 查询的 ERP Copilot V3。",
+        description="受 IAM 权限约束、可协同查询 ERP 与 Knowledge 并提供证据的 ERP Copilot V4。",
         lifespan=lifespan,
         docs_url="/docs" if docs_enabled else None,
         redoc_url="/redoc" if docs_enabled else None,
