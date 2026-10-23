@@ -1,5 +1,6 @@
 from fastapi import APIRouter
 
+from app.api.v1.action_previews import router as action_preview_router
 from app.api.v1.after_sales import router as after_sale_router
 from app.api.v1.analytics import router as analytics_router
 from app.api.v1.brands import router as brand_router
@@ -30,6 +31,7 @@ from app.api.v1.tasks import router as task_router
 from app.api.v1.warehouses import router as warehouse_router
 
 api_router = APIRouter(prefix="/api/v1")
+api_router.include_router(action_preview_router)
 api_router.include_router(health_router, tags=["health"])
 api_router.include_router(session_router)
 api_router.include_router(product_category_router)

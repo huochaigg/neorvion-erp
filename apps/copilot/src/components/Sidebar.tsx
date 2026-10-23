@@ -3,6 +3,7 @@ import { Input, Modal, Skeleton } from 'antd';
 import {
   Bot,
   History,
+  Files,
   ImagePlay,
   PanelLeftClose,
   PanelLeftOpen,
@@ -24,6 +25,7 @@ import { useCopilotStore } from '@/store';
 
 const NAV = [
   { to: '/chat', label: 'ERP 智能助手', icon: Bot, live: true },
+  { to: '/drafts', label: '业务草稿', icon: Files, live: true },
   { to: '/ads', label: 'AI 广告创作', icon: ImagePlay, live: false },
   { to: '/history', label: '生成历史', icon: History, live: false },
 ] as const;
@@ -230,7 +232,7 @@ export function Sidebar({
       </div>
       <div className={`border-t border-[#E2E8F0] p-3 ${collapsed ? 'flex justify-center' : ''}`}>
         {collapsed ? null : (
-          <div className="mb-2 px-1 text-[11px] leading-5 text-[#94A3B8]">Neorvion AI 工作台 · 仅查询企业授权数据</div>
+          <div className="mb-2 px-1 text-[11px] leading-5 text-[#94A3B8]">Neorvion AI 工作台 · 草稿不会自动执行</div>
         )}
         <button
           type="button"

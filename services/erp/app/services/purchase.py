@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import UTC, date, datetime, timedelta
 
 from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
@@ -23,6 +23,7 @@ from app.repositories.purchase import PurchaseOrderRepository
 from app.repositories.purchase_return import PurchaseReturnRepository
 from app.repositories.supplier import SupplierRepository
 from app.repositories.warehouse import WarehouseRepository
+from app.schemas.action_preview import ActionPreviewIssue, ActionPreviewOut
 from app.schemas.purchase import (
     PurchaseOrderCancel,
     PurchaseOrderCreate,
@@ -183,6 +184,43 @@ class PurchaseOrderService:
         if created is None:
             raise AppError(_UNAVAILABLE, code=40470, status_code=404)
         return self._detail_out(created)
+
+    def preview_create(self, payload: PurchaseOrderCreate) -> ActionPreviewOut:
+        """复用采购创建的实体与状态校验，但不新增单据、流水、事件或任务。"""
+        self.auth.require_all(self.context, (PermissionCode.PURCHASE_CREATE,))
+        supplier = self._require_active_supplier(payload.supplier_id)
+        warehouse = self._require_active_warehouse(payload.warehouse_id)
+        sku_map = self._require_active_skus([item.sku_id for item in payload.items])
+        now = datetime.now(UTC)
+        warnings = [
+            ActionPreviewIssue(
+                code="UNIT_PRICE_MISSING",
+                message="采购单价尚未填写",
+                field=f"items.{index}.unit_price",
+            )
+            for index, item in enumerate(payload.items)
+            if item.unit_price is None
+        ]
+        return ActionPreviewOut(
+            valid=True,
+            warnings=warnings,
+            normalized_payload=payload.model_dump(mode="json"),
+            preview_summary={
+                "supplier_id": supplier.id,
+                "supplier_name": supplier.name,
+                "warehouse_id": warehouse.id,
+                "warehouse_name": warehouse.name,
+                "sku_count": len(payload.items),
+                "total_quantity": sum(item.quantity for item in payload.items),
+            },
+            resource_versions={
+                "supplier": {"id": supplier.id, "status": supplier.status},
+                "warehouse": {"id": warehouse.id, "status": warehouse.status},
+                "skus": [{"id": sku.id, "status": sku.status} for sku in sku_map.values()],
+            },
+            validated_at=now,
+            expires_at=now + timedelta(minutes=10),
+        )
 
     def update_order(self, order_id: int, payload: PurchaseOrderUpdate) -> PurchaseOrderDetailOut:
         """仅 DRAFT / REJECTED 可改核心字段。提交审核后改 SKU 会使审核失去意义。

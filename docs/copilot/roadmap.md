@@ -83,9 +83,17 @@ services/copilot (FastAPI, port 8013)
 - 外部知识只作为不可信事实材料，服务端拒绝模型伪造的引用编号。
 - 继续禁止 ERP 写操作、多 Agent、Checkpointer 和自由 URL/SQL/Shell 工具。
 
-### V5：动作提案与审批
+### V5：Action Proposal 与 ERP 无副作用预检（已实现）
 
-### V6：可恢复的长流程
+- 独立 Action Registry 支持采购、销售订单和库存调拨三类结构化草稿，不含 ERP Write Handler。
+- `copilot_action_proposals`、revision、validation 三表提供幂等、版本历史、乐观并发、取消和过期语义。
+- ERP 三个 Preview API 复用现有创建 Schema 和 Service 校验，只读查询实体、状态、价格提示与库存。
+- LangGraph 保留 Agent → Tool → Agent，新增受控 `propose_action` / `validate_action_proposal` 工具。
+- SSE 新增 Proposal 生命周期事件；React 提供对话卡片、业务草稿页、结构化编辑、预检和历史。
+- `READY` 不是订单状态或执行授权；V5 没有执行按钮，不创建正式单据，也不改变库存三量。
+- 真实四服务联调、真实模型冒烟和目标部署数据库迁移仍须在可用环境执行后签收。
+
+### V6：受控执行与可恢复长流程
 
 目标：支持需要等待、重试和人工介入的工作流。
 

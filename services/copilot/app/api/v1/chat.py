@@ -12,9 +12,11 @@ from app.ai.types import ModelMessage
 from app.api.deps import CopilotContext, DbSession, WorkflowDep
 from app.core.config import settings
 from app.core.exceptions import AppError
+from app.erp.client import get_erp_client
 from app.graph.workflow import AgentRuntime
 from app.schemas.chat import ChatRequest, ChatResponse, TokenUsageOut
 from app.schemas.common import ApiResponse, ok
+from app.services.action_proposals import ActionProposalService
 from app.services.chat import ChatService
 from app.services.persistent_chat import PersistentChatService
 from app.tools.executor import ToolRuntime
@@ -35,15 +37,36 @@ def _sse(event: str, data: dict) -> str:
     return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
 
 
-def _runtime(request: Request, context: CopilotContext) -> AgentRuntime:
+def _runtime(
+    request: Request,
+    context: CopilotContext,
+    db: DbSession,
+    *,
+    conversation_id: int | None = None,
+    source_message_id: int | None = None,
+) -> AgentRuntime:
     audiences = frozenset(getattr(request.state, "jwt_audiences", ()))
+    access_token = str(getattr(request.state, "access_token", ""))
+    request_id = str(getattr(request.state, "request_id", ""))
+    proposal_service = None
+    if conversation_id is not None:
+        proposal_service = ActionProposalService(
+            cast(AsyncSession, db),
+            context,
+            erp_client=get_erp_client(),
+            access_token=access_token,
+            request_id=request_id,
+        )
     return AgentRuntime(
         tools=ToolRuntime(
             tenant=context,
-            access_token=str(getattr(request.state, "access_token", "")),
+            access_token=access_token,
             erp_audience_authorized=settings.erp_jwt_audience in audiences,
             knowledge_audience_authorized=settings.knowledge_jwt_audience in audiences,
-            request_id=str(getattr(request.state, "request_id", "")),
+            request_id=request_id,
+            proposal_service=proposal_service,
+            conversation_id=conversation_id,
+            source_message_id=source_message_id,
         )
     )
 
@@ -66,17 +89,32 @@ async def chat(
         )
         answer = ""
         usage = None
-        async for event in service.events(turn, _runtime(request, context), lambda: _false()):
+        async for event in service.events(
+            turn,
+            _runtime(
+                request,
+                context,
+                db,
+                conversation_id=turn.conversation_id,
+                source_message_id=turn.message_id,
+            ),
+            lambda: _false(),
+        ):
             if event["event"] == "done":
                 answer = str(event["data"].get("answer") or "")
                 usage = event["data"].get("usage")
-        return ok(ChatResponse(
-            answer=answer, model=settings.chat_model,
-            usage=TokenUsageOut(**usage) if isinstance(usage, dict) else None,
-            conversation_id=turn.conversation_id, message_id=turn.message_id, request_id=turn.request_id,
-        ))
+        return ok(
+            ChatResponse(
+                answer=answer,
+                model=settings.chat_model,
+                usage=TokenUsageOut(**usage) if isinstance(usage, dict) else None,
+                conversation_id=turn.conversation_id,
+                message_id=turn.message_id,
+                request_id=turn.request_id,
+            )
+        )
     answer, usage = await ChatService(workflow).complete(
-        _messages(payload), context=_runtime(request, context)
+        _messages(payload), context=_runtime(request, context, db)
     )
     return ok(
         ChatResponse(
@@ -103,14 +141,28 @@ async def chat_stream(
             if payload.conversation_id is not None:
                 service = PersistentChatService(cast(AsyncSession, db), context, workflow)
                 turn = await service.prepare(
-                    payload.conversation_id, payload.message or "", payload.client_request_id or "",
+                    payload.conversation_id,
+                    payload.message or "",
+                    payload.client_request_id or "",
                     stream_request_id,
                 )
                 persistent_turn = turn
-                events = service.events(turn, _runtime(request, context), request.is_disconnected)
+                events = service.events(
+                    turn,
+                    _runtime(
+                        request,
+                        context,
+                        db,
+                        conversation_id=turn.conversation_id,
+                        source_message_id=turn.message_id,
+                    ),
+                    request.is_disconnected,
+                )
             else:
                 events = ChatService(workflow).stream_events(
-                    _messages(payload), disconnected=request.is_disconnected, context=_runtime(request, context)
+                    _messages(payload),
+                    disconnected=request.is_disconnected,
+                    context=_runtime(request, context, db),
                 )
             async for event in events:
                 name = str(event.get("event") or "message")
@@ -127,7 +179,10 @@ async def chat_stream(
                 if persistent_turn is not None
                 else {}
             )
-            yield _sse("error", {"code": exc.code, "message": exc.message, "request_id": stream_request_id} | ids)
+            yield _sse(
+                "error",
+                {"code": exc.code, "message": exc.message, "request_id": stream_request_id} | ids,
+            )
         except Exception:
             ids = (
                 {
@@ -138,7 +193,10 @@ async def chat_stream(
                 if persistent_turn is not None
                 else {}
             )
-            yield _sse("error", {"code": 50268, "message": "模型生成失败", "request_id": stream_request_id} | ids)
+            yield _sse(
+                "error",
+                {"code": 50268, "message": "模型生成失败", "request_id": stream_request_id} | ids,
+            )
 
     return StreamingResponse(
         event_stream(),

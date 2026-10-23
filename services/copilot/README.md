@@ -1,6 +1,6 @@
-# Neorvion ERP Copilot V4
+# Neorvion ERP Copilot V5
 
-独立 FastAPI + LangGraph 服务，默认端口 `8013`。V4 在 V3 会话基础上增加 Knowledge 混合检索、ERP/Knowledge 证据引用和历史来源重新鉴权；两个下游都只通过只读 HTTP Tool 获取数据。
+独立 FastAPI + LangGraph 服务，默认端口 `8013`。V5 保留 V1-V4 的对话、只读 ERP/Knowledge 分析与证据能力，并增加只属于 Copilot 的结构化业务草稿和 ERP 无副作用预检。
 
 ## API 与事件
 
@@ -16,6 +16,11 @@
 | `POST /api/v1/conversations/{id}/messages` | 向已有会话发送消息（SSE） |
 | `PATCH /api/v1/conversations/{id}` | 重命名会话 |
 | `DELETE /api/v1/conversations/{id}` | 软删除会话 |
+| `POST/GET /api/v1/action-proposals` | 创建或分页查询当前用户业务草稿 |
+| `GET/PATCH /api/v1/action-proposals/{id}` | 读取或按 revision 编辑草稿 |
+| `POST /api/v1/action-proposals/{id}/validate` | 执行 ERP 无副作用预检 |
+| `POST /api/v1/action-proposals/{id}/cancel` | 取消草稿（不可恢复） |
+| `GET /api/v1/action-proposals/{id}/revisions` | 查看版本历史 |
 
 持久化聊天请求使用 `conversation_id`、`client_request_id`、`message`。旧版 `messages` 无会话请求保持兼容。
 
@@ -181,6 +186,47 @@ curl -N -X POST http://localhost:8013/api/v1/chat/stream \
 
 Knowledge 问答必须在消息中明确给出已授权的知识库 ID，例如“在知识库 11 中查询 DRAFT 是否预占库存”。服务端工具请求固定发送到 Knowledge `/api/v1/search`，不会接受模型提供的 URL。库存覆盖分析还需 `analytics:sales:read` 与 `inventory:read`，并要求明确 SKU 与日期区间；公式为 `可用库存 / 区间有效销量日均值`，日均销量为 0 时返回无法计算，不转化为补货建议。
 
-## V4 明确不做
+## V5 Action Proposal
 
-任意 URL/SQL/Shell 工具、多 Agent、Checkpointer、ERP 写操作、审批、断线续传和自动补货均不在本版本范围内。当前 Knowledge 权限粒度沿用 Knowledge 服务现有的知识库 Grant，不虚构文档级 ACL；调用方必须显式选择知识库 ID，不会默认跨全部知识库检索。
+V5 增加三类只属于 Copilot 的业务草稿：采购单、销售订单、库存调拨。Action Registry 与只读 Tool Registry
+分离，Registry 只登记参数 Schema、真实 IAM 权限、可编辑字段和固定 ERP Preview 地址，不含执行 Handler。
+模型可调用 `propose_action` / `validate_action_proposal`，但 HTTP 客户端只允许访问三个
+`/api/v1/action-previews/*` 路径，无法访问 ERP 创建、更新、取消或库存写接口。
+
+数据表为 `copilot_action_proposals`、`copilot_proposal_revisions`、`copilot_proposal_validations`。
+提案按 tenant + user 隔离，关联同一所有人的 Conversation；创建使用稳定幂等键，编辑必须携带
+`expected_revision`，冲突返回 409。编辑后旧预检自然失效并显示 `STALE`，预检过期也显示 `STALE`；
+取消或提案过期后不可编辑和预检。`READY` 仅表示当前 revision 在特定时点通过预检。
+
+```bash
+uv run --directory services/copilot alembic upgrade head
+# 仅在可销毁测试数据库验证 downgrade
+uv run --directory services/copilot alembic downgrade 20261023_0002
+uv run --directory services/copilot alembic upgrade head
+```
+
+API：`POST/GET /api/v1/action-proposals`、`GET/PATCH /api/v1/action-proposals/{id}`、
+`POST .../{id}/validate`、`POST .../{id}/cancel`、`GET .../{id}/revisions`。创建示例：
+
+```json
+{
+  "conversation_id": 1,
+  "idempotency_key": "purchase-request-20261023-001",
+  "action": {
+    "action_type": "PURCHASE_ORDER_CREATE",
+    "payload": {"supplier_id": 3, "warehouse_id": 2, "items": [{"sku_id": 8, "quantity": 100}]}
+  }
+}
+```
+
+React 前端在对话内和独立“业务草稿”页提供编辑、保存、重新预检、历史版本与取消；没有正式执行按钮。
+SSE 在原协议上新增 `proposal_created`、`proposal_updated`、`proposal_validation`，仅携带草稿 ID、revision、
+类型和状态，不推送完整业务 payload。
+草稿编辑器通过 ERP 既有 suppliers/customers/warehouses/product-skus 只读 API 提供远程选择；开发环境可用
+`VITE_ERP_API_BASE_URL=http://localhost:8011`，生产环境留空走同源 `/api` 反向代理。ERP 会独立复核读权限。
+
+## V5 明确不做
+
+正式 ERP 写操作、用户确认后执行、审批流、LangGraph interrupt、Checkpointer、Saga、多 Agent、任意
+URL/SQL/Shell、退款和库存直接调整均不在本版本范围内。V6 执行前必须重新验证权限、提案 revision、
+预检时效和 ERP 资源版本，不能把 V5 的 `READY` 当作执行授权。

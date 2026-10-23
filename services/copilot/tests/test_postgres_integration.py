@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import os
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from time import monotonic
 
 import pytest
@@ -11,7 +11,10 @@ from app.core.tenant import TenantContext
 from app.db.base import Base
 from app.db.isolation import REGISTRY
 from app.models.conversation import MessageStatus
+from app.repositories.action_proposals import ActionProposalRepository
 from app.repositories.conversations import ConversationRepository
+from app.schemas.action_proposal import ActionProposalCreate, ActionProposalUpdate
+from app.services.action_proposals import ActionProposalService
 from app.services.conversations import ConversationService
 from app.services.persistent_chat import PersistentChatService, PersistentTurn
 from neorvion_db import TenantAsyncSession
@@ -135,9 +138,9 @@ async def test_postgres_owner_and_tenant_isolation() -> None:
         )
         try:
             assert (
-                await ConversationRepository(
-                    other_tenant, tenant_id=202, user_id=1001
-                ).get(conversation_id)
+                await ConversationRepository(other_tenant, tenant_id=202, user_id=1001).get(
+                    conversation_id
+                )
                 is None
             )
         finally:
@@ -205,6 +208,8 @@ async def test_postgres_owner_and_tenant_isolation() -> None:
     finally:
         async with engine.begin() as connection:
             await connection.run_sync(Base.metadata.drop_all)
+            # 专用测试库保留 Alembic 版本表；重建 ORM 表，避免版本号与物理表不一致。
+            await connection.run_sync(Base.metadata.create_all)
         await engine.dispose()
 
 
@@ -225,4 +230,115 @@ async def test_postgres_pool_exhaustion_fails_within_configured_timeout() -> Non
                     pass
             assert monotonic() - started < 1.0
     finally:
+        await engine.dispose()
+
+
+class _PreviewClient:
+    async def preview(self, _path: str, **_kwargs) -> dict:
+        now = datetime.now(UTC)
+        return {
+            "valid": True,
+            "blocking_errors": [],
+            "warnings": [],
+            "missing_fields": [],
+            "preview_summary": {"total_quantity": 10},
+            "resource_versions": {"supplier": {"id": 3, "status": "ACTIVE"}},
+            "validated_at": now.isoformat(),
+            "expires_at": (now + timedelta(minutes=5)).isoformat(),
+        }
+
+
+@pytest.mark.asyncio
+async def test_postgres_action_proposal_idempotency_revision_and_isolation() -> None:
+    engine = create_async_engine(_integration_url())
+    try:
+        async with engine.begin() as connection:
+            await connection.run_sync(Base.metadata.drop_all)
+            await connection.run_sync(Base.metadata.create_all)
+        context = TenantContext(
+            user_id=1001,
+            tenant_id=101,
+            member_id=5001,
+            is_owner=False,
+            role="OPERATOR",
+            role_codes=("OPERATOR",),
+            permission_codes=frozenset({"copilot:use", "purchase:create"}),
+            token_jti="proposal-integration",
+            token_version=0,
+            authz_version=1,
+        )
+        session = TenantAsyncSession(101, registry=REGISTRY, bind=engine, expire_on_commit=False)
+        try:
+            conversation = await ConversationService(session, context).create("草稿测试")
+            service = ActionProposalService(
+                session,
+                context,
+                erp_client=_PreviewClient(),  # type: ignore[arg-type]
+                access_token="test-token",
+            )
+            create = ActionProposalCreate.model_validate(
+                {
+                    "conversation_id": conversation.id,
+                    "idempotency_key": "proposal-idempotency-1",
+                    "action": {
+                        "action_type": "PURCHASE_ORDER_CREATE",
+                        "payload": {"items": [{"sku_id": 8, "quantity": 10}]},
+                    },
+                }
+            )
+            proposal = await service.create(create)
+            assert proposal.status == "NEEDS_INPUT"
+            assert (await service.create(create)).id == proposal.id
+            conflicting = create.model_copy(deep=True)
+            conflicting.action.payload.items[0].quantity = 11  # type: ignore[union-attr]
+            with pytest.raises(AppError) as idempotency_conflict:
+                await service.create(conflicting)
+            assert idempotency_conflict.value.code == 40991
+
+            update = ActionProposalUpdate.model_validate(
+                {
+                    "expected_revision": 1,
+                    "action": {
+                        "action_type": "PURCHASE_ORDER_CREATE",
+                        "payload": {
+                            "supplier_id": 3,
+                            "warehouse_id": 2,
+                            "items": [{"sku_id": 8, "quantity": 10}],
+                        },
+                    },
+                }
+            )
+            proposal = await service.update(proposal.id, update)
+            assert proposal.current_revision == 2
+            with pytest.raises(AppError) as revision_conflict:
+                await service.update(proposal.id, update)
+            assert revision_conflict.value.code == 40994
+            proposal = await service.validate(proposal.id, 2)
+            assert proposal.status == "READY"
+            assert proposal.validation and proposal.validation.status == "VALID"
+            revisions = await service.revisions(proposal.id)
+            assert [item.revision for item in revisions.items] == [2, 1]
+            cancelled = await service.cancel(proposal.id, 2)
+            assert cancelled.status == "CANCELLED"
+            with pytest.raises(AppError):
+                await service.validate(proposal.id, 2)
+        finally:
+            await session.close()
+
+        other_user = TenantAsyncSession(101, registry=REGISTRY, bind=engine, expire_on_commit=False)
+        try:
+            assert await ActionProposalRepository(other_user, 101, 1002).get(proposal.id) is None
+        finally:
+            await other_user.close()
+        other_tenant = TenantAsyncSession(
+            202, registry=REGISTRY, bind=engine, expire_on_commit=False
+        )
+        try:
+            assert await ActionProposalRepository(other_tenant, 202, 1001).get(proposal.id) is None
+        finally:
+            await other_tenant.close()
+    finally:
+        async with engine.begin() as connection:
+            await connection.run_sync(Base.metadata.drop_all)
+            await connection.run_sync(Base.metadata.create_all)
         await engine.dispose()

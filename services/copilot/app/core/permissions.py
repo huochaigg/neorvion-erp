@@ -11,3 +11,6 @@ class PermissionCode(StrEnum):
     AFTER_SALE_READ = "after_sale:read"
     ANALYTICS_SALES_READ = "analytics:sales:read"
     KNOWLEDGE_READ = "knowledge:read"
+    PURCHASE_CREATE = "purchase:create"
+    ORDER_CREATE = "order:create"
+    STOCK_TRANSFER_CREATE = "stock_transfer:create"

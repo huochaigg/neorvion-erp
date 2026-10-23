@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy.orm import Session
 
@@ -24,6 +24,7 @@ from app.repositories.inventory import InventoryRepository
 from app.repositories.product import ProductSkuRepository
 from app.repositories.stock_transfer import StockTransferRepository
 from app.repositories.warehouse import WarehouseRepository
+from app.schemas.action_preview import ActionPreviewIssue, ActionPreviewOut
 from app.schemas.stock_transfer import (
     StockTransferCreate,
     StockTransferItemIn,
@@ -150,6 +151,61 @@ class StockTransferService:
         if created is None:
             raise AppError(_UNAVAILABLE, code=40493, status_code=404)
         return self._out(created)
+
+    def preview_create(self, payload: StockTransferCreate) -> ActionPreviewOut:
+        """校验调拨草稿并读取源仓库存；只读预检不会改变库存三量。"""
+        self.auth.require_all(self.context, (PermissionCode.STOCK_TRANSFER_CREATE,))
+        source, target = self._require_warehouses(
+            payload.source_warehouse_id, payload.target_warehouse_id
+        )
+        lines = self._plan_lines(payload.items)
+        inventory_map = {
+            row.sku_id: row
+            for row in self.inventories.list_by_warehouse_skus(
+                source.id, [sku_id for sku_id, _ in lines]
+            )
+        }
+        errors: list[ActionPreviewIssue] = []
+        versions: list[dict] = []
+        for index, (sku_id, quantity) in enumerate(lines):
+            row = inventory_map.get(sku_id)
+            available = row.available_quantity if row is not None else 0
+            if available < quantity:
+                errors.append(
+                    ActionPreviewIssue(
+                        code="INSUFFICIENT_AVAILABLE_INVENTORY",
+                        message=f"SKU {sku_id} 当前可用库存 {available}，不足调拨 {quantity}",
+                        field=f"items.{index}.quantity",
+                    )
+                )
+            versions.append(
+                {
+                    "sku_id": sku_id,
+                    "inventory_version": row.version if row else None,
+                    "available_quantity": available,
+                }
+            )
+        now = datetime.now(UTC)
+        return ActionPreviewOut(
+            valid=not errors,
+            blocking_errors=errors,
+            normalized_payload=payload.model_dump(mode="json"),
+            preview_summary={
+                "source_warehouse_id": source.id,
+                "source_warehouse_name": source.name,
+                "target_warehouse_id": target.id,
+                "target_warehouse_name": target.name,
+                "sku_count": len(lines),
+                "total_quantity": sum(quantity for _, quantity in lines),
+            },
+            resource_versions={
+                "source_warehouse": {"id": source.id, "status": source.status},
+                "target_warehouse": {"id": target.id, "status": target.status},
+                "inventories": versions,
+            },
+            validated_at=now,
+            expires_at=now + timedelta(minutes=2),
+        )
 
     def update_transfer(self, transfer_id: int, payload: StockTransferUpdate) -> StockTransferOut:
         self.auth.require_all(self.context, (PermissionCode.STOCK_TRANSFER_UPDATE,))

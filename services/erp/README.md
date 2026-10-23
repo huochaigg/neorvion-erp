@@ -25,3 +25,17 @@ Worker：
 ```bash
 uv run --directory services/erp python -m app.tasks.worker
 ```
+
+## Copilot V5 无副作用预检
+
+ERP 提供三个 `POST /api/v1/action-previews/*` 端点，分别复用采购、销售和调拨 Service 的真实 Schema、
+实体状态与权限校验。它们只执行 SELECT，不调用正式 `create_*`，不以 rollback 模拟预览，也不生成订单、
+明细、库存预占/扣减、事件、操作流水、通知或任务：
+
+- `/api/v1/action-previews/purchase-order`：`purchase:create`
+- `/api/v1/action-previews/sales-order`：`order:create`
+- `/api/v1/action-previews/inventory-transfer`：`stock_transfer:create`
+
+响应包含 `valid`、阻断错误、警告、标准化参数、摘要、资源版本和过期时间。销售预检会提示当前库存与
+缺失单价；调拨预检会把源仓可用库存不足作为阻断错误。预检通过不保证后续执行成功，未来执行接口必须
+重新校验全部业务规则和权限。

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -30,6 +30,7 @@ from app.repositories.inventory import InventoryRepository
 from app.repositories.product import ProductSkuRepository
 from app.repositories.sales_order import SalesOrderRepository
 from app.repositories.warehouse import WarehouseRepository
+from app.schemas.action_preview import ActionPreviewIssue, ActionPreviewOut
 from app.schemas.sales_order import (
     SalesOrderCancel,
     SalesOrderCreate,
@@ -210,6 +211,77 @@ class SalesOrderService:
         if created is None:
             raise AppError(_UNAVAILABLE, code=40471, status_code=404)
         return self._detail_out(created)
+
+    def preview_create(self, payload: SalesOrderCreate) -> ActionPreviewOut:
+        """按销售草稿的真实创建规则预检，并额外提示价格和当前可用库存。"""
+        self.auth.require_all(self.context, (PermissionCode.ORDER_CREATE,))
+        customer = self._require_active_customer(payload.customer_id)
+        warehouse = self._require_active_warehouse(payload.warehouse_id)
+        sku_map = self._require_active_skus([item.sku_id for item in payload.items])
+        source = self._normalize_source(payload.source or SalesOrderSource.MANUAL.value)
+        currency = self._normalize_currency(payload.currency_code or "CNY")
+        self._initial_snapshot(payload, customer)
+        inventory_map = {
+            row.sku_id: row
+            for row in self.inventories.list_by_warehouse_skus(
+                warehouse.id, [item.sku_id for item in payload.items]
+            )
+        }
+        warnings: list[ActionPreviewIssue] = []
+        resources: list[dict] = []
+        for index, item in enumerate(payload.items):
+            row = inventory_map.get(item.sku_id)
+            available = row.available_quantity if row is not None else 0
+            if item.unit_price is None:
+                warnings.append(
+                    ActionPreviewIssue(
+                        code="UNIT_PRICE_MISSING",
+                        message="销售单价尚未填写",
+                        field=f"items.{index}.unit_price",
+                    )
+                )
+            if available < item.quantity:
+                warnings.append(
+                    ActionPreviewIssue(
+                        code="INSUFFICIENT_AVAILABLE_INVENTORY",
+                        message=(
+                            f"SKU {item.sku_id} 当前可用库存 {available}，"
+                            f"低于订单数量 {item.quantity}"
+                        ),
+                        field=f"items.{index}.quantity",
+                    )
+                )
+            resources.append(
+                {
+                    "sku_id": item.sku_id,
+                    "inventory_version": row.version if row else None,
+                    "available_quantity": available,
+                }
+            )
+        now = datetime.now(UTC)
+        normalized = payload.model_dump(mode="json")
+        normalized["source"] = source
+        normalized["currency_code"] = currency
+        return ActionPreviewOut(
+            valid=True,
+            warnings=warnings,
+            normalized_payload=normalized,
+            preview_summary={
+                "customer_id": customer.id,
+                "customer_name": customer.name,
+                "warehouse_id": warehouse.id,
+                "warehouse_name": warehouse.name,
+                "sku_count": len(sku_map),
+                "total_quantity": sum(item.quantity for item in payload.items),
+            },
+            resource_versions={
+                "customer": {"id": customer.id, "status": customer.status},
+                "warehouse": {"id": warehouse.id, "status": warehouse.status},
+                "inventories": resources,
+            },
+            validated_at=now,
+            expires_at=now + timedelta(minutes=5),
+        )
 
     def update_order(self, order_id: int, payload: SalesOrderUpdate) -> SalesOrderDetailOut:
         """仅草稿可改核心内容。明细整体替换：先删旧行再插新行。

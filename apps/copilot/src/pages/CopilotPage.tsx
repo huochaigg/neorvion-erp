@@ -4,9 +4,11 @@ import { AlertCircle, RotateCcw, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { streamChat } from '@/api/chat';
 import { createConversation, getConversation } from '@/api/conversations';
+import { listProposals } from '@/api/proposals';
 import { ChatComposer } from '@/components/ChatComposer';
 import { ChatEmptyState } from '@/components/ChatEmptyState';
 import { ChatMessage } from '@/components/ChatMessage';
+import { ProposalCard } from '@/components/ProposalCard';
 import { useCopilotStore } from '@/store';
 import type { Evidence, Message, StreamEvent, ToolRun } from '@/types';
 
@@ -45,6 +47,11 @@ export function CopilotPage() {
     queryFn: ({ signal }) => getConversation(selected!, signal),
     enabled: selected != null,
     placeholderData: keepPreviousData,
+  });
+  const proposals = useQuery({
+    queryKey: ['tenant', tenantId, 'action-proposals', selected],
+    queryFn: ({ signal }) => listProposals(signal, selected!),
+    enabled: selected != null,
   });
 
   useEffect(() => () => useCopilotStore.getState().controller?.abort(), []);
@@ -114,6 +121,9 @@ export function CopilotPage() {
     if (item.event === 'error') setError(String(data.message ?? '生成失败'));
     if (item.event === 'evidence') {
       setEvidences((value) => [...value, { ...data, access_status: 'ACTIVE' } as unknown as Evidence]);
+    }
+    if (['proposal_created', 'proposal_updated', 'proposal_validation'].includes(item.event)) {
+      void query.invalidateQueries({ queryKey: ['tenant', tenantId, 'action-proposals', selected] });
     }
     if (item.event === 'done') {
       setDraft('');
@@ -189,6 +199,13 @@ export function CopilotPage() {
           <div className="mx-auto flex max-w-[900px] flex-col gap-6">
             {visible.map((message) => (
               <ChatMessage key={message.id} message={message} />
+            ))}
+            {(proposals.data?.items ?? []).map((proposal) => (
+              <ProposalCard
+                key={proposal.id}
+                value={proposal}
+                onChanged={() => void query.invalidateQueries({ queryKey: ['tenant', tenantId, 'action-proposals', selected] })}
+              />
             ))}
             <div ref={bottom} />
           </div>

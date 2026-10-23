@@ -19,7 +19,7 @@ class Settings(BaseSettings):
     app_env: str = "development"
     app_host: str = "0.0.0.0"
     app_port: int = 8013
-    app_version: str = "4.0.0"
+    app_version: str = "5.0.0"
     git_sha: str = ""
     enable_api_docs: bool = True
     cors_origins: str = (

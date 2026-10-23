@@ -10,7 +10,9 @@ from app.services.authorization import AuthorizationService
 router = APIRouter(tags=["session"])
 
 
-@router.get("/tenants/current", response_model=ApiResponse[TenantContextOut], summary="当前租户上下文")
+@router.get(
+    "/tenants/current", response_model=ApiResponse[TenantContextOut], summary="当前租户上下文"
+)
 def current_tenant_context(context: TenantContextDep) -> ApiResponse[TenantContextOut]:
     """需要 X-Tenant-ID。权限编码来自 Redis 快照，不查 IAM。"""
     codes = sorted(AuthorizationService().permission_codes(context))
