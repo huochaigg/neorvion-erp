@@ -1,0 +1,145 @@
+{
+  "pack": "v8-round2-multi-chunk",
+  "imported": false,
+  "upload_forbidden_knowledge_base_ids": [7],
+  "proposed_knowledge_base_name": "V8-R2-Multi-Chunk",
+  "questions_generated": false,
+  "chunk_algorithm": {
+    "strategy": "RECURSIVE",
+    "default_chunk_size": 800,
+    "default_chunk_overlap": 120,
+    "length_unit": "python_len",
+    "splitter": "app/processing/split.py"
+  },
+  "estimated_chunks_recursive": {
+    "400/60": 165,
+    "600/90": 107,
+    "800/120": 80,
+    "1200/160": 52,
+    "1600/200": 39
+  },
+  "documents": [
+    {
+      "filename": "01-sales-outbound.md",
+      "source_type": "DERIVED",
+      "domain": "sales-outbound",
+      "chars": 7298,
+      "estimated_chunks_800": 11,
+      "sha256": "b4045e90a0879bad546fa96b737bc0425c0786a73a2cc39ba76a1258532eff70",
+      "test_capabilities": [
+        "similar-status",
+        "error-code-family",
+        "exact-identifier",
+        "multi-span-reserve-then-outbound"
+      ],
+      "imported": false
+    },
+    {
+      "filename": "02-purchase-receipt-return.md",
+      "source_type": "DERIVED",
+      "domain": "purchase",
+      "chars": 6579,
+      "estimated_chunks_800": 10,
+      "sha256": "4f00aab9ddfc97ea9f780b841ce832c7e7746c190489a1560c1742b036a55d6d",
+      "test_capabilities": [
+        "no-APPROVED-status",
+        "receipt-vs-return",
+        "same-WAITING_OUTBOUND-different-rules",
+        "error-code-family"
+      ],
+      "imported": false
+    },
+    {
+      "filename": "03-inventory-reserve-transfer.md",
+      "source_type": "DERIVED",
+      "domain": "inventory-transfer",
+      "chars": 6526,
+      "estimated_chunks_800": 11,
+      "sha256": "6385dad5f801c06a6c9c260b648855c1b32188d4856ac4c5f5dc2a3b19b49364",
+      "test_capabilities": [
+        "three-quantities",
+        "PENDING_OUTBOUND-vs-WAITING_OUTBOUND",
+        "available-only-moves",
+        "stocktake-conflict-code"
+      ],
+      "imported": false
+    },
+    {
+      "filename": "04-after-sale-refund.md",
+      "source_type": "DERIVED",
+      "domain": "after-sale",
+      "chars": 6267,
+      "estimated_chunks_800": 10,
+      "sha256": "66fe771fbe605f80906598347862a9f6316c52cc5d7a4eb419e0f7953d34421a",
+      "test_capabilities": [
+        "returnable-vs-purchased-qty",
+        "GOOD-inbound-only",
+        "refund-record-history",
+        "EXCEEDS_RETURNABLE-prefix"
+      ],
+      "imported": false
+    },
+    {
+      "filename": "05-iam-tenant-rbac.md",
+      "source_type": "DERIVED",
+      "domain": "iam-rbac",
+      "chars": 5896,
+      "estimated_chunks_800": 10,
+      "sha256": "e8e7389228c5e7df6f0ffe8011b052f509eba8b1b2ed72a46058669eee53c2d4",
+      "test_capabilities": [
+        "permission-code-exact",
+        "header-not-authority",
+        "acl-plus-rbac",
+        "high-risk-split-by-service",
+        "zh-en-mix"
+      ],
+      "imported": false
+    },
+    {
+      "filename": "06-knowledge-rag-evaluation.md",
+      "source_type": "DERIVED",
+      "domain": "knowledge-eval",
+      "chars": 5965,
+      "estimated_chunks_800": 9,
+      "sha256": "e436f083027ea0ce1afcc1d7300865f97cd53f88e6d535aebf618287c5de3cb9",
+      "test_capabilities": [
+        "chunk-params",
+        "VECTOR-KEYWORD-HYBRID",
+        "metric-not-llm",
+        "freeze-vs-working-draft",
+        "query-embedding-cache"
+      ],
+      "imported": false
+    },
+    {
+      "filename": "07-cross-domain-state-collisions.md",
+      "source_type": "DERIVED",
+      "domain": "cross-domain",
+      "chars": 5807,
+      "estimated_chunks_800": 10,
+      "sha256": "03457cb67eaad4ed40675dd06b3d209f250bd93bf40b0c9e54c23e6e602d3e7f",
+      "test_capabilities": [
+        "repeated-conclusion-multi-chapter",
+        "multi-span-evidence",
+        "similar-error-codes",
+        "unanswerable-nonexistent-list"
+      ],
+      "imported": false
+    },
+    {
+      "filename": "08-shipment-stocktake.md",
+      "source_type": "DERIVED",
+      "domain": "shipment-stocktake",
+      "chars": 5904,
+      "estimated_chunks_800": 9,
+      "sha256": "de2ecf7868d399cbdf92caae9f24c6898b27b959596fba5b00ecca421705f93b",
+      "test_capabilities": [
+        "shipment-no-inventory",
+        "two-IN_TRANSIT",
+        "stocktake-delta-not-overwrite",
+        "SHIPMENT_EXCEEDS_OUTBOUND"
+      ],
+      "imported": false
+    }
+  ]
+}

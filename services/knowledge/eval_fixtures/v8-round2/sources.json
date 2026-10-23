@@ -1,0 +1,163 @@
+{
+  "note": "每份文档的规则均可回溯到下列源码、测试或项目文档。人工复核时按路径打开即可，不要把 SYNTHETIC 噪声写进本轮正文。",
+  "documents": [
+    {
+      "filename": "01-sales-outbound.md",
+      "domain": "sales-outbound",
+      "source_paths": [
+        "services/erp/app/models/sales_order.py",
+        "services/erp/app/models/outbound.py",
+        "services/erp/app/services/sales_order.py",
+        "services/erp/app/services/outbound.py",
+        "docs/orders.md",
+        "docs/fulfillment.md"
+      ],
+      "verify": [
+        "SalesOrderStatus 无 FAST_WAREHOUSE_TIMEOUT；确认才预占",
+        "OUTBOUND_EXCEEDS_RESERVED 与 INSUFFICIENT_RESERVED_INVENTORY 分路径",
+        "OUTBOUND_PICK_EXCEEDS_PLAN 只约束拣货",
+        "WAREHOUSE_DISABLED / CUSTOMER_DISABLED / CUSTOMER_IN_USE",
+        "order:audit 确认预占；outbound:confirm 扣库存"
+      ]
+    },
+    {
+      "filename": "02-purchase-receipt-return.md",
+      "domain": "purchase",
+      "source_paths": [
+        "services/erp/app/models/purchase.py",
+        "services/erp/app/services/purchase.py",
+        "services/erp/app/services/purchase_receipt.py",
+        "services/erp/app/services/purchase_return.py",
+        "docs/purchases.md",
+        "docs/fulfillment.md",
+        "docs/purchase-returns.md"
+      ],
+      "verify": [
+        "PurchaseOrderStatus 无单独 APPROVED",
+        "WAITING_RECEIPT 本版本不可取消",
+        "PURCHASE_RECEIPT_EXCEEDS_REMAINING / ALREADY_CONFIRMED",
+        "PURCHASE_RETURN_EXCEEDS_RETURNABLE 与售后码前缀不同",
+        "采购退货 WAITING_OUTBOUND 与销售 WAITING_OUTBOUND 同名不同库存"
+      ]
+    },
+    {
+      "filename": "03-inventory-reserve-transfer.md",
+      "domain": "inventory-transfer",
+      "source_paths": [
+        "services/erp/app/models/inventory.py",
+        "services/erp/app/models/stock_transfer.py",
+        "services/erp/app/models/stocktake.py",
+        "services/erp/app/services/inventory.py",
+        "services/erp/app/services/stock_transfer.py",
+        "services/erp/tests/test_inventory.py",
+        "services/erp/tests/test_stock_transfer.py",
+        "services/erp/tests/test_stocktake.py",
+        "docs/inventory.md",
+        "docs/stock-transfer.md"
+      ],
+      "verify": [
+        "available = quantity - reserved，不落库",
+        "调拨 DRAFT / PENDING_OUTBOUND 不改库存",
+        "INSUFFICIENT_AVAILABLE_INVENTORY 用于调出和采购退货出库",
+        "STOCKTAKE_CONFLICT_WITH_RESERVED_INVENTORY 不能写成释放码"
+      ]
+    },
+    {
+      "filename": "04-after-sale-refund.md",
+      "domain": "after-sale",
+      "source_paths": [
+        "services/erp/app/models/after_sale.py",
+        "services/erp/app/models/return_order.py",
+        "services/erp/app/models/refund.py",
+        "services/erp/app/services/after_sale.py",
+        "services/erp/tests/test_after_sales.py",
+        "docs/after-sales.md",
+        "docs/returns.md"
+      ],
+      "verify": [
+        "可退上限是 outbound_quantity",
+        "AFTER_SALE_EXCEEDS_RETURNABLE",
+        "GOOD 才入普通库存；RETURN_INBOUND 不回补 reserved",
+        "refund:confirm 高风险；与 supplier_refund:confirm 不同"
+      ]
+    },
+    {
+      "filename": "05-iam-tenant-rbac.md",
+      "domain": "iam-rbac",
+      "source_paths": [
+        "services/iam/app/core/permissions.py",
+        "services/erp/app/core/permissions.py",
+        "services/knowledge/app/core/permissions.py",
+        "services/knowledge/app/services/authorization.py",
+        "packages/python/neorvion_security/neorvion_security/snapshot.py",
+        "docs/rbac.md",
+        "docs/architecture/iam-authentication-authorization-guide.md",
+        "README.md"
+      ],
+      "verify": [
+        "X-Tenant-ID 只是意愿",
+        "knowledge:read/create/update/delete",
+        "Knowledge 高风险仅 knowledge:delete；ERP 高风险另有退款/删仓等",
+        "iam:snap / iam:aver 带租户；iam:tver 不带租户",
+        "JWT audience：neorvion-knowledge / neorvion-erp"
+      ]
+    },
+    {
+      "filename": "06-knowledge-rag-evaluation.md",
+      "domain": "knowledge-eval",
+      "source_paths": [
+        "services/knowledge/app/core/config.py",
+        "services/knowledge/app/processing/split.py",
+        "services/knowledge/app/evaluation/metrics.py",
+        "services/knowledge/app/services/evaluation.py",
+        "services/knowledge/app/services/evaluation_run.py",
+        "docs/knowledge.md"
+      ],
+      "verify": [
+        "默认 chunk 800/120，RECURSIVE",
+        "KEYWORD 不是 BM25，不建 HNSW",
+        "METRIC_VERSION v4-chunk-ndcg-exp；relevance>=1 算相关",
+        "评测 persist_log=False；查询向量缓存不缓存失败",
+        "Evidence Coverage 尚未作为 metrics.py 列落地"
+      ]
+    },
+    {
+      "filename": "07-cross-domain-state-collisions.md",
+      "domain": "cross-domain",
+      "source_paths": [
+        "eval_fixtures/v8-round2/docs/01-sales-outbound.md",
+        "eval_fixtures/v8-round2/docs/02-purchase-receipt-return.md",
+        "eval_fixtures/v8-round2/docs/03-inventory-reserve-transfer.md",
+        "eval_fixtures/v8-round2/docs/04-after-sale-refund.md",
+        "eval_fixtures/v8-round2/docs/05-iam-tenant-rbac.md",
+        "eval_fixtures/v8-round2/docs/08-shipment-stocktake.md"
+      ],
+      "verify": [
+        "对照表不引入新规则，只重排已有事实",
+        "不存在清单不得标成肯定答案",
+        "40097 在仓库停用和物流商校验上复用数字码"
+      ]
+    },
+    {
+      "filename": "08-shipment-stocktake.md",
+      "domain": "shipment-stocktake",
+      "source_paths": [
+        "services/erp/app/models/shipment.py",
+        "services/erp/app/models/stocktake.py",
+        "services/erp/app/services/shipment.py",
+        "services/erp/app/services/stocktake.py",
+        "services/erp/tests/test_shipping.py",
+        "services/erp/tests/test_stocktake.py",
+        "docs/shipping.md",
+        "docs/stocktake.md"
+      ],
+      "verify": [
+        "物流单号 SHP；确认发货不改 Inventory",
+        "SHIPMENT_EXCEEDS_OUTBOUND",
+        "物流 IN_TRANSIT 与调拨 IN_TRANSIT 库存不同",
+        "盘点按差异加到当前账面；ST 前缀",
+        "STOCKTAKE_CONFLICT_WITH_RESERVED_INVENTORY"
+      ]
+    }
+  ]
+}

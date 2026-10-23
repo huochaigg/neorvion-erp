@@ -1,0 +1,344 @@
+{
+  "algorithm": {
+    "strategy": "RECURSIVE",
+    "module": "app.processing.split.split_text",
+    "length_unit": "python_len",
+    "overlaps": {
+      "400": 60,
+      "600": 90,
+      "800": 120,
+      "1200": 160,
+      "1600": 200
+    }
+  },
+  "docs": [
+    {
+      "filename": "01-sales-outbound.md",
+      "chars": 7298,
+      "bytes": 13332,
+      "headings": 16,
+      "tables": 32,
+      "sha256": "b4045e90a0879bad546fa96b737bc0425c0786a73a2cc39ba76a1258532eff70",
+      "chunks": {
+        "400": {
+          "count": 23,
+          "min": 182,
+          "max": 396,
+          "avg": 324.7
+        },
+        "600": {
+          "count": 16,
+          "min": 238,
+          "max": 593,
+          "avg": 482.7
+        },
+        "800": {
+          "count": 11,
+          "min": 512,
+          "max": 794,
+          "avg": 694.5
+        },
+        "1200": {
+          "count": 8,
+          "min": 334,
+          "max": 1192,
+          "avg": 1007.1
+        },
+        "1600": {
+          "count": 5,
+          "min": 1478,
+          "max": 1589,
+          "avg": 1529.0
+        }
+      }
+    },
+    {
+      "filename": "02-purchase-receipt-return.md",
+      "chars": 6579,
+      "bytes": 12222,
+      "headings": 17,
+      "tables": 25,
+      "sha256": "4f00aab9ddfc97ea9f780b841ce832c7e7746c190489a1560c1742b036a55d6d",
+      "chunks": {
+        "400": {
+          "count": 21,
+          "min": 145,
+          "max": 398,
+          "avg": 325.3
+        },
+        "600": {
+          "count": 13,
+          "min": 422,
+          "max": 597,
+          "avg": 541.2
+        },
+        "800": {
+          "count": 10,
+          "min": 386,
+          "max": 799,
+          "avg": 705.2
+        },
+        "1200": {
+          "count": 7,
+          "min": 298,
+          "max": 1198,
+          "avg": 1027.4
+        },
+        "1600": {
+          "count": 5,
+          "min": 809,
+          "max": 1595,
+          "avg": 1396.2
+        }
+      }
+    },
+    {
+      "filename": "03-inventory-reserve-transfer.md",
+      "chars": 6526,
+      "bytes": 11266,
+      "headings": 15,
+      "tables": 39,
+      "sha256": "6385dad5f801c06a6c9c260b648855c1b32188d4856ac4c5f5dc2a3b19b49364",
+      "chunks": {
+        "400": {
+          "count": 21,
+          "min": 89,
+          "max": 395,
+          "avg": 323.3
+        },
+        "600": {
+          "count": 15,
+          "min": 215,
+          "max": 583,
+          "avg": 457.4
+        },
+        "800": {
+          "count": 11,
+          "min": 215,
+          "max": 786,
+          "avg": 646.0
+        },
+        "1200": {
+          "count": 7,
+          "min": 321,
+          "max": 1156,
+          "avg": 1001.3
+        },
+        "1600": {
+          "count": 5,
+          "min": 1038,
+          "max": 1591,
+          "avg": 1402.4
+        }
+      }
+    },
+    {
+      "filename": "04-after-sale-refund.md",
+      "chars": 6267,
+      "bytes": 10905,
+      "headings": 16,
+      "tables": 18,
+      "sha256": "66fe771fbe605f80906598347862a9f6316c52cc5d7a4eb419e0f7953d34421a",
+      "chunks": {
+        "400": {
+          "count": 20,
+          "min": 193,
+          "max": 398,
+          "avg": 319.7
+        },
+        "600": {
+          "count": 13,
+          "min": 404,
+          "max": 589,
+          "avg": 516.9
+        },
+        "800": {
+          "count": 10,
+          "min": 193,
+          "max": 791,
+          "avg": 671.3
+        },
+        "1200": {
+          "count": 6,
+          "min": 876,
+          "max": 1196,
+          "avg": 1124.2
+        },
+        "1600": {
+          "count": 5,
+          "min": 735,
+          "max": 1586,
+          "avg": 1367.4
+        }
+      }
+    },
+    {
+      "filename": "05-iam-tenant-rbac.md",
+      "chars": 5896,
+      "bytes": 10056,
+      "headings": 14,
+      "tables": 29,
+      "sha256": "e8e7389228c5e7df6f0ffe8011b052f509eba8b1b2ed72a46058669eee53c2d4",
+      "chunks": {
+        "400": {
+          "count": 19,
+          "min": 153,
+          "max": 393,
+          "avg": 311.8
+        },
+        "600": {
+          "count": 13,
+          "min": 153,
+          "max": 588,
+          "avg": 473.8
+        },
+        "800": {
+          "count": 10,
+          "min": 244,
+          "max": 774,
+          "avg": 616.1
+        },
+        "1200": {
+          "count": 6,
+          "min": 727,
+          "max": 1173,
+          "avg": 1064.5
+        },
+        "1600": {
+          "count": 4,
+          "min": 1493,
+          "max": 1590,
+          "avg": 1556.5
+        }
+      }
+    },
+    {
+      "filename": "06-knowledge-rag-evaluation.md",
+      "chars": 5965,
+      "bytes": 10954,
+      "headings": 15,
+      "tables": 20,
+      "sha256": "e436f083027ea0ce1afcc1d7300865f97cd53f88e6d535aebf618287c5de3cb9",
+      "chunks": {
+        "400": {
+          "count": 19,
+          "min": 120,
+          "max": 393,
+          "avg": 319.5
+        },
+        "600": {
+          "count": 12,
+          "min": 401,
+          "max": 582,
+          "avg": 521.8
+        },
+        "800": {
+          "count": 9,
+          "min": 494,
+          "max": 791,
+          "avg": 729.9
+        },
+        "1200": {
+          "count": 6,
+          "min": 725,
+          "max": 1164,
+          "avg": 1063.2
+        },
+        "1600": {
+          "count": 5,
+          "min": 401,
+          "max": 1579,
+          "avg": 1294.0
+        }
+      }
+    },
+    {
+      "filename": "07-cross-domain-state-collisions.md",
+      "chars": 5807,
+      "bytes": 10283,
+      "headings": 11,
+      "tables": 65,
+      "sha256": "03457cb67eaad4ed40675dd06b3d209f250bd93bf40b0c9e54c23e6e602d3e7f",
+      "chunks": {
+        "400": {
+          "count": 23,
+          "min": 43,
+          "max": 398,
+          "avg": 262.5
+        },
+        "600": {
+          "count": 13,
+          "min": 111,
+          "max": 598,
+          "avg": 481.7
+        },
+        "800": {
+          "count": 10,
+          "min": 196,
+          "max": 795,
+          "avg": 600.0
+        },
+        "1200": {
+          "count": 6,
+          "min": 616,
+          "max": 1172,
+          "avg": 1042.7
+        },
+        "1600": {
+          "count": 5,
+          "min": 196,
+          "max": 1590,
+          "avg": 1217.8
+        }
+      }
+    },
+    {
+      "filename": "08-shipment-stocktake.md",
+      "chars": 5904,
+      "bytes": 10687,
+      "headings": 13,
+      "tables": 22,
+      "sha256": "de2ecf7868d399cbdf92caae9f24c6898b27b959596fba5b00ecca421705f93b",
+      "chunks": {
+        "400": {
+          "count": 19,
+          "min": 150,
+          "max": 397,
+          "avg": 319.9
+        },
+        "600": {
+          "count": 12,
+          "min": 79,
+          "max": 590,
+          "avg": 515.1
+        },
+        "800": {
+          "count": 9,
+          "min": 438,
+          "max": 795,
+          "avg": 711.9
+        },
+        "1200": {
+          "count": 6,
+          "min": 662,
+          "max": 1160,
+          "avg": 1050.2
+        },
+        "1600": {
+          "count": 5,
+          "min": 190,
+          "max": 1580,
+          "avg": 1275.8
+        }
+      }
+    }
+  ],
+  "total_chunks": {
+    "400": 165,
+    "600": 107,
+    "800": 80,
+    "1200": 52,
+    "1600": 39
+  },
+  "total_chars": 50242
+}
