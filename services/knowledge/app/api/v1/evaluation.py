@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from fastapi import APIRouter, BackgroundTasks, File, Query, UploadFile
+from fastapi import APIRouter, BackgroundTasks, File, Query, Response, UploadFile
 from fastapi.responses import PlainTextResponse
 
 from app.api.deps import (
@@ -52,6 +52,7 @@ from app.schemas.ops import ProbeIn, ProbeOut
 from app.services.evaluation import EvaluationService
 from app.services.evaluation_run import EvaluationRunService, execute_eval_run
 from app.services.label_suggestion import LabelSuggestionService, execute_label_job
+from app.tasks.queue import enqueue_label_job
 
 router = APIRouter(tags=["knowledge-evaluation"])
 
@@ -61,6 +62,17 @@ def _schedule_eval_run(background: BackgroundTasks, run_id: int) -> None:
     if settings.task_executor == "redis":
         return
     background.add_task(execute_eval_run, run_id)
+
+
+async def _dispatch_label_job(background: BackgroundTasks, data: dict) -> None:
+    """redis 立即入队；inline 等响应发出后再跑，避免确认接口一直 pending。"""
+    if data.get("status") != "QUEUED":
+        return
+    job_id = int(data["id"])
+    if settings.task_executor == "redis":
+        await enqueue_label_job(job_id)
+        return
+    background.add_task(execute_label_job, job_id)
 
 
 def _run_out(row: EvaluationRun) -> RunOut:
@@ -340,6 +352,7 @@ async def suggest_labels(
                 rerun=payload.rerun,
                 only_failed=payload.only_failed,
                 only_rejected=payload.only_rejected,
+                only_empty=payload.only_empty,
             )
         )
     data = await service.accept(
@@ -347,9 +360,9 @@ async def suggest_labels(
         rerun=payload.rerun,
         only_failed=payload.only_failed,
         only_rejected=payload.only_rejected,
+        only_empty=payload.only_empty,
     )
-    if data["status"] == "QUEUED" and not data["already_running"]:
-        background.add_task(execute_label_job, int(data["id"]))
+    await _dispatch_label_job(background, data)
     return ok(data, "已开始初标")
 
 
@@ -359,8 +372,15 @@ async def confirm_label_suggestions(
     payload: SuggestionConfirmIn,
     session: DbSession,
     context: KnowledgeUpdateContext,
+    background: BackgroundTasks,
+    response: Response,
 ) -> ApiResponse[dict]:
     data = await LabelSuggestionService(session, context).confirm(dataset_id, payload)
+    if data.get("accepted"):
+        if not data.get("already_running"):
+            await _dispatch_label_job(background, data)
+        response.status_code = 202
+        return ok(data, "已开始批量确认")
     return ok(data)
 
 

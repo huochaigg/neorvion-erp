@@ -379,6 +379,7 @@ class SuggestLabelsIn(BaseModel):
     rerun: bool = False
     only_failed: bool = False
     only_rejected: bool = False
+    only_empty: bool = False
 
 
 class SuggestionItemIn(BaseModel):
@@ -390,6 +391,7 @@ class SuggestionItemIn(BaseModel):
 
 class SuggestionUpdateIn(BaseModel):
     confidence: str | None = None
+    verdict: str | None = None
     rationale: str | None = None
     risk: str | None = None
     items: list[SuggestionItemIn] | None = None

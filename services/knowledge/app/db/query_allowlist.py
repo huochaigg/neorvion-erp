@@ -20,6 +20,14 @@ ALLOWLIST = (
         "Worker 回收全部过期评测租约，不能只看当前请求租户",
     ),
     AllowedQuery(
+        "system_queue.py:list_queued_label_jobs",
+        "Worker 扫描全部排队智能标注任务，执行前再读取任务行上的租户",
+    ),
+    AllowedQuery(
+        "system_queue.py:requeue_stale_label_jobs",
+        "Worker 启动时回收全部 RUNNING 智能标注任务，确认过程幂等",
+    ),
+    AllowedQuery(
         "ops.py:ApiKeyRepository.get_by_hash",
         "API Key 认证先按全局哈希定位密钥，再校验请求头与密钥租户一致",
     ),

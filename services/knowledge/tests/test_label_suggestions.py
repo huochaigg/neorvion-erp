@@ -43,6 +43,32 @@ def test_finalize_drops_unknown_chunk_and_lowers_confidence() -> None:
     assert "999" not in str(draft.items)
 
 
+def test_finalize_remaps_unknown_chunk_id_by_excerpt() -> None:
+    draft = finalize_label(
+        judge={
+            "verdict": "ANSWERABLE",
+            "confidence": "HIGH",
+            "rationale": "原文支持",
+            "risk": "",
+            "items": [
+                {
+                    "chunk_id": 999,
+                    "relevance": 3,
+                    "reason": "直接写出规则",
+                    "excerpt": "七天无理由退货只适用于完好商品。",
+                }
+            ],
+        },
+        candidates=[_candidate()],
+        is_unanswerable=False,
+        question_type="FACTUAL",
+        model_name="mock-chat",
+    )
+    assert [item["chunk_id"] for item in draft.items] == [7]
+    assert draft.confidence == "HIGH"
+    assert "对齐" in (draft.risk or "")
+
+
 def test_finalize_does_not_upgrade_unanswerable_disagreement() -> None:
     draft = finalize_label(
         judge={

@@ -41,6 +41,16 @@ async def enqueue_eval_run(run_id: int) -> bool:
         return False
 
 
+async def enqueue_label_job(job_id: int) -> bool:
+    """智能初标 / 批量确认与文档任务共用 Redis List，前缀 label: 区分。"""
+    try:
+        await redis_client().lpush(settings.task_queue_key, f"label:{job_id}")
+        return True
+    except RedisError:
+        logger.warning("knowledge label enqueue failed job_id=%s", job_id)
+        return False
+
+
 async def pop_queue_item(timeout: int = 2) -> str | None:
     try:
         item = await redis_client().brpop(settings.task_queue_key, timeout=timeout)

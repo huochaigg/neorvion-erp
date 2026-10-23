@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from datetime import timedelta
 from typing import cast
 
 from neorvion_db import PrivilegedOperation, open_privileged_async_session, privileged_option
@@ -23,13 +24,15 @@ from app.db.system_access import PRIVILEGED_CALLERS, PRIVILEGED_FLUSH_MODELS
 from app.models.knowledge import KnowledgeDocument, KnowledgeDocumentStatus, TaskType
 from app.repositories.system_queue import (
     fail_stale_tasks,
+    list_queued_label_jobs,
     list_queued_runs,
     list_queued_tasks,
     pause_stale_runs,
+    requeue_stale_label_jobs,
 )
 from app.services.evaluation_run import EvaluationRunService
 from app.services.processing import ProcessingService
-from app.tasks.queue import enqueue_eval_run, enqueue_task, pop_queue_item
+from app.tasks.queue import enqueue_eval_run, enqueue_label_job, enqueue_task, pop_queue_item
 
 logger = logging.getLogger(__name__)
 
@@ -75,31 +78,48 @@ async def recover_stale_tasks() -> None:
         queued = await list_queued_tasks(session)
         eval_failed = await pause_stale_runs(session, "Worker 重启，已保留部分结果，将从中断处继续")
         eval_queued = await list_queued_runs(session)
+        label_failed = await requeue_stale_label_jobs(session, "Worker 重启，已保留部分确认结果，将从中断处继续")
+        label_queued = await list_queued_label_jobs(session)
         await session.commit()
         for task in queued:
             await enqueue_task(task.id)
         for run in eval_queued:
             await enqueue_eval_run(run.id)
-        if failed or queued or eval_failed or eval_queued:
+        for job in label_queued:
+            await enqueue_label_job(job.id)
+        if failed or queued or eval_failed or eval_queued or label_failed or label_queued:
             logger.info(
-                "knowledge worker recovered running=%s queued=%s eval_failed=%s eval_queued=%s",
+                "knowledge worker recovered running=%s queued=%s eval_failed=%s eval_queued=%s label_failed=%s label_queued=%s",
                 len(failed),
                 len(queued),
                 len(eval_failed),
                 len(eval_queued),
+                len(label_failed),
+                len(label_queued),
             )
 
 
 async def recover_expired_eval_leases() -> None:
-    """空闲时回收租约过期的 RUNNING 评测，避免 Worker 崩溃后任务永久卡住。"""
+    """空闲时回收租约过期的 RUNNING 评测，以及长时间无进度的标注任务。"""
     async with _open_claim() as privileged:
         session = cast(AsyncSession, cast(object, privileged))
         recovered = await pause_stale_runs(session, "评测租约过期，已保留部分结果，将从中断处继续")
+        labels = await requeue_stale_label_jobs(
+            session,
+            "标注任务中断，已保留部分结果，将从中断处继续",
+            stale_after=timedelta(minutes=10),
+        )
         await session.commit()
         for run in recovered:
             await enqueue_eval_run(run.id)
-        if recovered:
-            logger.info("knowledge worker reclaimed expired eval leases=%s", len(recovered))
+        for job in labels:
+            await enqueue_label_job(job.id)
+        if recovered or labels:
+            logger.info(
+                "knowledge worker reclaimed expired eval leases=%s stale_label_jobs=%s",
+                len(recovered),
+                len(labels),
+            )
 
 
 async def _task_tenant(task_id: int) -> int | None:
@@ -143,6 +163,31 @@ async def handle_one(task_id: int) -> None:
         await ProcessingService(session).execute(task_id)
 
 
+async def _label_tenant(job_id: int) -> int | None:
+    from app.models.evaluation import EvaluationLabelJob
+
+    async with _open_claim() as privileged:
+        session = cast(AsyncSession, cast(object, privileged))
+        job = await session.scalar(
+            select(EvaluationLabelJob)
+            .where(EvaluationLabelJob.id == job_id)
+            .execution_options(**privileged_option(PrivilegedOperation.WORKER_CLAIM))
+        )
+        if job is None:
+            return None
+        return _positive_tenant(job.tenant_id)
+
+
+async def handle_label(job_id: int) -> None:
+    from app.services.label_suggestion import execute_label_job
+
+    tenant_id = await _label_tenant(job_id)
+    if tenant_id is None:
+        logger.error("knowledge label missing tenant job_id=%s", job_id)
+        return
+    await execute_label_job(job_id)
+
+
 async def handle_eval(run_id: int) -> None:
     from app.evaluation.stages import PauseRun
 
@@ -169,6 +214,8 @@ async def run_forever() -> None:
         try:
             if raw.startswith("eval:"):
                 await handle_eval(int(raw.split(":", 1)[1]))
+            elif raw.startswith("label:"):
+                await handle_label(int(raw.split(":", 1)[1]))
             else:
                 await handle_one(int(raw))
         except Exception:
@@ -180,4 +227,7 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    # python -m app.tasks.worker 会把本文件标成 __main__，特权领取只认 app.tasks.worker。
+    from app.tasks.worker import main as _main
+
+    _main()

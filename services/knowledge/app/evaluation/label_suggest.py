@@ -68,7 +68,9 @@ def finalize_label(
     notes: list[str] = []
     raw_items = judge.get("items")
     kept: list[dict] = []
+    seen: set[int] = set()
     dropped = 0
+    remapped = 0
     for raw in raw_items if isinstance(raw_items, list) else []:
         if not isinstance(raw, dict):
             dropped += 1
@@ -79,17 +81,29 @@ def finalize_label(
         except (TypeError, ValueError):
             dropped += 1
             continue
-        candidate = allowed.get(chunk_id)
-        if candidate is None or relevance < 0 or relevance > 3:
+        if relevance < 0 or relevance > 3:
             dropped += 1
             continue
-        excerpt = str(raw.get("excerpt") or candidate.content[:240])[:500]
+        excerpt = str(raw.get("excerpt") or "")[:500]
+        candidate = allowed.get(chunk_id)
+        if candidate is None:
+            candidate = _match_candidate_by_excerpt(excerpt, candidates)
+            if candidate is None:
+                dropped += 1
+                continue
+            remapped += 1
+            notes.append(f"模型切片 #{chunk_id} 不在候选中，已按摘录对齐到 #{candidate.chunk_id}")
+        if candidate.chunk_id in seen:
+            continue
+        seen.add(candidate.chunk_id)
         if excerpt and excerpt not in candidate.content:
             excerpt = candidate.content[:240]
-            notes.append(f"Chunk {chunk_id} 的摘录不在原文中，已改用原文开头")
+            notes.append(f"Chunk {candidate.chunk_id} 的摘录不在原文中，已改用原文开头")
+        elif not excerpt:
+            excerpt = candidate.content[:240]
         kept.append(
             {
-                "chunk_id": chunk_id,
+                "chunk_id": candidate.chunk_id,
                 "document_id": candidate.document_id,
                 "filename": candidate.filename,
                 "relevance": relevance,
@@ -100,6 +114,8 @@ def finalize_label(
                 "methods": list(candidate.methods),
             }
         )
+    if remapped:
+        notes.append(f"已按摘录对齐 {remapped} 条切片，无需人工填写 ID")
     if dropped:
         notes.append(f"丢弃了 {dropped} 条无法对应到本知识库切片的建议")
 
@@ -150,6 +166,16 @@ def finalize_label(
     )
 
 
+def _match_candidate_by_excerpt(excerpt: str, candidates: list[LabelCandidate]) -> LabelCandidate | None:
+    quote = excerpt.strip()
+    if len(quote) < 12:
+        return None
+    hits = [item for item in candidates if quote in item.content]
+    if len(hits) == 1:
+        return hits[0]
+    return None
+
+
 def _lower(current: str, ceiling: str) -> str:
     if _RANK[current] <= _RANK[ceiling]:
         return current
@@ -186,6 +212,8 @@ async def judge_relevance(
                 "relevance >= 1 才会被检索指标当成相关。"
                 "verdict 取 ANSWERABLE、UNANSWERABLE、PARTIAL、CONFLICT、INSUFFICIENT。"
                 "confidence 取 HIGH、MEDIUM、LOW，它只是审核优先级，不是正确率。"
+                "题目当前标记无答案为 false 时，禁止输出 UNANSWERABLE。"
+                "题型 HALLUCINATION 且不是无答案时，应输出 ANSWERABLE 或 PARTIAL，并引用纠正错误前提的切片。"
                 "无答案必须 items 里不放 relevance>=1 的切片。"
                 "证据不够、文档冲突或只能回答一部分时降低 confidence，并在 risk 里说明。"
                 f"prompt_version={LABEL_PROMPT_VERSION}"

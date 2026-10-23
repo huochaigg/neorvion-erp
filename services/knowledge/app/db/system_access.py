@@ -10,6 +10,6 @@ PRIVILEGED_CALLERS = {
 
 PRIVILEGED_FLUSH_MODELS = {
     PrivilegedOperation.WORKER_CLAIM: frozenset(
-        {"DocumentProcessingTask", "KnowledgeDocument", "EvaluationRun"}
+        {"DocumentProcessingTask", "KnowledgeDocument", "EvaluationRun", "EvaluationLabelJob"}
     ),
 }

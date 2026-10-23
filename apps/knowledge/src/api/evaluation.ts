@@ -375,19 +375,32 @@ export function compareEvalRuns(runIds: number[], signal?: AbortSignal) {
 
 export interface KnowledgeEvalLabelJob {
   id: number;
+  task_id?: number;
   dataset_id: number;
-  status: 'QUEUED' | 'RUNNING' | 'SUCCEEDED' | 'FAILED' | string;
+  job_type?: 'SUGGEST' | 'CONFIRM' | string;
+  status: 'QUEUED' | 'RUNNING' | 'SUCCEEDED' | 'FAILED' | 'CANCELLED' | string;
   accepted: boolean;
   already_running: boolean;
   executed: boolean;
   total: number;
+  processed?: number;
+  succeeded?: number;
   drafted: number;
   failed: number;
   skipped: number;
   pending_cases: number;
+  details?: { skips?: { suggestion_id: number; reason: string }[]; failures?: { suggestion_id: number; reason: string }[] };
   error_message: string | null;
   started_at: string | null;
   finished_at: string | null;
+  confirmed?: number;
+  errors?: { suggestion_id: number; message: string }[];
+  pending_drafts?: number;
+  high_drafts?: number;
+}
+
+export function isLiveEvalLabelJob(status?: string | null) {
+  return status === 'QUEUED' || status === 'RUNNING';
 }
 
 export function fetchEvalLabelJob(datasetId: number, signal?: AbortSignal) {
@@ -423,7 +436,7 @@ export function fetchEvalLabelSuggestions(
 
 export function runEvalLabelSuggestions(
   datasetId: number,
-  payload: { execute: boolean; rerun?: boolean; only_failed?: boolean; only_rejected?: boolean },
+  payload: { execute: boolean; rerun?: boolean; only_failed?: boolean; only_rejected?: boolean; only_empty?: boolean },
 ) {
   return unwrapApi(
     apiClient.post<ApiResponse<KnowledgeEvalLabelEstimate & Partial<KnowledgeEvalLabelJob>>>(
@@ -435,7 +448,7 @@ export function runEvalLabelSuggestions(
 
 export function confirmEvalLabelSuggestions(datasetId: number, payload: { suggestion_ids?: number[]; only_high?: boolean }) {
   return unwrapApi(
-    apiClient.post<ApiResponse<{ confirmed: number; errors: { suggestion_id: number; message: string }[] }>>(
+    apiClient.post<ApiResponse<KnowledgeEvalLabelJob & { confirmed?: number; errors?: { suggestion_id: number; message: string }[] }>>(
       `/api/v1/evaluation/datasets/${datasetId}/label-suggestions/confirm`,
       payload,
     ),
@@ -446,6 +459,7 @@ export function updateEvalLabelSuggestion(
   suggestionId: number,
   payload: {
     confidence?: string;
+    verdict?: string;
     rationale?: string;
     risk?: string;
     items?: { chunk_id: number; relevance: number; reason?: string; excerpt?: string }[];

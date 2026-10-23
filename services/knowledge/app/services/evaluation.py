@@ -6,6 +6,7 @@ import csv
 import io
 from datetime import UTC, datetime
 
+from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -437,37 +438,72 @@ class EvaluationService:
         """覆盖本题标注。失效切片会标 stale，不会悄悄当作有效相关。"""
         self.auth.require_all(self.context, (PermissionCode.KNOWLEDGE_UPDATE,))
         case = await self._require_case(case_id)
-        existing = await self.repo.list_judgments(case.id)
-        for row in existing:
-            await self.session.delete(row)
-        await self.session.flush()
-        for item in items:
-            chunk, document = await self._load_chunk(item.chunk_id)
-            digest = content_sha256(chunk.content)
-            stale = chunk.status != ChunkStatus.ACTIVE.value or not chunk.enabled
-            self.session.add(
-                EvaluationJudgment(
-                    tenant_id=self.context.tenant_id,
-                    dataset_id=case.dataset_id,
-                    case_id=case.id,
-                    document_id=document.id,
-                    chunk_id=chunk.id,
-                    relevance=item.relevance,
-                    source_key=source_key_for(document, chunk),
-                    chunk_version=chunk.version,
-                    content_hash=digest,
-                    filename=document.filename,
-                    snippet=chunk.content[:500],
-                    stale=stale,
-                    created_by=self.context.user_id,
-                )
-            )
-        await self.session.flush()
-        await self._refresh_stale_for_case(case.id)
-        await self._refresh_case_status(case)
+        await self.write_judgments(case, items)
         await self.session.commit()
         await self.session.refresh(case)
         return self._case_out(case, await self.repo.list_judgments(case.id))
+
+    async def write_judgments(
+        self,
+        case: EvaluationCase,
+        items: list[JudgmentIn],
+        *,
+        chunks: dict[int, tuple[DocumentChunk, KnowledgeDocument]] | None = None,
+        existing: list[EvaluationJudgment] | None = None,
+    ) -> None:
+        """在当前事务写入正式标注，由调用方决定何时 commit。"""
+        rows = existing if existing is not None else await self.repo.list_judgments(case.id)
+        for row in rows:
+            await self.session.delete(row)
+        await self.session.flush()
+        written: list[EvaluationJudgment] = []
+        for item in items:
+            loaded = chunks.get(item.chunk_id) if chunks is not None else None
+            chunk, document = loaded if loaded is not None else await self._load_chunk(item.chunk_id)
+            digest = content_sha256(chunk.content)
+            stale = chunk.status != ChunkStatus.ACTIVE.value or not chunk.enabled
+            judgment = EvaluationJudgment(
+                tenant_id=self.context.tenant_id,
+                dataset_id=case.dataset_id,
+                case_id=case.id,
+                document_id=document.id,
+                chunk_id=chunk.id,
+                relevance=item.relevance,
+                source_key=source_key_for(document, chunk),
+                chunk_version=chunk.version,
+                content_hash=digest,
+                filename=document.filename,
+                snippet=chunk.content[:500],
+                stale=stale,
+                created_by=self.context.user_id,
+            )
+            self.session.add(judgment)
+            written.append(judgment)
+        await self.session.flush()
+        await self._refresh_stale_for_case(case.id, chunks=chunks, judgments=written)
+        await self._refresh_case_status(case, judgments=written)
+
+    async def load_chunks_by_ids(self, chunk_ids: list[int]) -> dict[int, tuple[DocumentChunk, KnowledgeDocument]]:
+        unique = sorted({int(item) for item in chunk_ids})
+        if not unique:
+            return {}
+        tenant_id = self.context.tenant_id
+        rows = (
+            await self.session.execute(
+                select(DocumentChunk, KnowledgeDocument)
+                .join(
+                    KnowledgeDocument,
+                    (KnowledgeDocument.id == DocumentChunk.document_id)
+                    & (KnowledgeDocument.tenant_id == DocumentChunk.tenant_id),
+                )
+                .where(
+                    DocumentChunk.tenant_id == tenant_id,
+                    DocumentChunk.id.in_(unique),
+                    KnowledgeDocument.deleted_at.is_(None),
+                )
+            )
+        ).all()
+        return {chunk.id: (chunk, document) for chunk, document in rows}
 
     async def refresh_stale(self, dataset_id: int) -> DatasetOut:
         self.auth.require_all(self.context, (PermissionCode.KNOWLEDGE_UPDATE,))
@@ -992,27 +1028,42 @@ class EvaluationService:
             raise AppError("文档不存在或不可访问", code=40452, status_code=404)
         return chunk, document
 
-    async def _refresh_stale_for_case(self, case_id: int) -> None:
-        for judgment in await self.repo.list_judgments(case_id):
-            chunk = await self.session.scalar(select_chunk(self.context.tenant_id, judgment.chunk_id))
-            if chunk is None or chunk.status != ChunkStatus.ACTIVE.value:
+    async def _refresh_stale_for_case(
+        self,
+        case_id: int,
+        *,
+        chunks: dict[int, tuple[DocumentChunk, KnowledgeDocument]] | None = None,
+        judgments: list[EvaluationJudgment] | None = None,
+    ) -> None:
+        rows = judgments if judgments is not None else await self.repo.list_judgments(case_id)
+        for judgment in rows:
+            loaded = chunks.get(judgment.chunk_id) if chunks is not None else None
+            chunk = loaded[0] if loaded is not None else await self.session.scalar(
+                select_chunk(self.context.tenant_id, judgment.chunk_id)
+            )
+            if chunk is None or chunk.status != ChunkStatus.ACTIVE.value or not chunk.enabled:
                 judgment.stale = True
                 continue
             digest = content_sha256(chunk.content)
             judgment.stale = digest != judgment.content_hash or chunk.version != judgment.chunk_version
 
-    async def _refresh_case_status(self, case: EvaluationCase) -> None:
+    async def _refresh_case_status(
+        self,
+        case: EvaluationCase,
+        *,
+        judgments: list[EvaluationJudgment] | None = None,
+    ) -> None:
         """按标注刷新状态。待人工复核的题目停在待标注或已标注，不能直接变成可评测。"""
-        judgments = await self.repo.list_judgments(case.id)
-        valid = [item for item in judgments if not item.stale and item.relevance >= 1]
+        rows = judgments if judgments is not None else await self.repo.list_judgments(case.id)
+        valid = [item for item in rows if not item.stale and item.relevance >= 1]
         if case.needs_human_review:
-            case.annotation_status = AnnotationStatus.LABELED.value if judgments else AnnotationStatus.PENDING.value
+            case.annotation_status = AnnotationStatus.LABELED.value if rows else AnnotationStatus.PENDING.value
             return
         if case.is_unanswerable:
             case.annotation_status = AnnotationStatus.READY.value
         elif valid:
             case.annotation_status = AnnotationStatus.READY.value
-        elif judgments:
+        elif rows:
             case.annotation_status = AnnotationStatus.LABELED.value
         else:
             case.annotation_status = AnnotationStatus.PENDING.value

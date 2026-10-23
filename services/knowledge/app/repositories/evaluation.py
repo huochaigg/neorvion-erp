@@ -467,6 +467,46 @@ class EvaluationRepository(BaseRepository):
             )
         )
 
+    async def list_label_suggestions_by_ids(self, dataset_id: int, suggestion_ids: list[int]):
+        tenant_id = self.ensure_tenant()
+        if not suggestion_ids:
+            return []
+        stmt = (
+            select(EvaluationLabelSuggestion)
+            .where(
+                EvaluationLabelSuggestion.tenant_id == tenant_id,
+                EvaluationLabelSuggestion.dataset_id == dataset_id,
+                EvaluationLabelSuggestion.id.in_(suggestion_ids),
+            )
+        )
+        found = {row.id: row for row in (await self.session.scalars(stmt)).all()}
+        return [found[item] for item in suggestion_ids if item in found]
+
+    async def list_cases_by_ids(self, dataset_id: int, case_ids: list[int]) -> dict[int, EvaluationCase]:
+        tenant_id = self.ensure_tenant()
+        if not case_ids:
+            return {}
+        stmt = select(EvaluationCase).where(
+            EvaluationCase.tenant_id == tenant_id,
+            EvaluationCase.dataset_id == dataset_id,
+            EvaluationCase.id.in_(case_ids),
+            EvaluationCase.deleted_at.is_(None),
+        )
+        return {row.id: row for row in (await self.session.scalars(stmt)).all()}
+
+    async def list_judgments_for_cases(self, case_ids: list[int]) -> dict[int, list[EvaluationJudgment]]:
+        tenant_id = self.ensure_tenant()
+        grouped: dict[int, list[EvaluationJudgment]] = {item: [] for item in case_ids}
+        if not case_ids:
+            return grouped
+        stmt = select(EvaluationJudgment).where(
+            EvaluationJudgment.tenant_id == tenant_id,
+            EvaluationJudgment.case_id.in_(case_ids),
+        )
+        for row in (await self.session.scalars(stmt)).all():
+            grouped.setdefault(row.case_id, []).append(row)
+        return grouped
+
     async def latest_label_job(self, dataset_id: int) -> EvaluationLabelJob | None:
         tenant_id = self.ensure_tenant()
         return await self.session.scalar(

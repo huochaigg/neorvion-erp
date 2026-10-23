@@ -29,6 +29,7 @@ from app.models.evaluation import (
     EvaluationLabelSuggestion,
     LabelConfidence,
     LabelJobStatus,
+    LabelJobType,
     SuggestionStatus,
 )
 from app.models.knowledge import ChunkStatus, DocumentChunk, KnowledgeDocument
@@ -42,6 +43,7 @@ from app.services.retrieval import RetrievalService
 Judge = Callable[..., Awaitable[dict]]
 _FULL_SCAN_LIMIT = 40
 _JOB_STALE_AFTER = timedelta(minutes=10)
+_CONFIRM_BATCH = 20
 
 
 class LabelSuggestionService:
@@ -59,6 +61,7 @@ class LabelSuggestionService:
         rerun: bool = False,
         only_failed: bool = False,
         only_rejected: bool = False,
+        only_empty: bool = False,
     ) -> dict:
         self.auth.require_all(self.context, (PermissionCode.KNOWLEDGE_READ,))
         dataset = await self._dataset(dataset_id)
@@ -69,7 +72,7 @@ class LabelSuggestionService:
             suggestion = await self.repo.get_label_suggestion_by_case(case.id)
             judgments = await self.repo.list_judgments(case.id)
             if self._locked(case, judgments, suggestion) or not self._should_run(
-                suggestion, rerun, only_failed, only_rejected
+                suggestion, rerun, only_failed, only_rejected, only_empty, case
             ):
                 skipped += 1
                 continue
@@ -90,6 +93,7 @@ class LabelSuggestionService:
         rerun: bool = False,
         only_failed: bool = False,
         only_rejected: bool = False,
+        only_empty: bool = False,
     ) -> dict:
         """写入排队任务后立即返回。模型调用由后台任务继续。"""
         self.auth.require_all(self.context, (PermissionCode.KNOWLEDGE_UPDATE,))
@@ -102,12 +106,19 @@ class LabelSuggestionService:
             rerun=rerun,
             only_failed=only_failed,
             only_rejected=only_rejected,
+            only_empty=only_empty,
         )
         job = EvaluationLabelJob(
             tenant_id=self.context.tenant_id,
             dataset_id=dataset_id,
+            job_type=LabelJobType.SUGGEST.value,
             status=LabelJobStatus.QUEUED.value,
-            options={"rerun": rerun, "only_failed": only_failed, "only_rejected": only_rejected},
+            options={
+                "rerun": rerun,
+                "only_failed": only_failed,
+                "only_rejected": only_rejected,
+                "only_empty": only_empty,
+            },
             total=int(plan["pending_cases"]),
             created_by=self.context.user_id,
         )
@@ -134,22 +145,34 @@ class LabelSuggestionService:
 
     async def run_job(self, job_id: int) -> None:
         """后台执行。请求里的数据库会话已经结束，这里使用当前服务自己的会话。"""
-        job = await self.session.get(EvaluationLabelJob, job_id)
-        if job is None or job.tenant_id != self.context.tenant_id:
+        job = await self.session.scalar(
+            select(EvaluationLabelJob)
+            .where(
+                EvaluationLabelJob.id == job_id,
+                EvaluationLabelJob.tenant_id == self.context.tenant_id,
+            )
+            .with_for_update()
+        )
+        if job is None:
             return
-        if job.status not in _ACTIVE_JOBS:
+        if job.status != LabelJobStatus.QUEUED.value:
             return
         job.status = LabelJobStatus.RUNNING.value
         job.started_at = job.started_at or datetime.now(UTC)
+        job.error_message = None
         await self.session.commit()
-        options = dict(job.options or {})
         try:
+            if job.job_type == LabelJobType.CONFIRM.value:
+                await self._run_confirm_job(job)
+                return
+            options = dict(job.options or {})
             result = await self.suggest(
                 job.dataset_id,
                 execute=True,
                 rerun=bool(options.get("rerun")),
                 only_failed=bool(options.get("only_failed")),
                 only_rejected=bool(options.get("only_rejected")),
+                only_empty=bool(options.get("only_empty")),
                 job=job,
             )
             if result["failed"] and not result["drafted"]:
@@ -171,6 +194,7 @@ class LabelSuggestionService:
         rerun: bool = False,
         only_failed: bool = False,
         only_rejected: bool = False,
+        only_empty: bool = False,
         job: EvaluationLabelJob | None = None,
     ) -> dict:
         """execute 为 false 时只返回估算。真正跑模型时由后台任务调用。"""
@@ -180,6 +204,7 @@ class LabelSuggestionService:
             rerun=rerun,
             only_failed=only_failed,
             only_rejected=only_rejected,
+            only_empty=only_empty,
         )
         if not execute:
             return plan
@@ -194,7 +219,7 @@ class LabelSuggestionService:
             suggestion = await self.repo.get_label_suggestion_by_case(case.id)
             judgments = await self.repo.list_judgments(case.id)
             if self._locked(case, judgments, suggestion) or not self._should_run(
-                suggestion, rerun, only_failed, only_rejected
+                suggestion, rerun, only_failed, only_rejected, only_empty, case
             ):
                 skipped += 1
                 continue
@@ -223,8 +248,10 @@ class LabelSuggestionService:
                 failed += 1
             if job is not None:
                 job.drafted = created
+                job.succeeded = created
                 job.failed = failed
                 job.skipped = skipped
+                job.processed = created + failed + skipped
             await self.session.commit()
         return {**plan, "executed": True, "drafted": created, "failed": failed, "skipped_cases": skipped}
 
@@ -246,10 +273,13 @@ class LabelSuggestionService:
             row.items = await self._checked_items(case.dataset_id, payload.items)
         if payload.confidence is not None:
             row.confidence = _confidence(payload.confidence)
+        if payload.verdict is not None:
+            row.verdict = _verdict(payload.verdict)
         if payload.rationale is not None:
             row.rationale = payload.rationale.strip()
         if payload.risk is not None:
             row.risk = payload.risk.strip()
+        self._apply_rebuttal_verdict(case, row)
         row.review_note = "人工修改了草稿，尚未确认"
         row.reviewed_by = self.context.user_id
         row.reviewed_at = datetime.now(UTC)
@@ -277,10 +307,16 @@ class LabelSuggestionService:
         await self.session.commit()
 
     async def confirm(self, dataset_id: int, payload: SuggestionConfirmIn) -> dict:
-        """只把人工确认的草稿写成正式标注。已确认的正式标注不会被覆盖。"""
+        """单条确认仍同步返回；批量确认入队后立即返回，由 Worker 执行。"""
         self.auth.require_all(self.context, (PermissionCode.KNOWLEDGE_UPDATE,))
-        await self._dataset(dataset_id)
-        rows = await self.repo.list_label_suggestions(dataset_id, confidence=None, status=SuggestionStatus.DRAFT.value)
+        if _is_batch_confirm(payload):
+            return await self.accept_confirm(dataset_id, payload)
+        return await self.confirm_sync(dataset_id, payload)
+
+    async def confirm_sync(self, dataset_id: int, payload: SuggestionConfirmIn) -> dict:
+        """只把人工确认的草稿写成正式标注。已确认的正式标注不会被覆盖。"""
+        dataset = await self._dataset(dataset_id)
+        rows = await self.repo.list_label_suggestions(dataset.id, confidence=None, status=SuggestionStatus.DRAFT.value)
         wanted = set(payload.suggestion_ids or [])
         confirmed = 0
         errors: list[dict] = []
@@ -288,30 +324,232 @@ class LabelSuggestionService:
         for row in rows:
             if wanted and row.id not in wanted:
                 continue
-            if payload.only_high and not wanted and row.confidence != LabelConfidence.HIGH.value:
+            if payload.only_high and row.confidence != LabelConfidence.HIGH.value:
                 continue
-            case = await self.repo.get_case(row.case_id)
-            if case is None:
-                errors.append({"suggestion_id": row.id, "message": "题目已从工作稿删除，无法确认"})
-                continue
-            judgments = await self.repo.list_judgments(case.id)
-            if self._locked(case, judgments, None):
-                errors.append({"suggestion_id": row.id, "message": "已有人工确认的正式标注，不会覆盖"})
-                continue
-            items = self._official_items(case, row)
-            if items is None:
-                errors.append({"suggestion_id": row.id, "message": "没有可写入的相关切片，或无答案结论与题目定义不一致"})
-                continue
-            case.needs_human_review = False
-            case.updated_by = self.context.user_id
-            row.status = SuggestionStatus.CONFIRMED.value
-            row.reviewed_by = self.context.user_id
-            row.reviewed_at = datetime.now(UTC)
-            row.review_note = "人工调整后确认" if row.items != row.original_items else "确认模型建议"
-            await self.session.flush()
-            await evaluation.replace_judgments(case.id, items)
-            confirmed += 1
-        return {"confirmed": confirmed, "errors": errors}
+            outcome = await self._confirm_one(dataset, evaluation, row, skip_human_modified=False)
+            if outcome is None:
+                confirmed += 1
+            else:
+                errors.append({"suggestion_id": row.id, "message": outcome})
+        await self.session.commit()
+        return {"confirmed": confirmed, "errors": errors, "accepted": False}
+
+    async def accept_confirm(self, dataset_id: int, payload: SuggestionConfirmIn) -> dict:
+        dataset = await self._dataset(dataset_id)
+        active = await self._expire_active_job(dataset.id)
+        if active is not None:
+            return _job_out(active, accepted=True, already_running=True)
+        frozen_ids = await self._freeze_confirm_ids(dataset.id, payload)
+        if not frozen_ids:
+            pending = await self.repo.list_label_suggestions(dataset.id, confidence=None, status=SuggestionStatus.DRAFT.value)
+            return {
+                "confirmed": 0,
+                "errors": [],
+                "accepted": False,
+                "status": "SUCCEEDED",
+                "total": 0,
+                "pending_drafts": len(pending),
+                "high_drafts": 0,
+            }
+        job = EvaluationLabelJob(
+            tenant_id=self.context.tenant_id,
+            dataset_id=dataset.id,
+            job_type=LabelJobType.CONFIRM.value,
+            status=LabelJobStatus.QUEUED.value,
+            options={
+                "only_high": bool(payload.only_high),
+                "confidence_threshold": LabelConfidence.HIGH.value if payload.only_high else None,
+                "suggestion_ids": frozen_ids,
+                "dataset_version": dataset.current_version,
+                "knowledge_base_ids": [int(item) for item in (dataset.knowledge_base_ids or [])],
+            },
+            total=len(frozen_ids),
+            created_by=self.context.user_id,
+        )
+        self.session.add(job)
+        try:
+            await self.session.commit()
+        except IntegrityError:
+            await self.session.rollback()
+            active = await self._expire_active_job(dataset.id)
+            if active is None:
+                raise
+            return _job_out(active, accepted=True, already_running=True)
+        await self.session.refresh(job)
+        return _job_out(job, accepted=True, already_running=False)
+
+    async def _freeze_confirm_ids(self, dataset_id: int, payload: SuggestionConfirmIn) -> list[int]:
+        drafts = await self.repo.list_label_suggestions(
+            dataset_id,
+            confidence=LabelConfidence.HIGH.value if payload.only_high else None,
+            status=SuggestionStatus.DRAFT.value,
+        )
+        wanted = list(payload.suggestion_ids or [])
+        if wanted:
+            allowed = set(wanted)
+            return [row.id for row in drafts if row.id in allowed]
+        return [row.id for row in drafts]
+
+    async def _run_confirm_job(self, job: EvaluationLabelJob) -> None:
+        options = dict(job.options or {})
+        frozen_ids = [int(item) for item in (options.get("suggestion_ids") or [])]
+        only_high = bool(options.get("only_high"))
+        threshold = str(options.get("confidence_threshold") or "")
+        allowed_bases = {int(item) for item in (options.get("knowledge_base_ids") or [])}
+        dataset = await self._dataset(job.dataset_id)
+        evaluation = EvaluationService(self.session, self.context)
+        succeeded = job.succeeded
+        skipped = job.skipped
+        failed = job.failed
+        details = dict(job.details or {})
+        confirmed_ids: list[int] = [int(item) for item in (details.get("confirmed") or [])]
+        skips: list[dict] = list(details.get("skips") or [])
+        failures: list[dict] = list(details.get("failures") or [])
+        logged = set(confirmed_ids)
+        for item in skips + failures:
+            if item.get("suggestion_id") is not None:
+                logged.add(int(item["suggestion_id"]))
+        remaining = [item for item in frozen_ids if item not in logged]
+        for offset in range(0, len(remaining), _CONFIRM_BATCH):
+            batch_ids = remaining[offset : offset + _CONFIRM_BATCH]
+            rows = await self.repo.list_label_suggestions_by_ids(dataset.id, batch_ids)
+            by_id = {row.id: row for row in rows}
+            case_ids = [row.case_id for row in rows]
+            cases = await self.repo.list_cases_by_ids(dataset.id, case_ids)
+            judgments_map = await self.repo.list_judgments_for_cases(case_ids)
+            chunk_ids: list[int] = []
+            for row in rows:
+                for item in row.items or []:
+                    if int(item.get("relevance") or 0) >= 1:
+                        chunk_ids.append(int(item["chunk_id"]))
+            chunks = await evaluation.load_chunks_by_ids(chunk_ids)
+            for suggestion_id in batch_ids:
+                row = by_id.get(suggestion_id)
+                if row is not None and row.status == SuggestionStatus.CONFIRMED.value:
+                    succeeded += 1
+                    confirmed_ids.append(suggestion_id)
+                    continue
+                reason = None
+                if row is None:
+                    reason = "初标草稿已删除"
+                elif (only_high or threshold == LabelConfidence.HIGH.value) and row.confidence != LabelConfidence.HIGH.value:
+                    reason = "低于置信度阈值"
+                elif row.status != SuggestionStatus.DRAFT.value:
+                    reason = "草稿状态已变化"
+                elif row.reviewed_by is not None or row.items != row.original_items:
+                    reason = "人工已修改草稿，需单独确认"
+                else:
+                    case = cases.get(row.case_id)
+                    if case is None:
+                        reason = "题目已从工作稿删除，无法确认"
+                    elif self._locked(case, judgments_map.get(case.id) or [], None):
+                        reason = "已有人工确认的正式标注，不会覆盖"
+                    else:
+                        self._apply_rebuttal_verdict(case, row)
+                        reason = self._confirm_ready_reason(case, row) or self._stale_confirm_reason(row, chunks, allowed_bases)
+                        if reason is None:
+                            items = self._official_items(case, row)
+                            if items is None:
+                                reason = "草稿还不能写成正式标注"
+                            else:
+                                try:
+                                    async with self.session.begin_nested():
+                                        case.needs_human_review = False
+                                        case.updated_by = self.context.user_id
+                                        row.status = SuggestionStatus.CONFIRMED.value
+                                        row.reviewed_by = self.context.user_id
+                                        row.reviewed_at = datetime.now(UTC)
+                                        row.review_note = "确认模型建议"
+                                        await evaluation.write_judgments(
+                                            case,
+                                            items,
+                                            chunks=chunks,
+                                            existing=judgments_map.get(case.id) or [],
+                                        )
+                                    succeeded += 1
+                                    confirmed_ids.append(suggestion_id)
+                                except Exception as exc:
+                                    failed += 1
+                                    failures.append({"suggestion_id": suggestion_id, "reason": str(exc)[:300]})
+                                continue
+                skipped += 1
+                skips.append({"suggestion_id": suggestion_id, "reason": reason or "已跳过"})
+            job.processed = succeeded + skipped + failed
+            job.succeeded = succeeded
+            job.skipped = skipped
+            job.failed = failed
+            job.details = {"confirmed": confirmed_ids, "skips": skips, "failures": failures}
+            await self.session.commit()
+        if failed and not succeeded:
+            job.status = LabelJobStatus.FAILED.value
+            job.error_message = job.error_message or "批量确认全部失败"
+        else:
+            job.status = LabelJobStatus.SUCCEEDED.value
+        job.finished_at = datetime.now(UTC)
+        await self.session.commit()
+
+    async def _confirm_one(
+        self,
+        dataset,
+        evaluation: EvaluationService,
+        row: EvaluationLabelSuggestion,
+        *,
+        skip_human_modified: bool,
+    ) -> str | None:
+        if skip_human_modified and (row.reviewed_by is not None or row.items != row.original_items):
+            return "人工已修改草稿，需单独确认"
+        case = await self.repo.get_case(row.case_id)
+        if case is None:
+            return "题目已从工作稿删除，无法确认"
+        judgments = await self.repo.list_judgments(case.id)
+        if self._locked(case, judgments, None):
+            return "已有人工确认的正式标注，不会覆盖"
+        self._apply_rebuttal_verdict(case, row)
+        allowed = {int(item) for item in (dataset.knowledge_base_ids or [])}
+        chunks = await evaluation.load_chunks_by_ids(
+            [int(item["chunk_id"]) for item in row.items or [] if int(item.get("relevance") or 0) >= 1]
+        )
+        ready_reason = self._confirm_ready_reason(case, row)
+        if ready_reason:
+            return ready_reason
+        stale_reason = self._stale_confirm_reason(row, chunks, allowed)
+        if stale_reason:
+            return stale_reason
+        items = self._official_items(case, row)
+        if items is None:
+            return self._confirm_ready_reason(case, row) or "草稿还不能写成正式标注"
+        case.needs_human_review = False
+        case.updated_by = self.context.user_id
+        row.status = SuggestionStatus.CONFIRMED.value
+        row.reviewed_by = self.context.user_id
+        row.reviewed_at = datetime.now(UTC)
+        row.review_note = "人工调整后确认" if row.items != row.original_items else "确认模型建议"
+        await evaluation.write_judgments(case, items, chunks=chunks)
+        return None
+
+    def _stale_confirm_reason(
+        self,
+        row: EvaluationLabelSuggestion,
+        chunks: dict[int, tuple],
+        allowed_bases: set[int],
+    ) -> str | None:
+        positive = [item for item in row.items or [] if int(item.get("relevance") or 0) >= 1]
+        if not positive:
+            return None
+        for item in positive:
+            chunk_id = int(item["chunk_id"])
+            loaded = chunks.get(chunk_id)
+            if loaded is None:
+                return "切片不存在或已失效"
+            chunk, _document = loaded
+            if chunk.status != ChunkStatus.ACTIVE.value or not chunk.enabled:
+                return "切片已停用或失效"
+            if allowed_bases and chunk.knowledge_base_id not in allowed_bases:
+                return "切片不在该数据集的知识库中"
+            expected_hash = item.get("content_hash")
+            if expected_hash and expected_hash != content_sha256(chunk.content):
+                return "切片内容已变化，需重新审核"
+        return None
 
     async def _expire_active_job(self, dataset_id: int) -> EvaluationLabelJob | None:
         job = await self.repo.latest_label_job(dataset_id)
@@ -482,15 +720,39 @@ class LabelSuggestionService:
             )
         return checked
 
-    def _official_items(self, case: EvaluationCase, row: EvaluationLabelSuggestion) -> list[JudgmentIn] | None:
+    def _positive_items(self, row: EvaluationLabelSuggestion) -> list:
+        return [item for item in row.items or [] if int(item.get("relevance") or 0) >= 1]
+
+    def _apply_rebuttal_verdict(self, case: EvaluationCase, row: EvaluationLabelSuggestion) -> None:
+        """前提错误题挂上纠正切片后，按可回答确认，不把题目改成无答案。"""
+        if case.is_unanswerable or row.verdict != "UNANSWERABLE":
+            return
+        if self._positive_items(row):
+            row.verdict = "ANSWERABLE"
+            if not (row.rationale or "").strip():
+                row.rationale = "前提错误，已用纠正切片确认"
+
+    def _confirm_ready_reason(self, case: EvaluationCase, row: EvaluationLabelSuggestion) -> str | None:
+        positive = self._positive_items(row)
         if row.verdict == "UNANSWERABLE":
-            if not case.is_unanswerable:
+            if case.is_unanswerable:
                 return None
-            return []
-        positive = [item for item in row.items or [] if int(item.get("relevance") or 0) >= 1]
+            if positive:
+                return None
+            return "这是前提错误题，不是无答案题。不要改题目。请补纠正切片后确认，或驳回后重试初标"
         if not positive:
+            return "这道草稿没有相关性≥1的切片，不能标成可评测。请先在「查看证据」里补切片并保存，或驳回后重试初标"
+        return None
+
+    def _official_items(self, case: EvaluationCase, row: EvaluationLabelSuggestion) -> list[JudgmentIn] | None:
+        if self._confirm_ready_reason(case, row):
             return None
-        return [JudgmentIn(chunk_id=int(item["chunk_id"]), relevance=int(item["relevance"])) for item in positive]
+        if row.verdict == "UNANSWERABLE" and case.is_unanswerable:
+            return []
+        return [
+            JudgmentIn(chunk_id=int(item["chunk_id"]), relevance=int(item["relevance"]))
+            for item in self._positive_items(row)
+        ]
 
     def _locked(self, case: EvaluationCase, judgments: list, suggestion: EvaluationLabelSuggestion | None) -> bool:
         if suggestion is not None and suggestion.status == SuggestionStatus.CONFIRMED.value:
@@ -507,11 +769,15 @@ class LabelSuggestionService:
         rerun: bool,
         only_failed: bool,
         only_rejected: bool,
+        only_empty: bool = False,
+        case: EvaluationCase | None = None,
     ) -> bool:
         if suggestion is None:
-            return not only_failed and not only_rejected
+            return not only_failed and not only_rejected and not only_empty
         if suggestion.status == SuggestionStatus.CONFIRMED.value:
             return False
+        if only_empty:
+            return _needs_evidence_retry(suggestion, case)
         if only_failed:
             return suggestion.status == SuggestionStatus.FAILED.value
         if only_rejected:
@@ -577,23 +843,43 @@ class LabelSuggestionService:
 _ACTIVE_JOBS = {LabelJobStatus.QUEUED.value, LabelJobStatus.RUNNING.value}
 
 
+def _needs_evidence_retry(suggestion: EvaluationLabelSuggestion | None, case: EvaluationCase | None) -> bool:
+    if suggestion is None or case is None or suggestion.status != SuggestionStatus.DRAFT.value:
+        return False
+    if suggestion.verdict == "UNANSWERABLE":
+        return not bool(case.is_unanswerable)
+    return not any(int(item.get("relevance") or 0) >= 1 for item in suggestion.items or [])
+
+
 def _job_out(job: EvaluationLabelJob, *, accepted: bool, already_running: bool) -> dict:
+    details = dict(job.details or {})
     return {
         "id": job.id,
+        "task_id": job.id,
         "dataset_id": job.dataset_id,
+        "job_type": job.job_type,
         "status": job.status,
         "accepted": accepted,
         "already_running": already_running,
         "executed": False,
         "total": job.total,
+        "processed": job.processed,
+        "succeeded": job.succeeded,
         "drafted": job.drafted,
         "failed": job.failed,
         "skipped": job.skipped,
         "pending_cases": job.total,
+        "details": details,
         "error_message": job.error_message,
         "started_at": job.started_at.isoformat() if job.started_at else None,
         "finished_at": job.finished_at.isoformat() if job.finished_at else None,
     }
+
+
+def _is_batch_confirm(payload: SuggestionConfirmIn) -> bool:
+    if payload.only_high:
+        return True
+    return len(payload.suggestion_ids or []) > 1
 
 
 def context_for_label_job(job: EvaluationLabelJob) -> TenantContext:
@@ -710,6 +996,14 @@ def _confidence(value: str) -> str:
     text = value.strip().upper()
     if text not in {item.value for item in LabelConfidence}:
         raise AppError("置信度只能是 HIGH、MEDIUM 或 LOW", code=40056, status_code=400)
+    return text
+
+
+def _verdict(value: str) -> str:
+    text = value.strip().upper()
+    allowed = {"ANSWERABLE", "UNANSWERABLE", "PARTIAL", "CONFLICT", "INSUFFICIENT"}
+    if text not in allowed:
+        raise AppError("结论不合法", code=40056, status_code=400)
     return text
 
 

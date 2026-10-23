@@ -1,12 +1,12 @@
 """Knowledge Worker 的全局领取与回收。业务请求不要调用这些函数。"""
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from neorvion_db import PrivilegedOperation, privileged_option
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.evaluation import EvaluationRun, RunStatus
+from app.models.evaluation import EvaluationLabelJob, EvaluationRun, LabelJobStatus, RunStatus
 from app.models.knowledge import DocumentProcessingTask, TaskStatus
 
 
@@ -63,6 +63,40 @@ async def pause_stale_runs(session: AsyncSession, message: str) -> list[Evaluati
         row.error_message = message
         row.lease_owner = None
         row.lease_until = None
+        row.finished_at = None
+        recovered.append(row)
+    return recovered
+
+
+async def list_queued_label_jobs(session: AsyncSession) -> list[EvaluationLabelJob]:
+    """扫描全部排队的智能标注任务。执行前再读取任务行上的租户。"""
+    stmt = (
+        select(EvaluationLabelJob)
+        .where(EvaluationLabelJob.status == LabelJobStatus.QUEUED.value)
+        .execution_options(**privileged_option(PrivilegedOperation.WORKER_CLAIM))
+    )
+    return list((await session.scalars(stmt)).all())
+
+
+async def requeue_stale_label_jobs(
+    session: AsyncSession,
+    message: str,
+    *,
+    stale_after: timedelta | None = None,
+) -> list[EvaluationLabelJob]:
+    """把 RUNNING 的标注任务改回 QUEUED。确认过程幂等，已确认的草稿不会重复写入。"""
+    stmt = (
+        select(EvaluationLabelJob)
+        .where(EvaluationLabelJob.status == LabelJobStatus.RUNNING.value)
+        .execution_options(**privileged_option(PrivilegedOperation.WORKER_CLAIM))
+    )
+    now = datetime.now(UTC)
+    recovered: list[EvaluationLabelJob] = []
+    for row in list((await session.scalars(stmt)).all()):
+        if stale_after is not None and row.updated_at is not None and row.updated_at > now - stale_after:
+            continue
+        row.status = LabelJobStatus.QUEUED.value
+        row.error_message = message
         row.finished_at = None
         recovered.append(row)
     return recovered

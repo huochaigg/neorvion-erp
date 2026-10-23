@@ -413,6 +413,12 @@ class LabelJobStatus(StrEnum):
     RUNNING = "RUNNING"
     SUCCEEDED = "SUCCEEDED"
     FAILED = "FAILED"
+    CANCELLED = "CANCELLED"
+
+
+class LabelJobType(StrEnum):
+    SUGGEST = "SUGGEST"
+    CONFIRM = "CONFIRM"
 
 
 class SuggestionStatus(StrEnum):
@@ -494,7 +500,7 @@ class EvaluationLabelSuggestion(TimestampMixin, TenantMixin, Base):
 
 
 class EvaluationLabelJob(TimestampMixin, TenantMixin, Base):
-    """一次智能初标任务。HTTP 只负责入队，进度以这张表为准。"""
+    """智能初标或批量确认任务。HTTP 只负责入队，进度以这张表为准。"""
 
     __tablename__ = "evaluation_label_jobs"
     __table_args__ = (
@@ -515,12 +521,26 @@ class EvaluationLabelJob(TimestampMixin, TenantMixin, Base):
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     dataset_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    job_type: Mapped[str] = mapped_column(
+        String(16),
+        nullable=False,
+        server_default=LabelJobType.SUGGEST.value,
+        comment="SUGGEST 初标 / CONFIRM 批量确认",
+    )
     status: Mapped[str] = mapped_column(String(16), nullable=False, server_default=LabelJobStatus.QUEUED.value)
     options: Mapped[dict] = mapped_column(JSONB, nullable=False, server_default=text("'{}'::jsonb"))
     total: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    processed: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    succeeded: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
     drafted: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
     failed: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
     skipped: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    details: Mapped[dict] = mapped_column(
+        JSONB,
+        nullable=False,
+        server_default=text("'{}'::jsonb"),
+        comment="跳过与失败明细，不作为正式 Ground Truth",
+    )
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
