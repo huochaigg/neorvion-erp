@@ -295,3 +295,18 @@ Procurement、Knowledge 协作。专业 Agent 只能看到自己的只读工具�
 
 迁移 `20261024_0006` 保存 AgentRun/AgentTaskRun，并关联 ToolRun/Evidence。前端只通过真实 SSE 生命周期展示协作状态。
 详细安全边界、回滚和 30 Case 评测基线见 `docs/copilot/v8-multi-agent.md`。
+
+## V9 Agent Evaluation & Observability
+
+V9 新增租户/用户隔离的 Agent Evaluation Dataset、结构化 Case、不可变冻结版本、异步 Replay Run、租约恢复、
+逐 Case 指标、Single/Multi Comparison、ModelCall Usage/定价快照与树状 Trace API。独立 Worker：
+
+```bash
+python -m app.tasks.evaluation_worker
+```
+
+当前服务端只接受 `REPLAY`，在 IAM 提供受控评测服务身份且接入只读 LIVE 执行器前会明确拒绝 `LIVE`；评测 Worker
+不保存用户 JWT，也不能触发 ERP 正式写入。V8 30 题可通过
+`POST /api/v1/evaluations/datasets/{id}/cases/import-v8` 幂等导入；完整 V9-AGENT-100 可通过同路径的
+`import-v9` 端点导入，包含 40 READY、60 NEEDS_REVIEW。
+完整 API、指标数学定义、安全边界和迁移回滚见 `docs/copilot/v9-evaluation-observability.md`。

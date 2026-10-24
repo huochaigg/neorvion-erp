@@ -234,3 +234,12 @@ Copilot 最终应成为“受策略控制的 ERP 操作入口”：默认只读�
 - React 增加工作流列表、详情、步骤时间线、输入恢复和 V6 Execution 关联入口。
 - 当前环境未配置模型 Secret，四个后端与浏览器未同时运行，因此真实模型、真实 HTTP 和浏览器 E2E 尚未验收。
 
+### V9：Agent Evaluation & Observability
+
+- 独立 Dataset/Case/冻结版本与 V9-AGENT-100，未审核 fixture Case 不进入可信基线。
+- 独立 Evaluation Redis 队列、数据库租约、暂停/恢复/取消和丢消息恢复扫描。
+- 确定性 Task/Tool/Evidence/Security 指标，INDETERMINATE 与 null Usage 不伪装成成功或零。
+- ModelCall 逐次记录真实 Provider Usage；版本化价格只生成明确标注的估算费用。
+- React 评测中心采用路由级懒加载，空数据不展示虚构图表。
+- 真实 DeepSeek/百炼 Single/Multi 对照仍需受控评测身份、固定数据快照和真实模型环境。
+

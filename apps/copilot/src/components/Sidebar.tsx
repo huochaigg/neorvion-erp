@@ -13,6 +13,7 @@ import {
   Plus,
   Search,
   Trash2,
+  ChartNoAxesCombined,
 } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
@@ -30,6 +31,7 @@ const NAV = [
   { to: '/drafts', label: '业务草稿', icon: Files, live: true },
   { to: '/approvals', label: '执行审批', icon: UserCheck, live: true },
   { to: '/workflows', label: '业务工作流', icon: GitBranch, live: true },
+  { to: '/evaluations', label: 'Agent 评测', icon: ChartNoAxesCombined, live: true },
   { to: '/ads', label: 'AI 广告创作', icon: ImagePlay, live: false },
   { to: '/history', label: '生成历史', icon: History, live: false },
 ] as const;

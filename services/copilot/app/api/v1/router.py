@@ -2,8 +2,10 @@ from fastapi import APIRouter
 
 from app.api.v1.action_executions import router as action_executions_router
 from app.api.v1.action_proposals import router as action_proposals_router
+from app.api.v1.agent_runs import router as agent_runs_router
 from app.api.v1.chat import router as chat_router
 from app.api.v1.conversations import router as conversations_router
+from app.api.v1.evaluations import router as evaluations_router
 from app.api.v1.health import router as health_router
 from app.api.v1.me import router as me_router
 from app.api.v1.workflows import router as workflows_router
@@ -16,3 +18,5 @@ api_router.include_router(conversations_router)
 api_router.include_router(action_proposals_router)
 api_router.include_router(action_executions_router)
 api_router.include_router(workflows_router)
+api_router.include_router(evaluations_router)
+api_router.include_router(agent_runs_router)

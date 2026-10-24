@@ -3,7 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { isCancel } from 'axios';
 import { App as AntApp, ConfigProvider } from 'antd';
 import zhCN from 'antd/locale/zh_CN';
-import { useState } from 'react';
+import { lazy, Suspense, useState } from 'react';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { WorkbenchLayout } from '@/components/WorkbenchLayout';
 import { TenantBridge } from '@/micro/TenantBridge';
@@ -17,6 +17,8 @@ import { WorkflowDetailPage } from '@/pages/WorkflowDetailPage';
 import { getPopupContainer } from '@/runtime';
 import { useCopilotStore } from '@/store';
 
+const EvaluationCenterPage = lazy(() => import('@/pages/EvaluationCenterPage'));
+
 function TenantWorkspace() {
   const epoch = useCopilotStore((s) => s.epoch);
   return (
@@ -27,6 +29,7 @@ function TenantWorkspace() {
         <Route path="/approvals" element={<ApprovalListPage />} />
         <Route path="/workflows" element={<WorkflowListPage />} />
         <Route path="/workflows/:id" element={<WorkflowDetailPage />} />
+        <Route path="/evaluations" element={<Suspense fallback={<div className="p-6">正在加载评测中心…</div>}><EvaluationCenterPage /></Suspense>} />
         <Route path="/ads" element={<AdsComingSoonPage />} />
         <Route path="/history" element={<HistoryComingSoonPage />} />
         <Route path="/" element={<Navigate to="/chat" replace />} />

@@ -292,6 +292,8 @@ services:
       WORKFLOW_QUEUE_KEY: ${COPILOT_WORKFLOW_QUEUE_KEY:-copilot:workflows:v1}
       MULTI_AGENT_ENABLED: ${COPILOT_MULTI_AGENT_ENABLED:-true}
       MULTI_AGENT_MAX_PARALLEL: ${COPILOT_MULTI_AGENT_MAX_PARALLEL:-3}
+      EVALUATION_QUEUE_KEY: ${COPILOT_EVALUATION_QUEUE_KEY:-copilot:evaluations:v1}
+      EVALUATION_TRACE_RETENTION_DAYS: ${COPILOT_EVALUATION_TRACE_RETENTION_DAYS:-90}
     ports:
       - "8013:8013"
     healthcheck:
@@ -330,6 +332,27 @@ services:
       WORKFLOW_MAX_ATTEMPTS: ${COPILOT_WORKFLOW_MAX_ATTEMPTS:-3}
       WORKFLOW_RECONCILE_MAX_ATTEMPTS: ${COPILOT_WORKFLOW_RECONCILE_MAX_ATTEMPTS:-6}
     command: python -m app.tasks.worker
+
+  copilot-evaluation-worker:
+    build:
+      context: .
+      dockerfile: services/copilot/Dockerfile
+    container_name: neorvion-copilot-evaluation-worker
+    restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    environment:
+      APP_ENV: development
+      DATABASE_URL: postgresql+psycopg://${COPILOT_POSTGRES_USER:-neorvion_copilot}:${COPILOT_POSTGRES_PASSWORD:-change-me}@postgres:5432/${COPILOT_POSTGRES_DB:-neorvion_copilot}
+      WORKFLOW_REDIS_URL: redis://redis:6379/0
+      EVALUATION_QUEUE_KEY: ${COPILOT_EVALUATION_QUEUE_KEY:-copilot:evaluations:v1}
+      EVALUATION_LEASE_SECONDS: ${COPILOT_EVALUATION_LEASE_SECONDS:-60}
+      EVALUATION_MAX_CONCURRENCY: ${COPILOT_EVALUATION_MAX_CONCURRENCY:-2}
+      EVALUATION_TRACE_RETENTION_DAYS: ${COPILOT_EVALUATION_TRACE_RETENTION_DAYS:-90}
+    command: python -m app.tasks.evaluation_worker
 
   nginx:
     image: nginx:1.27-alpine

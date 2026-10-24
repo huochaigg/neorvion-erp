@@ -147,6 +147,13 @@ class PersistentChatService:
                 elif name.startswith("agent_"):
                     await self.repo.record_agent_event(agent_run.id, name, data)
                     await self.session.commit()
+                elif name.startswith("model_call_"):
+                    await self.repo.record_model_event(
+                        agent_run.id,
+                        name,
+                        data | {"request_id": turn.request_id},
+                    )
+                    await self.session.commit()
                 enriched = data | self._ids(turn)
                 if name == "done":
                     await self.repo.finish_message(

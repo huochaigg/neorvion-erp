@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import re
+import time
+import uuid
 from collections.abc import AsyncGenerator, Awaitable, Callable
 from dataclasses import dataclass
 from typing import cast
@@ -78,8 +80,23 @@ class CopilotWorkflow:
         ):
             raise AppError("Agent 模型调用次数已达上限", code=42978, status_code=429)
         runtime.context.model_calls += 1
+        model_call_id = uuid.uuid4().hex
+        model_started = time.monotonic()
+        runtime.stream_writer(
+            {
+                "event": "model_call_start",
+                "data": {
+                    "model_call_id": model_call_id,
+                    "agent_run_id": runtime.context.agent_run_id,
+                    "agent_task_id": runtime.context.agent_task_id,
+                    "model_provider": settings.model_provider,
+                    "model_name": settings.chat_model,
+                },
+            }
+        )
         chunks: list[str] = []
         usage: ModelUsage | None = None
+        finish_reason: str | None = None
         calls = ()
         permissions = (
             runtime.context.tools.tenant.permission_codes
@@ -98,17 +115,47 @@ class CopilotWorkflow:
             if self.executor
             else []
         )
-        async for delta in self.adapter.stream(
-            state["messages"],
-            tools=definitions or None,
-            tool_choice="auto" if definitions else None,
-        ):
-            if delta.text:
-                chunks.append(delta.text)
-                runtime.stream_writer({"event": "message", "data": {"delta": delta.text}})
-            if delta.finished:
-                usage = delta.usage
-                calls = delta.tool_calls
+        try:
+            async for delta in self.adapter.stream(
+                state["messages"],
+                tools=definitions or None,
+                tool_choice="auto" if definitions else None,
+            ):
+                if delta.text:
+                    chunks.append(delta.text)
+                    runtime.stream_writer({"event": "message", "data": {"delta": delta.text}})
+                if delta.finished:
+                    usage = delta.usage
+                    calls = delta.tool_calls
+                    finish_reason = delta.finish_reason
+        except Exception as exc:
+            runtime.stream_writer(
+                {
+                    "event": "model_call_error",
+                    "data": {
+                        "model_call_id": model_call_id,
+                        "agent_run_id": runtime.context.agent_run_id,
+                        "agent_task_id": runtime.context.agent_task_id,
+                        "duration_ms": round((time.monotonic() - model_started) * 1000),
+                        "error_code": exc.code if isinstance(exc, AppError) else 50268,
+                    },
+                }
+            )
+            raise
+        runtime.stream_writer(
+            {
+                "event": "model_call_end",
+                "data": {
+                    "model_call_id": model_call_id,
+                    "agent_run_id": runtime.context.agent_run_id,
+                    "agent_task_id": runtime.context.agent_task_id,
+                    "duration_ms": round((time.monotonic() - model_started) * 1000),
+                    "usage": usage,
+                    "finish_reason": finish_reason,
+                    "usage_source": "PROVIDER" if usage and any(value is not None for value in usage.values()) else "UNKNOWN",
+                },
+            }
+        )
         text = "".join(chunks).strip()
         if calls:
             payload_calls: list[ModelToolCallPayload] = [

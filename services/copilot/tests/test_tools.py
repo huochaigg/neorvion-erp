@@ -177,7 +177,8 @@ async def test_graph_tool_loop_emits_lifecycle_events() -> None:
             [{"role": "user", "content": "SKU-1 库存"}], context=context
         )
     ]
-    assert [event["event"] for event in events] == [
+    legacy = [event["event"] for event in events if not event["event"].startswith("model_call_")]
+    assert legacy == [
         "tool_start",
         "analysis_status",
         "tool_end",
@@ -185,6 +186,8 @@ async def test_graph_tool_loop_emits_lifecycle_events() -> None:
         "message",
         "done",
     ]
+    assert [event["event"] for event in events].count("model_call_start") == 2
+    assert [event["event"] for event in events].count("model_call_end") == 2
     assert events[-1]["data"]["answer"] == "SKU-1 可用库存为 7。"
     await erp.aclose()
 

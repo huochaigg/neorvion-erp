@@ -20,7 +20,7 @@ class Settings(BaseSettings):
     app_env: str = "development"
     app_host: str = "0.0.0.0"
     app_port: int = 8013
-    app_version: str = "8.0.0"
+    app_version: str = "9.0.0"
     git_sha: str = ""
     enable_api_docs: bool = True
     cors_origins: str = (
@@ -96,6 +96,14 @@ class Settings(BaseSettings):
     multi_agent_total_timeout_seconds: float = 45.0
     multi_agent_context_chars: int = 4000
     multi_agent_result_chars: int = 8000
+    evaluation_queue_key: str = "copilot:evaluations:v1"
+    evaluation_lease_seconds: int = 60
+    evaluation_worker_poll_seconds: int = 3
+    evaluation_max_concurrency: int = 2
+    evaluation_task_success_regression_threshold: float = 0.02
+    evaluation_latency_regression_threshold: float = 0.20
+    evaluation_token_regression_threshold: float = 0.20
+    evaluation_trace_retention_days: int = 90
 
     @property
     def is_production(self) -> bool:

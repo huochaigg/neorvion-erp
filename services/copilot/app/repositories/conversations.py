@@ -17,6 +17,7 @@ from app.models.conversation import (
     ToolRun,
     ToolRunStatus,
 )
+from app.models.evaluation import ModelCall, ModelPricing
 
 
 class ConversationRepository:
@@ -256,6 +257,74 @@ class ConversationRepository:
         row.total_duration_ms = round((now - row.started_at).total_seconds() * 1000)
         row.error_code = error_code
         row.usage = usage
+
+    async def record_model_event(self, run_id: int, event: str, data: dict) -> None:
+        """保存逐次模型调用 Usage；Provider 缢失的 token 保持 null，费用仅使用有效定价快照估算。"""
+        call_id = str(data.get("model_call_id") or "")[:64]
+        if not call_id:
+            return
+        row = await self.session.scalar(
+            select(ModelCall).where(
+                ModelCall.tenant_id == self.tenant_id,
+                ModelCall.user_id == self.user_id,
+                ModelCall.model_call_id == call_id,
+            )
+        )
+        if event == "model_call_start":
+            if row is None:
+                self.session.add(
+                    ModelCall(
+                        tenant_id=self.tenant_id,
+                        user_id=self.user_id,
+                        request_id=str(data.get("request_id") or "")[:64],
+                        agent_run_id=run_id,
+                        agent_task_id=str(data.get("agent_task_id") or "")[:96] or None,
+                        model_call_id=call_id,
+                        model_provider=str(data.get("model_provider") or settings.model_provider)[:64],
+                        model_name=str(data.get("model_name") or settings.chat_model)[:128],
+                        status="RUNNING",
+                    )
+                )
+            return
+        if row is None:
+            return
+        row.completed_at = datetime.now(UTC)
+        row.duration_ms = data.get("duration_ms")
+        if event == "model_call_error":
+            row.status = "FAILED"
+            row.error_code = data.get("error_code")
+            row.usage_source = "UNKNOWN"
+            return
+        usage = data.get("usage") if isinstance(data.get("usage"), dict) else {}
+        row.status = "SUCCEEDED"
+        row.input_tokens = usage.get("prompt_tokens")
+        row.output_tokens = usage.get("completion_tokens")
+        row.cached_tokens = usage.get("cached_tokens")
+        row.reasoning_tokens = usage.get("reasoning_tokens")
+        row.finish_reason = str(data.get("finish_reason") or "")[:64] or None
+        row.usage_source = str(data.get("usage_source") or "UNKNOWN")[:32]
+        if row.input_tokens is None or row.output_tokens is None:
+            return
+        pricing = await self.session.scalar(
+            select(ModelPricing)
+            .where(
+                ModelPricing.tenant_id == self.tenant_id,
+                ModelPricing.provider == row.model_provider,
+                ModelPricing.model == row.model_name,
+                ModelPricing.enabled.is_(True),
+                ModelPricing.effective_from <= row.started_at,
+            )
+            .order_by(ModelPricing.effective_from.desc())
+            .limit(1)
+        )
+        if pricing is None:
+            return
+        row.estimated_cost = (
+            row.input_tokens * pricing.input_price
+            + row.output_tokens * pricing.output_price
+        ) / pricing.unit_tokens
+        row.currency = pricing.currency
+        row.pricing_version = pricing.pricing_version
 
     async def record_evidence(self, conversation_id: int, message_id: int, data: dict) -> None:
         """证据字段采用白名单落库，客户端和模型均不能指定租户、用户或消息归属。"""

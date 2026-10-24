@@ -59,6 +59,9 @@ class OpenAICompatChatAdapter:
             payload["tool_choice"] = tool_choice or "auto"
         prompt_tokens = None
         completion_tokens = None
+        cached_tokens = None
+        reasoning_tokens = None
+        finish_reason = None
         pending_calls: dict[int, dict[str, str]] = {}
         try:
             async with httpx.AsyncClient(
@@ -86,10 +89,15 @@ class OpenAICompatChatAdapter:
                                 "prompt_tokens": prompt_tokens,
                                 "completion_tokens": completion_tokens,
                             }
+                            if cached_tokens is not None:
+                                usage["cached_tokens"] = cached_tokens
+                            if reasoning_tokens is not None:
+                                usage["reasoning_tokens"] = reasoning_tokens
                             yield ChatDelta(
                                 finished=True,
                                 usage=usage,
                                 tool_calls=self._tool_calls(pending_calls),
+                                finish_reason=finish_reason,
                             )
                             return
                         try:
@@ -102,10 +110,17 @@ class OpenAICompatChatAdapter:
                             completion_tokens = raw_usage.get(
                                 "completion_tokens", completion_tokens
                             )
+                            prompt_details = raw_usage.get("prompt_tokens_details") or {}
+                            completion_details = raw_usage.get("completion_tokens_details") or {}
+                            cached_tokens = prompt_details.get("cached_tokens", cached_tokens)
+                            reasoning_tokens = completion_details.get(
+                                "reasoning_tokens", reasoning_tokens
+                            )
                         choices = chunk.get("choices") or []
                         if not choices:
                             continue
                         delta = choices[0].get("delta") or {}
+                        finish_reason = choices[0].get("finish_reason") or finish_reason
                         text = delta.get("content") or ""
                         if text:
                             yield ChatDelta(text=str(text))
@@ -122,10 +137,15 @@ class OpenAICompatChatAdapter:
                         "prompt_tokens": prompt_tokens,
                         "completion_tokens": completion_tokens,
                     }
+                    if cached_tokens is not None:
+                        usage["cached_tokens"] = cached_tokens
+                    if reasoning_tokens is not None:
+                        usage["reasoning_tokens"] = reasoning_tokens
                     yield ChatDelta(
                         finished=True,
                         usage=usage,
                         tool_calls=self._tool_calls(pending_calls),
+                        finish_reason=finish_reason,
                     )
         except AppError:
             raise

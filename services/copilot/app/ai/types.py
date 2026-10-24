@@ -35,9 +35,11 @@ class ModelToolCall:
     arguments: str
 
 
-class ModelUsage(TypedDict):
+class ModelUsage(TypedDict, total=False):
     prompt_tokens: int | None
     completion_tokens: int | None
+    cached_tokens: int | None
+    reasoning_tokens: int | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -46,6 +48,7 @@ class ChatDelta:
     usage: ModelUsage | None = None
     tool_calls: tuple[ModelToolCall, ...] = ()
     finished: bool = False
+    finish_reason: str | None = None
 
 
 class ChatAdapter(Protocol):

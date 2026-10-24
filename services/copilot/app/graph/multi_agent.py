@@ -4,6 +4,7 @@ import asyncio
 import json
 import operator
 import time
+import uuid
 from collections.abc import AsyncGenerator
 from dataclasses import replace
 from typing import Annotated, Any, TypedDict, cast
@@ -287,7 +288,15 @@ class MultiAgentWorkflow:
                 ):
                     name = str(event.get("event") or "")
                     data = event.get("data") if isinstance(event.get("data"), dict) else {}
-                    if name in {"tool_start", "tool_end", "tool_error", "analysis_status"}:
+                    if name in {
+                        "tool_start",
+                        "tool_end",
+                        "tool_error",
+                        "analysis_status",
+                        "model_call_start",
+                        "model_call_end",
+                        "model_call_error",
+                    }:
                         runtime.stream_writer(event)
                     elif name == "done":
                         answer = str(data.get("answer") or "")
@@ -372,6 +381,20 @@ class MultiAgentWorkflow:
         started = time.monotonic()
         chunks: list[str] = []
         usage = None
+        finish_reason = None
+        model_call_id = uuid.uuid4().hex
+        runtime.stream_writer(
+            {
+                "event": "model_call_start",
+                "data": {
+                    "model_call_id": model_call_id,
+                    "agent_run_id": self._run_id(runtime),
+                    "agent_task_id": "supervisor-synthesis",
+                    "model_provider": settings.model_provider,
+                    "model_name": settings.chat_model,
+                },
+            }
+        )
         try:
             supervisor = self.registry.get("supervisor_agent")
             async with asyncio.timeout(supervisor.timeout_seconds):
@@ -391,10 +414,23 @@ class MultiAgentWorkflow:
                         )
                     if delta.finished:
                         usage = delta.usage
+                        finish_reason = delta.finish_reason
             answer = CopilotWorkflow._validate_citations("".join(chunks).strip(), evidences)
             if not answer:
                 raise AppError("Supervisor 未返回有效内容", code=50287, status_code=502)
         except Exception as exc:
+            runtime.stream_writer(
+                {
+                    "event": "model_call_error",
+                    "data": {
+                        "model_call_id": model_call_id,
+                        "agent_run_id": self._run_id(runtime),
+                        "agent_task_id": "supervisor-synthesis",
+                        "duration_ms": round((time.monotonic() - started) * 1000),
+                        "error_code": exc.code if isinstance(exc, AppError) else 50288,
+                    },
+                }
+            )
             self._emit_agent(
                 runtime,
                 "agent_error",
@@ -408,6 +444,20 @@ class MultiAgentWorkflow:
                 evidence_count=len(evidences),
             )
             raise
+        runtime.stream_writer(
+            {
+                "event": "model_call_end",
+                "data": {
+                    "model_call_id": model_call_id,
+                    "agent_run_id": self._run_id(runtime),
+                    "agent_task_id": "supervisor-synthesis",
+                    "duration_ms": round((time.monotonic() - started) * 1000),
+                    "usage": usage,
+                    "finish_reason": finish_reason,
+                    "usage_source": "PROVIDER" if usage and any(value is not None for value in usage.values()) else "UNKNOWN",
+                },
+            }
+        )
         duration = round((time.monotonic() - started) * 1000)
         self._emit_agent(
             runtime,
