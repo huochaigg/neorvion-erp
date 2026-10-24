@@ -10,3 +10,10 @@ class HealthCheckData(BaseModel):
     git_sha: str
     identity: Literal["ok", "unavailable"]
 
+
+class ModelStatusData(BaseModel):
+    state: Literal["available", "mock", "unconfigured", "unavailable"]
+    provider: str
+    model: str | None
+    detail: str | None
+

@@ -20,7 +20,7 @@ class Settings(BaseSettings):
     app_env: str = "development"
     app_host: str = "0.0.0.0"
     app_port: int = 8013
-    app_version: str = "6.0.0"
+    app_version: str = "7.0.0"
     git_sha: str = ""
     enable_api_docs: bool = True
     cors_origins: str = (
@@ -83,6 +83,13 @@ class Settings(BaseSettings):
     tool_max_page_size: int = 50
     deepseek_api_key: str = ""
     dashscope_api_key: str = ""
+    workflow_queue_key: str = "copilot:workflows:v1"
+    workflow_redis_url: str = "redis://127.0.0.1:6379/0"
+    workflow_lease_seconds: int = 45
+    workflow_max_attempts: int = 3
+    workflow_max_steps: int = 16
+    workflow_worker_poll_seconds: int = 3
+    workflow_reconcile_max_attempts: int = 6
 
     @property
     def is_production(self) -> bool:
@@ -103,11 +110,23 @@ class Settings(BaseSettings):
 
     def require_runtime_secrets(self) -> None:
         """生产环境缺少身份校验或模型配置时拒绝启动，避免静默降级。"""
+        provider = self.model_provider.strip().lower()
+        if provider == "mock" and self.app_env.lower() not in {
+            "test",
+            "testing",
+            "development",
+            "dev",
+        }:
+            raise RuntimeError("Mock 模型只允许显式测试或开发环境")
+        if provider not in {"mock", "openai_compat"}:
+            raise RuntimeError("MODEL_PROVIDER 仅支持 openai_compat 或显式开发 mock")
         if not self.is_production:
             return
         if not self.iam_jwks_url.strip() and not self.iam_jwt_public_key_path.strip():
             raise RuntimeError("生产环境必须配置 IAM_JWKS_URL 或 IAM_JWT_PUBLIC_KEY_PATH")
-        if self.model_provider != "mock" and not self.resolved_chat_api_key():
+        if provider == "mock":
+            raise RuntimeError("生产环境禁止使用 Mock 模型")
+        if not self.resolved_chat_api_key():
             raise RuntimeError("生产环境必须配置 Chat 模型密钥")
         if len(self.erp_execution_secret.get_secret_value()) < 32:
             raise RuntimeError("生产环境必须配置至少 32 字节的 ERP_EXECUTION_SECRET")

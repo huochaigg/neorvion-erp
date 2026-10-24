@@ -80,6 +80,18 @@ class ActionExecutionService:
         )
         return self.out(row)
 
+    def get_internal(self, execution_key: str) -> ActionExecutionReceiptOut:
+        """仅供已通过服务间 HMAC 的内部路由读取幂等 Receipt。"""
+        row = self.session.scalars(
+            select(ErpActionExecutionReceipt).where(
+                ErpActionExecutionReceipt.tenant_id == self.context.tenant_id,
+                ErpActionExecutionReceipt.execution_key == execution_key,
+            )
+        ).first()
+        if row is None:
+            raise AppError("执行凭据不存在", code=40482, status_code=404)
+        return self.out(row)
+
     def execute(self, request: ActionExecutionRequest) -> ActionExecutionReceiptOut:
         """先占用幂等键，再在同一事务创建业务草稿与成功 Receipt。"""
         actual_hash = self.payload_hash(request.payload)

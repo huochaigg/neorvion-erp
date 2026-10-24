@@ -12,20 +12,169 @@ from app.core.tenant import TenantContext
 from app.db.base import Base
 from app.db.isolation import REGISTRY
 from app.graph.action_execution import ActionExecutionGraph
+from app.graph.business_workflow import BusinessWorkflowGraph
 from app.models.conversation import MessageStatus
+from app.models.workflow import WorkflowInstance
 from app.repositories.action_proposals import ActionProposalRepository
 from app.repositories.conversations import ConversationRepository
 from app.schemas.action_execution import ConfirmationCreate
 from app.schemas.action_proposal import ActionProposalCreate, ActionProposalUpdate
+from app.schemas.workflow import WorkflowCreate
 from app.services.action_executions import ActionExecutionService
 from app.services.action_proposals import ActionProposalService
 from app.services.conversations import ConversationService
 from app.services.persistent_chat import PersistentChatService, PersistentTurn
+from app.services.workflows import WorkflowService
+from app.tasks.worker import recover_item
 from neorvion_db import TenantAsyncSession
-from sqlalchemy import text
+from sqlalchemy import select, text
 from sqlalchemy.engine import make_url
 from sqlalchemy.exc import TimeoutError as SqlAlchemyTimeoutError
 from sqlalchemy.ext.asyncio import create_async_engine
+
+
+class _WorkflowErp:
+    async def get(self, path: str, **_kwargs):
+        assert path == "/api/v1/sales-orders/71"
+        return {"id": 71, "status": "WAITING_OUTBOUND", "items": []}
+
+
+class _WorkflowKnowledge:
+    pass
+
+
+@pytest.mark.asyncio
+async def test_workflow_idempotency_persistence_and_owner_isolation() -> None:
+    engine = create_async_engine(_integration_url())
+    try:
+        async with engine.begin() as connection:
+            await connection.run_sync(Base.metadata.drop_all)
+            await connection.run_sync(Base.metadata.create_all)
+        context = TenantContext(
+            user_id=7201,
+            tenant_id=702,
+            member_id=1,
+            is_owner=False,
+            role="OPERATOR",
+            role_codes=("OPERATOR",),
+            permission_codes=frozenset({"copilot:use", "order:read", "inventory:read"}),
+            token_jti="workflow",
+            token_version=0,
+            authz_version=1,
+        )
+        session = TenantAsyncSession(
+            702, registry=REGISTRY, bind=engine, expire_on_commit=False, autoflush=False
+        )
+        try:
+            service = WorkflowService(
+                session,
+                context,
+                access_token="token",
+                request_id="wf-test",
+                erp=_WorkflowErp(),
+                knowledge=_WorkflowKnowledge(),
+                audiences=(settings.erp_jwt_audience,),
+            )
+            payload = WorkflowCreate(
+                workflow_type="SALES_ORDER_REVIEW_WORKFLOW",
+                idempotency_key="workflow-order-71",
+                input={"order_id": 71},
+            )
+            first = await service.create(payload)
+            second = await service.create(payload)
+            assert first.id == second.id
+            assert first.status == "SUCCEEDED"
+            detail = await service.detail(first.id)
+            assert detail.result_summary["conclusion"] == "UNABLE_TO_DETERMINE"
+            assert any(item.event_type == "WORKFLOW_SUCCEEDED" for item in detail.events)
+        finally:
+            await session.close()
+        foreign_context = TenantContext(
+            user_id=7202,
+            tenant_id=702,
+            member_id=2,
+            is_owner=False,
+            role="OPERATOR",
+            role_codes=("OPERATOR",),
+            permission_codes=context.permission_codes,
+            token_jti="foreign",
+            token_version=0,
+            authz_version=1,
+        )
+        foreign = TenantAsyncSession(
+            702, registry=REGISTRY, bind=engine, expire_on_commit=False, autoflush=False
+        )
+        try:
+            with pytest.raises(AppError, match="不存在"):
+                await WorkflowService(
+                    foreign,
+                    foreign_context,
+                    access_token="token",
+                    request_id="wf-foreign",
+                    erp=_WorkflowErp(),
+                    knowledge=_WorkflowKnowledge(),
+                    audiences=(settings.erp_jwt_audience,),
+                ).detail(first.id)
+        finally:
+            await foreign.close()
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_workflow_worker_reclaims_stale_without_reusing_user_token(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    engine = create_async_engine(_integration_url())
+    try:
+        async with engine.begin() as connection:
+            await connection.run_sync(Base.metadata.drop_all)
+            await connection.run_sync(Base.metadata.create_all)
+        session = TenantAsyncSession(
+            703, registry=REGISTRY, bind=engine, expire_on_commit=False, autoflush=False
+        )
+        try:
+            row = WorkflowInstance(
+                tenant_id=703,
+                user_id=7301,
+                workflow_type="SALES_ORDER_REVIEW_WORKFLOW",
+                schema_version=1,
+                status="RUNNING",
+                current_step="order_lookup",
+                graph_thread_id="business-workflow:stale-test",
+                idempotency_key="stale-worker-test",
+                input_snapshot={"order_id": 1},
+                result_summary={},
+                lease_owner="dead",
+                lease_until=datetime.now(UTC) - timedelta(seconds=1),
+            )
+            session.add(row)
+            await session.commit()
+            workflow_id = row.id
+        finally:
+            await session.close()
+        monkeypatch.setattr(
+            "app.tasks.worker.open_tenant_session",
+            lambda tenant_id: TenantAsyncSession(
+                tenant_id, registry=REGISTRY, bind=engine, expire_on_commit=False, autoflush=False
+            ),
+        )
+        await recover_item(703, workflow_id, "worker-new")
+        verify = TenantAsyncSession(
+            703, registry=REGISTRY, bind=engine, expire_on_commit=False, autoflush=False
+        )
+        try:
+            restored = await verify.scalar(
+                select(WorkflowInstance).where(
+                    WorkflowInstance.id == workflow_id, WorkflowInstance.tenant_id == 703
+                )
+            )
+            assert restored is not None and restored.status == "PAUSED"
+            assert restored.lease_owner is None
+        finally:
+            await verify.close()
+    finally:
+        await engine.dispose()
 
 
 class _ExecutionErp:
@@ -515,6 +664,49 @@ async def test_langgraph_postgres_checkpoint_survives_restart(
         )
     finally:
         await restarted.close()
+
+
+@pytest.mark.asyncio
+async def test_business_workflow_checkpoint_survives_restart(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """V7 业务图在进程重建后从同一稳定 thread_id 恢复 interrupt。"""
+    monkeypatch.setattr(settings, "database_url", _integration_url())
+    workflow_id = 99101
+    first = BusinessWorkflowGraph()
+    await asyncio.wait_for(first.start(), timeout=10)
+    try:
+        await asyncio.wait_for(
+            first.begin(
+                {
+                    "workflow_id": workflow_id,
+                    "tenant_id": 302,
+                    "user_id": 3002,
+                    "workflow_type": "INVENTORY_REPLENISHMENT_WORKFLOW",
+                    "phase": "created",
+                }
+            ),
+            timeout=10,
+        )
+    finally:
+        await asyncio.wait_for(first.close(), timeout=10)
+
+    restarted = BusinessWorkflowGraph()
+    await asyncio.wait_for(restarted.start(), timeout=10)
+    try:
+        await asyncio.wait_for(
+            restarted.resume(
+                workflow_id,
+                {
+                    "supplier_id": 11,
+                    "warehouse_id": 22,
+                    "quantity": "10",
+                },
+            ),
+            timeout=10,
+        )
+    finally:
+        await asyncio.wait_for(restarted.close(), timeout=10)
 
 
 @pytest.mark.asyncio

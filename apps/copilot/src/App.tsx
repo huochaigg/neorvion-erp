@@ -12,6 +12,8 @@ import { AdsComingSoonPage, HistoryComingSoonPage } from '@/pages/ComingSoonPage
 import { CopilotPage } from '@/pages/CopilotPage';
 import { ProposalListPage } from '@/pages/ProposalListPage';
 import { ApprovalListPage } from '@/pages/ApprovalListPage';
+import { WorkflowListPage } from '@/pages/WorkflowListPage';
+import { WorkflowDetailPage } from '@/pages/WorkflowDetailPage';
 import { getPopupContainer } from '@/runtime';
 import { useCopilotStore } from '@/store';
 
@@ -23,6 +25,8 @@ function TenantWorkspace() {
         <Route path="/chat" element={<CopilotPage />} />
         <Route path="/drafts" element={<ProposalListPage />} />
         <Route path="/approvals" element={<ApprovalListPage />} />
+        <Route path="/workflows" element={<WorkflowListPage />} />
+        <Route path="/workflows/:id" element={<WorkflowDetailPage />} />
         <Route path="/ads" element={<AdsComingSoonPage />} />
         <Route path="/history" element={<HistoryComingSoonPage />} />
         <Route path="/" element={<Navigate to="/chat" replace />} />

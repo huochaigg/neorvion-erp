@@ -218,3 +218,12 @@ Copilot 最终应成为“受策略控制的 ERP 操作入口”：默认只读�
 - 前端支持工具过程、实时分析状态、ERP/Knowledge 来源卡片和安全文本详情展示。
 - 保持单 LangGraph 受控循环、只读边界和服务端安全校验；未引入写操作、多 Agent 或 Checkpointer。
 
+### V7：真实模型配置与可恢复业务工作流（代码完成，真实环境待验收）
+
+- 修复 Compose、本地示例和实际开发配置默认进入 Mock 的问题；未配置真实密钥时明确报错并展示状态。
+- 增加独立 Workflow Registry、PostgreSQL 状态/步骤/事件/尝试表和官方 PostgresSaver 编排图。
+- 支持库存补货分析与销售订单只读审查；采购动作通过 V5 Proposal 和 V6 Execution 完成，不新增写通道。
+- 增加独立 Redis 队列命名空间、租约回收 Worker、人工恢复与不可安全补偿的人工介入状态。
+- React 增加工作流列表、详情、步骤时间线、输入恢复和 V6 Execution 关联入口。
+- 当前环境未配置模型 Secret，四个后端与浏览器未同时运行，因此真实模型、真实 HTTP 和浏览器 E2E 尚未验收。
+

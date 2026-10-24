@@ -11,6 +11,8 @@ from app.core.exceptions import AppError
 def get_chat_adapter() -> ChatAdapter:
     provider = settings.model_provider.strip().lower()
     if provider == "mock":
+        if settings.app_env.lower() not in {"test", "testing", "development", "dev"}:
+            raise AppError("当前环境禁止 Mock 模型", code=50360, status_code=503)
         return MockChatAdapter()
     if provider != "openai_compat":
         raise AppError("不支持的模型 Provider", code=50061, status_code=500)

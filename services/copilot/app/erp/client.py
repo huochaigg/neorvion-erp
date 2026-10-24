@@ -238,6 +238,34 @@ class ErpApiClient:
             return None
         return self._parse_execution_response(response)
 
+    async def system_execution_receipt(
+        self, execution_key: str, *, tenant_id: int, request_id: str = ""
+    ) -> dict[str, Any] | None:
+        """使用短期 HMAC 查询 Receipt；只供后台 UNKNOWN 对账，不具备执行权限。"""
+        secret = settings.erp_execution_secret.get_secret_value()
+        if not secret:
+            raise AppError("未配置 ERP 执行授权", code=50374, status_code=503)
+        expires_at = int(time.time()) + settings.erp_execution_authorization_ttl_seconds
+        claim = f"receipt\n{tenant_id}\n{execution_key}\n{expires_at}"
+        signature = hmac.new(secret.encode(), claim.encode(), hashlib.sha256).hexdigest()
+        headers = {
+            "X-Tenant-ID": str(tenant_id),
+            "X-Copilot-Receipt-Signature": signature,
+            "X-Copilot-Receipt-Expires": str(expires_at),
+        }
+        if request_id:
+            headers["X-Request-ID"] = request_id
+        try:
+            response = await self._client.get(
+                f"{self.base_url}/api/v1/action-executions/internal-receipts/{execution_key}",
+                headers=headers,
+            )
+        except httpx.HTTPError as exc:
+            raise AppError("ERP 自动对账暂时不可用", code=50275, status_code=502) from exc
+        if response.status_code == 404:
+            return None
+        return self._parse_execution_response(response)
+
     @staticmethod
     def _parse_execution_response(response: httpx.Response) -> dict[str, Any]:
         try:

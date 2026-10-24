@@ -264,3 +264,22 @@ Checkpoint 只负责技术恢复，二者不能互相替代。
 一致性由不可变 payload hash、ERP 最终幂等和 Receipt 对账保证。
 
 V6 不做自动审批、自动提交/发货/出入库、退款、库存直接调整、任意 URL/SQL/Shell、多 Agent 和复杂 Saga。
+
+## V7 真实模型与业务工作流
+
+运行配置默认改为 `MODEL_PROVIDER=openai_compat`。实际本地 `.env` 若仍为 `mock` 会明确显示 Mock 横幅；真实
+Provider 未配置密钥时 Chat 返回 503，不会回退到模拟回答。`GET /api/v1/model-status` 只返回 provider、模型名和
+`available/mock/unconfigured/unavailable`，不会返回密钥。DeepSeek 使用 `https://api.deepseek.com` +
+`deepseek-chat`；百炼使用 `https://dashscope.aliyuncs.com/compatible-mode/v1` 和实际已开通的兼容模型名。
+
+Workflow Registry 当前只允许 `INVENTORY_REPLENISHMENT_WORKFLOW` 与只读
+`SALES_ORDER_REVIEW_WORKFLOW`。工作流 API 为 `POST/GET /api/v1/workflows`、详情、steps、events、metrics、
+resume、retry、cancel。库存流程不会编造安全库存、交期、在途、价格或采购数量；缺少供应商、仓库和数量时进入
+`WAITING_INPUT`，生成 Proposal 后进入 `WAITING_CONFIRMATION`，正式写入继续复用 V6 Execution。
+
+V7 表由 `20261024_0005` 创建。Redis 队列名默认 `copilot:workflows:v1`，仅投递 tenant/workflow ID；PostgreSQL
+是状态权威。Worker 没有当前用户 JWT 时只回收租约并暂停等待重新授权，不会保存旧 JWT 或绕过权限执行下游步骤。
+唯一例外是 UNKNOWN 的只读 Receipt 对账：Worker 用独立短期 HMAC 调 ERP 固定 internal-receipts 路径，它不能携带
+payload 或创建单据，成功后以同一个 execution key 恢复 Execution/Workflow。Redis 消息丢失时 Worker 会从数据库
+扫描过期租约；对账使用有限次数指数退避，耗尽预算后转人工介入。
+不能安全补偿的已创建 ERP 单据进入 `NEEDS_MANUAL_INTERVENTION`，绝不自动删除或反向调拨。

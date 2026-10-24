@@ -18,3 +18,10 @@ export interface ActionExecutionList {items:ActionExecution[];total:number;page:
 export interface ActionApproval {id:number;proposal_id:number;proposal_revision:number;execution_id:number;applicant_user_id:number;approver_user_id:number|null;status:string;decision:string|null;decision_reason:string|null;requested_at:string;decided_at:string|null;expires_at:string}
 export interface ActionApprovalList {items:ActionApproval[];total:number;page:number;page_size:number}
 export interface ActionAuditEvent {id:number;actor_user_id:number|null;event_type:string;outcome:string;details:Record<string,unknown>;created_at:string}
+export type WorkflowType='INVENTORY_REPLENISHMENT_WORKFLOW'|'SALES_ORDER_REVIEW_WORKFLOW';
+export interface WorkflowStep {id:number;step_key:string;step_type:string;status:string;attempt_count:number;started_at:string|null;completed_at:string|null;error_code:string|null;safe_result_summary:Record<string,unknown>}
+export interface WorkflowEvent {id:number;event_type:string;event_data:Record<string,unknown>;created_at:string}
+export interface Workflow {id:number;workflow_type:WorkflowType;schema_version:number;status:string;current_step:string;input_snapshot:Record<string,unknown>;result_summary:Record<string,unknown>;proposal_id:number|null;execution_id:number|null;created_at:string;updated_at:string;completed_at:string|null}
+export interface WorkflowDetail extends Workflow {steps:WorkflowStep[];events:WorkflowEvent[]}
+export interface WorkflowList {items:Workflow[];total:number;page:number;page_size:number}
+export interface ModelStatus {state:'available'|'mock'|'unconfigured'|'unavailable';provider:string;model:string|null;detail:string|null}

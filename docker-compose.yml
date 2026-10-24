@@ -272,7 +272,7 @@ services:
       IAM_REDIS_URL: redis://redis:6379/1
       DATABASE_URL: postgresql+psycopg://${COPILOT_POSTGRES_USER:-neorvion_copilot}:${COPILOT_POSTGRES_PASSWORD:-change-me}@postgres:5432/${COPILOT_POSTGRES_DB:-neorvion_copilot}
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:8015,http://localhost:8018,http://localhost:8019,http://127.0.0.1:8015,http://127.0.0.1:8018,http://127.0.0.1:8019}
-      MODEL_PROVIDER: ${COPILOT_MODEL_PROVIDER:-mock}
+      MODEL_PROVIDER: ${COPILOT_MODEL_PROVIDER:-openai_compat}
       CHAT_BASE_URL: ${COPILOT_CHAT_BASE_URL:-https://api.deepseek.com}
       CHAT_API_KEY: ${COPILOT_CHAT_API_KEY:-}
       CHAT_MODEL: ${COPILOT_CHAT_MODEL:-deepseek-chat}
@@ -288,6 +288,8 @@ services:
       TOOL_MAX_CALLS: ${COPILOT_TOOL_MAX_CALLS:-8}
       TOOL_TOTAL_TIMEOUT_SECONDS: ${COPILOT_TOOL_TOTAL_TIMEOUT_SECONDS:-30}
       TOOL_MAX_RESULT_CHARS: ${COPILOT_TOOL_MAX_RESULT_CHARS:-12000}
+      WORKFLOW_REDIS_URL: redis://redis:6379/0
+      WORKFLOW_QUEUE_KEY: ${COPILOT_WORKFLOW_QUEUE_KEY:-copilot:workflows:v1}
     ports:
       - "8013:8013"
     healthcheck:
@@ -301,6 +303,31 @@ services:
       interval: 10s
       timeout: 5s
       retries: 10
+
+  copilot-worker:
+    build:
+      context: .
+      dockerfile: services/copilot/Dockerfile
+    container_name: neorvion-copilot-worker
+    restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      erp:
+        condition: service_healthy
+    environment:
+      APP_ENV: development
+      DATABASE_URL: postgresql+psycopg://${COPILOT_POSTGRES_USER:-neorvion_copilot}:${COPILOT_POSTGRES_PASSWORD:-change-me}@postgres:5432/${COPILOT_POSTGRES_DB:-neorvion_copilot}
+      ERP_BASE_URL: ${COPILOT_ERP_BASE_URL:-http://erp:8011}
+      ERP_EXECUTION_SECRET: ${COPILOT_EXECUTION_SECRET:-}
+      WORKFLOW_REDIS_URL: redis://redis:6379/0
+      WORKFLOW_QUEUE_KEY: ${COPILOT_WORKFLOW_QUEUE_KEY:-copilot:workflows:v1}
+      WORKFLOW_LEASE_SECONDS: ${COPILOT_WORKFLOW_LEASE_SECONDS:-45}
+      WORKFLOW_MAX_ATTEMPTS: ${COPILOT_WORKFLOW_MAX_ATTEMPTS:-3}
+      WORKFLOW_RECONCILE_MAX_ATTEMPTS: ${COPILOT_WORKFLOW_RECONCILE_MAX_ATTEMPTS:-6}
+    command: python -m app.tasks.worker
 
   nginx:
     image: nginx:1.27-alpine

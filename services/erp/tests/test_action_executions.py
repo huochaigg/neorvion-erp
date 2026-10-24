@@ -4,7 +4,7 @@ import json
 import time
 from concurrent.futures import ThreadPoolExecutor
 
-from app.core.execution_auth import canonical_execution_claim
+from app.core.execution_auth import canonical_execution_claim, signable_receipt_claim
 from app.db.session import SessionLocal
 from app.models.action_execution import ErpActionExecutionReceipt
 from app.models.purchase import PurchaseOrder
@@ -87,6 +87,22 @@ def test_purchase_execution_is_finally_idempotent_and_signed(client: TestClient)
     assert {status for status, _ in results} == {200}, results
     resource_ids = {item["data"]["resource_id"] for _, item in results}
     assert len(resource_ids) == 1
+    receipt_expires = int(time.time()) + 60
+    receipt_signature = hmac.new(
+        SECRET.encode(),
+        signable_receipt_claim(tenant_id, body["execution_key"], receipt_expires).encode(),
+        hashlib.sha256,
+    ).hexdigest()
+    receipt = client.get(
+        f"/api/v1/action-executions/internal-receipts/{body['execution_key']}",
+        headers={
+            "X-Tenant-ID": str(tenant_id),
+            "X-Copilot-Receipt-Signature": receipt_signature,
+            "X-Copilot-Receipt-Expires": str(receipt_expires),
+        },
+    )
+    assert receipt.status_code == 200
+    assert receipt.json()["data"]["resource_id"] in resource_ids
     session = SessionLocal()
     try:
         assert session.scalar(select(func.count()).select_from(PurchaseOrder)) == 1

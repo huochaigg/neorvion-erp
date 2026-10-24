@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react';
 import { Outlet } from 'react-router-dom';
 import { api, unwrap } from '@/api/client';
 import { Sidebar } from '@/components/Sidebar';
+import { ModelStatusBanner } from '@/components/ModelStatusBanner';
 import { useCopilotStore } from '@/store';
 import type { ApiResponse } from '@neorvion/shared';
 
@@ -76,7 +77,7 @@ export function WorkbenchLayout() {
           </div>
         </>
       )}
-      <main className="relative min-w-0 flex-1">
+      <main className="relative flex min-w-0 flex-1 flex-col">
         {hideSidebar ? (
           <button
             type="button"
@@ -87,7 +88,8 @@ export function WorkbenchLayout() {
             <PanelLeftOpen size={18} />
           </button>
         ) : null}
-        <Outlet />
+        <ModelStatusBanner />
+        <div className="min-h-0 flex-1"><Outlet /></div>
       </main>
     </div>
   );
