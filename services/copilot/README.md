@@ -1,6 +1,6 @@
-# Neorvion ERP Copilot V5
+# Neorvion ERP Copilot V6
 
-独立 FastAPI + LangGraph 服务，默认端口 `8013`。V5 保留 V1-V4 的对话、只读 ERP/Knowledge 分析与证据能力，并增加只属于 Copilot 的结构化业务草稿和 ERP 无副作用预检。
+独立 FastAPI + LangGraph 服务，默认端口 `8013`。V6 保留 V1-V5 全部能力，并为三类 Action Proposal 增加显式人工确认、确定性审批、执行前复核、ERP 最终幂等写入、审计和 UNKNOWN 对账。
 
 ## API 与事件
 
@@ -21,6 +21,15 @@
 | `POST /api/v1/action-proposals/{id}/validate` | 执行 ERP 无副作用预检 |
 | `POST /api/v1/action-proposals/{id}/cancel` | 取消草稿（不可恢复） |
 | `GET /api/v1/action-proposals/{id}/revisions` | 查看版本历史 |
+| `POST /api/v1/action-proposals/{id}/confirmations` | 冻结 revision 并签发一次性确认票据 |
+| `POST /api/v1/action-executions/{id}/confirm` | 当前 Proposal 所有者显式确认 |
+| `POST /api/v1/action-executions/{id}/execute` | 获批后由申请人以当前权限执行 |
+| `GET /api/v1/action-executions` | 当前用户执行记录分页 |
+| `GET /api/v1/action-executions/{id}` | 当前用户执行详情 |
+| `POST /api/v1/action-executions/{id}/reconcile` | UNKNOWN 状态按 ERP Receipt 对账 |
+| `GET /api/v1/action-approvals` | `copilot:approve` 租户审批队列 |
+| `POST /api/v1/action-approvals/{id}/approve|reject|revoke` | 审批决策或申请人撤销 |
+| `GET /api/v1/action-executions/{id}/audit` | 追加式业务审计时间线 |
 
 持久化聊天请求使用 `conversation_id`、`client_request_id`、`message`。旧版 `messages` 无会话请求保持兼容。
 
@@ -129,6 +138,12 @@ ERP_BASE_URL=http://127.0.0.1:8011
 ERP_JWT_AUDIENCE=neorvion-erp
 ERP_CONNECT_TIMEOUT_SECONDS=3
 ERP_READ_TIMEOUT_SECONDS=10
+ERP_EXECUTION_TIMEOUT_SECONDS=15
+ERP_EXECUTION_SECRET=<与 ERP COPILOT_EXECUTION_SECRET 相同的至少 32 字节 Secret>
+ERP_EXECUTION_AUTHORIZATION_TTL_SECONDS=60
+CONFIRMATION_TTL_SECONDS=300
+APPROVAL_TTL_SECONDS=86400
+ACTION_GRAPH_ENABLED=true
 KNOWLEDGE_BASE_URL=http://127.0.0.1:8012
 KNOWLEDGE_JWT_AUDIENCE=neorvion-knowledge
 KNOWLEDGE_CONNECT_TIMEOUT_SECONDS=3
@@ -225,8 +240,27 @@ SSE 在原协议上新增 `proposal_created`、`proposal_updated`、`proposal_va
 草稿编辑器通过 ERP 既有 suppliers/customers/warehouses/product-skus 只读 API 提供远程选择；开发环境可用
 `VITE_ERP_API_BASE_URL=http://localhost:8011`，生产环境留空走同源 `/api` 反向代理。ERP 会独立复核读权限。
 
-## V5 明确不做
+## V6 受控执行
 
-正式 ERP 写操作、用户确认后执行、审批流、LangGraph interrupt、Checkpointer、Saga、多 Agent、任意
-URL/SQL/Shell、退款和库存直接调整均不在本版本范围内。V6 执行前必须重新验证权限、提案 revision、
-预检时效和 ERP 资源版本，不能把 V5 的 `READY` 当作执行授权。
+Execution Registry 与 LLM Tool Registry 完全分离，只登记采购、销售、库存调拨三个固定路径。模型没有
+`execute_action` Tool；聊天里的“继续”不是授权。确认票据绑定 tenant、user、proposal、revision、payload hash
+和短期有效期，服务端只保存 nonce hash，使用后不能重放。采购和销售为 MEDIUM，当前确定性策略无需审批；
+调拨为 HIGH，固定要求 `copilot:approve` 异人审批。申请人不能自批，审批后仍由申请人以当前 JWT 和最新 IAM
+权限执行，因此权限撤销会阻断写入。
+
+正式写入前 Copilot 再调用 Preview，ERP 端在同一 MySQL 事务内再次 Preview、占用
+`tenant_id + execution_key`、调用既有 Service 创建 DRAFT 单据并保存 Receipt。三类创建都不会自动提交审核、
+确认、预占、出库或入库。相同 key + payload 返回原结果；相同 key + 不同 payload 返回 409。网络超时或 5xx
+进入 UNKNOWN，禁止重新创建，只能查询 ERP Receipt 对账。
+
+PostgreSQL 业务表：`copilot_action_executions`、`copilot_action_approvals`、
+`copilot_action_execution_attempts`、`copilot_action_audit_events`、`copilot_action_graph_checkpoints`。
+LangGraph 独立执行图使用官方 `AsyncPostgresSaver`、`interrupt()` 与 `Command(resume=...)`；Saver 自己幂等管理
+`checkpoints`、`checkpoint_blobs`、`checkpoint_writes`、`checkpoint_migrations`。业务数据库状态是授权与审计权威，
+Checkpoint 只负责技术恢复，二者不能互相替代。
+
+迁移：Copilot `20261024_0004`，ERP `20261024_0023`。降级会删除 V6 执行/审批/审计或 ERP Receipt，必须先
+停止执行流量、确认无 EXECUTING/UNKNOWN、导出审计与 Receipt 并验证备份。跨 PostgreSQL/MySQL 没有原子事务；
+一致性由不可变 payload hash、ERP 最终幂等和 Receipt 对账保证。
+
+V6 不做自动审批、自动提交/发货/出入库、退款、库存直接调整、任意 URL/SQL/Shell、多 Agent 和复杂 Saga。

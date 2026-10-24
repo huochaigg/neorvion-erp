@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import hashlib
+import hmac
+import time
 from typing import Any
 
 import httpx
@@ -128,6 +131,135 @@ class ErpApiClient:
 
     async def aclose(self) -> None:
         await self._client.aclose()
+
+    @staticmethod
+    def _execution_claim(
+        *,
+        tenant_id: int,
+        user_id: int,
+        action_type: str,
+        execution_key: str,
+        revision: int,
+        payload_hash: str,
+        expires_at: int,
+    ) -> str:
+        return "\n".join(
+            map(
+                str,
+                (
+                    tenant_id,
+                    user_id,
+                    action_type,
+                    execution_key,
+                    revision,
+                    payload_hash,
+                    expires_at,
+                ),
+            )
+        )
+
+    async def execute(
+        self,
+        path: str,
+        *,
+        execution_key: str,
+        action_type: str,
+        revision: int,
+        payload_hash: str,
+        payload: dict[str, Any],
+        user_id: int,
+        access_token: str,
+        tenant_id: int,
+        request_id: str = "",
+    ) -> dict[str, Any]:
+        """调用固定 ERP 写接口；短期 HMAC 授权与用户 JWT/权限由 ERP 双重校验。"""
+        allowed = {
+            "/api/v1/action-executions/purchase-order",
+            "/api/v1/action-executions/sales-order",
+            "/api/v1/action-executions/inventory-transfer",
+        }
+        if path not in allowed:
+            raise AppError("ERP 执行路径未注册", code=50074, status_code=500)
+        secret = settings.erp_execution_secret.get_secret_value()
+        if not secret:
+            raise AppError("Copilot 未配置 ERP 执行授权", code=50374, status_code=503)
+        expires_at = int(time.time()) + settings.erp_execution_authorization_ttl_seconds
+        claim = self._execution_claim(
+            tenant_id=tenant_id,
+            user_id=user_id,
+            action_type=action_type,
+            execution_key=execution_key,
+            revision=revision,
+            payload_hash=payload_hash,
+            expires_at=expires_at,
+        )
+        signature = hmac.new(secret.encode(), claim.encode(), hashlib.sha256).hexdigest()
+        headers = {
+            "Authorization": f"Bearer {access_token}",
+            "X-Tenant-ID": str(tenant_id),
+            "X-Copilot-Execution-Signature": signature,
+            "X-Copilot-Execution-Expires": str(expires_at),
+        }
+        if request_id:
+            headers["X-Request-ID"] = request_id
+        body = {
+            "execution_key": execution_key,
+            "action_type": action_type,
+            "proposal_revision": revision,
+            "payload_hash": payload_hash,
+            "payload": payload,
+        }
+        try:
+            response = await self._client.post(
+                f"{self.base_url}{path}",
+                json=body,
+                headers=headers,
+                timeout=settings.erp_execution_timeout_seconds,
+            )
+        except httpx.TimeoutException as exc:
+            raise AppError("ERP 执行结果未知", code=50474, status_code=504) from exc
+        except httpx.HTTPError as exc:
+            raise AppError("ERP 执行结果未知", code=50274, status_code=502) from exc
+        return self._parse_execution_response(response)
+
+    async def execution_receipt(
+        self, execution_key: str, *, access_token: str, tenant_id: int, request_id: str = ""
+    ) -> dict[str, Any] | None:
+        headers = {"Authorization": f"Bearer {access_token}", "X-Tenant-ID": str(tenant_id)}
+        if request_id:
+            headers["X-Request-ID"] = request_id
+        try:
+            response = await self._client.get(
+                f"{self.base_url}/api/v1/action-executions/{execution_key}", headers=headers
+            )
+        except httpx.HTTPError as exc:
+            raise AppError("ERP 对账暂时不可用", code=50275, status_code=502) from exc
+        if response.status_code == 404:
+            return None
+        return self._parse_execution_response(response)
+
+    @staticmethod
+    def _parse_execution_response(response: httpx.Response) -> dict[str, Any]:
+        try:
+            body = response.json()
+        except ValueError as exc:
+            raise AppError("ERP 执行返回无效响应", code=50276, status_code=502) from exc
+        if response.status_code in {401, 403}:
+            raise AppError("无权执行 ERP 动作", code=40374, status_code=403)
+        if response.status_code == 409:
+            raise AppError(body.get("message", "ERP 执行幂等冲突"), code=40974, status_code=409)
+        if response.status_code >= 500:
+            raise AppError("ERP 执行结果未知", code=50274, status_code=502)
+        if response.status_code >= 400 or not isinstance(body, dict) or body.get("code") != 0:
+            raise AppError(
+                body.get("message", "ERP 执行失败") if isinstance(body, dict) else "ERP 执行失败",
+                code=40074,
+                status_code=400,
+            )
+        data = body.get("data")
+        if not isinstance(data, dict):
+            raise AppError("ERP 执行返回无效响应", code=50276, status_code=502)
+        return data
 
 
 _client: ErpApiClient | None = None

@@ -7,6 +7,7 @@ from collections.abc import Iterator
 
 os.environ["APP_ENV"] = "test"
 os.environ["MODEL_PROVIDER"] = "mock"
+os.environ["ACTION_GRAPH_ENABLED"] = "false"
 os.environ["IAM_JWKS_URL"] = "http://127.0.0.1:9/.well-known/jwks.json"
 os.environ.setdefault(
     "DATABASE_URL",

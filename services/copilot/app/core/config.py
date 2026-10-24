@@ -1,6 +1,7 @@
 from functools import lru_cache
 from pathlib import Path
 
+from pydantic import SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 _COPILOT_DIR = Path(__file__).resolve().parents[2]
@@ -19,7 +20,7 @@ class Settings(BaseSettings):
     app_env: str = "development"
     app_host: str = "0.0.0.0"
     app_port: int = 8013
-    app_version: str = "5.0.0"
+    app_version: str = "6.0.0"
     git_sha: str = ""
     enable_api_docs: bool = True
     cors_origins: str = (
@@ -61,6 +62,12 @@ class Settings(BaseSettings):
     erp_jwt_audience: str = "neorvion-erp"
     erp_connect_timeout_seconds: float = 3.0
     erp_read_timeout_seconds: float = 10.0
+    erp_execution_timeout_seconds: float = 15.0
+    erp_execution_secret: SecretStr = SecretStr("")
+    erp_execution_authorization_ttl_seconds: int = 60
+    confirmation_ttl_seconds: int = 300
+    approval_ttl_seconds: int = 86400
+    action_graph_enabled: bool = True
     knowledge_base_url: str = "http://127.0.0.1:8012"
     knowledge_jwt_audience: str = "neorvion-knowledge"
     knowledge_connect_timeout_seconds: float = 3.0
@@ -102,6 +109,10 @@ class Settings(BaseSettings):
             raise RuntimeError("生产环境必须配置 IAM_JWKS_URL 或 IAM_JWT_PUBLIC_KEY_PATH")
         if self.model_provider != "mock" and not self.resolved_chat_api_key():
             raise RuntimeError("生产环境必须配置 Chat 模型密钥")
+        if len(self.erp_execution_secret.get_secret_value()) < 32:
+            raise RuntimeError("生产环境必须配置至少 32 字节的 ERP_EXECUTION_SECRET")
+        if not self.action_graph_enabled:
+            raise RuntimeError("生产环境禁止关闭持久化 Action Execution Graph")
 
 
 @lru_cache

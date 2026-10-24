@@ -145,7 +145,9 @@ class SalesOrderService:
             raise AppError(_UNAVAILABLE, code=40471, status_code=404)
         return self._detail_out(order)
 
-    def create_order(self, payload: SalesOrderCreate) -> SalesOrderDetailOut:
+    def create_order(
+        self, payload: SalesOrderCreate, *, commit: bool = True
+    ) -> SalesOrderDetailOut:
         """创建草稿。主表和明细同一事务；任一行失败整单 rollback。
 
         功能：保存销售计划和收货快照，此时不检查、不预占库存。
@@ -197,7 +199,10 @@ class SalesOrderService:
                 resource_name=order.order_no,
                 description="创建销售订单",
             )
-            self.session.commit()
+            if commit:
+                self.session.commit()
+            else:
+                self.session.flush()
         except AppError:
             self.session.rollback()
             raise

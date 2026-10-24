@@ -6,14 +6,18 @@ from datetime import UTC, datetime, timedelta
 from time import monotonic
 
 import pytest
+from app.core.config import settings
 from app.core.exceptions import AppError
 from app.core.tenant import TenantContext
 from app.db.base import Base
 from app.db.isolation import REGISTRY
+from app.graph.action_execution import ActionExecutionGraph
 from app.models.conversation import MessageStatus
 from app.repositories.action_proposals import ActionProposalRepository
 from app.repositories.conversations import ConversationRepository
+from app.schemas.action_execution import ConfirmationCreate
 from app.schemas.action_proposal import ActionProposalCreate, ActionProposalUpdate
+from app.services.action_executions import ActionExecutionService
 from app.services.action_proposals import ActionProposalService
 from app.services.conversations import ConversationService
 from app.services.persistent_chat import PersistentChatService, PersistentTurn
@@ -22,6 +26,40 @@ from sqlalchemy import text
 from sqlalchemy.engine import make_url
 from sqlalchemy.exc import TimeoutError as SqlAlchemyTimeoutError
 from sqlalchemy.ext.asyncio import create_async_engine
+
+
+class _ExecutionErp:
+    def __init__(self) -> None:
+        self.execute_calls = 0
+
+    async def preview(self, _path: str, **_kwargs):
+        return {
+            "valid": True,
+            "blocking_errors": [],
+            "warnings": [],
+            "missing_fields": [],
+            "preview_summary": {},
+            "resource_versions": {},
+            "expires_at": (datetime.now(UTC) + timedelta(minutes=5)).isoformat(),
+        }
+
+    async def execute(self, path: str, **_kwargs):
+        self.execute_calls += 1
+        transfer = path.endswith("inventory-transfer")
+        return {
+            "status": "SUCCEEDED",
+            "resource_type": "STOCK_TRANSFER" if transfer else "PURCHASE_ORDER",
+            "resource_id": 8802 if transfer else 8801,
+            "resource_no": "TR8802" if transfer else "PO8801",
+        }
+
+    async def execution_receipt(self, _key: str, **_kwargs):
+        return {
+            "status": "SUCCEEDED",
+            "resource_type": "PURCHASE_ORDER",
+            "resource_id": 8801,
+            "resource_no": "PO8801",
+        }
 
 
 def _integration_url() -> str:
@@ -341,4 +379,237 @@ async def test_postgres_action_proposal_idempotency_revision_and_isolation() -> 
         async with engine.begin() as connection:
             await connection.run_sync(Base.metadata.drop_all)
             await connection.run_sync(Base.metadata.create_all)
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_postgres_confirmation_execution_audit_and_nonce_replay() -> None:
+    """真实 PostgreSQL 验证确认票据、单 revision 唯一执行、审计与最终结果持久化。"""
+    engine = create_async_engine(_integration_url())
+    try:
+        async with engine.begin() as connection:
+            await connection.run_sync(Base.metadata.drop_all)
+            await connection.run_sync(Base.metadata.create_all)
+        session = TenantAsyncSession(
+            301, registry=REGISTRY, bind=engine, expire_on_commit=False, autoflush=False
+        )
+        context = TenantContext(
+            user_id=3001,
+            tenant_id=301,
+            member_id=9301,
+            is_owner=False,
+            role="OPERATOR",
+            role_codes=("OPERATOR",),
+            permission_codes=frozenset({"copilot:use", "purchase:create"}),
+            token_jti="v6",
+            token_version=0,
+            authz_version=1,
+        )
+        erp = _ExecutionErp()
+        try:
+            conversation = await ConversationService(session, context).create("V6")
+            proposal_service = ActionProposalService(
+                session,
+                context,
+                erp_client=erp,
+                access_token="not-persisted",
+                request_id="v6-request",
+            )
+            proposal = await proposal_service.create(
+                ActionProposalCreate.model_validate(
+                    {
+                        "conversation_id": conversation.id,
+                        "idempotency_key": "v6-proposal-001",
+                        "action": {
+                            "action_type": "PURCHASE_ORDER_CREATE",
+                            "payload": {
+                                "supplier_id": 1,
+                                "warehouse_id": 2,
+                                "items": [{"sku_id": 3, "quantity": 4}],
+                            },
+                        },
+                    }
+                )
+            )
+            ready = await proposal_service.validate(proposal.id, proposal.current_revision)
+            service = ActionExecutionService(
+                session,
+                context,
+                erp_client=erp,
+                access_token="not-persisted",
+                request_id="v6-request",
+            )
+            ticket = await service.create_confirmation(
+                ready.id,
+                ConfirmationCreate(
+                    expected_revision=ready.current_revision, client_request_id="v6-confirm-001"
+                ),
+            )
+            completed = await service.confirm(
+                ticket.execution_id, ticket.proposal_revision, ticket.confirmation_nonce
+            )
+            assert completed.status == "SUCCEEDED"
+            assert completed.erp_resource_id == 8801
+            assert erp.execute_calls == 1
+            with pytest.raises(AppError, match="已使用"):
+                await service.confirm(
+                    ticket.execution_id, ticket.proposal_revision, ticket.confirmation_nonce
+                )
+            assert (await service.audit(ticket.execution_id)).items[-1].outcome == "SUCCEEDED"
+            with pytest.raises(AppError, match="已有执行流程"):
+                await service.create_confirmation(
+                    ready.id,
+                    ConfirmationCreate(
+                        expected_revision=ready.current_revision, client_request_id="v6-confirm-002"
+                    ),
+                )
+        finally:
+            await session.close()
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_langgraph_postgres_checkpoint_survives_restart(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """官方 PostgresSaver 保存 interrupt，关闭并重建 Graph 后仍可 Command(resume)。"""
+    monkeypatch.setattr(settings, "database_url", _integration_url())
+    first = ActionExecutionGraph()
+    await first.start()
+    try:
+        await first.begin(
+            {
+                "execution_id": 99001,
+                "tenant_id": 301,
+                "user_id": 3001,
+                "proposal_revision": 1,
+                "requires_approval": True,
+                "phase": "request_confirmation",
+            }
+        )
+    finally:
+        await first.close()
+    restarted = ActionExecutionGraph()
+    await restarted.start()
+    try:
+        await restarted.resume(
+            99001,
+            {
+                "confirmed": True,
+                "execution_id": 99001,
+                "tenant_id": 301,
+                "user_id": 3001,
+                "proposal_revision": 1,
+            },
+        )
+        await restarted.resume(
+            99001,
+            {
+                "approved": True,
+                "execution_id": 99001,
+                "tenant_id": 301,
+                "approver_user_id": 3002,
+                "proposal_revision": 1,
+            },
+        )
+    finally:
+        await restarted.close()
+
+
+@pytest.mark.asyncio
+async def test_high_risk_transfer_requires_separate_approver() -> None:
+    engine = create_async_engine(_integration_url())
+    try:
+        async with engine.begin() as connection:
+            await connection.run_sync(Base.metadata.drop_all)
+            await connection.run_sync(Base.metadata.create_all)
+        applicant_context = TenantContext(
+            user_id=4101,
+            tenant_id=401,
+            member_id=9411,
+            is_owner=False,
+            role="OPERATOR",
+            role_codes=("OPERATOR",),
+            permission_codes=frozenset({"copilot:use", "stock_transfer:create"}),
+            token_jti="applicant",
+            token_version=0,
+            authz_version=1,
+        )
+        applicant = TenantAsyncSession(
+            401, registry=REGISTRY, bind=engine, expire_on_commit=False, autoflush=False
+        )
+        erp = _ExecutionErp()
+        try:
+            conversation = await ConversationService(applicant, applicant_context).create("审批")
+            proposals = ActionProposalService(
+                applicant, applicant_context, erp_client=erp, access_token="applicant-token"
+            )
+            proposal = await proposals.create(
+                ActionProposalCreate.model_validate(
+                    {
+                        "conversation_id": conversation.id,
+                        "idempotency_key": "transfer-proposal-1",
+                        "action": {
+                            "action_type": "INVENTORY_TRANSFER_CREATE",
+                            "payload": {
+                                "source_warehouse_id": 1,
+                                "target_warehouse_id": 2,
+                                "items": [{"sku_id": 3, "quantity": 2}],
+                            },
+                        },
+                    }
+                )
+            )
+            ready = await proposals.validate(proposal.id, 1)
+            service = ActionExecutionService(
+                applicant, applicant_context, erp_client=erp, access_token="applicant-token"
+            )
+            ticket = await service.create_confirmation(
+                ready.id,
+                ConfirmationCreate(expected_revision=1, client_request_id="transfer-confirm-1"),
+            )
+            waiting = await service.confirm(ticket.execution_id, 1, ticket.confirmation_nonce)
+            assert waiting.status == "WAITING_APPROVAL"
+            assert erp.execute_calls == 0
+        finally:
+            await applicant.close()
+
+        approver_context = TenantContext(
+            user_id=4102,
+            tenant_id=401,
+            member_id=9412,
+            is_owner=False,
+            role="ADMIN",
+            role_codes=("ADMIN",),
+            permission_codes=frozenset({"copilot:use", "copilot:approve"}),
+            token_jti="approver",
+            token_version=0,
+            authz_version=1,
+        )
+        approver = TenantAsyncSession(
+            401, registry=REGISTRY, bind=engine, expire_on_commit=False, autoflush=False
+        )
+        try:
+            approved = await ActionExecutionService(
+                approver, approver_context, erp_client=erp, access_token="approver-token"
+            ).decide(waiting.approval_id, approve=True, reason="业务复核通过")
+            assert approved.status == "APPROVED"
+            assert erp.execute_calls == 0
+        finally:
+            await approver.close()
+
+        resumed = TenantAsyncSession(
+            401, registry=REGISTRY, bind=engine, expire_on_commit=False, autoflush=False
+        )
+        try:
+            completed = await ActionExecutionService(
+                resumed, applicant_context, erp_client=erp, access_token="applicant-token"
+            ).execute(waiting.id, 1)
+            assert completed.status == "SUCCEEDED"
+            assert completed.erp_resource_type == "STOCK_TRANSFER"
+            assert erp.execute_calls == 1
+        finally:
+            await resumed.close()
+    finally:
         await engine.dispose()

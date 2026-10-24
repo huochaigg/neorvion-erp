@@ -2,6 +2,7 @@ from functools import lru_cache
 from pathlib import Path
 from urllib.parse import quote_plus
 
+from pydantic import SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # 只读 services/erp/.env，避免仓库根目录给 Docker Compose 用的账号覆盖本地独立配置。
@@ -38,6 +39,8 @@ class Settings(BaseSettings):
     iam_snapshot_ttl_seconds: int = 3600
     iam_authorize_url: str = "http://127.0.0.1:8010/api/v1/internal/authorize"
     iam_internal_key: str = ""
+    copilot_execution_secret: SecretStr = SecretStr("")
+    copilot_execution_max_ttl_seconds: int = 120
     iam_redis_host: str = "127.0.0.1"
     iam_redis_port: int = 6379
     iam_redis_password: str = ""
@@ -85,6 +88,8 @@ class Settings(BaseSettings):
             raise RuntimeError("生产环境必须配置 IAM_JWKS_URL 或 IAM_JWT_PUBLIC_KEY_PATH")
         if not self.iam_authorize_url or not self.iam_internal_key:
             raise RuntimeError("生产环境必须配置 IAM_AUTHORIZE_URL 与 IAM_INTERNAL_KEY")
+        if len(self.copilot_execution_secret.get_secret_value()) < 32:
+            raise RuntimeError("生产环境必须配置至少 32 字节的 COPILOT_EXECUTION_SECRET")
 
     @property
     def is_production(self) -> bool:

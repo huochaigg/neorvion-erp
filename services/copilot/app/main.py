@@ -11,6 +11,7 @@ from app.core.logging import setup_logging
 from app.core.request_id import REQUEST_ID_HEADER, RequestIdMiddleware
 from app.db.session import close_database
 from app.erp.client import close_erp_client
+from app.graph.action_execution import action_execution_graph
 from app.knowledge.client import close_knowledge_client
 
 
@@ -18,9 +19,13 @@ from app.knowledge.client import close_knowledge_client
 async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     setup_logging()
     settings.require_runtime_secrets()
+    if settings.action_graph_enabled:
+        await action_execution_graph.start()
     try:
         yield
     finally:
+        if settings.action_graph_enabled:
+            await action_execution_graph.close()
         await close_erp_client()
         await close_knowledge_client()
         await close_database()
@@ -31,7 +36,7 @@ def create_app() -> FastAPI:
     app = FastAPI(
         title=settings.app_name,
         version=settings.app_version,
-        description="受 IAM 权限约束、支持只读分析与无执行能力业务草稿的 ERP Copilot V5。",
+        description="受 IAM 权限约束、具备人工确认、审批和最终幂等写入的 ERP Copilot V6。",
         lifespan=lifespan,
         docs_url="/docs" if docs_enabled else None,
         redoc_url="/redoc" if docs_enabled else None,

@@ -4,6 +4,7 @@ import {
   Bot,
   History,
   Files,
+  UserCheck,
   ImagePlay,
   PanelLeftClose,
   PanelLeftOpen,
@@ -26,6 +27,7 @@ import { useCopilotStore } from '@/store';
 const NAV = [
   { to: '/chat', label: 'ERP 智能助手', icon: Bot, live: true },
   { to: '/drafts', label: '业务草稿', icon: Files, live: true },
+  { to: '/approvals', label: '执行审批', icon: UserCheck, live: true },
   { to: '/ads', label: 'AI 广告创作', icon: ImagePlay, live: false },
   { to: '/history', label: '生成历史', icon: History, live: false },
 ] as const;

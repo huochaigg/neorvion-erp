@@ -119,7 +119,9 @@ class StockTransferService:
             raise AppError(_UNAVAILABLE, code=40493, status_code=404)
         return self._out(transfer)
 
-    def create_transfer(self, payload: StockTransferCreate) -> StockTransferOut:
+    def create_transfer(
+        self, payload: StockTransferCreate, *, commit: bool = True
+    ) -> StockTransferOut:
         """创建调拨草稿。不改库存。库存不足也可以先保存，真正校验在确认调出。"""
         self.auth.require_all(self.context, (PermissionCode.STOCK_TRANSFER_CREATE,))
         try:
@@ -140,7 +142,10 @@ class StockTransferService:
             self.session.flush()
             transfer.transfer_no = f"TR{datetime.now().year}{transfer.id:06d}"
             self._insert_items(transfer.id, lines)
-            self.session.commit()
+            if commit:
+                self.session.commit()
+            else:
+                self.session.flush()
         except AppError:
             self.session.rollback()
             raise

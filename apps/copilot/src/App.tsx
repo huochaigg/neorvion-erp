@@ -11,6 +11,7 @@ import { WujieRouteBridge } from '@/micro/WujieRouteBridge';
 import { AdsComingSoonPage, HistoryComingSoonPage } from '@/pages/ComingSoonPage';
 import { CopilotPage } from '@/pages/CopilotPage';
 import { ProposalListPage } from '@/pages/ProposalListPage';
+import { ApprovalListPage } from '@/pages/ApprovalListPage';
 import { getPopupContainer } from '@/runtime';
 import { useCopilotStore } from '@/store';
 
@@ -21,6 +22,7 @@ function TenantWorkspace() {
       <Route element={<WorkbenchLayout key={epoch} />}>
         <Route path="/chat" element={<CopilotPage />} />
         <Route path="/drafts" element={<ProposalListPage />} />
+        <Route path="/approvals" element={<ApprovalListPage />} />
         <Route path="/ads" element={<AdsComingSoonPage />} />
         <Route path="/history" element={<HistoryComingSoonPage />} />
         <Route path="/" element={<Navigate to="/chat" replace />} />

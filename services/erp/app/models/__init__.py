@@ -1,6 +1,7 @@
 """ORM 模型。Alembic 通过导入本包收集 metadata。"""
 
 from app.db.base import Base
+from app.models.action_execution import ErpActionExecutionReceipt
 from app.models.after_sale import (
     AFTER_SALE_REFERENCE,
     AfterSaleItem,
@@ -92,6 +93,7 @@ __all__ = [
     "AfterSaleType",
     "AsyncTask",
     "AsyncTaskLog",
+    "ErpActionExecutionReceipt",
     "Base",
     "Brand",
     "Carrier",

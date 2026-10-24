@@ -161,6 +161,7 @@ class PermissionCode(StrEnum):
     KNOWLEDGE_DELETE = "knowledge:delete"
 
     COPILOT_USE = "copilot:use"
+    COPILOT_APPROVE = "copilot:approve"
 
     IAM_USERS_READ = "iam:users:read"
     IAM_USERS_UPDATE = "iam:users:update"
@@ -438,6 +439,12 @@ PERMISSION_CATALOG: tuple[tuple[str, str, str, str], ...] = (
         "软删除知识库，不立即清理文档与向量",
     ),
     (PermissionCode.COPILOT_USE, "使用 ERP Copilot", "copilot", "访问租户内 ERP Copilot"),
+    (
+        PermissionCode.COPILOT_APPROVE,
+        "审批 Copilot 执行",
+        "copilot",
+        "审批需要职责分离的高风险 Copilot 动作",
+    ),
     (PermissionCode.IAM_USERS_READ, "查看平台用户", "iam", "平台管理员查看全局用户"),
     (PermissionCode.IAM_USERS_UPDATE, "编辑平台用户", "iam", "平台管理员修改用户资料"),
     (PermissionCode.IAM_USERS_DISABLE, "停用平台用户", "iam", "平台管理员停用账号并失效会话"),
@@ -1744,6 +1751,12 @@ PERMISSION_TREE: tuple[PermissionTreeDef, ...] = (
                         title="使用",
                         type="ACTION",
                         permission_code=PermissionCode.COPILOT_USE,
+                    ),
+                    PermissionTreeDef(
+                        key="action:copilot-approve",
+                        title="审批执行",
+                        type="ACTION",
+                        permission_code=PermissionCode.COPILOT_APPROVE,
                     ),
                 ),
             ),

@@ -39,3 +39,19 @@ ERP 提供三个 `POST /api/v1/action-previews/*` 端点，分别复用采购、
 响应包含 `valid`、阻断错误、警告、标准化参数、摘要、资源版本和过期时间。销售预检会提示当前库存与
 缺失单价；调拨预检会把源仓可用库存不足作为阻断错误。预检通过不保证后续执行成功，未来执行接口必须
 重新校验全部业务规则和权限。
+
+## Copilot V6 固定执行与最终幂等
+
+ERP 新增三个固定 `POST /api/v1/action-executions/*` 端点和 Receipt 查询。每个请求同时验证用户 JWT、租户
+快照、原创建权限，以及 Copilot 用共享 Secret 签发的短期 HMAC 执行授权；授权绑定 tenant、user、动作、
+execution key、revision、payload hash 和过期时间。浏览器和模型不能指定任意 URL，也不能绕过 ERP 的独立权限。
+
+- `/purchase-order`：只创建 `DRAFT` 采购单。
+- `/sales-order`：只创建 `DRAFT` 销售单，不确认、不预占。
+- `/inventory-transfer`：只创建 `DRAFT` 调拨单，不调出、不调入。
+- `GET /action-executions/{execution_key}`：权限复核后返回 Receipt，供 UNKNOWN 对账。
+
+`erp_action_execution_receipts` 以 `(tenant_id, execution_key)` 唯一。ERP 在一个 MySQL 事务中插入 Receipt、再次
+执行 Preview 业务校验、调用既有创建 Service 和更新成功资源 ID；并发 10 次相同 key 最终只产生一张单据。
+相同 key 不同 payload 返回 409。配置 `COPILOT_EXECUTION_SECRET` 必须与 Copilot 的
+`ERP_EXECUTION_SECRET` 相同，生产至少 32 字节并由部署 Secret 注入。

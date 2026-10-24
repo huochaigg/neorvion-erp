@@ -8,12 +8,18 @@ vi.mock('@/api/proposals', () => ({
   updateProposal: vi.fn(),
   validateProposal: vi.fn(),
 }));
+vi.mock('@/api/executions', () => ({
+  createConfirmation: vi.fn(), confirmExecution: vi.fn(), getExecution: vi.fn(),
+  listExecutionAudit: vi.fn(), reconcileExecution: vi.fn(),
+}));
 vi.mock('./ProposalDetail', () => ({ ProposalDetail: () => null }));
+vi.mock('./ConfirmationDialog', () => ({ ConfirmationDialog: () => null }));
+vi.mock('./ExecutionDetail', () => ({ ExecutionDetail: () => null }));
 import { ProposalCard } from './ProposalCard';
 import { useCopilotStore } from '@/store';
 
 describe('ProposalCard', () => {
-  it('只提供草稿操作，不渲染正式执行按钮', () => {
+  it('具备权限时展示人工确认入口，但预检过期时禁用', () => {
     useCopilotStore.setState({ tenantId: 7 });
     const client = new QueryClient();
     client.setQueryData(['tenant', 7, 'copilot-current-identity'], {
@@ -30,8 +36,8 @@ describe('ProposalCard', () => {
       </QueryClientProvider>,
     );
     expect(html).toContain('采购草稿');
-    expect(html).toContain('当前权限不允许操作此草稿');
-    expect(html).not.toContain('确认执行');
+    expect(html).toContain('确认执行');
+    expect(html).toContain('disabled');
     expect(html).not.toContain('创建采购单成功');
   });
 });

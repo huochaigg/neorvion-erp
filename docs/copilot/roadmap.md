@@ -93,15 +93,17 @@ services/copilot (FastAPI, port 8013)
 - `READY` 不是订单状态或执行授权；V5 没有执行按钮，不创建正式单据，也不改变库存三量。
 - 真实四服务联调、真实模型冒烟和目标部署数据库迁移仍须在可用环境执行后签收。
 
-### V6：受控执行与可恢复长流程
+### V6：HITL 受控执行（已实现）
 
-目标：支持需要等待、重试和人工介入的工作流。
-
-- 使用持久化状态图或等价状态机管理跨步骤任务。
-- 支持暂停、恢复、取消、有限重试、超时、补偿与人工接管。
-- PostgreSQL 是流程状态真相；队列只传递任务 ID。
-- 典型场景：缺货排查、待出库异常核对、采购收货差异处理建议。
-- 任何自动执行仍受 V5 的 Proposal、确认和策略约束。
+- 独立 Execution Registry 只开放采购、销售、调拨三个固定动作，LLM Tool Registry 无正式写工具。
+- 一次性确认票据冻结 tenant/user/proposal/revision/payload hash；确认与聊天文本彻底分离。
+- 调拨固定为 HIGH 并要求 `copilot:approve` 异人审批；采购/销售为 MEDIUM，按当前确定性策略无需审批。
+- 官方 PostgreSQL Checkpointer + `interrupt()` / `Command(resume=...)` 支持跨实例恢复；业务表仍是状态和审计权威。
+- ERP 用户 JWT/租户/创建权限与短期 HMAC 双重授权；既有 Service 只创建 DRAFT，不自动提交或改变库存。
+- ERP Receipt 与单据同一 MySQL 事务，`tenant + execution_key` 最终幂等；超时进入 UNKNOWN 后按 Receipt 对账。
+- React 增加明确确认弹窗、执行状态/详情/审计时间线和审批队列；租户 epoch 会清空旧租户页面状态。
+- 已完成真实 PostgreSQL、真实 MySQL 幂等并发和迁移往返测试；真实四服务 HTTP、真实模型和浏览器 E2E
+  仍需在可用测试租户环境完成，不能视为已签收。
 
 ### V7：事件驱动的主动洞察
 

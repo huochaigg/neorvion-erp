@@ -123,7 +123,9 @@ class PurchaseOrderService:
             raise AppError(_UNAVAILABLE, code=40470, status_code=404)
         return self._detail_out(order)
 
-    def create_order(self, payload: PurchaseOrderCreate) -> PurchaseOrderDetailOut:
+    def create_order(
+        self, payload: PurchaseOrderCreate, *, commit: bool = True
+    ) -> PurchaseOrderDetailOut:
         """创建采购单主表 + 明细，同一事务。任一行失败整单 rollback。
 
         审核通过也不改库存：采购只是计划数量，货可能少到。收货版本才动 Inventory。
@@ -165,7 +167,10 @@ class PurchaseOrderService:
                 resource_name=order.order_no,
                 description="创建采购单",
             )
-            self.session.commit()
+            if commit:
+                self.session.commit()
+            else:
+                self.session.flush()
         except AppError:
             self.session.rollback()
             raise

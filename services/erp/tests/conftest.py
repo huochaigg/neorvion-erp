@@ -17,6 +17,7 @@ os.environ["IAM_JWT_ISSUER"] = "neorvion-iam"
 os.environ["IAM_JWT_AUDIENCE"] = "neorvion-erp"
 os.environ["IAM_JWKS_URL"] = ""
 os.environ["IAM_JWT_KEY_ID"] = "jwt-v1"
+os.environ["COPILOT_EXECUTION_SECRET"] = "test-only-copilot-execution-secret-32-bytes"
 
 _JWT_ROOT = Path(tempfile.mkdtemp(prefix="neorvion-erp-jwt-"))
 _key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
@@ -91,6 +92,7 @@ def _wipe_business_tables() -> None:
     session = SessionLocal()
     try:
         session.execute(text("SET FOREIGN_KEY_CHECKS=0"))
+        session.execute(text("DELETE FROM erp_action_execution_receipts"))
         session.execute(text("DELETE FROM async_task_logs"))
         session.execute(text("DELETE FROM async_tasks"))
         session.execute(text("DELETE FROM operation_logs"))

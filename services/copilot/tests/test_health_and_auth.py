@@ -1,4 +1,5 @@
 from app.api.deps import get_tenant_context
+from app.core.config import settings
 from app.main import app
 
 
@@ -8,7 +9,7 @@ def test_health_is_public(client) -> None:
     assert response.json()["data"] == {
         "status": "ok",
         "service": "copilot",
-        "version": "2.0.0",
+        "version": settings.app_version,
         "git_sha": "",
         "identity": "unavailable",
     }

@@ -11,3 +11,10 @@ export interface ActionProposal {id:number;conversation_id:number;source_message
 export interface ActionProposalList {items:ActionProposal[];total:number;page:number;page_size:number}
 export interface ProposalRevision {revision:number;payload:Record<string,unknown>;editor_user_id:number;created_at:string}
 export interface CurrentIdentity {user_id:number;tenant_id:number;member_id:number;is_owner:boolean;roles:string[];permissions:string[];authz_version:number}
+export type ExecutionStatus = 'PENDING_CONFIRMATION'|'WAITING_APPROVAL'|'APPROVED'|'EXECUTING'|'SUCCEEDED'|'FAILED'|'UNKNOWN'|'RECONCILING'|'REJECTED'|'CANCELLED'|'EXPIRED';
+export interface ConfirmationTicket {execution_id:number;confirmation_nonce:string;expires_at:string;requires_approval:boolean;risk_level:string;proposal_revision:number;payload_hash:string}
+export interface ActionExecution {id:number;proposal_id:number;proposal_revision:number;action_type:ActionType;status:ExecutionStatus;risk_level:string;approval_id:number|null;erp_resource_type:string|null;erp_resource_id:number|null;erp_resource_no:string|null;error_code:string|null;started_at:string|null;completed_at:string|null;created_at:string;updated_at:string}
+export interface ActionExecutionList {items:ActionExecution[];total:number;page:number;page_size:number}
+export interface ActionApproval {id:number;proposal_id:number;proposal_revision:number;execution_id:number;applicant_user_id:number;approver_user_id:number|null;status:string;decision:string|null;decision_reason:string|null;requested_at:string;decided_at:string|null;expires_at:string}
+export interface ActionApprovalList {items:ActionApproval[];total:number;page:number;page_size:number}
+export interface ActionAuditEvent {id:number;actor_user_id:number|null;event_type:string;outcome:string;details:Record<string,unknown>;created_at:string}

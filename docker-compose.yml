@@ -115,6 +115,7 @@ services:
       IAM_JWKS_URL: http://iam:8010/.well-known/jwks.json
       IAM_AUTHORIZE_URL: http://iam:8010/api/v1/internal/authorize
       IAM_INTERNAL_KEY: ${IAM_INTERNAL_KEY:-}
+      COPILOT_EXECUTION_SECRET: ${COPILOT_EXECUTION_SECRET:-}
       IAM_REDIS_HOST: redis
       IAM_REDIS_PORT: 6379
       IAM_REDIS_DB: 1
@@ -277,6 +278,8 @@ services:
       CHAT_MODEL: ${COPILOT_CHAT_MODEL:-deepseek-chat}
       ERP_BASE_URL: http://erp:8011
       ERP_JWT_AUDIENCE: neorvion-erp
+      ERP_EXECUTION_SECRET: ${COPILOT_EXECUTION_SECRET:-}
+      ACTION_GRAPH_ENABLED: "true"
       KNOWLEDGE_BASE_URL: ${COPILOT_KNOWLEDGE_BASE_URL:-http://knowledge:8012}
       KNOWLEDGE_JWT_AUDIENCE: neorvion-knowledge
       KNOWLEDGE_TOP_K_MAX: ${COPILOT_KNOWLEDGE_TOP_K_MAX:-8}
