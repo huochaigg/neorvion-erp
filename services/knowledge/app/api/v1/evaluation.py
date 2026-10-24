@@ -79,6 +79,16 @@ def _run_out(row: EvaluationRun) -> RunOut:
     return EvaluationService._run_out(row)
 
 
+def _compare_metric_value(metrics: dict, key: str) -> float | None:
+    value = metrics.get(key)
+    if isinstance(value, (int, float)):
+        return float(value)
+    generation = metrics.get("generation")
+    if isinstance(generation, dict) and isinstance(generation.get(key), (int, float)):
+        return float(generation[key])
+    return None
+
+
 def _result_out(item: EvaluationResult, expected_answer: str | None = None) -> ResultOut:
     return ResultOut(
         id=item.id,
@@ -541,7 +551,7 @@ async def list_runs(
     strategy: str | None = Query(default=None, description="config_snapshot 中的检索策略"),
     sort_by: str = Query(
         default="created_at",
-        description="id / created_at / recall / mrr / ndcg / hit_rate / latency_p95",
+        description="id / created_at / recall / mrr / ndcg / hit_rate / latency_p95 / evidence_coverage / complete_evidence_rate",
     ),
     sort_order: str = Query(default="desc"),
     page: int = Query(default=1, ge=1),
@@ -765,18 +775,30 @@ async def compare_runs(
         ).get("embedding_dimensions"):
             comparable = False
             reason = (reason or "") + " Embedding/索引版本不同，不能直接解读为检索提升。"
-    keys = ["hit_rate", "recall", "precision", "mrr", "ndcg"]
+    keys = [
+        "hit_rate",
+        "recall",
+        "precision",
+        "mrr",
+        "ndcg",
+        "evidence_coverage",
+        "complete_evidence_rate",
+        "faithfulness",
+        "answer_correctness",
+        "citation_correctness",
+        "refusal_accuracy",
+    ]
     deltas = {}
     base_metrics = baseline.metrics or {}
     for row in runs[1:]:
         item = {}
         current = row.metrics or {}
         for key in keys:
-            if base_metrics.get(key) is None or current.get(key) is None:
+            base_value = _compare_metric_value(base_metrics, key)
+            value = _compare_metric_value(current, key)
+            if base_value is None or value is None:
                 item[key] = None
                 continue
-            base_value = float(base_metrics[key])
-            value = float(current[key])
             item[key] = {
                 "base": base_value,
                 "value": value,

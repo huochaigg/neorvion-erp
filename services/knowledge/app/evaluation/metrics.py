@@ -10,6 +10,8 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass
 
+from app.evaluation.evidence import aggregate_evidence_coverage
+
 METRIC_VERSION = "v4-chunk-ndcg-exp"
 
 
@@ -183,4 +185,5 @@ def aggregate_retrieval(rows: list[dict], *, unanswerable_rows: list[dict]) -> d
         result["unanswerable_empty_ok"] = sum(
             float(row.get("empty_ok") or 0) for row in unanswerable_rows
         ) / len(unanswerable_rows)
+    result.update(aggregate_evidence_coverage(rows))
     return result

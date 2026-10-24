@@ -7,6 +7,8 @@ from pydantic import BaseModel, Field, field_validator
 
 from app.core.config import settings
 
+POSTGRES_INT32_MAX = 2_147_483_647
+
 
 class DatasetCreateIn(BaseModel):
     name: str = Field(min_length=1, max_length=128, description="数据集名称")
@@ -243,9 +245,19 @@ class ExperimentConfigIn(BaseModel):
     similarity_threshold: float | None = Field(default=None, ge=0, le=1)
     rerank: bool = False
     evaluate_generation: bool = Field(default=False, description="是否调用生成与 Judge，会产生模型费用")
-    token_budget: int | None = Field(default=None, ge=0, description="本 Run Token 预算；空则用服务默认值")
+    token_budget: int | None = Field(
+        default=None,
+        ge=0,
+        le=POSTGRES_INT32_MAX,
+        description="本 Run Token 预算；空则用服务默认值。须落入 PostgreSQL integer，100 万合法。",
+    )
     cost_budget_usd: float | None = Field(default=None, ge=0, description="本 Run 费用预算；空表示不限制")
     knowledge_base_ids: list[int] | None = None
+    case_ids: list[int] | None = Field(
+        default=None,
+        description="仅评测这些题目；空表示冻结快照中全部 READY。用于烟测，不改数据集。",
+        max_length=200,
+    )
 
     @field_validator("strategy")
     @classmethod
@@ -338,7 +350,12 @@ class ResultOut(BaseModel):
 
 
 class RunResumeIn(BaseModel):
-    token_budget: int | None = Field(default=None, ge=0, description="恢复前可上调的 Token 预算")
+    token_budget: int | None = Field(
+        default=None,
+        ge=0,
+        le=POSTGRES_INT32_MAX,
+        description="恢复前可上调的 Token 预算。须落入 PostgreSQL integer。",
+    )
     cost_budget_usd: float | None = Field(default=None, ge=0, description="恢复前可上调的费用预算")
 
 

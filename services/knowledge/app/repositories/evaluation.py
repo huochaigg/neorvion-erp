@@ -332,6 +332,8 @@ class EvaluationRepository(BaseRepository):
             "mrr": EvaluationRun.metrics["mrr"].astext.cast(Float),
             "ndcg": EvaluationRun.metrics["ndcg"].astext.cast(Float),
             "hit_rate": EvaluationRun.metrics["hit_rate"].astext.cast(Float),
+            "evidence_coverage": EvaluationRun.metrics["evidence_coverage"].astext.cast(Float),
+            "complete_evidence_rate": EvaluationRun.metrics["complete_evidence_rate"].astext.cast(Float),
             "latency_p95": EvaluationRun.usage["latency_p95_ms"].astext.cast(Float),
             "id": EvaluationRun.id,
             "created_at": EvaluationRun.created_at,

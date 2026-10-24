@@ -353,7 +353,15 @@ def test_generation_judge_invalid_json_and_missing_gold(client: TestClient, iden
     items = results.json()["data"]
     invalid_row = next(item for item in items if "__INVALID_JSON__" in item["question"])
     assert invalid_row["judge_error"]
-    assert invalid_row["generation_metrics"] is None
+    assert invalid_row["generation_metrics"] is not None
+    assert invalid_row["generation_metrics"].get("faithfulness") is None
+    assert invalid_row["generation_metrics"]["citation"]["status"] in {
+        "no_explicit_citation",
+        "valid_index",
+        "invalid_rank",
+        "mixed",
+        "unanswerable_with_citation",
+    }
     gold_row = next(item for item in items if "__INVALID_JSON__" not in item["question"])
     if gold_row["generation_metrics"] is not None:
         assert gold_row["generation_metrics"]["answer_correctness"] is None

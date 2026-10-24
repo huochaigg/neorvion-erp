@@ -40,11 +40,15 @@ def test_generation_excerpt_is_separate_from_display_snippet() -> None:
     )
     packed = pack_retrieved_hits([hit], {"judgments": []}, context_budget=1000)
     assert len(packed[0]["content"]) == 500
-    assert len(packed[0]["generation_excerpt"]) == 1000
+    assert packed[0]["generation_excerpt"] == ""
+    assert packed[0]["in_prompt"] is False
     assert packed[0]["generation_truncated"] is True
-    proxy = _hits_as_objects(packed)[0]
-    assert proxy.content == packed[0]["generation_excerpt"]
-    assert proxy.content != packed[0]["content"]
+    included = pack_retrieved_hits([hit], {"judgments": []}, context_budget=6000)
+    assert included[0]["generation_excerpt"] == hit.content
+    assert included[0]["in_prompt"] is True
+    proxy = _hits_as_objects(included)[0]
+    assert proxy.content == included[0]["generation_excerpt"]
+    assert proxy.content != included[0]["content"]
 
 
 def test_candidate_diagnostics_keep_ids_not_body() -> None:

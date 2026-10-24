@@ -129,8 +129,32 @@ describe('evalRunMetrics', () => {
 
   it('keeps a real zero and hides metrics until success', () => {
     expect(evalRunMetrics(base).recall).toBe(0);
+    expect(evalRunMetrics(base).evidence_coverage).toBeNull();
     expect(evalRunMetrics({ ...base, status: 'RUNNING', progress: 40, metrics: { recall: 0 } }).recall).toBeNull();
     expect(evalRunMetrics({ ...base, status: 'FAILED', metrics: null, usage: null }).latency_p95_ms).toBeNull();
+  });
+
+  it('reads coverage only after success and does not invent zero for old runs', () => {
+    expect(evalRunMetrics({ ...base, metrics: { ...base.metrics, evidence_coverage: 0, complete_evidence_rate: 0 } }).evidence_coverage).toBe(0);
+    expect(evalRunMetrics({ ...base, metrics: { ...base.metrics, evidence_coverage: 0.5, complete_evidence_rate: 0.4 } }).complete_evidence_rate).toBe(0.4);
+  });
+
+  it('reads nested generation metrics and keeps missing citation as dash-ready null', () => {
+    const withGen = {
+      ...base,
+      metrics: {
+        ...base.metrics,
+        generation: { faithfulness: 0.8, answer_correctness: 0, citation_correctness: null, refusal_accuracy: 1 },
+      },
+    };
+    expect(evalRunMetrics(withGen).faithfulness).toBe(0.8);
+    expect(evalRunMetrics(withGen).answer_correctness).toBe(0);
+    expect(evalRunMetrics(withGen).citation_correctness).toBeNull();
+    expect(evalRunMetrics(withGen).citation_validity).toBeNull();
+    expect(evalRunMetrics(withGen).gold_citation_match).toBeNull();
+    expect(evalRunMetrics(withGen).prompt_evidence_coverage).toBeNull();
+    expect(evalRunMetrics(withGen).refusal_accuracy).toBe(1);
+    expect(evalRunMetrics(base).faithfulness).toBeNull();
   });
 
   it('summarizes completed failed and pending counts', () => {

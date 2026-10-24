@@ -16,13 +16,31 @@ import { GroupedMetricBars } from '@/components/MetricBars';
 import { PageHeader } from '@/components/PageHeader';
 import { usePermissions } from '@/hooks/usePermissions';
 
-const METRIC_KEYS = ['hit_rate', 'recall', 'precision', 'mrr', 'ndcg'] as const;
+const METRIC_KEYS = [
+  'hit_rate',
+  'recall',
+  'precision',
+  'mrr',
+  'ndcg',
+  'evidence_coverage',
+  'complete_evidence_rate',
+  'faithfulness',
+  'answer_correctness',
+  'citation_correctness',
+  'refusal_accuracy',
+] as const;
 const METRIC_LABEL: Record<string, string> = {
   hit_rate: 'Hit Rate',
   recall: 'Recall',
   precision: 'Precision',
   mrr: 'MRR',
   ndcg: 'nDCG',
+  evidence_coverage: 'Coverage@K',
+  complete_evidence_rate: 'Complete@K',
+  faithfulness: 'Faithfulness',
+  answer_correctness: 'Correctness',
+  citation_correctness: 'Citation',
+  refusal_accuracy: 'Refusal',
 };
 const COLORS = ['#0ea5e9', '#8b5cf6', '#f59e0b', '#10b981'];
 
@@ -37,7 +55,13 @@ function rankText(value: unknown, hasGold: boolean): string {
 
 function metricOf(run: KnowledgeEvalRun, key: string): number | null {
   const value = run.metrics?.[key];
-  return typeof value === 'number' ? value : null;
+  if (typeof value === 'number') return value;
+  const generation = run.metrics?.generation;
+  if (generation && typeof generation === 'object' && !Array.isArray(generation)) {
+    const nested = (generation as Record<string, unknown>)[key];
+    return typeof nested === 'number' ? nested : null;
+  }
+  return null;
 }
 
 export function EvaluationComparePage() {
@@ -179,6 +203,7 @@ export function EvaluationComparePage() {
                 <div>
                   对齐 {diagnosisQuery.data.summary.matched ?? 0} 题，缺失 {diagnosisQuery.data.summary.missing ?? 0}。
                   Recall 改善 {diagnosisQuery.data.summary.recall_improved ?? 0}，退化 {diagnosisQuery.data.summary.recall_regressed ?? 0}，不变 {diagnosisQuery.data.summary.recall_unchanged ?? 0}。
+                  Coverage 改善 {diagnosisQuery.data.summary.coverage_improved ?? 0}，退化 {diagnosisQuery.data.summary.coverage_regressed ?? 0}。
                   排序改善 {diagnosisQuery.data.summary.rank_improved ?? 0}，退化 {diagnosisQuery.data.summary.rank_regressed ?? 0}。
                 </div>
                 <div className="text-xs text-slate-500">{diagnosisQuery.data.note}</div>
@@ -237,6 +262,11 @@ export function EvaluationComparePage() {
                       render: (_, record) => `${scoreText(record.ndcg_before)} → ${scoreText(record.ndcg_after)}`,
                     },
                     {
+                      title: 'Coverage',
+                      width: 120,
+                      render: (_, record) => `${scoreText(record.coverage_before)} → ${scoreText(record.coverage_after)}`,
+                    },
+                    {
                       title: 'Rerank',
                       width: 140,
                       render: (_, record) => `${record.baseline_rerank || '无'} → ${record.candidate_rerank || '无'}`,
@@ -280,6 +310,10 @@ export function EvaluationComparePage() {
                   render: (_, record) => knowledgeRetrievalStrategyLabel(String(record.config_snapshot.strategy ?? '')),
                 },
                 { title: 'Top-K', render: (_, record) => String(record.config_snapshot.top_k ?? '-') },
+                {
+                  title: 'Candidate-K',
+                  render: (_, record) => String(record.config_snapshot.candidate_k ?? '-'),
+                },
                 { title: 'Rerank', render: (_, record) => (record.config_snapshot.rerank ? '开' : '关') },
                 { title: 'Embedding', render: (_, record) => String(record.config_snapshot.embedding_model ?? '-') },
                 { title: 'Chat', render: (_, record) => String(record.config_snapshot.chat_model ?? '-') },

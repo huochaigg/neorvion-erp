@@ -30,14 +30,37 @@ from app.evaluation.budget import (
     merge_embedding_usage,
     tokens_of,
 )
-from app.evaluation.context_pack import generation_text, pack_retrieved_hits, retrieval_diagnostics
+from app.evaluation.citation import citation_metrics
+from app.evaluation.context_pack import (
+    generation_text,
+    pack_retrieved_hits,
+    prompt_observability,
+    retrieval_diagnostics,
+)
 from app.evaluation.diagnose import citation_presence, generation_contexts, unanswerable_outcome
+from app.evaluation.generation import (
+    GENERATION_METRIC_VERSION,
+    absent_terms_from_case,
+    aggregate_generation,
+    fabricated_terms,
+    gold_chunk_ids,
+    is_false_premise_case,
+    prompt_evidence_coverage,
+    support_chunk_ids,
+)
 from app.evaluation.judge import (
     JUDGE_PROMPT_VERSION,
     collect_chat,
     judge_answer,
     looks_like_refusal,
 )
+from app.evaluation.evidence import (
+    LiveChunk,
+    classify_evidence_chunks,
+    evidence_coverage_metrics,
+    parse_case_evidence,
+)
+from app.evaluation.prompt import assert_no_answer_leak
 from app.evaluation.metrics import (
     LabeledItem,
     aggregate_retrieval,
@@ -66,6 +89,7 @@ from app.models.evaluation import (
     EvaluationRun,
     RunStatus,
 )
+from app.models.knowledge import DocumentChunk
 from app.repositories.evaluation import EvaluationRepository
 from app.repositories.knowledge import KnowledgeBaseRepository
 from app.schemas.ops import ProbeOut
@@ -143,19 +167,15 @@ class EvaluationRunService:
         eval_service = EvaluationService(self.session, self.context)
         dataset, version_row = await self._locked_snapshot(eval_service, experiment.dataset_id)
         snapshot = version_row.snapshot or {}
-        ready_cases = [
-            item
-            for item in snapshot.get("cases") or []
-            if item.get("annotation_status") == AnnotationStatus.READY.value
-        ]
-        if not ready_cases:
-            raise AppError("没有可用于正式评测的已标注问题", code=40084, status_code=400)
-        if len(ready_cases) > settings.eval_max_cases:
-            raise AppError(f"超过单任务最大题量 {settings.eval_max_cases}", code=40085, status_code=400)
         config = freeze_run_config(
             dict(experiment.config or {}),
             knowledge_base_ids=list(dataset.knowledge_base_ids or []),
         )
+        ready_cases = _filter_eval_cases(list(snapshot.get("cases") or []), config)
+        if not ready_cases:
+            raise AppError("没有可用于正式评测的已标注问题", code=40084, status_code=400)
+        if len(ready_cases) > settings.eval_max_cases:
+            raise AppError(f"超过单任务最大题量 {settings.eval_max_cases}", code=40085, status_code=400)
         run = EvaluationRun(
             tenant_id=self.context.tenant_id,
             experiment_id=experiment.id,
@@ -298,7 +318,8 @@ class EvaluationRunService:
             ):
                 stages = mark_stage(stages, EvalStage.JUDGE.value, StageStatus.PENDING.value, error=None)
                 row.judge_error = None
-                row.generation_metrics = None
+                side = dict(stage_entry(stages, EvalStage.GENERATE.value).get("generation_side") or {})
+                row.generation_metrics = side or None
                 row.judge_raw = None
             elif not stage_succeeded(stage_status(stages, EvalStage.GENERATE.value)):
                 stages = mark_stage(stages, EvalStage.GENERATE.value, StageStatus.PENDING.value, error=None)
@@ -371,13 +392,10 @@ class EvaluationRunService:
         await self.session.commit()
 
         config = dict(run.config_snapshot or {})
-        cases = [
-            item
-            for item in (version.snapshot or {}).get("cases") or []
-            if item.get("annotation_status") == AnnotationStatus.READY.value
-        ]
+        cases = _filter_eval_cases(list((version.snapshot or {}).get("cases") or []), config)
         retrieval = RetrievalService(self.session, context)
         chat = ChatService(self.session, context)
+        consecutive_judge_failures = 0
         try:
             for index, case in enumerate(cases, start=1):
                 await self.session.refresh(run)
@@ -401,18 +419,34 @@ class EvaluationRunService:
                 if existing is not None and existing.result_status == ResultCaseStatus.SUCCESS.value:
                     continue
                 try:
-                    await self._run_case_with_checkpoints(run, case, config, retrieval, chat, existing)
+                    result_row = await self._run_case_with_checkpoints(run, case, config, retrieval, chat, existing)
                 except PauseRun as exc:
                     await self._pause_run(run, exc.reason, exc.message, diagnostics=exc.diagnostics)
                     return
                 except AppError as exc:
                     if not await self._handle_case_error(run, case, existing, exc):
                         return
+                    consecutive_judge_failures = 0
+                    run.progress = int(index / max(len(cases), 1) * 100)
+                    await self._sync_usage(run, repo)
+                    await self.session.commit()
+                    continue
                 except Exception as exc:
                     logger.exception("evaluation case crashed run=%s case=%s", run.id, case.get("id"))
                     await self._save_case_failure(run, case, existing, "本题评测失败")
                     await self._pause_run(run, InterruptReason.WORKER_CRASH.value, "Worker 异常退出，已保存部分结果")
                     raise exc
+                if result_row.judge_error:
+                    consecutive_judge_failures += 1
+                    if consecutive_judge_failures >= 3:
+                        await self._pause_run(
+                            run,
+                            InterruptReason.CASE_FAILED.value,
+                            "连续 3 题无法解析 Judge 结果，已暂停以免继续消耗 Token",
+                        )
+                        return
+                else:
+                    consecutive_judge_failures = 0
                 run.progress = int(index / max(len(cases), 1) * 100)
                 await self._sync_usage(run, repo)
                 await self.session.commit()
@@ -484,7 +518,14 @@ class EvaluationRunService:
 
         if not stage_succeeded(stage_status(stages, EvalStage.METRICS.value)) or row.retrieval_metrics is None:
             run.current_stage = EvalStage.METRICS.value
-            row.retrieval_metrics = _compute_metrics(case, row.retrieved or [], k)
+            row.retrieval_metrics = await _compute_metrics_async(
+                self.session,
+                case,
+                row.retrieved or [],
+                k,
+                tenant_id=run.tenant_id,
+                knowledge_base_ids=list(config.get("knowledge_base_ids") or []),
+            )
             stages = mark_stage(stages, EvalStage.METRICS.value, StageStatus.SUCCESS.value)
             row.stages = stages
             await self.session.commit()
@@ -508,31 +549,56 @@ class EvaluationRunService:
                 from app.services.chat import _REFUSE
 
                 row.answer = _REFUSE
+                side = await self._generation_side_metrics(run, case, hits, _REFUSE, config)
                 row.generation_metrics = {
+                    **side,
                     "faithfulness": 1.0,
                     "answer_relevancy": 1.0,
                     "answer_correctness": None,
+                    "refused": True,
                     "judge_skipped": True,
                     "unanswerable_outcome": unanswerable_outcome(retrieved_nonempty=False, answer=_REFUSE),
                 }
                 stages = mark_stage(stages, EvalStage.GENERATE.value, StageStatus.SUCCESS.value)
                 stages = mark_stage(stages, EvalStage.JUDGE.value, StageStatus.SKIPPED.value)
             else:
-                prompt = chat._build_messages(str(case["question"]), _hits_as_objects(hits), [])
+                started_gen = datetime.now(UTC)
+                prompt_hits = _prompt_hit_objects(hits)
+                trace = chat._build_messages(str(case["question"]), prompt_hits, [])
+                assert_no_answer_leak(trace.messages, case.get("expected_answer"))
                 answer, usage = await call_with_retry(
-                    lambda: collect_chat(prompt),
+                    lambda: collect_chat(trace.messages),
                     what="generate",
                     stage=EvalStage.GENERATE.value,
                     case_id=int(case["id"]),
                 )
                 row.answer = answer
+                generate_usage = _merge_usage({}, usage, estimated=usage is None or usage.get("prompt_tokens") is None)
                 row.usage = _merge_usage(row.usage, usage, estimated=usage is None or usage.get("prompt_tokens") is None)
+                side = await self._generation_side_metrics(run, case, hits, answer, config, trace=trace)
+                gen_ms = int((datetime.now(UTC) - started_gen).total_seconds() * 1000)
                 stages = mark_stage(
                     stages,
                     EvalStage.GENERATE.value,
                     StageStatus.SUCCESS.value,
-                    usage=row.usage,
-                    extra={"citation_presence": citation_presence(row.answer, len(row.retrieved or []))},
+                    latency_ms=gen_ms,
+                    usage=generate_usage,
+                    extra={
+                        "citation_presence": citation_presence(row.answer, len(trace.prompt_chunk_ids)),
+                        "prompt_chunk_ids": side.get("prompt_chunk_ids") or trace.prompt_chunk_ids,
+                        "retrieved_chunk_ids": side.get("retrieved_chunk_ids") or trace.retrieved_chunk_ids,
+                        "omitted_chunk_ids": side.get("omitted_chunk_ids"),
+                        "prompt_truncated": side.get("prompt_truncated"),
+                        "context_budget_limited": side.get("context_budget_limited"),
+                        "truncation_reason": side.get("truncation_reason"),
+                        "prompt_used_chars": side.get("budget_used_chars", trace.used_chars),
+                        "budget_used_chars": side.get("budget_used_chars"),
+                        "budget_limit_chars": side.get("budget_limit_chars"),
+                        "omitted_chunk_count": side.get("omitted_chunk_count"),
+                        "partially_truncated_chunk_count": side.get("partially_truncated_chunk_count"),
+                        "citation": side.get("citation"),
+                        "generation_side": side,
+                    },
                 )
             row.stages = stages
             await self._touch_run_usage(run)
@@ -543,6 +609,7 @@ class EvaluationRunService:
             await self.session.commit()
             assert_budget(run, extra_tokens=estimate_next_call())
             contexts = generation_contexts(row.retrieved or [])
+            started_judge = datetime.now(UTC)
             generation_metrics, judge_raw, judge_error = await call_with_retry(
                 lambda: judge_answer(
                     question=str(case["question"]),
@@ -550,43 +617,63 @@ class EvaluationRunService:
                     contexts=contexts,
                     expected_answer=case.get("expected_answer"),
                     is_unanswerable=bool(case.get("is_unanswerable")),
+                    is_false_premise=is_false_premise_case(case),
                 ),
                 what="judge",
                 stage=EvalStage.JUDGE.value,
                 case_id=int(case["id"]),
             )
-            row.generation_metrics = generation_metrics
-            row.judge_raw = judge_raw
-            row.judge_error = judge_error
-            row.judge_model = str(config.get("chat_model") or settings.chat_model)
-            row.judge_prompt_version = str(config.get("judge_prompt_version") or JUDGE_PROMPT_VERSION)
+            judge_usage = None
+            if isinstance(judge_raw, dict) and isinstance(judge_raw.get("usage"), dict):
+                judge_usage = judge_raw.get("usage")
+                row.usage = _merge_usage(
+                    row.usage,
+                    judge_usage,
+                    estimated=judge_usage.get("prompt_tokens") is None,
+                )
+            side = dict(stage_entry(stages, EvalStage.GENERATE.value).get("generation_side") or {})
+            if not side:
+                side = await self._generation_side_metrics(run, case, row.retrieved or [], row.answer or "", config)
+            merged = dict(side)
+            if generation_metrics:
+                merged.update(generation_metrics)
+            merged["is_unanswerable"] = bool(case.get("is_unanswerable"))
+            merged["is_false_premise"] = is_false_premise_case(case)
             if case.get("is_unanswerable"):
                 outcome = unanswerable_outcome(
                     retrieved_nonempty=bool(row.retrieved),
                     answer=row.answer,
                 )
-                current = row.generation_metrics
-                if not isinstance(current, dict):
-                    stages = mark_stage(
-                        stages,
-                        EvalStage.JUDGE.value,
-                        stage_status(stages, EvalStage.JUDGE.value),
-                        extra={"unanswerable_outcome": outcome},
-                    )
-                else:
-                    metrics: dict[str, object] = {
-                        **current,
-                        "refusal_keyword_hint": outcome["refusal_keyword_hint"],
-                        "unanswerable_outcome": outcome,
-                    }
-                    metrics.pop("refusal", None)
-                    row.generation_metrics = metrics
+                merged["refusal_keyword_hint"] = outcome["refusal_keyword_hint"]
+                merged["unanswerable_outcome"] = outcome
+                merged.pop("refusal", None)
             if judge_error:
-                stages = mark_stage(stages, EvalStage.JUDGE.value, StageStatus.FAILED.value, error=judge_error)
+                merged["judge_error"] = judge_error
+            row.generation_metrics = merged
+            row.judge_raw = judge_raw
+            row.judge_error = judge_error
+            row.judge_model = str(config.get("chat_model") or settings.chat_model)
+            row.judge_prompt_version = str(config.get("judge_prompt_version") or JUDGE_PROMPT_VERSION)
+            judge_ms = int((datetime.now(UTC) - started_judge).total_seconds() * 1000)
+            if judge_error:
+                stages = mark_stage(
+                    stages,
+                    EvalStage.JUDGE.value,
+                    StageStatus.FAILED.value,
+                    latency_ms=judge_ms,
+                    usage=judge_usage,
+                    error=judge_error,
+                )
                 row.result_status = ResultCaseStatus.FAILED.value
                 row.error_message = judge_error
             else:
-                stages = mark_stage(stages, EvalStage.JUDGE.value, StageStatus.SUCCESS.value)
+                stages = mark_stage(
+                    stages,
+                    EvalStage.JUDGE.value,
+                    StageStatus.SUCCESS.value,
+                    latency_ms=judge_ms,
+                    usage=judge_usage,
+                )
                 row.result_status = ResultCaseStatus.SUCCESS.value
                 row.error_message = None
             row.stages = stages
@@ -614,7 +701,96 @@ class EvaluationRunService:
         status = stage_status(stages, EvalStage.JUDGE.value)
         if stage_succeeded(status):
             return True
-        return bool(row.generation_metrics) and not row.judge_error
+        if row.judge_error:
+            return False
+        metrics = row.generation_metrics if isinstance(row.generation_metrics, dict) else {}
+        return bool(metrics.get("judge_skipped") or metrics.get("faithfulness") is not None)
+
+    async def _generation_side_metrics(
+        self,
+        run: EvaluationRun,
+        case: dict,
+        retrieved: list[dict],
+        answer: str,
+        config: dict,
+        *,
+        trace=None,
+    ) -> dict:
+        observability = prompt_observability(retrieved, trace)
+        prompt_ids = list(observability["prompt_chunk_ids"]) or (
+            list(trace.prompt_chunk_ids) if trace is not None else _prompt_chunk_ids(retrieved)
+        )
+        retrieved_ids = list(observability["retrieved_chunk_ids"]) or [
+            int(item["chunk_id"]) for item in retrieved if item.get("chunk_id") is not None
+        ]
+        gold = gold_chunk_ids(case)
+        valid: set[int] = set()
+        rejected: dict[int, str] = {}
+        spec = parse_case_evidence(case) if not case.get("is_unanswerable") else None
+        if spec is not None:
+            live = await _load_live_chunks(self.session, spec.all_chunk_ids())
+            valid, rejected = classify_evidence_chunks(
+                spec,
+                judgments=list(case.get("judgments") or []),
+                live_chunks=live,
+                allowed_kb_ids={int(item) for item in (config.get("knowledge_base_ids") or [])},
+                tenant_id=run.tenant_id,
+            )
+        citation = citation_metrics(
+            answer,
+            prompt_ids,
+            gold_chunk_ids=gold,
+            support_chunk_ids=support_chunk_ids(case, valid_chunk_ids=valid if spec is not None else None),
+            is_unanswerable=bool(case.get("is_unanswerable")),
+        )
+        prompt_cov = prompt_evidence_coverage(
+            prompt_ids,
+            case,
+            valid_chunk_ids=valid,
+            rejected=rejected,
+        )
+        fabric = fabricated_terms(
+            answer,
+            absent_terms_from_case(case),
+            question=str(case.get("question") or ""),
+        )
+        payload = {
+            "generation_metric_version": GENERATION_METRIC_VERSION,
+            "retrieved_chunk_ids": retrieved_ids,
+            "prompt_chunk_ids": prompt_ids,
+            "omitted_chunk_ids": observability["omitted_chunk_ids"],
+            "omitted_chunk_count": observability["omitted_chunk_count"],
+            "partially_truncated_chunk_count": observability["partially_truncated_chunk_count"],
+            "truncation_reason": observability["truncation_reason"],
+            "context_budget_limited": observability["context_budget_limited"],
+            "budget_used_chars": observability["budget_used_chars"],
+            "budget_limit_chars": observability["budget_limit_chars"],
+            "prompt_truncated": observability["prompt_truncated"],
+            "citation": citation,
+            "citation_correctness": citation.get("citation_correctness"),
+            "citation_validity": citation.get("citation_validity"),
+            "gold_citation_match": citation.get("gold_citation_match"),
+            "claim_support": citation.get("claim_support"),
+            "claim_support_skipped": citation.get("claim_support_skipped"),
+            "is_unanswerable": bool(case.get("is_unanswerable")),
+            "is_false_premise": is_false_premise_case(case),
+        }
+        if case.get("is_unanswerable"):
+            payload.update(fabric)
+        payload.update(
+            {
+                key: prompt_cov[key]
+                for key in (
+                    "prompt_evidence_coverage_at_k",
+                    "prompt_complete_evidence_at_k",
+                    "prompt_evidence_coverage_skipped",
+                    "uncovered_facts",
+                    "required_facts",
+                )
+                if key in prompt_cov
+            }
+        )
+        return payload
 
     async def _insert_pending_result(self, run: EvaluationRun, case: dict) -> EvaluationResult:
         repo = EvaluationRepository(self.session, run.tenant_id)
@@ -715,13 +891,15 @@ class EvaluationRunService:
                 if looks_like_refusal(result_row.answer or ""):
                     refuse_hits += 1
             if result_row.generation_metrics:
-                gen_scores.append(result_row.generation_metrics)
+                payload = dict(result_row.generation_metrics)
+                payload["is_unanswerable"] = bool(result_row.is_unanswerable)
+                payload["judge_error"] = result_row.judge_error
+                gen_scores.append(payload)
         metrics = aggregate_retrieval(supervised, unanswerable_rows=unanswerable_stats)
         if unanswerable_total:
             metrics["unanswerable_refuse_rate"] = refuse_hits / unanswerable_total
         if gen_scores:
-            metrics["generation"] = _avg_generation(gen_scores)
-            metrics["generation"]["subjective"] = True
+            metrics["generation"] = aggregate_generation(gen_scores)
         summary = accumulate_results(rows)
         run.metrics = metrics
         run.usage = {
@@ -995,7 +1173,14 @@ class EvaluationRunService:
             rerank=bool(config.get("rerank")),
             persist_log=False,
         )
-        metrics = _compute_metrics(case, _hits_to_retrieved(search.hits, case), k)
+        metrics = await _compute_metrics_async(
+            self.session,
+            case,
+            _hits_to_retrieved(search.hits, case),
+            k,
+            tenant_id=run.tenant_id,
+            knowledge_base_ids=list(config.get("knowledge_base_ids") or []),
+        )
         retrieved = _hits_to_retrieved(search.hits, case)
         answer = None
         generation_metrics = None
@@ -1011,23 +1196,23 @@ class EvaluationRunService:
                     "faithfulness": 1.0,
                     "answer_relevancy": 1.0,
                     "answer_correctness": None,
-                    "refusal": True,
+                    "refused": True,
                     "judge_skipped": True,
                 }
             else:
-                prompt = chat._build_messages(str(case["question"]), search.hits, [])
-                answer, usage = await collect_chat(prompt)
+                trace = chat._build_messages(str(case["question"]), search.hits, [])
+                assert_no_answer_leak(trace.messages, case.get("expected_answer"))
+                answer, usage = await collect_chat(trace.messages)
                 generation_metrics, judge_raw, judge_error = await judge_answer(
                     question=str(case["question"]),
                     answer=answer,
-                    contexts=[hit.content for hit in search.hits],
+                    contexts=[hit.content for hit in search.hits[: len(trace.prompt_chunk_ids)]],
                     expected_answer=case.get("expected_answer"),
                     is_unanswerable=bool(case.get("is_unanswerable")),
+                    is_false_premise=is_false_premise_case(case),
                 )
-                if case.get("is_unanswerable"):
-                    generation_metrics = generation_metrics or {}
-                    if generation_metrics is not None:
-                        generation_metrics["refusal"] = looks_like_refusal(answer)
+                if generation_metrics is not None and case.get("is_unanswerable"):
+                    generation_metrics["refusal_keyword_hint"] = looks_like_refusal(answer)
         return (
             EvaluationResult(
                 tenant_id=run.tenant_id,
@@ -1056,6 +1241,52 @@ async def _load_run(session: AsyncSession, run_id: int) -> EvaluationRun | None:
     return await session.scalar(select(EvaluationRun).where(EvaluationRun.id == run_id))
 
 
+def _filter_eval_cases(cases: list[dict], config: dict) -> list[dict]:
+    """正式评测只用冻结快照里的 READY 题；case_ids 用于烟测子集。"""
+    ready = [item for item in cases if item.get("annotation_status") == AnnotationStatus.READY.value]
+    raw_ids = config.get("case_ids")
+    if raw_ids is None:
+        return ready
+    if not raw_ids:
+        raise AppError("case_ids 为空，无法评测", code=40086, status_code=400)
+    wanted = [int(item) for item in raw_ids]
+    ready_by_id = {int(item["id"]): item for item in ready}
+    missing = [case_id for case_id in wanted if case_id not in ready_by_id]
+    if missing:
+        raise AppError(
+            f"case_ids 中有 {len(missing)} 道不在冻结 READY 快照中，例如 {missing[0]}",
+            code=40086,
+            status_code=400,
+        )
+    return [ready_by_id[case_id] for case_id in wanted]
+
+
+def _prompt_chunk_ids(retrieved: list[dict]) -> list[int]:
+    ids: list[int] = []
+    for item in retrieved:
+        if not isinstance(item, dict) or item.get("chunk_id") is None:
+            continue
+        if item.get("in_prompt") is False:
+            continue
+        if item.get("in_prompt") is None and not generation_text(item):
+            continue
+        ids.append(int(item["chunk_id"]))
+    return ids
+
+
+def _prompt_hit_objects(retrieved: list[dict]) -> list[RetrievedHit]:
+    selected = []
+    for item in retrieved:
+        if not isinstance(item, dict):
+            continue
+        if item.get("in_prompt") is False:
+            continue
+        if item.get("in_prompt") is None and not generation_text(item):
+            continue
+        selected.append(item)
+    return _hits_as_objects(selected)
+
+
 def _hits_to_retrieved(hits, case: dict) -> list[dict]:
     """兼容 probe：展示摘要与生成摘录分开，预算与 Chat 上下文一致。"""
     return pack_retrieved_hits(hits, case, context_budget=int(settings.chat_max_context_chars))
@@ -1079,7 +1310,7 @@ def _hits_as_objects(hits: list[dict]) -> list[RetrievedHit]:
     ]
 
 
-def _compute_metrics(case: dict, retrieved: list[dict], k: int) -> dict:
+def _compute_metrics(case: dict, retrieved: list[dict], k: int, *, coverage: dict | None = None) -> dict:
     ranked = [int(item["chunk_id"]) for item in retrieved if item.get("chunk_id") is not None]
     labeled = [
         LabeledItem(item_id=int(item["chunk_id"]), relevance=int(item["relevance"]))
@@ -1094,8 +1325,64 @@ def _compute_metrics(case: dict, retrieved: list[dict], k: int) -> dict:
         doc_labeled = _document_labels(case.get("judgments") or [])
         if any(item.relevance >= 1 for item in doc_labeled):
             metrics["document"] = retrieval_metrics(doc_ranked, doc_labeled, k=k, granularity="document")
-        return metrics
-    return {"skipped": "no_relevant_labels", "granularity": "chunk"}
+    else:
+        metrics = {"skipped": "no_relevant_labels", "granularity": "chunk"}
+    if coverage:
+        for key, value in coverage.items():
+            if key == "k":
+                continue
+            metrics[key] = value
+    return metrics
+
+
+async def _load_live_chunks(session: AsyncSession, chunk_ids: set[int]) -> dict[int, LiveChunk]:
+    if not chunk_ids:
+        return {}
+    rows = (await session.scalars(select(DocumentChunk).where(DocumentChunk.id.in_(chunk_ids)))).all()
+    return {
+        row.id: LiveChunk(
+            chunk_id=row.id,
+            tenant_id=row.tenant_id,
+            knowledge_base_id=row.knowledge_base_id,
+            status=row.status,
+            enabled=bool(row.enabled),
+        )
+        for row in rows
+    }
+
+
+async def _compute_metrics_async(
+    session: AsyncSession,
+    case: dict,
+    retrieved: list[dict],
+    k: int,
+    *,
+    tenant_id: int | None,
+    knowledge_base_ids: list[int],
+) -> dict:
+    coverage = None
+    if not case.get("is_unanswerable"):
+        ranked = [int(item["chunk_id"]) for item in retrieved if item.get("chunk_id") is not None]
+        spec = parse_case_evidence(case)
+        if spec is None:
+            coverage = evidence_coverage_metrics(ranked, None, k=k, valid_chunk_ids=set())
+        else:
+            live = await _load_live_chunks(session, spec.all_chunk_ids())
+            valid, rejected = classify_evidence_chunks(
+                spec,
+                judgments=list(case.get("judgments") or []),
+                live_chunks=live,
+                allowed_kb_ids={int(item) for item in knowledge_base_ids},
+                tenant_id=tenant_id,
+            )
+            coverage = evidence_coverage_metrics(
+                ranked,
+                spec,
+                k=k,
+                valid_chunk_ids=valid,
+                rejected=rejected,
+            )
+    return _compute_metrics(case, retrieved, k, coverage=coverage)
 
 
 def _merge_usage(current: dict | None, incoming: dict | None, *, estimated: bool) -> dict:

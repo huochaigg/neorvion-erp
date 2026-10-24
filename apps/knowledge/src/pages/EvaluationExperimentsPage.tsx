@@ -71,7 +71,17 @@ import {
 import { snapshotParam } from '@/lib/snapshotParam';
 
 const RUN_RECORD_STATUS_FILTERS = ['QUEUED', 'RUNNING', 'PAUSED', 'SUCCESS', 'FAILED', 'CANCELLED'];
-const METRIC_SORT_KEYS = new Set(['recall', 'mrr', 'ndcg', 'hit_rate', 'latency_p95', 'id', 'created_at']);
+const METRIC_SORT_KEYS = new Set([
+  'recall',
+  'mrr',
+  'ndcg',
+  'hit_rate',
+  'evidence_coverage',
+  'complete_evidence_rate',
+  'latency_p95',
+  'id',
+  'created_at',
+]);
 const EXPERIMENT_SORT_KEYS = new Set(['id', 'created_at']);
 
 function metricNumber(metrics: Record<string, unknown> | null | undefined, key: string): number | null {
@@ -605,6 +615,32 @@ export function EvaluationExperimentsPage() {
       },
     },
     {
+      title: <FormLabelHelp label="Coverage@K">{EVAL_METRIC_HELP.evidence_coverage}</FormLabelHelp>,
+      key: 'evidence_coverage',
+      width: 120,
+      sorter: true,
+      sortDirections: ['descend', 'ascend'],
+      sortOrder: sortOrderOf(runsSortBy, runsSortOrder, 'evidence_coverage'),
+      render: (_, record) => {
+        const view = evalRunMetrics(record);
+        return <MetricCell value={view.evidence_coverage} run={view} help={EVAL_METRIC_HELP.evidence_coverage} />;
+      },
+    },
+    {
+      title: <FormLabelHelp label="Complete@K">{EVAL_METRIC_HELP.complete_evidence_rate}</FormLabelHelp>,
+      key: 'complete_evidence_rate',
+      width: 120,
+      sorter: true,
+      sortDirections: ['descend', 'ascend'],
+      sortOrder: sortOrderOf(runsSortBy, runsSortOrder, 'complete_evidence_rate'),
+      render: (_, record) => {
+        const view = evalRunMetrics(record);
+        return (
+          <MetricCell value={view.complete_evidence_rate} run={view} help={EVAL_METRIC_HELP.complete_evidence_rate} />
+        );
+      },
+    },
+    {
       title: <FormLabelHelp label="P95">{EVAL_METRIC_HELP.p95}</FormLabelHelp>,
       key: 'latency_p95',
       width: 90,
@@ -787,6 +823,24 @@ export function EvaluationExperimentsPage() {
       title: 'Hit',
       width: 80,
       render: (_, record) => metricNumber(record.retrieval_metrics, 'hit_rate')?.toFixed(0) ?? '-',
+    },
+    {
+      title: 'Coverage',
+      width: 100,
+      render: (_, record) =>
+        record.is_unanswerable
+          ? '无答案'
+          : metricNumber(record.retrieval_metrics, 'evidence_coverage_at_k')?.toFixed(3) ?? '-',
+    },
+    {
+      title: 'Faithfulness',
+      width: 110,
+      render: (_, record) => metricNumber(record.generation_metrics, 'faithfulness')?.toFixed(3) ?? '-',
+    },
+    {
+      title: 'Correctness',
+      width: 110,
+      render: (_, record) => metricNumber(record.generation_metrics, 'answer_correctness')?.toFixed(3) ?? '-',
     },
     {
       title: '错误',
@@ -1178,9 +1232,21 @@ export function EvaluationExperimentsPage() {
                 { label: 'Precision', value: metricNumber(visibleRun.metrics, 'precision') },
                 { label: 'MRR', value: metricNumber(visibleRun.metrics, 'mrr') },
                 { label: 'nDCG', value: metricNumber(visibleRun.metrics, 'ndcg') },
+                { label: 'Coverage', value: metricNumber(visibleRun.metrics, 'evidence_coverage') },
+                { label: 'Complete', value: metricNumber(visibleRun.metrics, 'complete_evidence_rate') },
+                { label: 'Prompt Coverage', value: evalRunMetrics(visibleRun).prompt_evidence_coverage },
+                { label: 'Prompt Complete', value: evalRunMetrics(visibleRun).prompt_complete_evidence_rate },
+                { label: 'Faithfulness', value: evalRunMetrics(visibleRun).faithfulness },
+                { label: 'Correctness', value: evalRunMetrics(visibleRun).answer_correctness },
+                { label: 'Citation（历史）', value: evalRunMetrics(visibleRun).citation_correctness },
+                { label: '引用合法性', value: evalRunMetrics(visibleRun).citation_validity },
+                { label: 'Gold 命中', value: evalRunMetrics(visibleRun).gold_citation_match },
+                { label: 'Refusal', value: evalRunMetrics(visibleRun).refusal_accuracy },
               ]}
             />
-            <div className="text-xs text-slate-500">粒度：Chunk。LLM Judge 具有主观性与波动，失败时不会伪造分数。</div>
+            <div className="text-xs text-slate-500">
+              粒度：Chunk。LLM Judge 具有主观性与波动，失败时不会伪造分数。Gold 命中不是真实引用正确率；主张支持当前未评测。
+            </div>
             <AppTable
               rowKey="id"
               fillHeight={false}

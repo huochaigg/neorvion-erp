@@ -122,8 +122,16 @@ def align_case_results(baseline: list[dict], candidate: list[dict], *, case_meta
                 "mrr_delta": None if mrr_before is None or mrr_after is None else mrr_after - mrr_before,
                 "ndcg_before": _metric(base, "ndcg"),
                 "ndcg_after": _metric(other, "ndcg"),
+                "coverage_before": _metric(base, "evidence_coverage_at_k"),
+                "coverage_after": _metric(other, "evidence_coverage_at_k"),
+                "complete_before": _metric(base, "complete_evidence_at_k"),
+                "complete_after": _metric(other, "complete_evidence_at_k"),
                 "recall_movement": _movement(recall_before, recall_after),
                 "rank_movement": _movement(mrr_before, mrr_after),
+                "coverage_movement": _movement(
+                    _metric(base, "evidence_coverage_at_k"),
+                    _metric(other, "evidence_coverage_at_k"),
+                ),
                 "baseline_chunk_ids": base_ids,
                 "candidate_chunk_ids": other_ids,
                 "baseline_best_rank": _best_rank(base_ids, gold),
@@ -146,6 +154,9 @@ def align_case_results(baseline: list[dict], candidate: list[dict], *, case_meta
         "rank_improved": sum(1 for item in matched if item["rank_movement"] == "IMPROVED"),
         "rank_regressed": sum(1 for item in matched if item["rank_movement"] == "REGRESSED"),
         "rank_unchanged": sum(1 for item in matched if item["rank_movement"] == "UNCHANGED"),
+        "coverage_improved": sum(1 for item in matched if item["coverage_movement"] == "IMPROVED"),
+        "coverage_regressed": sum(1 for item in matched if item["coverage_movement"] == "REGRESSED"),
+        "coverage_unchanged": sum(1 for item in matched if item["coverage_movement"] == "UNCHANGED"),
     }
     return {
         "cases": rows,
@@ -269,4 +280,14 @@ def usage_snapshot(usage: dict | None) -> dict:
 
 
 def generation_contexts(retrieved: list[dict]) -> list[str]:
-    return [generation_text(item) for item in retrieved if isinstance(item, dict)]
+    """只返回实际进入生成 Prompt 的摘录，供 Judge 使用。"""
+    texts: list[str] = []
+    for item in retrieved:
+        if not isinstance(item, dict):
+            continue
+        if item.get("in_prompt") is False:
+            continue
+        text = generation_text(item)
+        if text:
+            texts.append(text)
+    return texts

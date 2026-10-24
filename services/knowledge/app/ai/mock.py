@@ -47,7 +47,9 @@ class MockChatClient:
             else:
                 answer = (
                     '{"faithfulness": 0.8, "answer_relevancy": 0.7, '
-                    '"answer_correctness": 0.6, "explanation": "mock-judge"}'
+                    '"answer_correctness": 0.6, "refused": false, '
+                    '"false_premise_identified": null, "correction_correctness": null, '
+                    '"explanation": "mock-judge"}'
                 )
         else:
             answer = "根据知识库证据，相关说明如下。证据不足的部分不会编造。"

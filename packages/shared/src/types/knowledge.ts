@@ -870,6 +870,7 @@ export interface KnowledgeEvalExperimentConfig {
   token_budget?: number | null;
   cost_budget_usd?: number | null;
   knowledge_base_ids?: number[] | null;
+  case_ids?: number[] | null;
 }
 
 export interface KnowledgeEvalExperiment {

@@ -14,6 +14,7 @@ from app.core.config import settings
 from app.core.exceptions import AppError
 from app.core.permissions import PermissionCode
 from app.core.tenant import TenantContext
+from app.evaluation.evidence import EVIDENCE_COVERAGE_VERSION
 from app.evaluation.importing import parse_table
 from app.evaluation.version_diff import diff_snapshots
 from app.models.evaluation import (
@@ -85,6 +86,7 @@ _RUNTIME_IDENTITY_KEYS = (
     "prompt_version",
     "judge_prompt_version",
     "metric_version",
+    "evidence_coverage_version",
     "granularity",
 )
 
@@ -98,8 +100,9 @@ def default_experiment_config(payload: ExperimentConfigIn | None = None) -> dict
             "chat_model": settings.chat_model,
             "rerank_model": settings.rerank_model or None,
             "prompt_version": "v3-rag-system",
-            "judge_prompt_version": "v4-judge-1",
+            "judge_prompt_version": "v5-r2-06",
             "metric_version": "v4-chunk-ndcg-exp",
+            "evidence_coverage_version": EVIDENCE_COVERAGE_VERSION,
             "granularity": "chunk",
         }
     )
@@ -895,7 +898,17 @@ class EvaluationService:
         allowed_strategy = {"VECTOR", "KEYWORD", "HYBRID"}
         if strategy and strategy not in allowed_strategy:
             raise AppError("不支持的检索策略筛选", code=40090, status_code=400)
-        allowed_sort = {"id", "created_at", "recall", "mrr", "ndcg", "hit_rate", "latency_p95"}
+        allowed_sort = {
+            "id",
+            "created_at",
+            "recall",
+            "mrr",
+            "ndcg",
+            "hit_rate",
+            "latency_p95",
+            "evidence_coverage",
+            "complete_evidence_rate",
+        }
         if sort_by not in allowed_sort:
             raise AppError("不支持的排序字段", code=40091, status_code=400)
         order = sort_order if sort_order in {"asc", "desc"} else "desc"
