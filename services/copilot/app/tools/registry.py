@@ -158,6 +158,11 @@ class ToolRegistry:
     def get(self, name: str) -> ToolSpec | None:
         return self._specs.get(name)
 
+    @property
+    def names(self) -> frozenset[str]:
+        """返回可信只读工具名快照，供 Agent Registry 启动期校验。"""
+        return frozenset(self._specs)
+
     def definitions(self, permissions: frozenset[str]) -> list[ModelToolDefinition]:
         return [
             spec.definition()

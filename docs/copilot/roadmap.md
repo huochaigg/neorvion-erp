@@ -1,5 +1,12 @@
 # Neorvion ERP Copilot 路线图
 
+## V8：Multi-Agent 协作（代码与自动化测试阶段）
+
+- 保留 Single Agent，新增确定性 Router、Supervisor 和四个专业 Agent。
+- 新增 Agent 工具白名单、隔离上下文、结构化结果、Evidence 合并和 Trace。
+- 新增 Agent SSE、React AgentExecutionPanel 和 30 个对比评测基线 Case。
+- 真实四服务 HTTP、Knowledge/ERP 综合分析和浏览器 E2E 仍是发布门禁。
+
 ## 1. 产品目标
 
 ERP Copilot 是独立于 ERP Core、IAM 和 Knowledge 的智能交互层。它帮助用户查询业务、解释异常、生成操作草稿，并在明确授权和人工确认后调用现有 ERP API 执行动作。

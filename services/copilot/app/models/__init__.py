@@ -7,6 +7,7 @@ from app.models.action_execution import (
     ActionGraphCheckpoint,
 )
 from app.models.action_proposal import ActionProposal, ProposalRevision, ProposalValidation
+from app.models.agent_trace import AgentRun, AgentTaskRun
 from app.models.conversation import Conversation, Evidence, Message, ToolRun
 from app.models.workflow import WorkflowEvent, WorkflowInstance, WorkflowStep, WorkflowStepAttempt
 
@@ -28,4 +29,6 @@ __all__ = [
     "WorkflowStep",
     "WorkflowEvent",
     "WorkflowStepAttempt",
+    "AgentRun",
+    "AgentTaskRun",
 ]

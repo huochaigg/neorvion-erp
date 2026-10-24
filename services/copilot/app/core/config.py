@@ -20,7 +20,7 @@ class Settings(BaseSettings):
     app_env: str = "development"
     app_host: str = "0.0.0.0"
     app_port: int = 8013
-    app_version: str = "7.0.0"
+    app_version: str = "8.0.0"
     git_sha: str = ""
     enable_api_docs: bool = True
     cors_origins: str = (
@@ -90,6 +90,12 @@ class Settings(BaseSettings):
     workflow_max_steps: int = 16
     workflow_worker_poll_seconds: int = 3
     workflow_reconcile_max_attempts: int = 6
+    multi_agent_enabled: bool = True
+    multi_agent_max_agents: int = 4
+    multi_agent_max_parallel: int = 3
+    multi_agent_total_timeout_seconds: float = 45.0
+    multi_agent_context_chars: int = 4000
+    multi_agent_result_chars: int = 8000
 
     @property
     def is_production(self) -> bool:

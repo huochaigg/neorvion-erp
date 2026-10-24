@@ -9,4 +9,3 @@ class CurrentIdentityOut(BaseModel):
     roles: list[str] = Field(default_factory=list)
     permissions: list[str] = Field(default_factory=list)
     authz_version: int = Field(description="IAM 授权快照版本")
-

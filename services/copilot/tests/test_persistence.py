@@ -58,6 +58,15 @@ class FakeRepo:
         self.events = []
         self.finished = []
 
+    async def begin_agent_run(self, conversation_id, message_id, request_id):
+        return SimpleNamespace(id=91)
+
+    async def record_agent_event(self, run_id, event, data):
+        self.events.append((event, data))
+
+    async def finish_agent_run(self, run_id, **values):
+        self.finished.append({"agent_run_id": run_id, **values})
+
     async def record_tool_event(self, conversation_id, message_id, event, data):
         self.events.append((event, data))
 
@@ -113,7 +122,7 @@ async def test_persistent_stream_records_tool_run_and_message() -> None:
         "done",
     ]
     assert [item[0] for item in service.repo.events] == ["tool_start", "tool_end", "evidence"]
-    assert service.repo.finished[-1]["status"] == "COMPLETED"
+    assert service.repo.finished[0]["status"] == "COMPLETED"
 
 
 @pytest.mark.asyncio
@@ -133,5 +142,5 @@ async def test_disconnected_stream_is_persisted_as_cancelled() -> None:
             disconnected,
         ):
             pass
-    assert service.repo.finished[-1]["status"] == "CANCELLED"
-    assert service.repo.finished[-1]["error_code"] == 49900
+    assert service.repo.finished[0]["status"] == "CANCELLED"
+    assert service.repo.finished[0]["error_code"] == 49900

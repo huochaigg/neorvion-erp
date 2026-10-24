@@ -3,11 +3,12 @@ from __future__ import annotations
 from collections.abc import AsyncGenerator, Awaitable, Callable
 
 from app.ai.types import ModelMessage
-from app.graph.workflow import AgentRuntime, CopilotWorkflow
+from app.graph.multi_agent import MultiAgentWorkflow
+from app.graph.workflow import AgentRuntime
 
 
 class ChatService:
-    def __init__(self, workflow: CopilotWorkflow) -> None:
+    def __init__(self, workflow: MultiAgentWorkflow) -> None:
         self.workflow = workflow
 
     async def complete(self, messages: list[ModelMessage], *, context: AgentRuntime):

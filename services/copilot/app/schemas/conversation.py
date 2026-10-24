@@ -12,7 +12,9 @@ class ConversationRename(BaseModel):
 
 
 class ConversationMessageIn(BaseModel):
-    client_request_id: str = Field(min_length=8, max_length=64, description="客户端生成的幂等请求 ID")
+    client_request_id: str = Field(
+        min_length=8, max_length=64, description="客户端生成的幂等请求 ID"
+    )
     message: str = Field(min_length=1, max_length=4000, description="本轮用户消息")
 
 
@@ -21,6 +23,7 @@ class ToolRunOut(BaseModel):
     message_id: int = Field(description="关联的助手消息 ID")
     tool_call_id: str = Field(description="模型生成的本轮工具调用 ID")
     tool_name: str = Field(description="服务端白名单中的工具名称")
+    agent_task_id: str | None = Field(default=None, description="关联的专业 Agent 任务标识")
     status: str = Field(description="RUNNING、SUCCEEDED、FAILED 或 CANCELLED")
     duration_ms: int | None
     input_summary: str | None
@@ -44,6 +47,30 @@ class EvidenceOut(BaseModel):
     metadata: dict = Field(default_factory=dict, description="页码、标题及检索分数等非敏感元数据")
     observed_at: datetime
     access_status: str = Field(description="ACTIVE、STALE、FORBIDDEN、MISSING 或 UNAVAILABLE")
+    source_agent: str | None = Field(default=None, description="产生该证据的专业 Agent")
+    agent_task_id: str | None = Field(default=None, description="关联的专业 Agent 任务标识")
+
+
+class AgentTaskRunOut(BaseModel):
+    agent_name: str = Field(description="执行该任务的可信 Agent 名称")
+    task_id: str = Field(description="父运行内稳定的任务标识")
+    status: str = Field(description="任务当前状态或终态")
+    duration_ms: int | None = Field(description="已完成任务耗时，单位毫秒")
+    model_calls: int = Field(description="任务实际模型调用次数")
+    tool_calls: int = Field(description="任务实际工具调用次数")
+    evidence_count: int = Field(description="任务登记的有效证据数")
+    error_code: int | None = Field(description="任务失败时的脱敏业务错误码")
+
+
+class AgentRunOut(BaseModel):
+    id: int = Field(description="Multi-Agent 父运行 ID")
+    graph_type: str = Field(description="本轮实际执行的图类型")
+    status: str = Field(description="父运行当前状态或终态")
+    route_reason: str | None = Field(description="服务端 Router 的脱敏路由原因")
+    total_duration_ms: int | None = Field(description="父运行端到端耗时，单位毫秒")
+    tasks: list[AgentTaskRunOut] = Field(
+        default_factory=list, description="该父运行下的 Agent 子任务"
+    )
 
 
 class MessageOut(BaseModel):
@@ -56,6 +83,7 @@ class MessageOut(BaseModel):
     updated_at: datetime
     tool_runs: list[ToolRunOut] = Field(default_factory=list)
     evidences: list[EvidenceOut] = Field(default_factory=list)
+    agent_runs: list[AgentRunOut] = Field(default_factory=list)
 
 
 class ConversationOut(BaseModel):

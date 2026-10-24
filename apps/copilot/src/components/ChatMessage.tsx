@@ -2,6 +2,7 @@ import { SafeMarkdown } from '@/components/SafeMarkdown';
 import { ToolRunCard } from '@/components/ToolRunCard';
 import { EvidenceCard } from '@/components/EvidenceCard';
 import type { Message } from '@/types';
+import { AgentExecutionPanel } from '@/components/AgentExecutionPanel';
 
 export function ChatMessage({ message }: { message: Message }) {
   const isUser = message.role === 'user';
@@ -14,6 +15,7 @@ export function ChatMessage({ message }: { message: Message }) {
           </div>
         ) : (
           <div>
+            <AgentExecutionPanel runs={message.agent_runs ?? []} toolRuns={message.tool_runs} />
             {message.tool_runs.length ? <ToolRunCard runs={message.tool_runs} /> : null}
             {message.analysis_status && message.status === 'RUNNING' ? <div className="mb-2 text-xs text-[#6366F1]">{message.analysis_status}</div> : null}
             {message.content ? <SafeMarkdown text={message.content} /> : null}

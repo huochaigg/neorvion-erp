@@ -10,7 +10,7 @@ import { ChatEmptyState } from '@/components/ChatEmptyState';
 import { ChatMessage } from '@/components/ChatMessage';
 import { ProposalCard } from '@/components/ProposalCard';
 import { useCopilotStore } from '@/store';
-import type { Evidence, Message, StreamEvent, ToolRun } from '@/types';
+import type { AgentRun, AgentTaskRun, Evidence, Message, StreamEvent, ToolRun } from '@/types';
 
 function requestId() {
   return crypto.randomUUID().replaceAll('-', '');
@@ -29,6 +29,7 @@ export function CopilotPage() {
   const [tools, setTools] = useState<ToolRun[]>([]);
   const [evidences, setEvidences] = useState<Evidence[]>([]);
   const [analysisStatus, setAnalysisStatus] = useState('');
+  const [agentRun, setAgentRun] = useState<AgentRun|null>(null);
   const [error, setError] = useState('');
   const [running, setRunning] = useState(false);
   const bottom = useRef<HTMLDivElement>(null);
@@ -75,15 +76,19 @@ export function CopilotPage() {
             tool_runs: tools,
             evidences,
             analysis_status: analysisStatus,
+            agent_runs: agentRun ? [agentRun] : [],
           } as Message,
         ]
       : messages;
-  }, [analysisStatus, detail.data?.messages, draft, evidences, running, tools]);
+  }, [agentRun, analysisStatus, detail.data?.messages, draft, evidences, running, tools]);
 
   const handleEvent = (item: StreamEvent, guard: string) => {
     if (runRef.current !== guard) return;
     const data = item.data;
     if (item.event === 'analysis_status') setAnalysisStatus(String(data.message ?? ''));
+    if (item.event === 'agent_route') setAgentRun({id:String(data.agent_run_id??'live'),graph_type:String(data.mode??'').toUpperCase()==='MULTI'?'MULTI_AGENT':'SINGLE_AGENT',status:'RUNNING',route_reason:String(data.reason??''),total_duration_ms:null,tasks:[]});
+    if (item.event === 'agent_start') setAgentRun(value=>{const task:AgentTaskRun={agent_name:String(data.agent_name??''),task_id:String(data.agent_task_id??''),status:'RUNNING',duration_ms:null,model_calls:0,tool_calls:0,evidence_count:0,error_code:null};return value?{...value,tasks:[...value.tasks.filter(x=>x.task_id!==task.task_id),task]}:{id:String(data.agent_run_id??'live'),graph_type:'MULTI_AGENT',status:'RUNNING',route_reason:null,total_duration_ms:null,tasks:[task]}});
+    if (item.event === 'agent_end'||item.event === 'agent_error') setAgentRun(value=>value?{...value,status:item.event==='agent_error'?'DEGRADED':value.status,tasks:value.tasks.map(x=>x.task_id===String(data.agent_task_id??'')?{...x,status:item.event==='agent_error'?'FAILED':'SUCCEEDED',duration_ms:Number(data.duration_ms??0)||null,model_calls:Number(data.model_calls??0),tool_calls:Number(data.tool_calls??0),evidence_count:Number(data.evidence_count??0),error_code:Number(data.error_code??0)||null}:x)}:value);
     if (item.event === 'message') setDraft((value) => value + String(data.delta ?? ''));
     if (item.event === 'tool_start') {
       setTools((value) => [
@@ -130,6 +135,7 @@ export function CopilotPage() {
       setTools([]);
       setEvidences([]);
       setAnalysisStatus('');
+      setAgentRun(null);
     }
   };
 
@@ -152,6 +158,7 @@ export function CopilotPage() {
     setTools([]);
     setEvidences([]);
     setAnalysisStatus('');
+    setAgentRun(null);
     setError('');
     setRunning(true);
     try {

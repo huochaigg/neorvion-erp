@@ -9,4 +9,3 @@ class ApiResponse[T](BaseModel):
 
 def ok[T](data: T, message: str = "ok") -> ApiResponse[T]:
     return ApiResponse(code=0, message=message, data=data)
-

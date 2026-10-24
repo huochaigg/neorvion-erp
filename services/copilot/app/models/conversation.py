@@ -52,7 +52,9 @@ class Conversation(TimestampMixin, TenantMixin, Base):
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     user_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
-    title: Mapped[str] = mapped_column(String(128), nullable=False, server_default="New conversation")
+    title: Mapped[str] = mapped_column(
+        String(128), nullable=False, server_default="New conversation"
+    )
     status: Mapped[str] = mapped_column(String(16), nullable=False, server_default="ACTIVE")
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
@@ -72,10 +74,15 @@ class Message(TimestampMixin, TenantMixin, Base):
             name="fk_copilot_messages_conversation_owner",
         ),
         UniqueConstraint(
-            "tenant_id", "conversation_id", "client_request_id", "role",
+            "tenant_id",
+            "conversation_id",
+            "client_request_id",
+            "role",
             name="uq_copilot_messages_idempotency",
         ),
-        Index("ix_copilot_messages_conversation_created", "tenant_id", "conversation_id", "created_at"),
+        Index(
+            "ix_copilot_messages_conversation_created", "tenant_id", "conversation_id", "created_at"
+        ),
         Index("ix_copilot_messages_running", "tenant_id", "conversation_id", "status"),
         CheckConstraint("role IN ('user', 'assistant')", name="ck_copilot_messages_role"),
         CheckConstraint(
@@ -126,12 +133,15 @@ class ToolRun(TenantMixin, Base):
     message_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
     tool_call_id: Mapped[str] = mapped_column(String(128), nullable=False)
     tool_name: Mapped[str] = mapped_column(String(64), nullable=False)
+    agent_task_id: Mapped[str | None] = mapped_column(String(96))
     status: Mapped[str] = mapped_column(String(16), nullable=False, server_default="RUNNING")
     duration_ms: Mapped[int | None] = mapped_column()
     input_summary: Mapped[str | None] = mapped_column(Text)
     output_summary: Mapped[str | None] = mapped_column(Text)
     error_code: Mapped[int | None] = mapped_column()
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=text("now()"))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=text("now()")
+    )
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
@@ -150,7 +160,9 @@ class Evidence(TenantMixin, Base):
             ondelete="CASCADE",
             name="fk_copilot_evidences_message_tenant",
         ),
-        UniqueConstraint("tenant_id", "message_id", "citation_id", name="uq_copilot_evidence_citation"),
+        UniqueConstraint(
+            "tenant_id", "message_id", "citation_id", name="uq_copilot_evidence_citation"
+        ),
         Index("ix_copilot_evidences_message", "tenant_id", "message_id"),
         CheckConstraint("source_type IN ('ERP', 'KNOWLEDGE')", name="ck_copilot_evidences_source"),
     )
@@ -160,6 +172,8 @@ class Evidence(TenantMixin, Base):
     message_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
     user_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
     tool_call_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    source_agent: Mapped[str | None] = mapped_column(String(64))
+    agent_task_id: Mapped[str | None] = mapped_column(String(96))
     citation_id: Mapped[str] = mapped_column(String(32), nullable=False)
     source_type: Mapped[str] = mapped_column(String(16), nullable=False)
     resource_type: Mapped[str] = mapped_column(String(64), nullable=False)
@@ -170,6 +184,10 @@ class Evidence(TenantMixin, Base):
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     excerpt: Mapped[str | None] = mapped_column(Text)
     source_version: Mapped[int | None] = mapped_column()
-    evidence_metadata: Mapped[dict[str, Any]] = mapped_column("metadata", JSONB, nullable=False, server_default="{}")
+    evidence_metadata: Mapped[dict[str, Any]] = mapped_column(
+        "metadata", JSONB, nullable=False, server_default="{}"
+    )
     observed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=text("now()"))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=text("now()")
+    )

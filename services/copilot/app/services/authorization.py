@@ -14,4 +14,3 @@ class AuthorizationService:
                 raise AppError("权限编码未定义", code=50021, status_code=500)
         if not context.has_all(*codes):
             raise AppError("缺少权限", code=40320, status_code=403)
-

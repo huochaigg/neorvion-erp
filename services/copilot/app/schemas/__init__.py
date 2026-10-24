@@ -1,2 +1,1 @@
 """Copilot API Schema。"""
-

@@ -25,4 +25,3 @@ async def current_identity(context: CopilotContext) -> ApiResponse[CurrentIdenti
             authz_version=context.authz_version,
         )
     )
-

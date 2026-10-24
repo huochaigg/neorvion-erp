@@ -89,7 +89,9 @@ class SearchKnowledgeArgs(ToolArgs):
     )
     strategy: str = Field(default="HYBRID", pattern="^(VECTOR|KEYWORD|HYBRID)$")
     top_k: int = Field(default=5, ge=1, le=settings.knowledge_top_k_max)
-    rerank: bool = Field(default=True, description="请求 Knowledge 使用现有 Rerank；失败时由其明确降级")
+    rerank: bool = Field(
+        default=True, description="请求 Knowledge 使用现有 Rerank；失败时由其明确降级"
+    )
 
 
 class ListKnowledgeBasesArgs(ToolArgs):

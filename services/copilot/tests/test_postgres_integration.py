@@ -44,6 +44,59 @@ class _WorkflowKnowledge:
 
 
 @pytest.mark.asyncio
+async def test_agent_trace_persists_with_owner_isolation() -> None:
+    """真实 PostgreSQL 验证 AgentRun→TaskRun 父子关系和跨用户不可见。"""
+    engine = create_async_engine(_integration_url())
+    try:
+        async with engine.begin() as connection:
+            await connection.run_sync(Base.metadata.drop_all)
+            await connection.run_sync(Base.metadata.create_all)
+        session = TenantAsyncSession(
+            801, registry=REGISTRY, bind=engine, expire_on_commit=False, autoflush=False
+        )
+        try:
+            repo = ConversationRepository(session, 801, 8001)
+            conversation = await repo.create("V8 trace")
+            _, message = await repo.begin_turn(
+                conversation.id, "分析销售和库存", "v8-trace-request", "request-v8"
+            )
+            run = await repo.begin_agent_run(conversation.id, message.id, "request-v8")
+            await repo.record_agent_event(
+                run.id,
+                "agent_route",
+                {"mode": "multi", "reason": "跨领域复杂分析"},
+            )
+            await repo.record_agent_event(
+                run.id,
+                "agent_start",
+                {"agent_name": "sales_agent", "agent_task_id": "sales-1"},
+            )
+            await session.flush()
+            await repo.record_agent_event(
+                run.id,
+                "agent_end",
+                {
+                    "agent_name": "sales_agent",
+                    "agent_task_id": "sales-1",
+                    "status": "SUCCEEDED",
+                    "duration_ms": 12,
+                    "model_calls": 1,
+                    "tool_calls": 2,
+                    "evidence_count": 1,
+                },
+            )
+            await repo.finish_agent_run(run.id, status="SUCCEEDED")
+            await session.commit()
+            assert (await repo.agent_runs(conversation.id))[0].graph_type == "MULTI_AGENT"
+            assert (await repo.agent_tasks([run.id]))[0].tool_calls == 2
+            assert await ConversationRepository(session, 801, 8002).agent_runs(conversation.id) == []
+        finally:
+            await session.close()
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
 async def test_workflow_idempotency_persistence_and_owner_isolation() -> None:
     engine = create_async_engine(_integration_url())
     try:

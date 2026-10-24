@@ -665,9 +665,7 @@ class WorkflowService:
             },
             total_step_retries=sum(max(0, step.attempt_count - 1) for step in steps),
             reconciliation_success_rate=(
-                reconciliation_succeeded / reconciliation_total
-                if reconciliation_total
-                else None
+                reconciliation_succeeded / reconciliation_total if reconciliation_total else None
             ),
         )
 

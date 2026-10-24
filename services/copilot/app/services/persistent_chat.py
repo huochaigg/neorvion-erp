@@ -11,7 +11,8 @@ from app.ai.types import ModelMessage
 from app.core.config import settings
 from app.core.exceptions import AppError
 from app.core.tenant import TenantContext
-from app.graph.workflow import AgentRuntime, CopilotWorkflow
+from app.graph.multi_agent import MultiAgentWorkflow
+from app.graph.workflow import AgentRuntime
 from app.models.conversation import MessageStatus
 from app.repositories.conversations import ConversationRepository
 
@@ -26,12 +27,16 @@ class PersistentTurn:
 
 
 class PersistentChatService:
-    def __init__(self, session: AsyncSession, context: TenantContext, workflow: CopilotWorkflow) -> None:
+    def __init__(
+        self, session: AsyncSession, context: TenantContext, workflow: MultiAgentWorkflow
+    ) -> None:
         self.session = session
         self.repo = ConversationRepository(session, context.tenant_id, context.user_id)
         self.workflow = workflow
 
-    async def prepare(self, conversation_id: int, content: str, client_request_id: str, request_id: str) -> PersistentTurn:
+    async def prepare(
+        self, conversation_id: int, content: str, client_request_id: str, request_id: str
+    ) -> PersistentTurn:
         """短事务锁定会话并建立本轮占位；模型网络调用不持有数据库事务。"""
         try:
             await self.repo.recover_stale(settings.stale_run_seconds)
@@ -44,13 +49,23 @@ class PersistentChatService:
                 if duplicate.status == MessageStatus.RUNNING.value:
                     raise AppError("该请求仍在运行", code=40981, status_code=409)
                 if duplicate.status != MessageStatus.COMPLETED.value:
-                    raise AppError("该请求已终止，请使用新的 client_request_id 重试", code=40982, status_code=409)
-                return PersistentTurn(conversation_id, duplicate.id, duplicate.request_id, [], duplicate.content)
+                    raise AppError(
+                        "该请求已终止，请使用新的 client_request_id 重试",
+                        code=40982,
+                        status_code=409,
+                    )
+                return PersistentTurn(
+                    conversation_id, duplicate.id, duplicate.request_id, [], duplicate.content
+                )
             if await self.repo.running_message(conversation_id) is not None:
                 raise AppError("该会话已有生成任务", code=40980, status_code=409)
             history = self._build_history(await self.repo.messages(conversation_id))
-            _, assistant = await self.repo.begin_turn(conversation_id, content, client_request_id, request_id)
-            conversation.updated_at = __import__("datetime").datetime.now(__import__("datetime").UTC)
+            _, assistant = await self.repo.begin_turn(
+                conversation_id, content, client_request_id, request_id
+            )
+            conversation.updated_at = __import__("datetime").datetime.now(
+                __import__("datetime").UTC
+            )
             await self.session.commit()
         except IntegrityError as exc:
             await self.session.rollback()
@@ -101,10 +116,18 @@ class PersistentChatService:
     ) -> AsyncIterator[dict]:
         if turn.duplicate_answer is not None:
             yield {"event": "run_start", "data": self._ids(turn) | {"replayed": True}}
-            yield {"event": "done", "data": self._ids(turn) | {"answer": turn.duplicate_answer, "replayed": True}}
+            yield {
+                "event": "done",
+                "data": self._ids(turn) | {"answer": turn.duplicate_answer, "replayed": True},
+            }
             return
         runtime.protocol_messages = []
         runtime.disconnected = disconnected
+        agent_run = await self.repo.begin_agent_run(
+            turn.conversation_id, turn.message_id, turn.request_id
+        )
+        await self.session.commit()
+        runtime.agent_run_id = agent_run.id
         yield {"event": "run_start", "data": self._ids(turn)}
         completed = False
         terminal_written = False
@@ -114,10 +137,15 @@ class PersistentChatService:
                 raw = event.get("data")
                 data = raw if isinstance(raw, dict) else {}
                 if name.startswith("tool_"):
-                    await self.repo.record_tool_event(turn.conversation_id, turn.message_id, name, data)
+                    await self.repo.record_tool_event(
+                        turn.conversation_id, turn.message_id, name, data
+                    )
                     await self.session.commit()
                 elif name == "evidence":
                     await self.repo.record_evidence(turn.conversation_id, turn.message_id, data)
+                    await self.session.commit()
+                elif name.startswith("agent_"):
+                    await self.repo.record_agent_event(agent_run.id, name, data)
                     await self.session.commit()
                 enriched = data | self._ids(turn)
                 if name == "done":
@@ -126,6 +154,12 @@ class PersistentChatService:
                         content=str(data.get("answer") or ""),
                         status=MessageStatus.COMPLETED.value,
                         protocol_data=runtime.protocol_messages,
+                    )
+                    await self.session.commit()
+                    await self.repo.finish_agent_run(
+                        agent_run.id,
+                        status="DEGRADED" if data.get("degraded") else "SUCCEEDED",
+                        usage=data.get("usage") if isinstance(data.get("usage"), dict) else None,
                     )
                     await self.session.commit()
                     completed = True
@@ -142,13 +176,26 @@ class PersistentChatService:
                 turn.message_id, content="", status=status, error_code=code
             )
             await self.session.commit()
+            await self.repo.finish_agent_run(agent_run.id, status=status, error_code=code)
+            await self.session.commit()
             terminal_written = True
             raise
         finally:
             if not completed and not terminal_written:
-                await self.repo.finish_message(turn.message_id, content="", status=MessageStatus.CANCELLED.value, error_code=49900)
+                await self.repo.finish_message(
+                    turn.message_id,
+                    content="",
+                    status=MessageStatus.CANCELLED.value,
+                    error_code=49900,
+                )
+                await self.session.commit()
+                await self.repo.finish_agent_run(agent_run.id, status="CANCELLED", error_code=49900)
                 await self.session.commit()
 
     @staticmethod
     def _ids(turn: PersistentTurn) -> dict:
-        return {"request_id": turn.request_id, "conversation_id": turn.conversation_id, "message_id": turn.message_id}
+        return {
+            "request_id": turn.request_id,
+            "conversation_id": turn.conversation_id,
+            "message_id": turn.message_id,
+        }

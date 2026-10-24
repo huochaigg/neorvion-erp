@@ -87,7 +87,7 @@ class ActionProposalService:
                 warnings=validation.warnings,
                 missing_fields=validation.missing_fields,
                 preview_data=validation.preview_data,
-            resource_versions=validation.resource_versions,
+                resource_versions=validation.resource_versions,
                 validated_at=validation.validated_at,
                 expires_at=validation.expires_at,
             )
@@ -188,9 +188,7 @@ class ActionProposalService:
         )
         if not allowed_types:
             return ActionProposalListOut(items=[], total=0, page=page, page_size=page_size)
-        rows, total = await self.repo.list(
-            page, page_size, conversation_id, allowed_types
-        )
+        rows, total = await self.repo.list(page, page_size, conversation_id, allowed_types)
         return ActionProposalListOut(
             items=[await self._out(row) for row in rows],
             total=total,

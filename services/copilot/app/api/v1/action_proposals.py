@@ -46,9 +46,7 @@ async def list_action_proposals(
     page_size: int = Query(default=20, ge=1, le=100),
     conversation_id: int | None = Query(default=None, gt=0),
 ):
-    return ok(
-        await _service(request, db, context).list(page, page_size, conversation_id)
-    )
+    return ok(await _service(request, db, context).list(page, page_size, conversation_id))
 
 
 @router.get("/{proposal_id}", response_model=ApiResponse[ActionProposalOut])

@@ -38,6 +38,10 @@ class ToolRuntime:
     proposal_service: ActionProposalService | None = None
     conversation_id: int | None = None
     source_message_id: int | None = None
+    allowed_tools: frozenset[str] | None = None
+    max_calls_override: int | None = None
+    shared_calls: list[int] | None = None
+    global_call_limit: int | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -60,14 +64,28 @@ class ToolExecutor:
         self.knowledge_client = knowledge_client
         self.action_registry = action_registry or build_action_registry()
 
-    def definitions(self, permissions: frozenset[str]) -> list[dict[str, Any]]:
-        return [
+    def definitions(
+        self,
+        permissions: frozenset[str],
+        *,
+        allowed_tools: frozenset[str] | None = None,
+    ) -> list[dict[str, Any]]:
+        definitions = [
             *self.registry.definitions(permissions),
             *self.action_registry.definitions(permissions),
+        ]
+        if allowed_tools is None:
+            return definitions
+        return [
+            item
+            for item in definitions
+            if str(item.get("function", {}).get("name")) in allowed_tools
         ]
 
     async def execute(self, call: ModelToolCall, runtime: ToolRuntime) -> ToolExecutionResult:
         """在模型之外执行工具白名单、参数、权限、预算和结果大小校验。"""
+        if runtime.allowed_tools is not None and call.name not in runtime.allowed_tools:
+            raise AppError("Agent 无权调用该工具", code=40378, status_code=403)
         if call.name in {"propose_action", "validate_action_proposal"}:
             return await self._execute_proposal(call, runtime)
         spec = self.registry.get(call.name)
@@ -82,8 +100,13 @@ class ToolExecutor:
             raise AppError("当前令牌不能代表用户访问 ERP", code=40373, status_code=403)
         if spec.source == "KNOWLEDGE" and not runtime.knowledge_audience_authorized:
             raise AppError("当前令牌不能代表用户访问 Knowledge", code=40374, status_code=403)
-        if runtime.calls >= settings.tool_max_calls:
+        call_limit = runtime.max_calls_override or settings.tool_max_calls
+        if runtime.calls >= call_limit:
             raise AppError("工具调用次数已达上限", code=42972, status_code=429)
+        if runtime.shared_calls is not None and runtime.global_call_limit is not None:
+            if runtime.shared_calls[0] >= runtime.global_call_limit:
+                raise AppError("多 Agent 工具总调用次数已达上限", code=42979, status_code=429)
+            runtime.shared_calls[0] += 1
         if time.monotonic() - runtime.started_at >= settings.tool_total_timeout_seconds:
             raise AppError("工具执行总时限已到", code=50472, status_code=504)
         try:

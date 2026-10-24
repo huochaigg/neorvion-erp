@@ -39,7 +39,7 @@ def create_app() -> FastAPI:
     app = FastAPI(
         title=settings.app_name,
         version=settings.app_version,
-        description="受 IAM 权限约束，具备真实模型状态、可恢复工作流与 V6 受控写入的 ERP Copilot V7。",
+        description="受 IAM 权限约束，具备 Single/Multi-Agent、可恢复工作流与 V6 受控写入的 ERP Copilot V8。",
         lifespan=lifespan,
         docs_url="/docs" if docs_enabled else None,
         redoc_url="/redoc" if docs_enabled else None,

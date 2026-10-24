@@ -14,7 +14,7 @@ from app.core.permissions import PermissionCode
 from app.core.tenant import TENANT_HEADER, TenantContext
 from app.db.session import open_tenant_session
 from app.erp.client import get_erp_client
-from app.graph.workflow import CopilotWorkflow
+from app.graph.multi_agent import MultiAgentWorkflow
 from app.knowledge.client import get_knowledge_client
 from app.services.authorization import AuthorizationService
 from app.tools.executor import ToolExecutor
@@ -83,11 +83,10 @@ DbSession = Annotated[AsyncSession, Depends(get_db)]
 
 
 @lru_cache
-def get_workflow() -> CopilotWorkflow:
-    return CopilotWorkflow(
-        get_chat_adapter(),
-        ToolExecutor(build_tool_registry(), get_erp_client(), get_knowledge_client()),
-    )
+def get_workflow() -> MultiAgentWorkflow:
+    adapter = get_chat_adapter()
+    executor = ToolExecutor(build_tool_registry(), get_erp_client(), get_knowledge_client())
+    return MultiAgentWorkflow(adapter, executor)
 
 
-WorkflowDep = Annotated[CopilotWorkflow, Depends(get_workflow)]
+WorkflowDep = Annotated[MultiAgentWorkflow, Depends(get_workflow)]

@@ -283,3 +283,15 @@ V7 表由 `20261024_0005` 创建。Redis 队列名默认 `copilot:workflows:v1`�
 payload 或创建单据，成功后以同一个 execution key 恢复 Execution/Workflow。Redis 消息丢失时 Worker 会从数据库
 扫描过期租约；对账使用有限次数指数退避，耗尽预算后转人工介入。
 不能安全补偿的已创建 ERP 单据进入 `NEEDS_MANUAL_INTERVENTION`，绝不自动删除或反向调拨。
+
+## V8 Single / Multi-Agent
+
+V8 默认启用确定性 Agent Router。简单查询继续走原单 Agent；跨领域复杂分析才进入 Supervisor、Sales、Inventory、
+Procurement、Knowledge 协作。专业 Agent 只能看到自己的只读工具，所有调用仍经过原 Tool Executor 的 IAM、租户、
+参数、超时与结果裁剪校验；Supervisor 不拥有 ERP 工具或写权限。
+
+配置：`MULTI_AGENT_ENABLED`、`MULTI_AGENT_MAX_AGENTS`、`MULTI_AGENT_MAX_PARALLEL`、
+`MULTI_AGENT_TOTAL_TIMEOUT_SECONDS`、`MULTI_AGENT_CONTEXT_CHARS`、`MULTI_AGENT_RESULT_CHARS`。
+
+迁移 `20261024_0006` 保存 AgentRun/AgentTaskRun，并关联 ToolRun/Evidence。前端只通过真实 SSE 生命周期展示协作状态。
+详细安全边界、回滚和 30 Case 评测基线见 `docs/copilot/v8-multi-agent.md`。

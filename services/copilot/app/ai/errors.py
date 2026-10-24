@@ -59,4 +59,3 @@ def describe_model_transport(exc: httpx.HTTPError) -> AppError:
     if isinstance(exc, httpx.ConnectError):
         return AppError("无法连接模型服务", code=50262, status_code=502)
     return AppError(f"模型服务网络错误（{name}）", code=50266, status_code=502)
-

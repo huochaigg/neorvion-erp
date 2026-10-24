@@ -15,4 +15,3 @@ def get_current_user_id() -> int | None:
 def set_tenant_context(*, tenant_id: int | None, user_id: int | None) -> None:
     current_tenant_id.set(tenant_id)
     current_user_id.set(user_id)
-

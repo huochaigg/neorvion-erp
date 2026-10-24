@@ -81,4 +81,3 @@ def register_exception_handlers(app: FastAPI) -> None:
             status_code=422,
             content=ErrorBody(code=40000, message="请求参数不合法", data=details).model_dump(),
         )
-

@@ -29,4 +29,3 @@ def setup_logging() -> None:
     context_filter = RequestContextFilter()
     for handler in logging.getLogger().handlers:
         handler.addFilter(context_filter)
-

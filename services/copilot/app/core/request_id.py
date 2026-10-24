@@ -54,4 +54,3 @@ class RequestIdMiddleware(BaseHTTPMiddleware):
             raise
         finally:
             current_request_id.reset(token)
-

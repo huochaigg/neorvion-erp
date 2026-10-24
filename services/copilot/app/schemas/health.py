@@ -16,4 +16,3 @@ class ModelStatusData(BaseModel):
     provider: str
     model: str | None
     detail: str | None
-

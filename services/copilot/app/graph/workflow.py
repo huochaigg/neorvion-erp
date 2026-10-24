@@ -37,14 +37,26 @@ class AgentRuntime:
     tools: ToolRuntime | None = None
     disconnected: Callable[[], Awaitable[bool]] = _never_disconnected
     protocol_messages: list[ModelMessage] | None = None
+    agent_run_id: int | str | None = None
+    agent_name: str | None = None
+    agent_task_id: str | None = None
+    model_calls: int = 0
+    max_model_calls: int | None = None
 
 
 class CopilotWorkflow:
     """Agent → Tool → Agent 的受控循环；所有工具安全边界均在服务端执行。"""
 
-    def __init__(self, adapter: ChatAdapter, executor: ToolExecutor | None = None) -> None:
+    def __init__(
+        self,
+        adapter: ChatAdapter,
+        executor: ToolExecutor | None = None,
+        *,
+        system_prompt: str | None = None,
+    ) -> None:
         self.adapter = adapter
         self.executor = executor
+        self.system_prompt = system_prompt or _SYSTEM_PROMPT
         builder = StateGraph(CopilotState, context_schema=AgentRuntime)
         builder.add_node("agent", self._agent_node)
         builder.add_node("tools", self._tool_node)
@@ -53,14 +65,19 @@ class CopilotWorkflow:
         builder.add_edge("tools", "agent")
         self.graph = builder.compile()
 
-    @staticmethod
-    def prepare_messages(messages: list[ModelMessage]) -> list[ModelMessage]:
-        return [{"role": "system", "content": _SYSTEM_PROMPT}, *messages]
+    def prepare_messages(self, messages: list[ModelMessage]) -> list[ModelMessage]:
+        return [{"role": "system", "content": self.system_prompt}, *messages]
 
     async def _agent_node(self, state: CopilotState, runtime: Runtime[AgentRuntime]) -> dict:
         """调用模型并仅把自然语言 delta 发给客户端，工具参数保持为内部结构。"""
         if await runtime.context.disconnected():
             raise AppError("客户端已断开", code=49900, status_code=499)
+        if (
+            runtime.context.max_model_calls is not None
+            and runtime.context.model_calls >= runtime.context.max_model_calls
+        ):
+            raise AppError("Agent 模型调用次数已达上限", code=42978, status_code=429)
+        runtime.context.model_calls += 1
         chunks: list[str] = []
         usage: ModelUsage | None = None
         calls = ()
@@ -69,7 +86,18 @@ class CopilotWorkflow:
             if runtime.context.tools is not None
             else frozenset()
         )
-        definitions = self.executor.definitions(permissions) if self.executor else []
+        definitions = (
+            self.executor.definitions(
+                permissions,
+                allowed_tools=(
+                    runtime.context.tools.allowed_tools
+                    if runtime.context.tools is not None
+                    else None
+                ),
+            )
+            if self.executor
+            else []
+        )
         async for delta in self.adapter.stream(
             state["messages"],
             tools=definitions or None,
@@ -108,7 +136,9 @@ class CopilotWorkflow:
             raise AppError("模型未返回有效内容", code=50267, status_code=502)
         evidence = runtime.context.tools.evidences if runtime.context.tools is not None else []
         text = self._validate_citations(text, evidence)
-        runtime.stream_writer({"event": "done", "data": {"answer": text, "usage": usage, "evidence": evidence}})
+        runtime.stream_writer(
+            {"event": "done", "data": {"answer": text, "usage": usage, "evidence": evidence}}
+        )
         if runtime.context.protocol_messages is not None:
             runtime.context.protocol_messages.append({"role": "assistant", "content": text})
         return {
@@ -141,14 +171,39 @@ class CopilotWorkflow:
         for call in state["pending_tool_calls"]:
             if await runtime.context.disconnected():
                 raise AppError("客户端已断开", code=49900, status_code=499)
-            runtime.stream_writer({"event": "tool_start", "data": {
-                "tool_call_id": call.id, "name": call.name, "input_summary": call.arguments[:1000]
-            }})
+            event_id = (
+                f"{runtime.context.agent_task_id}:{call.id}"
+                if runtime.context.agent_task_id
+                else call.id
+            )[:128]
+            runtime.stream_writer(
+                {
+                    "event": "tool_start",
+                    "data": {
+                        "tool_call_id": event_id,
+                        "name": call.name,
+                        "input_summary": call.arguments[:1000],
+                        "agent_run_id": runtime.context.agent_run_id,
+                        "agent_name": runtime.context.agent_name,
+                        "agent_task_id": runtime.context.agent_task_id,
+                    },
+                }
+            )
             spec = self.executor.registry.get(call.name)
-            runtime.stream_writer({
-                "event": "analysis_status",
-                "data": {"message": "正在处理业务草稿" if call.name in {"propose_action", "validate_action_proposal"} else ("正在检索知识库" if spec and spec.source == "KNOWLEDGE" else "正在查询 ERP 数据")},
-            })
+            runtime.stream_writer(
+                {
+                    "event": "analysis_status",
+                    "data": {
+                        "message": "正在处理业务草稿"
+                        if call.name in {"propose_action", "validate_action_proposal"}
+                        else (
+                            "正在检索知识库"
+                            if spec and spec.source == "KNOWLEDGE"
+                            else "正在查询 ERP 数据"
+                        )
+                    },
+                }
+            )
             try:
                 result = await self.executor.execute(call, runtime.context.tools)
             except AppError as exc:
@@ -156,7 +211,7 @@ class CopilotWorkflow:
                     {
                         "event": "tool_error",
                         "data": {
-                            "tool_call_id": call.id,
+                            "tool_call_id": event_id,
                             "name": call.name,
                             "code": exc.code,
                             "message": exc.message,
@@ -165,18 +220,51 @@ class CopilotWorkflow:
                 )
                 content = f"工具调用失败：{exc.message}（错误码 {exc.code}）"
             else:
+                result.event["tool_call_id"] = event_id
+                result.event.update(
+                    {
+                        "agent_run_id": runtime.context.agent_run_id,
+                        "agent_name": runtime.context.agent_name,
+                        "agent_task_id": runtime.context.agent_task_id,
+                    }
+                )
                 runtime.stream_writer({"event": "tool_end", "data": result.event})
                 proposal_event = result.event.get("proposal_event")
                 if proposal_event:
-                    runtime.stream_writer({"event": proposal_event, "data": {
-                        key: result.event.get(key) for key in (
-                            "proposal_id", "revision", "action_type", "status", "validation_status", "missing_fields"
-                        )
-                    }})
+                    runtime.stream_writer(
+                        {
+                            "event": proposal_event,
+                            "data": {
+                                key: result.event.get(key)
+                                for key in (
+                                    "proposal_id",
+                                    "revision",
+                                    "action_type",
+                                    "status",
+                                    "validation_status",
+                                    "missing_fields",
+                                )
+                            },
+                        }
+                    )
                 for evidence in result.evidences:
-                    runtime.stream_writer({"event": "evidence", "data": evidence})
+                    runtime.stream_writer(
+                        {
+                            "event": "evidence",
+                            "data": evidence
+                            | {
+                                "tool_call_id": event_id,
+                                "source_agent": runtime.context.agent_name,
+                                "agent_task_id": runtime.context.agent_task_id,
+                            },
+                        }
+                    )
                 content = result.content
-            tool_message: ModelMessage = {"role": "tool", "tool_call_id": call.id, "content": content}
+            tool_message: ModelMessage = {
+                "role": "tool",
+                "tool_call_id": call.id,
+                "content": content,
+            }
             messages.append(tool_message)
             if runtime.context.protocol_messages is not None:
                 runtime.context.protocol_messages.append(tool_message)

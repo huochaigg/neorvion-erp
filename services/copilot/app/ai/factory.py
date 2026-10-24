@@ -23,4 +23,3 @@ def get_chat_adapter() -> ChatAdapter:
         timeout_seconds=settings.chat_timeout_seconds,
         max_output_tokens=settings.chat_max_output_tokens,
     )
-

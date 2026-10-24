@@ -62,4 +62,3 @@ def ping_iam_store() -> bool:
         return bool(iam_redis_client.ping())
     except Exception:
         return False
-

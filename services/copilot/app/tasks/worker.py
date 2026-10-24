@@ -35,9 +35,7 @@ async def scan_recoverable_items(limit: int = 100) -> list[tuple[int, int]]:
     return [(int(row.tenant_id), int(row.id)) for row in rows]
 
 
-def _schedule_reconciliation_retry(
-    row: WorkflowInstance, tenant_id: int
-) -> WorkflowEvent:
+def _schedule_reconciliation_retry(row: WorkflowInstance, tenant_id: int) -> WorkflowEvent:
     """为 UNKNOWN 对账安排有限退避；耗尽预算后保留未知语义并转人工介入。"""
     row.run_attempts += 1
     row.lease_owner = None

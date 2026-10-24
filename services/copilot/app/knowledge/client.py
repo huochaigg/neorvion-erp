@@ -123,7 +123,11 @@ class KnowledgeApiClient:
             body = response.json()
         except ValueError as exc:
             raise AppError("Knowledge 返回了无效响应", code=50275, status_code=502) from exc
-        if not isinstance(body, dict) or body.get("code") != 0 or not isinstance(body.get("data"), dict):
+        if (
+            not isinstance(body, dict)
+            or body.get("code") != 0
+            or not isinstance(body.get("data"), dict)
+        ):
             raise AppError("Knowledge 返回了无效响应", code=50275, status_code=502)
         return body["data"]
 

@@ -38,8 +38,12 @@ async def list_conversations(
     return ok(await ConversationService(cast(AsyncSession, db), context).list(page, page_size))
 
 
-@router.get("/{conversation_id}", response_model=ApiResponse[ConversationDetailOut], summary="加载会话详情")
-async def get_conversation(conversation_id: int, request: Request, context: CopilotContext, db: DbSession):
+@router.get(
+    "/{conversation_id}", response_model=ApiResponse[ConversationDetailOut], summary="加载会话详情"
+)
+async def get_conversation(
+    conversation_id: int, request: Request, context: CopilotContext, db: DbSession
+):
     audiences = frozenset(getattr(request.state, "jwt_audiences", ()))
     service = ConversationService(
         cast(AsyncSession, db),
@@ -75,8 +79,14 @@ async def send_conversation_message(
 
 
 @router.patch("/{conversation_id}", response_model=ApiResponse[ConversationOut])
-async def rename_conversation(conversation_id: int, payload: ConversationRename, context: CopilotContext, db: DbSession):
-    return ok(await ConversationService(cast(AsyncSession, db), context).rename(conversation_id, payload.title))
+async def rename_conversation(
+    conversation_id: int, payload: ConversationRename, context: CopilotContext, db: DbSession
+):
+    return ok(
+        await ConversationService(cast(AsyncSession, db), context).rename(
+            conversation_id, payload.title
+        )
+    )
 
 
 @router.delete("/{conversation_id}", status_code=204)
