@@ -163,10 +163,11 @@ class PersistentChatService:
                         protocol_data=runtime.protocol_messages,
                     )
                     await self.session.commit()
+                    raw_usage = data.get("usage")
                     await self.repo.finish_agent_run(
                         agent_run.id,
                         status="DEGRADED" if data.get("degraded") else "SUCCEEDED",
-                        usage=data.get("usage") if isinstance(data.get("usage"), dict) else None,
+                        usage=raw_usage if isinstance(raw_usage, dict) else None,
                     )
                     await self.session.commit()
                     completed = True

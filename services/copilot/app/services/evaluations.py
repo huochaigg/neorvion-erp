@@ -583,7 +583,8 @@ class ReplayEvaluationRunner:
                 "replay_result"
             )
             if isinstance(result, dict):
-                usage = result.get("usage") if isinstance(result.get("usage"), dict) else {}
+                raw_usage = result.get("usage")
+                usage = raw_usage if isinstance(raw_usage, dict) else {}
                 next_tokens = (
                     int(usage["input_tokens"]) + int(usage["output_tokens"])
                     if usage.get("input_tokens") is not None
@@ -622,12 +623,12 @@ class ReplayEvaluationRunner:
                 }
                 case_run.metrics = metrics
                 case_run.assertion_results = assertions
-                judge = result.get("judge") if isinstance(result.get("judge"), dict) else {}
+                raw_judge = result.get("judge")
+                judge = raw_judge if isinstance(raw_judge, dict) else {}
+                raw_feedback = judge.get("feedback")
                 case_run.judge_model = str(judge.get("model") or "")[:128] or None
                 case_run.judge_prompt_version = str(judge.get("prompt_version") or "")[:64] or None
-                case_run.judge_feedback = (
-                    judge.get("feedback") if isinstance(judge.get("feedback"), dict) else None
-                )
+                case_run.judge_feedback = raw_feedback if isinstance(raw_feedback, dict) else None
                 case_run.judge_confidence = judge.get("confidence")
                 if (
                     metrics.get("input_tokens") is not None

@@ -1,4 +1,5 @@
 import logging
+from typing import Any, cast
 
 from redis.asyncio import Redis
 from redis.exceptions import RedisError
@@ -19,7 +20,9 @@ def redis_client() -> Redis:
 async def enqueue_workflow(tenant_id: int, workflow_id: int) -> bool:
     """Redis 仅投递租户和任务 ID；业务状态仍由 PostgreSQL 决定。"""
     try:
-        await redis_client().lpush(settings.workflow_queue_key, f"{tenant_id}:{workflow_id}")
+        await cast(Any, redis_client()).lpush(
+            settings.workflow_queue_key, f"{tenant_id}:{workflow_id}"
+        )
         return True
     except RedisError:
         logger.warning(
@@ -30,7 +33,9 @@ async def enqueue_workflow(tenant_id: int, workflow_id: int) -> bool:
 
 async def pop_workflow(timeout: int = 3) -> tuple[int, int] | None:
     try:
-        item = await redis_client().brpop(settings.workflow_queue_key, timeout=timeout)
+        item = await cast(Any, redis_client()).brpop(
+            settings.workflow_queue_key, timeout=timeout
+        )
     except RedisError:
         return None
     if not item:

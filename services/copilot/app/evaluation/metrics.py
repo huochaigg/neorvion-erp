@@ -125,7 +125,8 @@ def evaluate_case(case: dict[str, Any], result: dict[str, Any]) -> tuple[str, di
     else:
         outcome = "INDETERMINATE"
 
-    usage = result.get("usage") if isinstance(result.get("usage"), dict) else {}
+    raw_usage = result.get("usage")
+    usage = raw_usage if isinstance(raw_usage, dict) else {}
     metrics = {
         "transport_success": transport,
         "agent_completed": completed,

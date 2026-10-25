@@ -12,7 +12,7 @@ from pydantic import ValidationError
 
 from app.actions.registry import ActionRegistry, build_action_registry
 from app.actions.schemas import ProposeActionArgs, ValidateActionProposalArgs
-from app.ai.types import ModelToolCall
+from app.ai.types import ModelToolCall, ModelToolDefinition
 from app.core.config import settings
 from app.core.exceptions import AppError
 from app.core.tenant import TenantContext
@@ -69,8 +69,8 @@ class ToolExecutor:
         permissions: frozenset[str],
         *,
         allowed_tools: frozenset[str] | None = None,
-    ) -> list[dict[str, Any]]:
-        definitions = [
+    ) -> list[ModelToolDefinition]:
+        definitions: list[ModelToolDefinition] = [
             *self.registry.definitions(permissions),
             *self.action_registry.definitions(permissions),
         ]
@@ -79,7 +79,7 @@ class ToolExecutor:
         return [
             item
             for item in definitions
-            if str(item.get("function", {}).get("name")) in allowed_tools
+            if str(item["function"].get("name")) in allowed_tools
         ]
 
     async def execute(self, call: ModelToolCall, runtime: ToolRuntime) -> ToolExecutionResult:
@@ -171,34 +171,35 @@ class ToolExecutor:
             raise AppError("工具调用次数已达上限", code=42972, status_code=429)
         try:
             raw = json.loads(call.arguments or "{}")
-            if call.name == "propose_action":
-                args = ProposeActionArgs.model_validate(raw)
-            else:
-                args = ValidateActionProposalArgs.model_validate(raw)
-        except (json.JSONDecodeError, ValidationError) as exc:
+        except json.JSONDecodeError as exc:
             raise AppError("Proposal 工具参数无效", code=40071, status_code=400) from exc
         runtime.calls += 1
         started = time.monotonic()
-        if call.name == "propose_action":
-            proposal = await runtime.proposal_service.create(
-                ActionProposalCreate(
-                    conversation_id=runtime.conversation_id,
-                    source_message_id=runtime.source_message_id,
-                    idempotency_key=f"agent:{runtime.source_message_id}:{call.id}"[:128],
-                    action=args.action,
+        try:
+            if call.name == "propose_action":
+                args = ProposeActionArgs.model_validate(raw)
+                proposal = await runtime.proposal_service.create(
+                    ActionProposalCreate(
+                        conversation_id=runtime.conversation_id,
+                        source_message_id=runtime.source_message_id,
+                        idempotency_key=f"agent:{runtime.source_message_id}:{call.id}"[:128],
+                        action=args.action,
+                    )
                 )
-            )
-            event_name = "proposal_created"
-            if proposal.status == "DRAFT":
+                event_name = "proposal_created"
+                if proposal.status == "DRAFT":
+                    proposal = await runtime.proposal_service.validate(
+                        proposal.id, proposal.current_revision
+                    )
+                    event_name = "proposal_validation"
+            else:
+                args = ValidateActionProposalArgs.model_validate(raw)
                 proposal = await runtime.proposal_service.validate(
-                    proposal.id, proposal.current_revision
+                    args.proposal_id, args.expected_revision
                 )
                 event_name = "proposal_validation"
-        else:
-            proposal = await runtime.proposal_service.validate(
-                args.proposal_id, args.expected_revision
-            )
-            event_name = "proposal_validation"
+        except ValidationError as exc:
+            raise AppError("Proposal 工具参数无效", code=40071, status_code=400) from exc
         safe = {
             "proposal_id": proposal.id,
             "revision": proposal.current_revision,

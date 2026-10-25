@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from contextlib import AbstractAsyncContextManager
-from typing import Any, TypedDict
+from typing import Any, TypedDict, cast
 
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 from langgraph.graph import END, START, StateGraph
@@ -25,15 +25,16 @@ def _validate(state: BusinessWorkflowState) -> dict[str, str]:
 
 
 def _wait_input(state: BusinessWorkflowState) -> dict[str, Any]:
-    decision = interrupt({"kind": "workflow_input", "workflow_id": state["workflow_id"]})
+    decision = interrupt({"kind": "workflow_input", "workflow_id": state.get("workflow_id")})
     return {"phase": "resumed", "resume": decision}
 
 
 def _after_validate(state: BusinessWorkflowState) -> str:
-    return "finalize" if state["workflow_type"] == "SALES_ORDER_REVIEW_WORKFLOW" else "wait_input"
+    return "finalize" if state.get("workflow_type") == "SALES_ORDER_REVIEW_WORKFLOW" else "wait_input"
 
 
-def _finalize(_state: BusinessWorkflowState) -> dict[str, str]:
+def _finalize(state: BusinessWorkflowState) -> dict[str, str]:
+    _ = state
     return {"phase": "finalized"}
 
 
@@ -74,12 +75,12 @@ class BusinessWorkflowGraph:
     async def begin(self, state: BusinessWorkflowState) -> None:
         if self._graph is None:
             raise AppError("工作流编排尚未就绪", code=50377, status_code=503)
-        await self._graph.ainvoke(state, self.config(state["workflow_id"]))
+        await self._graph.ainvoke(state, cast(Any, self.config(state.get("workflow_id") or 0)))
 
     async def resume(self, workflow_id: int, decision: dict[str, Any]) -> None:
         if self._graph is None:
             raise AppError("工作流编排尚未就绪", code=50377, status_code=503)
-        await self._graph.ainvoke(Command(resume=decision), self.config(workflow_id))
+        await self._graph.ainvoke(Command(resume=decision), cast(Any, self.config(workflow_id)))
 
 
 business_workflow_graph = BusinessWorkflowGraph()

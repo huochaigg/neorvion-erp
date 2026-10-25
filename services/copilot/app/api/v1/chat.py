@@ -107,7 +107,7 @@ async def chat(
             ChatResponse(
                 answer=answer,
                 model=settings.chat_model,
-                usage=TokenUsageOut(**usage) if isinstance(usage, dict) else None,
+                usage=TokenUsageOut.model_validate(usage) if isinstance(usage, dict) else None,
                 conversation_id=turn.conversation_id,
                 message_id=turn.message_id,
                 request_id=turn.request_id,
@@ -120,7 +120,7 @@ async def chat(
         ChatResponse(
             answer=answer,
             model=settings.chat_model,
-            usage=TokenUsageOut(**usage) if usage is not None else None,
+            usage=TokenUsageOut.model_validate(usage) if usage is not None else None,
         )
     )
 

@@ -231,7 +231,8 @@ class ConversationRepository:
         task.tool_calls = int(data.get("tool_calls") or 0)
         task.evidence_count = int(data.get("evidence_count") or 0)
         task.error_code = data.get("error_code")
-        task.usage = data.get("usage") if isinstance(data.get("usage"), dict) else None
+        raw_usage = data.get("usage")
+        task.usage = raw_usage if isinstance(raw_usage, dict) else None
         task.output_summary = "执行失败" if event == "agent_error" else "执行完成"
 
     async def finish_agent_run(
@@ -295,7 +296,8 @@ class ConversationRepository:
             row.error_code = data.get("error_code")
             row.usage_source = "UNKNOWN"
             return
-        usage = data.get("usage") if isinstance(data.get("usage"), dict) else {}
+        raw_usage = data.get("usage")
+        usage = raw_usage if isinstance(raw_usage, dict) else {}
         row.status = "SUCCEEDED"
         row.input_tokens = usage.get("prompt_tokens")
         row.output_tokens = usage.get("completion_tokens")

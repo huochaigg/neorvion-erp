@@ -89,7 +89,8 @@ class MultiAgentWorkflow:
     async def _route(
         self, state: MultiAgentState, runtime: Runtime[AgentRuntime]
     ) -> dict[str, Any]:
-        query = str(state["messages"][-1].get("content") or "")[
+        messages = state.get("messages") or []
+        query = str((messages[-1] if messages else {}).get("content") or "")[
             : settings.multi_agent_context_chars
         ]
         decision = self.router.route(query)
@@ -132,16 +133,16 @@ class MultiAgentWorkflow:
         }
 
     def _after_route(self, state: MultiAgentState) -> str | list[Send]:
-        if state["route_mode"] != "multi":
+        if state.get("route_mode") != "multi":
             return "single"
-        initial = [name for name in state["planned_agents"] if name != "procurement_agent"]
+        initial = [name for name in state.get("planned_agents") or [] if name != "procurement_agent"]
         if not initial:
             return "single"
         return [
             Send(
                 "specialist",
                 {
-                    "query": state["query"],
+                    "query": state.get("query") or "",
                     "agent_name": name,
                     "task_id": f"{name}-{index + 1}",
                     "results": [],
@@ -162,9 +163,10 @@ class MultiAgentWorkflow:
         started = time.monotonic()
         initial_model_calls = runtime.context.model_calls
         try:
-            async for event in self.single.stream(state["messages"], context=runtime.context):
+            async for event in self.single.stream(state.get("messages") or [], context=runtime.context):
                 if event.get("event") == "done":
-                    data = event.get("data") or {}
+                    raw = event.get("data")
+                    data = raw if isinstance(raw, dict) else {}
                     answer = str(data.get("answer") or "")
                     usage = data.get("usage")
                 else:
@@ -208,7 +210,10 @@ class MultiAgentWorkflow:
         self, state: MultiAgentState, runtime: Runtime[AgentRuntime]
     ) -> dict[str, list[AgentResult]]:
         result = await self._run_specialist(
-            state["agent_name"], state["task_id"], state["query"], runtime
+            str(state.get("agent_name") or ""),
+            str(state.get("task_id") or ""),
+            str(state.get("query") or ""),
+            runtime,
         )
         return {"results": [result]}
 
@@ -219,7 +224,7 @@ class MultiAgentWorkflow:
             return {"results": []}
         prior = [item.model_dump(mode="json") for item in state.get("results", [])]
         context = json.dumps(prior, ensure_ascii=False)[: settings.multi_agent_result_chars]
-        query = f"用户问题：{state['query']}\n上游专业结果：{context}"
+        query = f"用户问题：{state.get('query') or ''}\n上游专业结果：{context}"
         result = await self._run_specialist(
             "procurement_agent", "procurement-agent-dependent", query, runtime
         )
@@ -287,7 +292,8 @@ class MultiAgentWorkflow:
                     context=child,
                 ):
                     name = str(event.get("event") or "")
-                    data = event.get("data") if isinstance(event.get("data"), dict) else {}
+                    raw_data = event.get("data")
+                    data = raw_data if isinstance(raw_data, dict) else {}
                     if name in {
                         "tool_start",
                         "tool_end",
@@ -403,7 +409,7 @@ class MultiAgentWorkflow:
                         {"role": "system", "content": _SUPERVISOR_PROMPT},
                         {
                             "role": "user",
-                            "content": f"用户问题：{state['query']}\n专业结果：{payload}",
+                            "content": f"用户问题：{state.get('query') or ''}\n专业结果：{payload}",
                         },
                     ]
                 ):
@@ -547,7 +553,8 @@ class MultiAgentWorkflow:
         usage = None
         async for event in self.stream(messages, context=context):
             if event.get("event") == "done":
-                data = event.get("data") or {}
+                raw = event.get("data")
+                data = raw if isinstance(raw, dict) else {}
                 answer = str(data.get("answer") or "")
                 usage = data.get("usage")
         return answer, cast(ModelUsage | None, usage)

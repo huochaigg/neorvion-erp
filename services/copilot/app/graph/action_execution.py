@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from contextlib import AbstractAsyncContextManager
-from typing import Any, TypedDict
+from typing import Any, TypedDict, cast
 
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 from langgraph.graph import END, START, StateGraph
@@ -26,8 +26,8 @@ def _request_confirmation(state: ActionExecutionState) -> dict[str, Any]:
     decision = interrupt(
         {
             "kind": "confirmation",
-            "execution_id": state["execution_id"],
-            "proposal_revision": state["proposal_revision"],
+            "execution_id": state.get("execution_id"),
+            "proposal_revision": state.get("proposal_revision"),
         }
     )
     return {"confirmation": decision, "phase": "confirmation_received"}
@@ -37,9 +37,9 @@ def _after_confirmation(state: ActionExecutionState) -> str:
     decision = state.get("confirmation", {})
     if (
         not decision.get("confirmed")
-        or decision.get("execution_id") != state["execution_id"]
-        or decision.get("tenant_id") != state["tenant_id"]
-        or decision.get("proposal_revision") != state["proposal_revision"]
+        or decision.get("execution_id") != state.get("execution_id")
+        or decision.get("tenant_id") != state.get("tenant_id")
+        or decision.get("proposal_revision") != state.get("proposal_revision")
     ):
         return "end"
     return "request_approval" if state.get("requires_approval") else "final_revalidation"
@@ -49,8 +49,8 @@ def _request_approval(state: ActionExecutionState) -> dict[str, Any]:
     decision = interrupt(
         {
             "kind": "approval",
-            "execution_id": state["execution_id"],
-            "proposal_revision": state["proposal_revision"],
+            "execution_id": state.get("execution_id"),
+            "proposal_revision": state.get("proposal_revision"),
         }
     )
     return {"approval": decision, "phase": "approval_received"}
@@ -60,15 +60,16 @@ def _after_approval(state: ActionExecutionState) -> str:
     decision = state.get("approval", {})
     valid = (
         decision.get("approved")
-        and decision.get("execution_id") == state["execution_id"]
-        and decision.get("tenant_id") == state["tenant_id"]
-        and decision.get("proposal_revision") == state["proposal_revision"]
+        and decision.get("execution_id") == state.get("execution_id")
+        and decision.get("tenant_id") == state.get("tenant_id")
+        and decision.get("proposal_revision") == state.get("proposal_revision")
     )
     return "final_revalidation" if valid else "end"
 
 
 def _phase(name: str):
-    def node(_state: ActionExecutionState) -> dict[str, Any]:
+    def node(state: ActionExecutionState) -> dict[str, Any]:
+        _ = state
         return {"phase": name}
 
     return node
@@ -117,12 +118,12 @@ class ActionExecutionGraph:
     async def begin(self, state: ActionExecutionState) -> None:
         if self._graph is None:
             raise AppError("执行编排尚未就绪", code=50376, status_code=503)
-        await self._graph.ainvoke(state, self._config(state["execution_id"]))
+        await self._graph.ainvoke(state, cast(Any, self._config(state.get("execution_id") or 0)))
 
     async def resume(self, execution_id: int, decision: dict[str, Any]) -> None:
         if self._graph is None:
             raise AppError("执行编排尚未就绪", code=50376, status_code=503)
-        await self._graph.ainvoke(Command(resume=decision), self._config(execution_id))
+        await self._graph.ainvoke(Command(resume=decision), cast(Any, self._config(execution_id)))
 
 
 action_execution_graph = ActionExecutionGraph()

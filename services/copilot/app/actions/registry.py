@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
 
+from app.ai.types import ModelToolDefinition
 from app.core.permissions import PermissionCode
 
 
@@ -35,7 +35,7 @@ class ActionRegistry:
         return tuple(self._specs.values())
 
     @staticmethod
-    def definitions(permissions: frozenset[str]) -> list[dict[str, Any]]:
+    def definitions(permissions: frozenset[str]) -> list[ModelToolDefinition]:
         """Proposal 工具定义与只读工具定义分离；服务端仍会再次鉴权。"""
         allowed = any(
             code in permissions

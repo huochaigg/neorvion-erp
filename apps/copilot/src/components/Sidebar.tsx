@@ -190,15 +190,15 @@ export function Sidebar({
           visible.map((item) => (
             <div
               key={item.id}
-              className={`group mb-1 flex cursor-pointer items-center rounded-xl px-2 py-2 transition ${
+              className={`group mb-1 flex h-9 cursor-pointer items-center rounded-xl px-2 transition ${
                 selectedId === item.id ? 'bg-[#EEF2FF] text-[#4F46E5]' : 'text-[#334155] hover:bg-[#F8FAFC]'
               }`}
               onClick={() => openConversation(item.id)}
             >
-              <div className="min-w-0 flex-1 truncate px-1 text-sm">{item.title}</div>
+              <div className="min-w-0 flex-1 truncate px-1 text-sm leading-5">{item.title}</div>
               <button
                 type="button"
-                className="hidden rounded-lg p-1 text-[#94A3B8] hover:bg-white hover:text-[#6366F1] group-hover:block"
+                className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg text-[#94A3B8] opacity-0 transition hover:bg-white hover:text-[#6366F1] group-hover:opacity-100"
                 onClick={(event) => {
                   event.stopPropagation();
                   let value = item.title;
@@ -214,7 +214,7 @@ export function Sidebar({
               </button>
               <button
                 type="button"
-                className="hidden rounded-lg p-1 text-[#94A3B8] hover:bg-white hover:text-rose-500 group-hover:block"
+                className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg text-[#94A3B8] opacity-0 transition hover:bg-white hover:text-rose-500 group-hover:opacity-100"
                 onClick={(event) => {
                   event.stopPropagation();
                   Modal.confirm({ title: '删除会话？', onOk: () => remove(item.id) });

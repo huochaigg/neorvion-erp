@@ -1,4 +1,4 @@
-import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Skeleton } from 'antd';
 import { AlertCircle, RotateCcw, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -9,8 +9,14 @@ import { ChatComposer } from '@/components/ChatComposer';
 import { ChatEmptyState } from '@/components/ChatEmptyState';
 import { ChatMessage } from '@/components/ChatMessage';
 import { ProposalCard } from '@/components/ProposalCard';
+import {
+  composeVisibleMessages,
+  pendingUserMessage,
+  seedConversationWithUser,
+  turnHasTerminalAssistant,
+} from '@/lib/chatMessages';
 import { useCopilotStore } from '@/store';
-import type { AgentRun, AgentTaskRun, Evidence, Message, StreamEvent, ToolRun } from '@/types';
+import type { AgentRun, ConversationDetail, Evidence, Message, StreamEvent, ToolRun } from '@/types';
 
 function requestId() {
   return crypto.randomUUID().replaceAll('-', '');
@@ -29,9 +35,12 @@ export function CopilotPage() {
   const [tools, setTools] = useState<ToolRun[]>([]);
   const [evidences, setEvidences] = useState<Evidence[]>([]);
   const [analysisStatus, setAnalysisStatus] = useState('');
-  const [agentRun, setAgentRun] = useState<AgentRun|null>(null);
+  const [agentRun, setAgentRun] = useState<AgentRun | null>(null);
   const [error, setError] = useState('');
   const [running, setRunning] = useState(false);
+  const [pendingUser, setPendingUser] = useState<Message | null>(null);
+  const [pendingFromIndex, setPendingFromIndex] = useState(0);
+  const [pendingConversationId, setPendingConversationId] = useState<number | null>(null);
   const bottom = useRef<HTMLDivElement>(null);
   const autoScroll = useRef(true);
   const runRef = useRef('');
@@ -47,7 +56,6 @@ export function CopilotPage() {
     queryKey: ['tenant', tenantId, 'copilot-conversation', selected],
     queryFn: ({ signal }) => getConversation(selected!, signal),
     enabled: selected != null,
-    placeholderData: keepPreviousData,
   });
   const proposals = useQuery({
     queryKey: ['tenant', tenantId, 'action-proposals', selected],
@@ -55,40 +63,101 @@ export function CopilotPage() {
     enabled: selected != null,
   });
 
+  const pendingForThisChat =
+    pendingUser != null && (pendingConversationId == null || pendingConversationId === selected)
+      ? pendingUser
+      : null;
+
   useEffect(() => () => useCopilotStore.getState().controller?.abort(), []);
   useEffect(() => {
     if (autoScroll.current) bottom.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [detail.data?.messages, draft, tools]);
+  }, [detail.data?.messages, draft, tools, pendingForThisChat]);
 
   const visible = useMemo(() => {
     const messages = detail.data?.messages ?? [];
-    return running
-      ? [
-          ...messages,
-          {
-            id: -1,
-            role: 'assistant',
-            content: draft,
-            status: 'RUNNING',
-            request_id: '',
-            created_at: '',
-            updated_at: '',
-            tool_runs: tools,
-            evidences,
-            analysis_status: analysisStatus,
-            agent_runs: agentRun ? [agentRun] : [],
-          } as Message,
-        ]
-      : messages;
-  }, [agentRun, analysisStatus, detail.data?.messages, draft, evidences, running, tools]);
+    return composeVisibleMessages({
+      messages,
+      pendingUser: pendingForThisChat,
+      pendingFromIndex,
+      showLiveAssistant:
+        pendingForThisChat != null &&
+        (running || !turnHasTerminalAssistant(messages, pendingFromIndex)),
+      draft,
+      tools,
+      evidences,
+      analysisStatus,
+      agentRun,
+    });
+  }, [
+    agentRun,
+    analysisStatus,
+    detail.data?.messages,
+    draft,
+    evidences,
+    pendingForThisChat,
+    pendingFromIndex,
+    running,
+    tools,
+  ]);
 
   const handleEvent = (item: StreamEvent, guard: string) => {
     if (runRef.current !== guard) return;
     const data = item.data;
     if (item.event === 'analysis_status') setAnalysisStatus(String(data.message ?? ''));
-    if (item.event === 'agent_route') setAgentRun({id:String(data.agent_run_id??'live'),graph_type:String(data.mode??'').toUpperCase()==='MULTI'?'MULTI_AGENT':'SINGLE_AGENT',status:'RUNNING',route_reason:String(data.reason??''),total_duration_ms:null,tasks:[]});
-    if (item.event === 'agent_start') setAgentRun(value=>{const task:AgentTaskRun={agent_name:String(data.agent_name??''),task_id:String(data.agent_task_id??''),status:'RUNNING',duration_ms:null,model_calls:0,tool_calls:0,evidence_count:0,error_code:null};return value?{...value,tasks:[...value.tasks.filter(x=>x.task_id!==task.task_id),task]}:{id:String(data.agent_run_id??'live'),graph_type:'MULTI_AGENT',status:'RUNNING',route_reason:null,total_duration_ms:null,tasks:[task]}});
-    if (item.event === 'agent_end'||item.event === 'agent_error') setAgentRun(value=>value?{...value,status:item.event==='agent_error'?'DEGRADED':value.status,tasks:value.tasks.map(x=>x.task_id===String(data.agent_task_id??'')?{...x,status:item.event==='agent_error'?'FAILED':'SUCCEEDED',duration_ms:Number(data.duration_ms??0)||null,model_calls:Number(data.model_calls??0),tool_calls:Number(data.tool_calls??0),evidence_count:Number(data.evidence_count??0),error_code:Number(data.error_code??0)||null}:x)}:value);
+    if (item.event === 'agent_route')
+      setAgentRun({
+        id: String(data.agent_run_id ?? 'live'),
+        graph_type: String(data.mode ?? '').toUpperCase() === 'MULTI' ? 'MULTI_AGENT' : 'SINGLE_AGENT',
+        status: 'RUNNING',
+        route_reason: String(data.reason ?? ''),
+        total_duration_ms: null,
+        tasks: [],
+      });
+    if (item.event === 'agent_start')
+      setAgentRun((value) => {
+        const task: AgentRun['tasks'][number] = {
+          agent_name: String(data.agent_name ?? ''),
+          task_id: String(data.agent_task_id ?? ''),
+          status: 'RUNNING',
+          duration_ms: null,
+          model_calls: 0,
+          tool_calls: 0,
+          evidence_count: 0,
+          error_code: null,
+        };
+        return value
+          ? { ...value, tasks: [...value.tasks.filter((x) => x.task_id !== task.task_id), task] }
+          : {
+              id: String(data.agent_run_id ?? 'live'),
+              graph_type: 'MULTI_AGENT',
+              status: 'RUNNING',
+              route_reason: null,
+              total_duration_ms: null,
+              tasks: [task],
+            };
+      });
+    if (item.event === 'agent_end' || item.event === 'agent_error')
+      setAgentRun((value) =>
+        value
+          ? {
+              ...value,
+              status: item.event === 'agent_error' ? 'DEGRADED' : value.status,
+              tasks: value.tasks.map((x) =>
+                x.task_id === String(data.agent_task_id ?? '')
+                  ? {
+                      ...x,
+                      status: item.event === 'agent_error' ? 'FAILED' : 'SUCCEEDED',
+                      duration_ms: Number(data.duration_ms ?? 0) || null,
+                      model_calls: Number(data.model_calls ?? 0),
+                      tool_calls: Number(data.tool_calls ?? 0),
+                      evidence_count: Number(data.evidence_count ?? 0),
+                      error_code: Number(data.error_code ?? 0) || null,
+                    }
+                  : x,
+              ),
+            }
+          : value,
+      );
     if (item.event === 'message') setDraft((value) => value + String(data.delta ?? ''));
     if (item.event === 'tool_start') {
       setTools((value) => [
@@ -130,25 +199,15 @@ export function CopilotPage() {
     if (['proposal_created', 'proposal_updated', 'proposal_validation'].includes(item.event)) {
       void query.invalidateQueries({ queryKey: ['tenant', tenantId, 'action-proposals', selected] });
     }
-    if (item.event === 'done') {
-      setDraft('');
-      setTools([]);
-      setEvidences([]);
-      setAnalysisStatus('');
-      setAgentRun(null);
-    }
   };
 
   const send = async (retryText?: string) => {
     const text = (retryText ?? input).trim();
     if (!text || running) return;
-    let conversationId = selected;
-    if (conversationId == null) {
-      const created = await create.mutateAsync();
-      conversationId = created.id;
-    }
-    const abort = new AbortController();
     const guard = requestId();
+    const user = pendingUserMessage(text, guard);
+    const fromIndex = selected != null ? (detail.data?.messages.length ?? 0) : 0;
+    const abort = new AbortController();
     autoScroll.current = true;
     runRef.current = guard;
     setController(abort);
@@ -160,8 +219,28 @@ export function CopilotPage() {
     setAnalysisStatus('');
     setAgentRun(null);
     setError('');
+    setPendingUser(user);
+    setPendingFromIndex(fromIndex);
+    setPendingConversationId(selected);
     setRunning(true);
+
+    let conversationId = selected;
     try {
+      if (conversationId == null) {
+        const created = await create.mutateAsync();
+        conversationId = created.id;
+        if (runRef.current !== guard) return;
+        setPendingConversationId(conversationId);
+      }
+      const key = ['tenant', tenantId, 'copilot-conversation', conversationId] as const;
+      query.setQueryData<ConversationDetail>(key, (old) =>
+        seedConversationWithUser(old, conversationId!, user, old?.title),
+      );
+      if (abort.signal.aborted) {
+        setPendingUser(null);
+        setPendingConversationId(null);
+        return;
+      }
       await streamChat({
         conversationId,
         message: text,
@@ -171,16 +250,25 @@ export function CopilotPage() {
       });
     } catch (cause) {
       if (!abort.signal.aborted) setError(cause instanceof Error ? cause.message : '生成失败');
+      if (conversationId == null) {
+        setPendingUser(null);
+        setPendingConversationId(null);
+        setInput(text);
+      }
     } finally {
       if (runRef.current === guard) {
         setRunning(false);
         setController(null);
-        void query.invalidateQueries({ queryKey: ['tenant', tenantId, 'copilot-conversation', conversationId] });
+        if (conversationId != null) {
+          void query.invalidateQueries({ queryKey: ['tenant', tenantId, 'copilot-conversation', conversationId] });
+          void query.invalidateQueries({ queryKey: ['tenant', tenantId, 'copilot-conversations'] });
+        }
       }
     }
   };
 
-  const empty = !selected || (!detail.isPending && visible.length === 0 && !running);
+  const empty = visible.length === 0 && !running && pendingForThisChat == null;
+  const showSkeleton = selected != null && detail.isPending && pendingForThisChat == null && !running;
 
   return (
     <div className="relative flex h-full min-h-0 flex-col">
@@ -198,14 +286,14 @@ export function CopilotPage() {
       >
         {empty ? (
           <ChatEmptyState disabled={running || create.isPending} onPrompt={(text) => void send(text)} />
-        ) : selected && detail.isPending ? (
+        ) : showSkeleton ? (
           <div className="mx-auto max-w-[900px] pt-10">
             <Skeleton active paragraph={{ rows: 8 }} />
           </div>
         ) : (
           <div className="mx-auto flex max-w-[900px] flex-col gap-6">
-            {visible.map((message) => (
-              <ChatMessage key={message.id} message={message} />
+            {visible.map((message, index) => (
+              <ChatMessage key={`${message.role}-${message.id}-${message.request_id}-${index}`} message={message} />
             ))}
             {(proposals.data?.items ?? []).map((proposal) => (
               <ProposalCard

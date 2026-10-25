@@ -10,7 +10,13 @@ from typing import cast
 from langgraph.graph import END, START, StateGraph
 from langgraph.runtime import Runtime
 
-from app.ai.types import ChatAdapter, ModelMessage, ModelToolCallPayload, ModelUsage
+from app.ai.types import (
+    ChatAdapter,
+    ModelMessage,
+    ModelToolCallPayload,
+    ModelToolDefinition,
+    ModelUsage,
+)
 from app.core.config import settings
 from app.core.exceptions import AppError
 from app.graph.state import CopilotState
@@ -118,7 +124,7 @@ class CopilotWorkflow:
         try:
             async for delta in self.adapter.stream(
                 state["messages"],
-                tools=definitions or None,
+                tools=cast(list[ModelToolDefinition] | None, definitions or None),
                 tool_choice="auto" if definitions else None,
             ):
                 if delta.text:
