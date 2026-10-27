@@ -20,6 +20,14 @@ from app.models.evaluation import (
     ModelCall,
     ModelPricing,
 )
+from app.models.governance import (
+    AIGovernanceAudit,
+    AIGovernancePolicy,
+    AIModelDefinition,
+    AIModelProvider,
+    AIRetentionRun,
+    TenantAIQuota,
+)
 from app.models.insight import (
     BusinessInsight,
     InsightDetectionRun,
@@ -61,6 +69,12 @@ __all__ = [
     "ModelPricing",
     "InsightRule",
     "InsightRuleRevision",
+    "AIGovernanceAudit",
+    "AIGovernancePolicy",
+    "AIModelDefinition",
+    "AIModelProvider",
+    "AIRetentionRun",
+    "TenantAIQuota",
     "InsightDetectionRun",
     "BusinessInsight",
     "InsightEvent",

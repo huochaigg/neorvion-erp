@@ -1,6 +1,7 @@
 """HTTP 依赖。JWT 验签 + Redis 快照写在这里，业务 Router 不要重复实现。"""
 
 from collections.abc import AsyncIterator
+from dataclasses import replace
 from datetime import UTC, datetime
 from typing import Annotated
 
@@ -48,7 +49,23 @@ async def get_tenant_context(request: Request) -> TenantContext:
     tenant_id = _parse_tenant_id(request.headers.get(TENANT_HEADER))
     try:
         claims = jwt_verifier().verify_access(token)
-        context = snapshot_store().load(claims=claims, tenant_id=tenant_id)
+        if claims.subject_type == "SERVICE":
+            context = authority_client().authorize(
+                access_token=token,
+                tenant_id=tenant_id,
+                audience=settings.iam_jwt_audience,
+            )
+            allowed = context.service_resources.get("knowledge_base", ())
+            if not allowed:
+                raise AppError(
+                    "服务身份必须绑定知识库资源范围", code=40373, status_code=403
+                )
+            context = replace(
+                context,
+                api_key_base_ids=frozenset(int(item) for item in allowed),
+            )
+        else:
+            context = snapshot_store().load(claims=claims, tenant_id=tenant_id)
     except SecurityError as exc:
         raise from_security_error(exc) from exc
     set_tenant_context(tenant_id=context.tenant_id, user_id=context.user_id)
@@ -146,6 +163,8 @@ async def get_high_risk_context(request: Request) -> TenantContext:
     tenant_id = _parse_tenant_id(request.headers.get(TENANT_HEADER))
     try:
         claims = jwt_verifier().verify_access(token)
+        if claims.subject_type != "USER":
+            raise AppError("服务身份不能调用高风险或写接口", code=40374, status_code=403)
         if settings.iam_authorize_url.strip() and settings.iam_internal_key.strip():
             context = snapshot_store().load(
                 claims=claims,

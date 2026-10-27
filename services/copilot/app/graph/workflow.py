@@ -50,6 +50,7 @@ class AgentRuntime:
     agent_task_id: str | None = None
     model_calls: int = 0
     max_model_calls: int | None = None
+    allow_multi_agent: bool = True
 
 
 class CopilotWorkflow:

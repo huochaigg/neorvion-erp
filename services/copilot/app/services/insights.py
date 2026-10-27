@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import json
+import uuid
 from datetime import UTC, date, datetime, timedelta
+from time import perf_counter
 from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -8,11 +11,15 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.ai.factory import get_chat_adapter
+from app.ai.types import ModelMessage, ModelUsage
 from app.core.config import settings
 from app.core.exceptions import AppError
 from app.core.tenant import TenantContext
 from app.erp.client import ErpApiClient
 from app.insights.detectors import detect, detector_registry
+from app.models.evaluation import ModelCall
+from app.models.governance import AIGovernancePolicy
 from app.models.insight import (
     BusinessInsight,
     InsightDetectionRun,
@@ -24,6 +31,7 @@ from app.models.insight import (
 from app.schemas.insight import (
     BusinessInsightOut,
     InsightAction,
+    InsightAnalysisResult,
     InsightEventOut,
     InsightNotificationOut,
     InsightRuleCreate,
@@ -31,6 +39,8 @@ from app.schemas.insight import (
     InsightRulePatch,
     InsightRunOut,
 )
+from app.schemas.workflow import WorkflowType
+from app.services.quotas import enforce_runtime_governance, reserve_chat_quota, usage_tokens
 
 
 class InsightService:
@@ -145,6 +155,28 @@ class InsightService:
         )
         self.session.add(run)
         await self.session.commit()
+        return await self._execute_detection(rule, run, now)
+
+    async def execute_queued(self, run_id: int) -> InsightRunOut:
+        """执行已由 Worker 领取的周期任务；规则停用或授权撤销时拒绝继续。"""
+        run = await self.session.scalar(
+            select(InsightDetectionRun).where(
+                InsightDetectionRun.tenant_id == self.context.tenant_id,
+                InsightDetectionRun.id == run_id,
+            )
+        )
+        if run is None:
+            raise AppError("检测运行不存在", code=40496, status_code=404)
+        rule = await self._rule(run.rule_id)
+        if not rule.enabled:
+            raise AppError("检测规则已停用", code=40997, status_code=409)
+        self._require_permissions(detector_registry.get(rule.detector_type).required_permissions)
+        return await self._execute_detection(rule, run, run.started_at or datetime.now(UTC))
+
+    async def _execute_detection(
+        self, rule: InsightRule, run: InsightDetectionRun, now: datetime
+    ) -> InsightRunOut:
+        """执行确定性检测并提交结果；外部请求期间不持有数据库行锁。"""
         try:
             data = await self._fetch(rule)
             findings = detect(rule.detector_type, rule.config, data, now=now)[
@@ -155,13 +187,15 @@ class InsightService:
             run.duplicate_count = duplicate
             run.status = "SUCCEEDED"
             run.finished_at = datetime.now(UTC)
+            run.lease_owner = None
+            run.lease_until = None
             rule.next_run_at = (
                 now + timedelta(minutes=rule.interval_minutes) if rule.enabled else None
             )
             await self.session.commit()
         except AppError as exc:
             await self.session.rollback()
-            run = await self.session.scalar(
+            failed_run = await self.session.scalar(
                 select(InsightDetectionRun)
                 .where(
                     InsightDetectionRun.tenant_id == self.context.tenant_id,
@@ -169,13 +203,15 @@ class InsightService:
                 )
                 .with_for_update()
             )
-            if run is not None:
-                run.status, run.error_code, run.safe_error, run.finished_at = (
+            if failed_run is not None:
+                failed_run.status, failed_run.error_code, failed_run.safe_error, failed_run.finished_at = (
                     "FAILED",
                     exc.code,
                     exc.message[:255],
                     datetime.now(UTC),
                 )
+                failed_run.lease_owner = None
+                failed_run.lease_until = None
                 await self.session.commit()
             raise
         return InsightRunOut.model_validate(run)
@@ -271,6 +307,191 @@ class InsightService:
 
     async def insight(self, insight_id: int) -> BusinessInsightOut:
         return BusinessInsightOut.model_validate(await self._insight(insight_id))
+
+    async def chat_seed(self, insight_id: int) -> tuple[BusinessInsight, str]:
+        """把授权后的结构化洞察压缩为安全首问，不携带隐藏 Prompt 或任意指令。"""
+        row = await self._insight(insight_id)
+        evidence = row.evidence_summary or {}
+        allowed = {
+            key: evidence[key]
+            for key in (
+                "available_quantity",
+                "threshold",
+                "warehouse_id",
+                "sku_id",
+                "sku_code",
+                "expected_arrival_date",
+                "overdue_days",
+                "processing_sla_hours",
+                "status",
+                "coverage_days",
+                "threshold_days",
+                "observed_at",
+            )
+            if key in evidence
+        }
+        prompt = (
+            f"请分析主动洞察 #{row.id}（{row.detector_type}，严重度 {row.severity}）。"
+            f"只基于以下已验证事实回答，区分事实、规则、推断和信息不足：{allowed}"
+        )
+        return row, prompt[:4000]
+
+    async def workflow_seed(
+        self, insight_id: int
+    ) -> tuple[BusinessInsight, WorkflowType, dict[str, Any]]:
+        """仅把固定 Detector 映射到现有白名单 Workflow，不允许模型选择工作流或参数。"""
+        row = await self._insight(insight_id)
+        evidence = row.evidence_summary or {}
+        if row.detector_type in {"LOW_STOCK_RISK", "INVENTORY_COVERAGE_RISK"}:
+            sku_code = str(evidence.get("sku_code") or "").strip()
+            if not sku_code and row.detector_type == "INVENTORY_COVERAGE_RISK":
+                sku_code = row.resource_id.split(":", 1)[-1].strip()
+            if not sku_code:
+                raise AppError("洞察缺少 SKU，不能启动补货工作流", code=40998, status_code=409)
+            workflow_type: WorkflowType = "INVENTORY_REPLENISHMENT_WORKFLOW"
+            values: dict[str, Any] = {"sku_code": sku_code}
+            warehouse = evidence.get("warehouse_id")
+            if warehouse is not None:
+                values["warehouse_id"] = int(warehouse)
+        elif row.detector_type == "OVERDUE_SHIPMENT":
+            try:
+                order_id = int(row.resource_id)
+            except ValueError as exc:
+                raise AppError("洞察订单标识无效", code=40998, status_code=409) from exc
+            workflow_type = "SALES_ORDER_REVIEW_WORKFLOW"
+            values = {"order_id": order_id}
+        else:
+            raise AppError("当前洞察没有安全的工作流映射", code=40998, status_code=409)
+        return row, workflow_type, values
+
+    async def record_link(self, insight_id: int, event_type: str, target_id: int) -> None:
+        await self._insight(insight_id)
+        self._event(insight_id, event_type, self.context.user_id, {"target_id": target_id})
+        await self.session.commit()
+
+    async def analyze(self, insight_id: int) -> BusinessInsightOut:
+        """在无工具模型调用中分析已验证证据；模型失败不影响原始告警事实。"""
+        row = await self._insight(insight_id, lock=True)
+        policy = await self.session.scalar(
+            select(AIGovernancePolicy).where(
+                AIGovernancePolicy.tenant_id == self.context.tenant_id
+            )
+        )
+        if policy is None or not policy.insight_analysis_enabled:
+            raise AppError("租户未启用 AI 洞察分析", code=40376, status_code=403)
+        if policy.allowed_provider_codes and settings.model_provider not in policy.allowed_provider_codes:
+            raise AppError("当前模型 Provider 不符合租户策略", code=40377, status_code=403)
+        if policy.allowed_model_names and settings.chat_model not in policy.allowed_model_names:
+            raise AppError("当前模型不符合租户策略", code=40377, status_code=403)
+        await enforce_runtime_governance(
+            self.session, self.context.tenant_id, "INSIGHT_ANALYSIS"
+        )
+        row.analysis_status = "RUNNING"
+        await self.session.commit()
+
+        evidence_json = json.dumps(row.evidence_summary, ensure_ascii=False, default=str)[:6000]
+        messages: list[ModelMessage] = [
+            {
+                "role": "system",
+                "content": (
+                    "你是企业 ERP 洞察分析器。只能依据输入事实，不得调用工具、不得建议自动写入。"
+                    "严格输出 JSON：fact_summary、rule_basis、inference、"
+                    "insufficient_information、recommendations。recommendations 仅提供人工复核建议。"
+                ),
+            },
+            {
+                "role": "user",
+                "content": (
+                    f"detector={row.detector_type}; severity={row.severity}; "
+                    f"resource={row.resource_type}:{row.resource_id}; evidence={evidence_json}"
+                ),
+            },
+        ]
+        reservation = await reserve_chat_quota(
+            self.session,
+            self.context.tenant_id,
+            max(1, (len(evidence_json) + 2) // 3) + settings.chat_max_output_tokens,
+        )
+        started = perf_counter()
+        call = ModelCall(
+            tenant_id=self.context.tenant_id,
+            user_id=self.context.user_id,
+            request_id=self.request_id[:64],
+            model_call_id=uuid.uuid4().hex,
+            model_provider=settings.model_provider,
+            model_name=settings.chat_model,
+            status="RUNNING",
+        )
+        model_call_id = call.model_call_id
+        self.session.add(call)
+        await self.session.commit()
+        usage: ModelUsage | None = None
+        try:
+            chunks: list[str] = []
+            async for delta in get_chat_adapter().stream(messages):
+                if delta.text:
+                    chunks.append(delta.text)
+                if delta.usage is not None:
+                    usage = delta.usage
+            payload = self._analysis_json("".join(chunks))
+            result = InsightAnalysisResult.model_validate(payload)
+            row = await self._insight(insight_id, lock=True)
+            row.ai_summary = result.fact_summary
+            row.recommendations = [
+                {
+                    "rule_basis": result.rule_basis,
+                    "inference": result.inference,
+                    "insufficient_information": result.insufficient_information,
+                },
+                *result.recommendations,
+            ][:5]
+            row.analysis_status = "SUCCEEDED"
+            call.status = "SUCCEEDED"
+            call.completed_at = datetime.now(UTC)
+            call.duration_ms = int((perf_counter() - started) * 1000)
+            call.input_tokens = usage.get("prompt_tokens") if usage else None
+            call.output_tokens = usage.get("completion_tokens") if usage else None
+            call.usage_source = "PROVIDER" if usage_tokens(usage) is not None else "UNKNOWN"
+            self._event(row.id, "INSIGHT_ANALYZED", self.context.user_id, {})
+            await self.session.commit()
+            await reservation.settle(usage_tokens(usage))
+            return BusinessInsightOut.model_validate(row)
+        except Exception as exc:
+            await self.session.rollback()
+            row = await self._insight(insight_id, lock=True)
+            row.analysis_status = "FAILED"
+            call = await self.session.scalar(
+                select(ModelCall).where(
+                    ModelCall.tenant_id == self.context.tenant_id,
+                    ModelCall.model_call_id == model_call_id,
+                )
+            )
+            if call is not None:
+                call.status = "FAILED"
+                call.completed_at = datetime.now(UTC)
+                call.duration_ms = int((perf_counter() - started) * 1000)
+                call.error_code = exc.code if isinstance(exc, AppError) else 50268
+            self._event(row.id, "INSIGHT_ANALYSIS_FAILED", self.context.user_id, {})
+            await self.session.commit()
+            await reservation.cancel()
+            if isinstance(exc, AppError):
+                raise
+            raise AppError("洞察分析输出无效", code=50298, status_code=502) from exc
+
+    @staticmethod
+    def _analysis_json(value: str) -> dict[str, Any]:
+        """只接受单一 JSON 对象，兼容常见 Markdown fence 但拒绝其余自由文本。"""
+        text_value = value.strip()
+        if text_value.startswith("```") and text_value.endswith("```"):
+            lines = text_value.splitlines()
+            text_value = "\n".join(lines[1:-1]).strip()
+        try:
+            parsed = json.loads(text_value)
+        except json.JSONDecodeError as exc:
+            raise AppError("洞察分析输出不是有效 JSON", code=50298, status_code=502) from exc
+        if not isinstance(parsed, dict):
+            raise AppError("洞察分析输出必须是 JSON 对象", code=50298, status_code=502)
+        return parsed
 
     async def transition(
         self, insight_id: int, action: str, payload: InsightAction

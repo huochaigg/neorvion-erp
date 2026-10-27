@@ -34,6 +34,10 @@ class TenantContext:
     session_id: str = ""
     high_risk_verified: bool = False
     authz_source: str = "snapshot"
+    subject_type: str = "USER"
+    service_id: str = ""
+    service_scopes: frozenset[str] = field(default_factory=frozenset)
+    service_resources: dict[str, tuple[str, ...]] = field(default_factory=dict)
 
     def has_all(self, *codes: str) -> bool:
         """当前快照是否具备全部功能权限。"""

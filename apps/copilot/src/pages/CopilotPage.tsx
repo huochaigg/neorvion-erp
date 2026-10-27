@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Skeleton } from 'antd';
 import { AlertCircle, RotateCcw, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import { streamChat } from '@/api/chat';
 import { createConversation, getConversation } from '@/api/conversations';
 import { listProposals } from '@/api/proposals';
@@ -23,13 +24,16 @@ function requestId() {
 }
 
 export function CopilotPage() {
+  const location = useLocation();
   const query = useQueryClient();
   const tenantId = useCopilotStore((s) => s.tenantId);
   const controller = useCopilotStore((s) => s.controller);
   const setController = useCopilotStore((s) => s.setController);
   const selected = useCopilotStore((s) => s.selectedId);
   const setSelected = useCopilotStore((s) => s.setSelectedId);
-  const [input, setInput] = useState('');
+  const [input, setInput] = useState(
+    () => String((location.state as { initialInput?: string } | null)?.initialInput ?? ''),
+  );
   const [lastMessage, setLastMessage] = useState('');
   const [draft, setDraft] = useState('');
   const [tools, setTools] = useState<ToolRun[]>([]);

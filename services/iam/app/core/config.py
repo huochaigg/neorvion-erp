@@ -34,6 +34,7 @@ class Settings(BaseSettings):
     jwt_access_expire_minutes: int = 30
     jwt_refresh_expire_days: int = 7
     jwt_leeway_seconds: int = 10
+    service_token_expire_seconds: int = 300
 
     cors_origins: str = (
         "http://localhost:8015,http://localhost:8016,http://localhost:8017,http://localhost:8018,"

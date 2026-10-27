@@ -55,6 +55,8 @@ def get_current_user(request: Request, session: IdentityDb) -> User:
     """解析 Access Token 并加载当前用户。Refresh 不得依赖本函数。"""
     token = _extract_bearer_token(request)
     claims = decode_token(token, expected_type="access")
+    if claims.subject_type != "USER":
+        raise AppError("服务身份不能调用用户接口", code=40374, status_code=403)
     request.state.session_id = claims.session_id
     if claims.session_id:
         from app.services.session import SessionService

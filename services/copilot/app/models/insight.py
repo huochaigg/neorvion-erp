@@ -94,6 +94,7 @@ class InsightDetectionRun(TimestampMixin, TenantMixin, Base):
     status: Mapped[str] = mapped_column(String(24), nullable=False, server_default="QUEUED")
     detected_count: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
     duplicate_count: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    attempt_count: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
     error_code: Mapped[int | None] = mapped_column(Integer)
     safe_error: Mapped[str | None] = mapped_column(String(255))
     lease_owner: Mapped[str | None] = mapped_column(String(96))

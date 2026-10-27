@@ -17,3 +17,6 @@ export const listInsightNotifications = (signal?: AbortSignal) => unwrap<Paged<I
 export const acknowledgeInsight = (id: number) => unwrap<BusinessInsight>(api.post(`/api/v1/insights/${id}/acknowledge`));
 export const closeInsight = (id: number) => unwrap<BusinessInsight>(api.post(`/api/v1/insights/${id}/close`));
 export const readInsightNotification = (id: number) => unwrap<InsightNotification>(api.post(`/api/v1/insight-notifications/${id}/read`));
+export const analyzeInsight = (id: number) => unwrap<BusinessInsight>(api.post(`/api/v1/insights/${id}/analyze`));
+export const insightToChat = (id: number) => unwrap<{ conversation_id: number; initial_message: string }>(api.post(`/api/v1/insights/${id}/chat`));
+export const insightToWorkflow = (id: number) => unwrap<{ workflow_id: number; workflow_type: string; status: string }>(api.post(`/api/v1/insights/${id}/workflow`));

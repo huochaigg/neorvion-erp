@@ -17,12 +17,15 @@ def redis_client() -> Redis:
     return _client
 
 
+def async_redis() -> Any:
+    """redis-py 类型桩把 asyncio 客户端标成同步接口，调用方仍按协程 await。"""
+    return cast(Any, redis_client())
+
+
 async def enqueue_workflow(tenant_id: int, workflow_id: int) -> bool:
     """Redis 仅投递租户和任务 ID；业务状态仍由 PostgreSQL 决定。"""
     try:
-        await cast(Any, redis_client()).lpush(
-            settings.workflow_queue_key, f"{tenant_id}:{workflow_id}"
-        )
+        await async_redis().lpush(settings.workflow_queue_key, f"{tenant_id}:{workflow_id}")
         return True
     except RedisError:
         logger.warning(
@@ -33,7 +36,7 @@ async def enqueue_workflow(tenant_id: int, workflow_id: int) -> bool:
 
 async def pop_workflow(timeout: int = 3) -> tuple[int, int] | None:
     try:
-        item = await cast(Any, redis_client()).brpop(settings.workflow_queue_key, timeout=timeout)
+        item = await async_redis().brpop(settings.workflow_queue_key, timeout=timeout)
     except RedisError:
         return None
     if not item:

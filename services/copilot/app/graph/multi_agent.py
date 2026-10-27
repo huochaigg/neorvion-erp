@@ -108,7 +108,11 @@ class MultiAgentWorkflow:
             if all(item in permissions for item in self.registry.get(name).required_permissions)
         ][: min(settings.multi_agent_max_agents, settings.multi_agent_max_parallel + 1)]
         mode = decision.mode
-        if not settings.multi_agent_enabled or (mode == "multi" and len(permitted) < 2):
+        if (
+            not settings.multi_agent_enabled
+            or not runtime.context.allow_multi_agent
+            or (mode == "multi" and len(permitted) < 2)
+        ):
             mode = "single"
         runtime.stream_writer(
             {

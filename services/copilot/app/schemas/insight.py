@@ -54,6 +54,7 @@ class InsightRunOut(BaseModel):
     status: str
     detected_count: int
     duplicate_count: int
+    attempt_count: int
     error_code: int | None
     safe_error: str | None
     started_at: datetime | None
@@ -86,6 +87,28 @@ class InsightAction(BaseModel):
     snoozed_until: datetime | None = Field(
         default=None, description="仅 snooze 操作需要，必须是未来时间"
     )
+
+
+class InsightChatOut(BaseModel):
+    conversation_id: int
+    initial_message: str = Field(
+        description="由服务端基于已授权洞察生成的安全首问，客户端不得替换租户上下文"
+    )
+
+
+class InsightWorkflowOut(BaseModel):
+    workflow_id: int
+    workflow_type: str
+    status: str
+
+
+class InsightAnalysisResult(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    fact_summary: str = Field(min_length=1, max_length=1200)
+    rule_basis: str = Field(min_length=1, max_length=800)
+    inference: str | None = Field(default=None, max_length=800)
+    insufficient_information: list[str] = Field(default_factory=list, max_length=10)
+    recommendations: list[dict[str, Any]] = Field(default_factory=list, max_length=5)
 
 
 class InsightEventOut(BaseModel):

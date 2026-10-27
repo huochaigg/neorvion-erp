@@ -8,6 +8,8 @@ class PermissionCode(StrEnum):
     COPILOT_INSIGHT_MANAGE = "copilot:insight:manage"
     COPILOT_EVALUATION_READ = "copilot:evaluation:read"
     COPILOT_EVALUATION_MANAGE = "copilot:evaluation:manage"
+    COPILOT_GOVERNANCE_READ = "copilot:governance:read"
+    COPILOT_GOVERNANCE_MANAGE = "copilot:governance:manage"
     PRODUCT_READ = "product:read"
     ORDER_READ = "order:read"
     INVENTORY_READ = "inventory:read"

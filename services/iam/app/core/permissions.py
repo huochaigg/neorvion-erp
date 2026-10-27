@@ -166,6 +166,8 @@ class PermissionCode(StrEnum):
     COPILOT_INSIGHT_MANAGE = "copilot:insight:manage"
     COPILOT_EVALUATION_READ = "copilot:evaluation:read"
     COPILOT_EVALUATION_MANAGE = "copilot:evaluation:manage"
+    COPILOT_GOVERNANCE_READ = "copilot:governance:read"
+    COPILOT_GOVERNANCE_MANAGE = "copilot:governance:manage"
 
     IAM_USERS_READ = "iam:users:read"
     IAM_USERS_UPDATE = "iam:users:update"
@@ -461,6 +463,18 @@ PERMISSION_CATALOG: tuple[tuple[str, str, str, str], ...] = (
         "管理 Agent 评测",
         "copilot",
         "管理数据集并启动受控评测",
+    ),
+    (
+        PermissionCode.COPILOT_GOVERNANCE_READ,
+        "查看 AI 治理",
+        "copilot",
+        "查看本租户模型、配额、审计与运行健康",
+    ),
+    (
+        PermissionCode.COPILOT_GOVERNANCE_MANAGE,
+        "管理 AI 治理",
+        "copilot",
+        "管理本租户模型用途、配额和 AI 安全策略",
     ),
     (
         PermissionCode.COPILOT_APPROVE,
@@ -1808,6 +1822,18 @@ PERMISSION_TREE: tuple[PermissionTreeDef, ...] = (
                         title="管理 Agent 评测",
                         type="ACTION",
                         permission_code=PermissionCode.COPILOT_EVALUATION_MANAGE,
+                    ),
+                    PermissionTreeDef(
+                        key="action:copilot-governance-read",
+                        title="查看 AI 治理",
+                        type="ACTION",
+                        permission_code=PermissionCode.COPILOT_GOVERNANCE_READ,
+                    ),
+                    PermissionTreeDef(
+                        key="action:copilot-governance-manage",
+                        title="管理 AI 治理",
+                        type="ACTION",
+                        permission_code=PermissionCode.COPILOT_GOVERNANCE_MANAGE,
                     ),
                 ),
             ),

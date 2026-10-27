@@ -54,6 +54,8 @@ async def get_tenant_context(request: Request) -> TenantContext:
     except SecurityError as exc:
         raise from_security_error(exc) from exc
     set_tenant_context(tenant_id=context.tenant_id, user_id=context.user_id)
+    if claims.subject_type != "USER":
+        raise AppError("服务身份不能调用用户专属 Copilot API", code=40374, status_code=403)
     request.state.access_token = token
     request.state.jwt_audiences = claims.audience
     return context
@@ -105,6 +107,23 @@ async def get_evaluation_manage_context(context: CopilotContext) -> TenantContex
 
 EvaluationReadContext = Annotated[TenantContext, Depends(get_evaluation_read_context)]
 EvaluationManageContext = Annotated[TenantContext, Depends(get_evaluation_manage_context)]
+
+
+async def get_governance_read_context(context: CopilotContext) -> TenantContext:
+    AuthorizationService().require_all(context, (PermissionCode.COPILOT_GOVERNANCE_READ,))
+    return context
+
+
+async def get_governance_manage_context(context: CopilotContext) -> TenantContext:
+    AuthorizationService().require_all(
+        context,
+        (PermissionCode.COPILOT_GOVERNANCE_READ, PermissionCode.COPILOT_GOVERNANCE_MANAGE),
+    )
+    return context
+
+
+GovernanceReadContext = Annotated[TenantContext, Depends(get_governance_read_context)]
+GovernanceManageContext = Annotated[TenantContext, Depends(get_governance_manage_context)]
 
 
 async def get_db(context: CopilotContext) -> AsyncIterator[AsyncSession]:

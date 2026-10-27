@@ -20,7 +20,7 @@ class Settings(BaseSettings):
     app_env: str = "development"
     app_host: str = "0.0.0.0"
     app_port: int = 8013
-    app_version: str = "10.0.0"
+    app_version: str = "11.0.0"
     git_sha: str = ""
     enable_api_docs: bool = True
     cors_origins: str = (
@@ -38,6 +38,11 @@ class Settings(BaseSettings):
     iam_redis_connect_timeout_seconds: float = 1.5
     iam_redis_read_timeout_seconds: float = 1.5
     iam_auth_timeout_seconds: float = 4.0
+    iam_service_token_url: str = "http://127.0.0.1:8010/api/v1/service-tokens"
+    insight_service_id: str = ""
+    insight_service_secret: SecretStr = SecretStr("")
+    evaluation_service_id: str = ""
+    evaluation_service_secret: SecretStr = SecretStr("")
     database_url: str
     database_pool_size: int = 5
     database_max_overflow: int = 5
@@ -104,6 +109,13 @@ class Settings(BaseSettings):
     evaluation_latency_regression_threshold: float = 0.20
     evaluation_token_regression_threshold: float = 0.20
     evaluation_trace_retention_days: int = 90
+    insight_scheduler_enabled: bool = False
+    insight_queue_key: str = "copilot:insights:v1"
+    insight_worker_poll_seconds: int = 3
+    insight_lease_seconds: int = 60
+    insight_max_concurrency: int = 2
+    insight_max_attempts: int = 3
+    quota_enforcement_enabled: bool = False
 
     @property
     def is_production(self) -> bool:
@@ -146,6 +158,8 @@ class Settings(BaseSettings):
             raise RuntimeError("生产环境必须配置至少 32 字节的 ERP_EXECUTION_SECRET")
         if not self.action_graph_enabled:
             raise RuntimeError("生产环境禁止关闭持久化 Action Execution Graph")
+        if not self.quota_enforcement_enabled:
+            raise RuntimeError("生产环境必须启用 QUOTA_ENFORCEMENT_ENABLED")
 
 
 @lru_cache

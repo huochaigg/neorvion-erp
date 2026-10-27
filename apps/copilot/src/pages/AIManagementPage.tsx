@@ -8,6 +8,7 @@ import { getCurrentIdentity } from '@/api/proposals';
 import { useCopilotStore } from '@/store';
 
 const EvaluationCenterPage = lazy(() => import('@/pages/EvaluationCenterPage'));
+const GovernanceCenterPage = lazy(() => import('@/pages/GovernanceCenterPage'));
 const { Text, Title } = Typography;
 
 export default function AIManagementPage() {
@@ -20,16 +21,24 @@ export default function AIManagementPage() {
     enabled: tenantId != null,
   });
   if (identity.isPending) return <Card loading className="m-6" />;
-  if (!identity.data?.permissions.includes('copilot:evaluation:read'))
+  const evaluationAllowed = identity.data?.permissions.includes('copilot:evaluation:read');
+  const governanceAllowed = identity.data?.permissions.includes('copilot:governance:read');
+  if (!evaluationAllowed && !governanceAllowed)
     return (
       <Result
         status="403"
         title="无权访问 AI 管理中心"
-        subTitle="需要 copilot:evaluation:read 权限"
+        subTitle="需要 Agent 评测或 AI 治理读取权限"
       />
     );
-  const knowledgeAllowed = identity.data.permissions.includes('knowledge:read');
+  const knowledgeAllowed = Boolean(identity.data?.permissions.includes('knowledge:read'));
   const items = [
+    ...(governanceAllowed ? [{
+      key: 'governance',
+      label: '企业 AI 治理',
+      children: <Suspense fallback={<Card loading />}><GovernanceCenterPage canManage={Boolean(identity.data?.permissions.includes('copilot:governance:manage'))} /></Suspense>,
+    }] : []),
+    ...(evaluationAllowed ? [
     {
       key: 'evaluation',
       label: 'Agent 任务评测',
@@ -39,6 +48,7 @@ export default function AIManagementPage() {
         </Suspense>
       ),
     },
+    ] : []),
     ...(knowledgeAllowed
       ? [
           {
@@ -78,7 +88,7 @@ export default function AIManagementPage() {
               Trace Viewer 位于 Agent 任务评测的 Trace 页签，展示 AgentRun、ModelCall、ToolRun 与
               Evidence，不展示隐藏思维过程。
             </Text>
-            <Button onClick={() => setParams({})}>打开 Agent 评测</Button>
+            <Button disabled={!evaluationAllowed} onClick={() => setParams({ tab: 'evaluation' })}>打开 Agent 评测</Button>
           </Space>
         </Card>
       ),
@@ -113,8 +123,8 @@ export default function AIManagementPage() {
           description="Agent 评测关注任务、工具、证据与安全；Knowledge 评测关注检索、重排与 Recall/MRR/nDCG。这里只统一入口，不合并数据库或 Runner。"
         />
         <Tabs
-          activeKey={items.some((item) => item.key === tab) ? tab : 'evaluation'}
-          onChange={(value) => setParams(value === 'evaluation' ? {} : { tab: value })}
+          activeKey={items.some((item) => item.key === tab) ? tab : (governanceAllowed ? 'governance' : 'evaluation')}
+          onChange={(value) => setParams({ tab: value })}
           items={items}
         />
       </div>

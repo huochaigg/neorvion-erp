@@ -13,6 +13,7 @@ from app.schemas.common import ApiResponse, ok
 from app.schemas.session import AuthorityCheckIn, AuthorityCheckOut
 from app.services.authorization import AuthorizationService
 from app.services.authz_revision import current_revision
+from app.services.service_identities import ServiceIdentityService
 from app.services.session import SessionService
 from app.services.snapshots import SnapshotService
 
@@ -36,6 +37,42 @@ def authorize(
         raise AppError("未登录", code=40100, status_code=401)
     token = header.removeprefix("Bearer ").strip()
     claims = decode_token(token, expected_type="access")
+    if claims.subject_type == "SERVICE":
+        if not payload.audience:
+            raise AppError("服务授权必须声明目标 Audience", code=40070, status_code=400)
+        service = ServiceIdentityService(session)
+        row = service.authorize_claims(
+            claims,
+            tenant_id=_tenant_id(x_tenant_id),
+            audience=payload.audience,
+            scopes=payload.codes,
+        )
+        service.require_resources(claims, payload.resources)
+        return ok(
+            AuthorityCheckOut(
+                user_id=0,
+                tenant_id=_tenant_id(x_tenant_id),
+                member_id=0,
+                is_owner=False,
+                role="SERVICE",
+                permission_codes=list(claims.scopes),
+                role_codes=[],
+                token_jti=claims.jti,
+                token_version=claims.credential_version,
+                authz_version=claims.credential_version,
+                is_platform_admin=False,
+                must_change_password=False,
+                display_name=row.name,
+                email="",
+                session_id="",
+                subject_type="SERVICE",
+                service_id=row.public_id,
+                service_scopes=list(claims.scopes),
+                service_resources={key: list(value) for key, value in claims.resources.items()},
+            )
+        )
+    if claims.subject_type != "USER":
+        raise AppError("委托身份暂未开放该授权入口", code=40374, status_code=403)
     SnapshotService(session).drain_outbox()
     if claims.session_id:
         SessionService(session).require_active(user_id=claims.user_id, public_id=claims.session_id)
@@ -111,3 +148,15 @@ def authorize(
             session_id=context.session_id,
         )
     )
+
+
+def _tenant_id(raw: str | None) -> int:
+    if not raw or not raw.strip():
+        raise AppError("缺少租户上下文", code=40030, status_code=400)
+    try:
+        value = int(raw.strip())
+    except ValueError as exc:
+        raise AppError("租户上下文无效", code=40030, status_code=400) from exc
+    if value <= 0:
+        raise AppError("租户上下文无效", code=40030, status_code=400)
+    return value

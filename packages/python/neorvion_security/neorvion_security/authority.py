@@ -28,6 +28,8 @@ class HttpAuthorityClient:
         access_token: str,
         tenant_id: int,
         codes: list[str] | None = None,
+        audience: str = "",
+        resources: dict[str, list[str]] | None = None,
     ) -> TenantContext:
         """用当前 Access Token 向 IAM 索取最新成员授权。
 
@@ -37,7 +39,14 @@ class HttpAuthorityClient:
         """
         if not self.url or not self.internal_key:
             raise SecurityError("高风险操作缺少权威授权通道", code=50314, status_code=503)
-        body = json.dumps({"codes": codes or [], "high_risk": True}).encode("utf-8")
+        body = json.dumps(
+            {
+                "codes": codes or [],
+                "audience": audience,
+                "resources": resources or {},
+                "high_risk": True,
+            }
+        ).encode("utf-8")
         request = Request(
             self.url,
             data=body,
@@ -97,4 +106,11 @@ def _context_from_authority(data: dict[str, Any]) -> TenantContext:
         session_id=str(data.get("session_id") or ""),
         high_risk_verified=True,
         authz_source="iam-db",
+        subject_type=str(data.get("subject_type") or "USER"),
+        service_id=str(data.get("service_id") or ""),
+        service_scopes=frozenset(str(item) for item in data.get("service_scopes") or []),
+        service_resources={
+            str(key): tuple(str(item) for item in values)
+            for key, values in (data.get("service_resources") or {}).items()
+        },
     )

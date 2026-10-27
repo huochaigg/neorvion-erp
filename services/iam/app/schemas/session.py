@@ -17,6 +17,10 @@ class SessionOut(BaseModel):
 
 class AuthorityCheckIn(BaseModel):
     codes: list[str] = Field(default_factory=list, description="高风险接口要求的权限编码")
+    audience: str = Field(default="", description="调用方正在保护的目标 Audience")
+    resources: dict[str, list[str]] = Field(
+        default_factory=dict, description="本次调用要求的资源范围"
+    )
     high_risk: bool = True
 
 
@@ -38,3 +42,7 @@ class AuthorityCheckOut(BaseModel):
     session_id: str
     high_risk_verified: bool = True
     authz_source: str = "iam-db"
+    subject_type: str = "USER"
+    service_id: str = ""
+    service_scopes: list[str] = Field(default_factory=list)
+    service_resources: dict[str, list[str]] = Field(default_factory=dict)

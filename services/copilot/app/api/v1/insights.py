@@ -4,20 +4,28 @@ from fastapi import APIRouter, Query, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import DbSession, InsightManageContext, InsightReadContext
+from app.core.permissions import PermissionCode
 from app.erp.client import get_erp_client
 from app.insights.detectors import detector_registry
+from app.knowledge.client import get_knowledge_client
 from app.schemas.common import ApiResponse, ok
 from app.schemas.insight import (
     BusinessInsightOut,
     InsightAction,
+    InsightChatOut,
     InsightEventOut,
     InsightNotificationOut,
     InsightRuleCreate,
     InsightRuleOut,
     InsightRulePatch,
     InsightRunOut,
+    InsightWorkflowOut,
 )
+from app.schemas.workflow import WorkflowCreate
+from app.services.authorization import AuthorizationService
+from app.services.conversations import ConversationService
 from app.services.insights import InsightService
+from app.services.workflows import WorkflowService
 
 router = APIRouter(tags=["proactive-insights"])
 
@@ -110,6 +118,62 @@ async def get_insight(
     insight_id: int, request: Request, context: InsightReadContext, db: DbSession
 ):
     return ok(await _service(request, db, context).insight(insight_id))
+
+
+@router.post("/insights/{insight_id}/chat", response_model=ApiResponse[InsightChatOut])
+async def insight_to_chat(
+    insight_id: int, request: Request, context: InsightReadContext, db: DbSession
+):
+    """显式创建当前用户会话并返回安全首问；不会后台冒充用户执行模型调用。"""
+    AuthorizationService().require_all(context, (PermissionCode.COPILOT_USE,))
+    insight, initial_message = await _service(request, db, context).chat_seed(insight_id)
+    conversation = await ConversationService(cast(AsyncSession, db), context).create(
+        f"洞察 #{insight.id}：{insight.detector_type}"[:128]
+    )
+    await _service(request, db, context).record_link(
+        insight_id, "INSIGHT_CHAT_CREATED", conversation.id
+    )
+    return ok(InsightChatOut(conversation_id=conversation.id, initial_message=initial_message))
+
+
+@router.post("/insights/{insight_id}/analyze", response_model=ApiResponse[BusinessInsightOut])
+async def analyze_insight(
+    insight_id: int, request: Request, context: InsightReadContext, db: DbSession
+):
+    return ok(await _service(request, db, context).analyze(insight_id))
+
+
+@router.post("/insights/{insight_id}/workflow", response_model=ApiResponse[InsightWorkflowOut])
+async def insight_to_workflow(
+    insight_id: int, request: Request, context: InsightReadContext, db: DbSession
+):
+    """仅在用户显式操作后，将固定洞察类型映射到现有受控工作流。"""
+    _, workflow_type, values = await _service(request, db, context).workflow_seed(insight_id)
+    workflow = await WorkflowService(
+        cast(AsyncSession, db),
+        context,
+        access_token=str(getattr(request.state, "access_token", "")),
+        request_id=str(getattr(request.state, "request_id", "")),
+        erp=get_erp_client(),
+        knowledge=get_knowledge_client(),
+        audiences=tuple(getattr(request.state, "jwt_audiences", ())),
+    ).create(
+        WorkflowCreate(
+            workflow_type=workflow_type,
+            idempotency_key=f"insight:{insight_id}:user:{context.user_id}",
+            input=values,
+        )
+    )
+    await _service(request, db, context).record_link(
+        insight_id, "INSIGHT_WORKFLOW_CREATED", workflow.id
+    )
+    return ok(
+        InsightWorkflowOut(
+            workflow_id=workflow.id,
+            workflow_type=workflow.workflow_type,
+            status=workflow.status,
+        )
+    )
 
 
 async def _transition(

@@ -48,7 +48,7 @@ const NAV_GROUPS = [
         to: '/manage',
         label: 'AI 管理中心',
         icon: ChartNoAxesCombined,
-        permission: 'copilot:evaluation:read',
+        permissions: ['copilot:evaluation:read', 'copilot:governance:read'],
       },
     ],
   },
@@ -133,7 +133,10 @@ export function Sidebar({
       <nav className="space-y-4 px-3" aria-label="全局模块导航">
         {NAV_GROUPS.map((group) => {
           const items = group.items.filter(
-            (item) => !('permission' in item) || permissions.includes(item.permission),
+            (item) =>
+              (!('permission' in item) && !('permissions' in item)) ||
+              ('permission' in item && permissions.includes(item.permission)) ||
+              ('permissions' in item && item.permissions.some((code) => permissions.includes(code))),
           );
           if (!items.length) return null;
           return (

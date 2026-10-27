@@ -15,6 +15,7 @@ PUBLIC_ROUTES: frozenset[tuple[str, str]] = frozenset(
         ("GET", "/.well-known/jwks.json"),
         ("POST", "/api/v1/internal/permissions/sync"),
         ("POST", "/api/v1/internal/authorize"),
+        ("POST", "/api/v1/service-tokens"),
     }
 )
 

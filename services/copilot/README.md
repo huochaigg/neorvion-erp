@@ -317,3 +317,27 @@ V10 新增四类固定 Detector、规则版本审计、手动只读检测、异�
 必须由用户主动触发，使用本次请求的短期 Access Token；Token 不写入 PostgreSQL 或 Redis。由于 IAM 尚无可签发、
 可实时撤销的后台评测/调度服务身份，周期后台执行和 V9 LIVE Evaluation 继续由服务端禁用，不能用管理员 Token
 或伪造 tenant/user 绕过。迁移：`7f803d545046`。详细边界见 `docs/copilot/v10-proactive-insights.md`。
+
+## V11 Enterprise AI Governance
+
+V11 新增 IAM 短期服务身份、周期 Insight Scheduler/Worker、AI 洞察分析、Insight 到
+Chat/Workflow 的显式联动，以及租户级模型目录、治理策略、Redis 原子配额、审计、保留策略
+Dry Run 和运行态势 API。服务凭据只通过部署 Secret 注入；数据库仅保存 Argon2 哈希，Redis
+消息只保存 tenant/run ID。
+
+新环境先分别执行 IAM 与 Copilot 迁移：
+
+```bash
+uv run --directory services/iam alembic upgrade head
+uv run --directory services/copilot alembic upgrade head
+```
+
+由 IAM 平台管理员创建用途独立的服务身份，并只授予目标租户、Audience、只读 Scope 与资源
+白名单。此步骤不会自动给任何内置角色或现有成员增加权限。确认部署 Secret 后再设置
+`INSIGHT_SCHEDULER_ENABLED=true`，分别启动 `app.tasks.insight_scheduler` 与
+`app.tasks.insight_worker`。
+
+生产环境必须启用 `QUOTA_ENFORCEMENT_ENABLED=true`。Provider 的 API Key 不经管理 API 上传，
+只登记 `SECRET_ENV_NAME`，前端仅显示“已配置/未配置”。数据保留接口在 V11 只允许 Dry Run；
+物理删除仍需要独立审批和备份。完整部署、回滚和安全门禁见
+`docs/copilot/v11-enterprise-ai-governance.md`。

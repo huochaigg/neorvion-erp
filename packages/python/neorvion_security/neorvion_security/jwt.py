@@ -4,22 +4,23 @@ from __future__ import annotations
 
 import json
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from typing import Any, Literal
-from uuid import uuid4
 from urllib.request import urlopen
+from uuid import uuid4
 
 import jwt
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
-from jwt import PyJWK, PyJWKClient
+from jwt import PyJWK
 from jwt.algorithms import RSAAlgorithm
 
 from neorvion_security.errors import SecurityError
 
 ALLOWED_ALGORITHMS = ("RS256",)
 TokenType = Literal["access", "refresh"]
+SubjectType = Literal["USER", "SERVICE", "DELEGATED"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -37,6 +38,14 @@ class JwtClaims:
     not_before: int
     kid: str
     session_id: str = ""
+    subject_type: SubjectType = "USER"
+    service_id: str = ""
+    tenant_scope: tuple[int, ...] = ()
+    scopes: tuple[str, ...] = ()
+    resources: dict[str, tuple[str, ...]] = field(default_factory=dict)
+    credential_version: int = 0
+    actor: str = ""
+    delegated_subject: str = ""
 
 
 class JwksCache:
@@ -151,12 +160,24 @@ class JwtVerifier:
             raise SecurityError("无效的登录凭证", code=40102, status_code=401) from exc
         if payload.get("type") != expected_type:
             raise SecurityError("无效的登录凭证", code=40102, status_code=401)
-        try:
-            user_id = int(payload["sub"])
-        except (TypeError, ValueError) as exc:
-            raise SecurityError("无效的登录凭证", code=40102, status_code=401) from exc
-        if user_id <= 0:
-            raise SecurityError("无效的登录凭证", code=40102, status_code=401)
+        subject_type = str(payload.get("subject_type") or "USER").upper()
+        if subject_type not in {"USER", "SERVICE", "DELEGATED"}:
+            raise SecurityError("无效的身份类型", code=40108, status_code=401)
+        user_id = 0
+        service_id = str(payload.get("service_id") or "")
+        if subject_type == "SERVICE":
+            if expected_type != "access" or not service_id or str(payload["sub"]) != service_id:
+                raise SecurityError("无效的服务身份凭证", code=40108, status_code=401)
+        else:
+            try:
+                user_id = int(payload["sub"])
+            except (TypeError, ValueError) as exc:
+                raise SecurityError("无效的登录凭证", code=40102, status_code=401) from exc
+            if user_id <= 0:
+                raise SecurityError("无效的登录凭证", code=40102, status_code=401)
+        tenant_scope = _positive_int_tuple(payload.get("tenant_scope"))
+        scopes = _string_tuple(payload.get("scope"))
+        resources = _resource_claim(payload.get("resources"))
         audience = payload.get("aud")
         if isinstance(audience, str):
             aud_tuple = (audience,)
@@ -178,6 +199,14 @@ class JwtVerifier:
             not_before=int(payload["nbf"]),
             kid=kid,
             session_id=str(payload.get("sid") or ""),
+            subject_type=subject_type,  # type: ignore[arg-type]
+            service_id=service_id,
+            tenant_scope=tenant_scope,
+            scopes=scopes,
+            resources=resources,
+            credential_version=int(payload.get("credential_version") or 0),
+            actor=str(payload.get("actor") or ""),
+            delegated_subject=str(payload.get("delegated_subject") or ""),
         )
 
 
@@ -238,7 +267,49 @@ class LocalJwtSigner:
         )
         return token, jti
 
-    def jwks(self, previous_public_pem: bytes | None = None, previous_kid: str | None = None) -> dict:
+    def sign_service(
+        self,
+        *,
+        service_id: str,
+        ttl: timedelta,
+        audiences: list[str],
+        tenant_scope: list[int],
+        scopes: list[str],
+        resources: dict[str, list[str]] | None = None,
+        credential_version: int = 1,
+    ) -> tuple[str, str]:
+        """签发短期 SERVICE Token；所有能力均显式写入受签名声明。"""
+        if not service_id or not audiences or not tenant_scope or not scopes:
+            raise SecurityError("服务身份授权范围不能为空", code=40070, status_code=400)
+        now = datetime.now(UTC)
+        jti = uuid4().hex
+        payload: dict[str, Any] = {
+            "sub": service_id,
+            "service_id": service_id,
+            "subject_type": "SERVICE",
+            "type": "access",
+            "iss": self.issuer,
+            "aud": list(audiences),
+            "iat": now,
+            "nbf": now,
+            "exp": now + ttl,
+            "jti": jti,
+            "tenant_scope": sorted(set(tenant_scope)),
+            "scope": sorted(set(scopes)),
+            "resources": resources or {},
+            "credential_version": credential_version,
+        }
+        token = jwt.encode(
+            payload,
+            self._private,
+            algorithm="RS256",
+            headers={"kid": self.kid, "typ": "JWT"},
+        )
+        return token, jti
+
+    def jwks(
+        self, previous_public_pem: bytes | None = None, previous_kid: str | None = None
+    ) -> dict:
         """当前与上一把公钥的 JWKS，供 /.well-known/jwks.json 使用。"""
         keys = [self._jwk(self.public_pem, self.kid)]
         if previous_public_pem and previous_kid:
@@ -256,3 +327,35 @@ class LocalJwtSigner:
 def decode_access_token(verifier: JwtVerifier, token: str) -> JwtClaims:
     """业务服务入口：只接受 access。"""
     return verifier.verify_access(token)
+
+
+def _string_tuple(value: Any) -> tuple[str, ...]:
+    if isinstance(value, str):
+        return tuple(item for item in value.split() if item)
+    if isinstance(value, list):
+        return tuple(str(item) for item in value if str(item))
+    return ()
+
+
+def _positive_int_tuple(value: Any) -> tuple[int, ...]:
+    if not isinstance(value, list):
+        return ()
+    parsed: list[int] = []
+    for item in value:
+        try:
+            number = int(item)
+        except (TypeError, ValueError):
+            continue
+        if number > 0:
+            parsed.append(number)
+    return tuple(parsed)
+
+
+def _resource_claim(value: Any) -> dict[str, tuple[str, ...]]:
+    if not isinstance(value, dict):
+        return {}
+    return {
+        str(key): _string_tuple(items)
+        for key, items in value.items()
+        if isinstance(items, (list, str))
+    }

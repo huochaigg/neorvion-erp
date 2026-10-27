@@ -1,5 +1,16 @@
 # Neorvion ERP Copilot 路线图
 
+## V11：Enterprise AI Governance（核心治理切片完成，发布门禁未全部关闭）
+
+- IAM 新增 USER/SERVICE/DELEGATED 声明模型和可轮换、可吊销的短期 Service Token；
+  DELEGATED 仅完成声明兼容，尚未开放签发流程。
+- 新增模型目录、租户配额、治理策略、治理审计、保留策略 Dry Run 与运行态势聚合。
+- V10 Scheduler/Worker 使用 IAM 服务身份和只读 ERP Scope；默认禁用，配置专用身份后显式开启。
+- AI 分析不改变 Detector 的事实判定；Insight 到 Chat/Workflow 必须由用户显式发起。
+- V9 LIVE 仍保持服务端拒绝：ERP 资源约束尚未由各只读端点绑定到实际参数，不能用“JWT 有效”
+  代替资源级授权；完成该契约和真实隔离租户验收后才能开放。
+- 未给任何现有角色批量回填新权限；迁移与真实 IAM/ERP/Knowledge/LLM/E2E 仍是发布门禁。
+
 ## V8：Multi-Agent 协作（代码与自动化测试阶段）
 
 - 保留 Single Agent，新增确定性 Router、Supervisor 和四个专业 Agent。
