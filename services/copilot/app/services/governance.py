@@ -6,13 +6,16 @@ from typing import Any
 
 import httpx
 from redis.exceptions import RedisError
-from sqlalchemy import func, select, text
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.exceptions import AppError
 from app.core.tenant import TenantContext
-from app.models.evaluation import ModelCall
+from app.models.action_execution import ActionExecution
+from app.models.agent_trace import AgentRun
+from app.models.conversation import Conversation, ToolRun
+from app.models.evaluation import AgentEvaluationRun, ModelCall
 from app.models.governance import (
     AIGovernanceAudit,
     AIGovernancePolicy,
@@ -21,12 +24,15 @@ from app.models.governance import (
     AIRetentionRun,
     TenantAIQuota,
 )
+from app.models.insight import InsightDetectionRun
+from app.models.workflow import WorkflowInstance
 from app.schemas.governance import (
     GovernancePolicyIn,
     ModelCreate,
     ProviderCreate,
     ProviderPatch,
     TenantQuotaIn,
+    TenantQuotaOut,
 )
 from app.tasks.queue import async_redis
 
@@ -229,43 +235,61 @@ class GovernanceService:
                     "unknown_usage_calls": int(row[6]),
                 }
             )
-        quota = await self.quota()
-        quota_out = quota if isinstance(quota, dict) else {
-            column.name: getattr(quota, column.name) for column in quota.__table__.columns
+        return {
+            "period_start": month.isoformat(),
+            "items": items,
+            "quota": TenantQuotaOut.model_validate(await self.quota()).model_dump(mode="json"),
         }
-        return {"period_start": month.isoformat(), "items": items, "quota": quota_out}
 
     async def operations(self) -> dict[str, Any]:
-        values = (
-            await self.session.execute(
-                text(
-                    "SELECT "
-                    "(SELECT count(*) FROM copilot_model_calls WHERE tenant_id=:tenant) AS model_calls_total,"
-                    "(SELECT count(*) FROM copilot_model_calls WHERE tenant_id=:tenant AND status='SUCCEEDED') AS model_calls_succeeded,"
-                    "(SELECT count(*) FROM copilot_model_calls WHERE tenant_id=:tenant AND status='FAILED') AS model_failures,"
-                    "(SELECT count(*) FROM copilot_model_calls WHERE tenant_id=:tenant AND error_code BETWEEN 42900 AND 42999) AS model_429,"
-                    "(SELECT count(*) FROM copilot_model_calls WHERE tenant_id=:tenant AND error_code BETWEEN 50200 AND 50299) AS model_5xx,"
-                    "(SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY duration_ms) FROM copilot_model_calls WHERE tenant_id=:tenant AND duration_ms IS NOT NULL) AS model_p50_ms,"
-                    "(SELECT percentile_cont(0.95) WITHIN GROUP (ORDER BY duration_ms) FROM copilot_model_calls WHERE tenant_id=:tenant AND duration_ms IS NOT NULL) AS model_p95_ms,"
-                    "(SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY duration_ms) FROM copilot_tool_runs WHERE tenant_id=:tenant AND duration_ms IS NOT NULL) AS tool_p50_ms,"
-                    "(SELECT percentile_cont(0.95) WITHIN GROUP (ORDER BY duration_ms) FROM copilot_tool_runs WHERE tenant_id=:tenant AND duration_ms IS NOT NULL) AS tool_p95_ms,"
-                    "(SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY total_duration_ms) FROM copilot_agent_runs WHERE tenant_id=:tenant AND total_duration_ms IS NOT NULL) AS agent_p50_ms,"
-                    "(SELECT percentile_cont(0.95) WITHIN GROUP (ORDER BY total_duration_ms) FROM copilot_agent_runs WHERE tenant_id=:tenant AND total_duration_ms IS NOT NULL) AS agent_p95_ms,"
-                    "(SELECT count(*) FROM copilot_action_executions WHERE tenant_id=:tenant AND status='UNKNOWN') AS unknown_executions,"
-                    "(SELECT count(*) FROM copilot_workflow_instances WHERE tenant_id=:tenant AND status IN ('QUEUED','RUNNING','RECONCILING')) AS active_workflows,"
-                    "(SELECT count(*) FROM copilot_agent_evaluation_runs WHERE tenant_id=:tenant AND status IN ('QUEUED','RUNNING')) AS active_evaluations,"
-                    "(SELECT count(*) FROM copilot_insight_detection_runs WHERE tenant_id=:tenant AND status IN ('QUEUED','RUNNING')) AS active_insights,"
-                    "(SELECT count(*) FROM copilot_workflow_instances WHERE tenant_id=:tenant AND lease_until < now() AND status IN ('RUNNING','RECONCILING')) AS expired_leases"
-                ),
-                {"tenant": self.context.tenant_id},
-            )
-        ).mappings().one()
+        model_calls_total = await self._count(ModelCall)
+        model_calls_succeeded = await self._count(ModelCall, ModelCall.status == "SUCCEEDED")
         output: dict[str, Any] = {
-            key: (float(value) if value is not None else None) for key, value in values.items()
+            "model_calls_total": float(model_calls_total),
+            "model_calls_succeeded": float(model_calls_succeeded),
+            "model_failures": float(await self._count(ModelCall, ModelCall.status == "FAILED")),
+            "model_429": float(
+                await self._count(ModelCall, ModelCall.error_code.between(42900, 42999))
+            ),
+            "model_5xx": float(
+                await self._count(ModelCall, ModelCall.error_code.between(50200, 50299))
+            ),
+            "model_p50_ms": await self._percentile(ModelCall, ModelCall.duration_ms, 0.5),
+            "model_p95_ms": await self._percentile(ModelCall, ModelCall.duration_ms, 0.95),
+            "tool_p50_ms": await self._percentile(ToolRun, ToolRun.duration_ms, 0.5),
+            "tool_p95_ms": await self._percentile(ToolRun, ToolRun.duration_ms, 0.95),
+            "agent_p50_ms": await self._percentile(AgentRun, AgentRun.total_duration_ms, 0.5),
+            "agent_p95_ms": await self._percentile(AgentRun, AgentRun.total_duration_ms, 0.95),
+            "unknown_executions": float(
+                await self._count(ActionExecution, ActionExecution.status == "UNKNOWN")
+            ),
+            "active_workflows": float(
+                await self._count(
+                    WorkflowInstance,
+                    WorkflowInstance.status.in_(("QUEUED", "RUNNING", "RECONCILING")),
+                )
+            ),
+            "active_evaluations": float(
+                await self._count(
+                    AgentEvaluationRun, AgentEvaluationRun.status.in_(("QUEUED", "RUNNING"))
+                )
+            ),
+            "active_insights": float(
+                await self._count(
+                    InsightDetectionRun, InsightDetectionRun.status.in_(("QUEUED", "RUNNING"))
+                )
+            ),
+            "expired_leases": float(
+                await self._count(
+                    WorkflowInstance,
+                    WorkflowInstance.lease_until < func.now(),
+                    WorkflowInstance.status.in_(("RUNNING", "RECONCILING")),
+                )
+            ),
         }
-        total = int(output.get("model_calls_total") or 0)
-        succeeded = int(output.get("model_calls_succeeded") or 0)
-        output["model_success_rate"] = round(succeeded / total, 4) if total else None
+        output["model_success_rate"] = (
+            round(model_calls_succeeded / model_calls_total, 4) if model_calls_total else None
+        )
         try:
             redis = async_redis()
             output["redis_status"] = "UP" if await redis.ping() else "UNKNOWN"
@@ -303,22 +327,13 @@ class GovernanceService:
         conversation_days = int(self._value(policy, "conversation_retention_days"))
         trace_cutoff = datetime.now(UTC) - timedelta(days=trace_days)
         conversation_cutoff = datetime.now(UTC) - timedelta(days=conversation_days)
-        counts = {}
-        for key, table_name, column, cutoff in (
-            ("model_calls", "copilot_model_calls", "started_at", trace_cutoff),
-            ("agent_runs", "copilot_agent_runs", "created_at", trace_cutoff),
-            ("conversations", "copilot_conversations", "updated_at", conversation_cutoff),
-        ):
-            counts[key] = int(
-                await self.session.scalar(
-                    text(
-                        f"SELECT count(*) FROM {table_name} "  # noqa: S608 固定内部表名白名单
-                        f"WHERE tenant_id=:tenant AND {column} < :cutoff"
-                    ),
-                    {"tenant": self.context.tenant_id, "cutoff": cutoff},
-                )
-                or 0
-            )
+        counts = {
+            "model_calls": await self._count(ModelCall, ModelCall.started_at < trace_cutoff),
+            "agent_runs": await self._count(AgentRun, AgentRun.started_at < trace_cutoff),
+            "conversations": await self._count(
+                Conversation, Conversation.updated_at < conversation_cutoff
+            ),
+        }
         row = AIRetentionRun(
             tenant_id=self.context.tenant_id,
             requested_by=self.context.user_id,
@@ -382,7 +397,6 @@ class GovernanceService:
     def _policy_defaults(self) -> dict[str, Any]:
         return {
             "id": 0,
-            "tenant_id": self.context.tenant_id,
             **GovernancePolicyIn().model_dump(),
             "updated_by": 0,
             "updated_at": datetime.now(UTC),
@@ -391,11 +405,27 @@ class GovernanceService:
     def _quota_defaults(self) -> dict[str, Any]:
         return {
             "id": 0,
-            "tenant_id": self.context.tenant_id,
             **TenantQuotaIn().model_dump(),
             "updated_by": 0,
             "updated_at": datetime.now(UTC),
         }
+
+    async def _count(self, model: Any, *filters: Any) -> int:
+        value = await self.session.scalar(
+            select(func.count())
+            .select_from(model)
+            .where(model.tenant_id == self.context.tenant_id, *filters)
+        )
+        return int(value or 0)
+
+    async def _percentile(self, model: Any, column: Any, quantile: float) -> float | None:
+        value = await self.session.scalar(
+            select(func.percentile_cont(quantile).within_group(column)).where(
+                model.tenant_id == self.context.tenant_id,
+                column.is_not(None),
+            )
+        )
+        return float(value) if value is not None else None
 
     @staticmethod
     def _value(row: Any, name: str) -> Any:

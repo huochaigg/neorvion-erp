@@ -71,7 +71,7 @@ class ModelCreate(BaseModel):
 
 
 class ModelOut(ModelCreate):
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(from_attributes=True, extra="ignore")
     id: int
     created_at: datetime
     updated_at: datetime
@@ -92,7 +92,7 @@ class GovernancePolicyIn(BaseModel):
 
 
 class GovernancePolicyOut(GovernancePolicyIn):
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(from_attributes=True, extra="ignore")
     id: int
     updated_by: int
     updated_at: datetime
@@ -115,7 +115,7 @@ class TenantQuotaIn(BaseModel):
 
 
 class TenantQuotaOut(TenantQuotaIn):
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(from_attributes=True, extra="ignore")
     id: int
     updated_by: int
     updated_at: datetime

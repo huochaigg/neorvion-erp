@@ -1,8 +1,14 @@
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from app.core.exceptions import AppError
-from app.schemas.governance import ProviderOut
+from app.schemas.governance import (
+    GovernancePolicyIn,
+    GovernancePolicyOut,
+    ProviderOut,
+    TenantQuotaIn,
+    TenantQuotaOut,
+)
 from app.services.insights import InsightService
 from app.services.quotas import usage_tokens
 from cryptography.hazmat.primitives import serialization
@@ -74,6 +80,16 @@ def test_provider_response_has_reference_but_no_secret() -> None:
     assert "secret_configured" in fields
     assert "api_key" not in fields
     assert "client_secret" not in fields
+
+
+def test_quota_and_policy_defaults_match_response_schema() -> None:
+    now = datetime.now(UTC)
+    TenantQuotaOut.model_validate(
+        {"id": 0, **TenantQuotaIn().model_dump(), "updated_by": 0, "updated_at": now}
+    )
+    GovernancePolicyOut.model_validate(
+        {"id": 0, **GovernancePolicyIn().model_dump(), "updated_by": 0, "updated_at": now}
+    )
 
 
 def test_unknown_usage_is_not_coerced_to_zero() -> None:
