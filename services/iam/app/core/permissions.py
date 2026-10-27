@@ -162,6 +162,10 @@ class PermissionCode(StrEnum):
 
     COPILOT_USE = "copilot:use"
     COPILOT_APPROVE = "copilot:approve"
+    COPILOT_INSIGHT_READ = "copilot:insight:read"
+    COPILOT_INSIGHT_MANAGE = "copilot:insight:manage"
+    COPILOT_EVALUATION_READ = "copilot:evaluation:read"
+    COPILOT_EVALUATION_MANAGE = "copilot:evaluation:manage"
 
     IAM_USERS_READ = "iam:users:read"
     IAM_USERS_UPDATE = "iam:users:update"
@@ -439,6 +443,25 @@ PERMISSION_CATALOG: tuple[tuple[str, str, str, str], ...] = (
         "软删除知识库，不立即清理文档与向量",
     ),
     (PermissionCode.COPILOT_USE, "使用 ERP Copilot", "copilot", "访问租户内 ERP Copilot"),
+    (PermissionCode.COPILOT_INSIGHT_READ, "查看主动洞察", "copilot", "查看租户主动洞察与站内通知"),
+    (
+        PermissionCode.COPILOT_INSIGHT_MANAGE,
+        "管理主动洞察",
+        "copilot",
+        "配置并主动运行确定性只读检测规则",
+    ),
+    (
+        PermissionCode.COPILOT_EVALUATION_READ,
+        "查看 Agent 评测",
+        "copilot",
+        "查看租户 Agent 评测结果与 Trace",
+    ),
+    (
+        PermissionCode.COPILOT_EVALUATION_MANAGE,
+        "管理 Agent 评测",
+        "copilot",
+        "管理数据集并启动受控评测",
+    ),
     (
         PermissionCode.COPILOT_APPROVE,
         "审批 Copilot 执行",
@@ -449,12 +472,16 @@ PERMISSION_CATALOG: tuple[tuple[str, str, str, str], ...] = (
     (PermissionCode.IAM_USERS_UPDATE, "编辑平台用户", "iam", "平台管理员修改用户资料"),
     (PermissionCode.IAM_USERS_DISABLE, "停用平台用户", "iam", "平台管理员停用账号并失效会话"),
     (PermissionCode.IAM_APPS_READ, "查看应用注册", "iam", "查看已注册的业务应用"),
-    (PermissionCode.IAM_APPS_MANAGE, "管理应用注册", "iam", "注册或停用业务应用，不能由租户管理员执行"),
+    (
+        PermissionCode.IAM_APPS_MANAGE,
+        "管理应用注册",
+        "iam",
+        "注册或停用业务应用，不能由租户管理员执行",
+    ),
     (PermissionCode.IAM_MENUS_READ, "查看菜单", "iam", "查看系统菜单与按钮配置"),
     (PermissionCode.IAM_MENUS_MANAGE, "管理菜单", "iam", "调整菜单路径与按钮权限绑定"),
     (PermissionCode.IAM_AUDIT_READ, "查看审计日志", "iam", "查看身份与权限变更审计"),
     (PermissionCode.IAM_PERMISSIONS_SYNC, "同步权限目录", "iam", "业务服务受控注册新权限编码"),
-
     (PermissionCode.SUPPLIER_READ, "查看供应商", "supplier", "查看本企业供应商"),
     (PermissionCode.SUPPLIER_CREATE, "新增供应商", "supplier", "创建供应商"),
     (PermissionCode.SUPPLIER_UPDATE, "编辑供应商", "supplier", "编辑供应商档案，编码创建后只读"),
@@ -1757,6 +1784,30 @@ PERMISSION_TREE: tuple[PermissionTreeDef, ...] = (
                         title="审批执行",
                         type="ACTION",
                         permission_code=PermissionCode.COPILOT_APPROVE,
+                    ),
+                    PermissionTreeDef(
+                        key="action:copilot-insight-read",
+                        title="查看主动洞察",
+                        type="ACTION",
+                        permission_code=PermissionCode.COPILOT_INSIGHT_READ,
+                    ),
+                    PermissionTreeDef(
+                        key="action:copilot-insight-manage",
+                        title="管理主动洞察",
+                        type="ACTION",
+                        permission_code=PermissionCode.COPILOT_INSIGHT_MANAGE,
+                    ),
+                    PermissionTreeDef(
+                        key="action:copilot-evaluation-read",
+                        title="查看 Agent 评测",
+                        type="ACTION",
+                        permission_code=PermissionCode.COPILOT_EVALUATION_READ,
+                    ),
+                    PermissionTreeDef(
+                        key="action:copilot-evaluation-manage",
+                        title="管理 Agent 评测",
+                        type="ACTION",
+                        permission_code=PermissionCode.COPILOT_EVALUATION_MANAGE,
                     ),
                 ),
             ),

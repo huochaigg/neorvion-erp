@@ -69,9 +69,7 @@ def test_agent_registry_is_closed_and_rejects_duplicates() -> None:
     }
     with pytest.raises(AppError):
         registry.get("write_anything_agent")
-    duplicate = AgentSpec(
-        "same", 1, "x", "x", frozenset(), (), "isolated", 1, 0, 1, 10
-    )
+    duplicate = AgentSpec("same", 1, "x", "x", frozenset(), (), "isolated", 1, 0, 1, 10)
     with pytest.raises(ValueError, match="重复"):
         AgentRegistry([duplicate, duplicate])
     invalid_tool = AgentSpec(
@@ -134,9 +132,13 @@ async def test_multi_agent_emits_trace_and_keeps_secret_out_of_context() -> None
             context=runtime,
         )
     ]
-    assert any(item["event"] == "agent_route" and item["data"]["mode"] == "multi" for item in events)
+    assert any(
+        item["event"] == "agent_route" and item["data"]["mode"] == "multi" for item in events
+    )
     started = {item["data"]["agent_name"] for item in events if item["event"] == "agent_start"}
-    assert {"sales_agent", "inventory_agent", "procurement_agent", "supervisor_agent"}.issubset(started)
+    assert {"sales_agent", "inventory_agent", "procurement_agent", "supervisor_agent"}.issubset(
+        started
+    )
     assert all(
         item["data"]["request_id"] == "request-v8"
         for item in events
@@ -145,8 +147,7 @@ async def test_multi_agent_emits_trace_and_keeps_secret_out_of_context() -> None
     procurement_starts = [
         item
         for item in events
-        if item["event"] == "agent_start"
-        and item["data"]["agent_name"] == "procurement_agent"
+        if item["event"] == "agent_start" and item["data"]["agent_name"] == "procurement_agent"
     ]
     assert len(procurement_starts) == 1
     assert events[-1]["event"] == "done"
@@ -172,8 +173,7 @@ async def test_single_agent_failure_emits_terminal_agent_error() -> None:
         ):
             events.append(item)
     assert any(
-        item["event"] == "agent_error"
-        and item["data"]["agent_task_id"] == "single-agent-1"
+        item["event"] == "agent_error" and item["data"]["agent_task_id"] == "single-agent-1"
         for item in events
     )
 
@@ -186,8 +186,20 @@ def test_evidence_merge_deduplicates_same_observation_but_not_different_time() -
         "observed_at": "2026-10-24T01:00:00+00:00",
     }
     results = [
-        AgentResult(agent_name="sales_agent", task_id="s1", status="SUCCEEDED", evidences=[base], duration_ms=1),
-        AgentResult(agent_name="inventory_agent", task_id="i1", status="SUCCEEDED", evidences=[base, base | {"observed_at": "2026-10-24T01:01:00+00:00"}], duration_ms=1),
+        AgentResult(
+            agent_name="sales_agent",
+            task_id="s1",
+            status="SUCCEEDED",
+            evidences=[base],
+            duration_ms=1,
+        ),
+        AgentResult(
+            agent_name="inventory_agent",
+            task_id="i1",
+            status="SUCCEEDED",
+            evidences=[base, base | {"observed_at": "2026-10-24T01:01:00+00:00"}],
+            duration_ms=1,
+        ),
     ]
     merged = MultiAgentWorkflow._merge_evidence(results)
     assert len(merged) == 2

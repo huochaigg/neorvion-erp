@@ -10,14 +10,13 @@ import { TenantBridge } from '@/micro/TenantBridge';
 import { WujieRouteBridge } from '@/micro/WujieRouteBridge';
 import { AdsComingSoonPage, HistoryComingSoonPage } from '@/pages/ComingSoonPage';
 import { CopilotPage } from '@/pages/CopilotPage';
-import { ProposalListPage } from '@/pages/ProposalListPage';
-import { ApprovalListPage } from '@/pages/ApprovalListPage';
-import { WorkflowListPage } from '@/pages/WorkflowListPage';
 import { WorkflowDetailPage } from '@/pages/WorkflowDetailPage';
 import { getPopupContainer } from '@/runtime';
 import { useCopilotStore } from '@/store';
 
-const EvaluationCenterPage = lazy(() => import('@/pages/EvaluationCenterPage'));
+const InsightCenterPage = lazy(() => import('@/pages/InsightCenterPage'));
+const TaskCenterPage = lazy(() => import('@/pages/TaskCenterPage'));
+const AIManagementPage = lazy(() => import('@/pages/AIManagementPage'));
 
 function TenantWorkspace() {
   const epoch = useCopilotStore((s) => s.epoch);
@@ -25,13 +24,39 @@ function TenantWorkspace() {
     <Routes>
       <Route element={<WorkbenchLayout key={epoch} />}>
         <Route path="/chat" element={<CopilotPage />} />
-        <Route path="/drafts" element={<ProposalListPage />} />
-        <Route path="/approvals" element={<ApprovalListPage />} />
-        <Route path="/workflows" element={<WorkflowListPage />} />
+        <Route
+          path="/tasks"
+          element={
+            <Suspense fallback={<div className="p-6">正在加载任务工作区…</div>}>
+              <TaskCenterPage />
+            </Suspense>
+          }
+        />
+        <Route path="/drafts" element={<Navigate to="/tasks?tab=drafts" replace />} />
+        <Route path="/approvals" element={<Navigate to="/tasks?tab=pending" replace />} />
+        <Route path="/workflows" element={<Navigate to="/tasks?tab=workflows" replace />} />
         <Route path="/workflows/:id" element={<WorkflowDetailPage />} />
-        <Route path="/evaluations" element={<Suspense fallback={<div className="p-6">正在加载评测中心…</div>}><EvaluationCenterPage /></Suspense>} />
+        <Route path="/tasks/workflows/:id" element={<WorkflowDetailPage />} />
+        <Route
+          path="/manage"
+          element={
+            <Suspense fallback={<div className="p-6">正在加载 AI 管理中心…</div>}>
+              <AIManagementPage />
+            </Suspense>
+          }
+        />
+        <Route path="/evaluations" element={<Navigate to="/manage" replace />} />
+        <Route
+          path="/insights"
+          element={
+            <Suspense fallback={<div className="p-6">正在加载主动洞察…</div>}>
+              <InsightCenterPage />
+            </Suspense>
+          }
+        />
         <Route path="/ads" element={<AdsComingSoonPage />} />
-        <Route path="/history" element={<HistoryComingSoonPage />} />
+        <Route path="/creative-history" element={<HistoryComingSoonPage />} />
+        <Route path="/history" element={<Navigate to="/creative-history" replace />} />
         <Route path="/" element={<Navigate to="/chat" replace />} />
         <Route path="*" element={<Navigate to="/chat" replace />} />
       </Route>
@@ -45,7 +70,8 @@ export function App() {
       new QueryClient({
         defaultOptions: {
           queries: {
-            retry: (n, e) => !(e instanceof ApiError && [401, 403].includes(e.status)) && !isCancel(e) && n < 1,
+            retry: (n, e) =>
+              !(e instanceof ApiError && [401, 403].includes(e.status)) && !isCancel(e) && n < 1,
             refetchOnWindowFocus: false,
           },
         },

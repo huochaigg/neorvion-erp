@@ -33,9 +33,7 @@ async def enqueue_workflow(tenant_id: int, workflow_id: int) -> bool:
 
 async def pop_workflow(timeout: int = 3) -> tuple[int, int] | None:
     try:
-        item = await cast(Any, redis_client()).brpop(
-            settings.workflow_queue_key, timeout=timeout
-        )
+        item = await cast(Any, redis_client()).brpop(settings.workflow_queue_key, timeout=timeout)
     except RedisError:
         return None
     if not item:

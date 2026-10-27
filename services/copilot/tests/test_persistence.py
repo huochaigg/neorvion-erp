@@ -81,7 +81,10 @@ class FakeWorkflow:
     async def stream(self, messages, *, context):
         context.protocol_messages.extend([{"role": "assistant", "content": "完成"}])
         yield {"event": "tool_start", "data": {"tool_call_id": "c1", "name": "get_inventory"}}
-        yield {"event": "tool_end", "data": {"tool_call_id": "c1", "name": "get_inventory", "duration_ms": 3}}
+        yield {
+            "event": "tool_end",
+            "data": {"tool_call_id": "c1", "name": "get_inventory", "duration_ms": 3},
+        }
         yield {"event": "evidence", "data": {"tool_call_id": "c1", "citation_id": "E1"}}
         yield {"event": "message", "data": {"delta": "完成"}}
         yield {"event": "done", "data": {"answer": "完成"}}

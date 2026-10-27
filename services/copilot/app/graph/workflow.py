@@ -158,7 +158,9 @@ class CopilotWorkflow:
                     "duration_ms": round((time.monotonic() - model_started) * 1000),
                     "usage": usage,
                     "finish_reason": finish_reason,
-                    "usage_source": "PROVIDER" if usage and any(value is not None for value in usage.values()) else "UNKNOWN",
+                    "usage_source": "PROVIDER"
+                    if usage and any(value is not None for value in usage.values())
+                    else "UNKNOWN",
                 },
             }
         )

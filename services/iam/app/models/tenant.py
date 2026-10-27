@@ -31,8 +31,10 @@ class MemberRole(StrEnum):
     OWNER = "OWNER"
     MEMBER = "MEMBER"
 
+
 class Tenant(TimestampMixin, Base):
     """租户（企业）表"""
+
     __tablename__ = "tenants"
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)

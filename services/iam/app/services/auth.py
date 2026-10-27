@@ -103,7 +103,9 @@ class AuthService:
             ip_address=ip_address,
         )
 
-    def refresh(self, refresh_token: str, *, csrf_token: str | None) -> tuple[TokenResponse, str, int, str]:
+    def refresh(
+        self, refresh_token: str, *, csrf_token: str | None
+    ) -> tuple[TokenResponse, str, int, str]:
         """Refresh 轮换以数据库会话为准。Redis GETDEL 只加速单飞，重放检测看 family。"""
         claims = decode_token(refresh_token, expected_type="refresh")
         incoming_hash = hash_token_id(claims.jti)
@@ -284,5 +286,7 @@ class AuthService:
         )
         return body, refresh_token, ttl_seconds, csrf_token
 
-    def _rotate_tokens(self, user_id: int, session_row: AuthSession) -> tuple[TokenResponse, str, int, str]:
+    def _rotate_tokens(
+        self, user_id: int, session_row: AuthSession
+    ) -> tuple[TokenResponse, str, int, str]:
         return self._issue_tokens(user_id, session_row=session_row)

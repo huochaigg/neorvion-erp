@@ -46,8 +46,7 @@ def evaluate_case(case: dict[str, Any], result: dict[str, Any]) -> tuple[str, di
                 "kind": "expected_mode",
                 "target": expected_mode,
                 "actual": result.get("mode"),
-                "passed": str(result.get("mode") or "").lower()
-                == str(expected_mode).lower(),
+                "passed": str(result.get("mode") or "").lower() == str(expected_mode).lower(),
             }
         )
 
@@ -102,7 +101,10 @@ def evaluate_case(case: dict[str, Any], result: dict[str, Any]) -> tuple[str, di
     )
     valid_sequences = tool_spec.get("valid_sequences") or []
     sequence_correctness = (
-        any(_is_subsequence([str(x) for x in sequence], actual_names) for sequence in valid_sequences)
+        any(
+            _is_subsequence([str(x) for x in sequence], actual_names)
+            for sequence in valid_sequences
+        )
         if valid_sequences
         else None
     )

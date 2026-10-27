@@ -39,8 +39,8 @@ async def test_openai_compatible_stream() -> None:
 @pytest.mark.asyncio
 async def test_openai_compatible_merges_streamed_tool_calls() -> None:
     body = (
-        'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call-1","function":{"name":"get_","arguments":"{\\\"order"}}]}}]}\n\n'
-        'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"name":"sales_order","arguments":"_id\\\":1}"}}]}}]}\n\n'
+        'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call-1","function":{"name":"get_","arguments":"{\\"order"}}]}}]}\n\n'
+        'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"name":"sales_order","arguments":"_id\\":1}"}}]}}]}\n\n'
         "data: [DONE]\n\n"
     )
     transport = httpx.MockTransport(lambda request: httpx.Response(200, text=body))

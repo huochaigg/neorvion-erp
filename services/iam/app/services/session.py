@@ -68,16 +68,12 @@ class SessionService:
 
     def get_by_jti_hash(self, jti_hash: str) -> AuthSession | None:
         return self.session.scalars(
-            select(AuthSession)
-            .where(AuthSession.refresh_jti_hash == jti_hash)
-            .with_for_update()
+            select(AuthSession).where(AuthSession.refresh_jti_hash == jti_hash).with_for_update()
         ).first()
 
     def get_by_previous_hash(self, jti_hash: str) -> AuthSession | None:
         return self.session.scalars(
-            select(AuthSession)
-            .where(AuthSession.previous_jti_hash == jti_hash)
-            .with_for_update()
+            select(AuthSession).where(AuthSession.previous_jti_hash == jti_hash).with_for_update()
         ).first()
 
     def revoke_family(self, family_id: str, *, reason: str = "REPLAY") -> None:

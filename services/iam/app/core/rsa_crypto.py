@@ -108,10 +108,14 @@ class RsaKeyStore:
         if public_path:
             public_pem = resolve_key_path(public_path).read_text(encoding="utf-8")
         else:
-            public_pem = current.public_key().public_bytes(
-                encoding=serialization.Encoding.PEM,
-                format=serialization.PublicFormat.SubjectPublicKeyInfo,
-            ).decode("utf-8")
+            public_pem = (
+                current.public_key()
+                .public_bytes(
+                    encoding=serialization.Encoding.PEM,
+                    format=serialization.PublicFormat.SubjectPublicKeyInfo,
+                )
+                .decode("utf-8")
+            )
 
         self._keys: dict[str, RsaKeyMaterial] = {
             self.current_key_id: RsaKeyMaterial(
@@ -125,10 +129,14 @@ class RsaKeyStore:
         previous_path = settings.rsa_previous_private_key_path.strip()
         if previous_id and previous_path:
             previous = _load_private_key(resolve_key_path(previous_path))
-            previous_pem = previous.public_key().public_bytes(
-                encoding=serialization.Encoding.PEM,
-                format=serialization.PublicFormat.SubjectPublicKeyInfo,
-            ).decode("utf-8")
+            previous_pem = (
+                previous.public_key()
+                .public_bytes(
+                    encoding=serialization.Encoding.PEM,
+                    format=serialization.PublicFormat.SubjectPublicKeyInfo,
+                )
+                .decode("utf-8")
+            )
             self._keys[previous_id] = RsaKeyMaterial(
                 key_id=previous_id,
                 private_key=previous,

@@ -67,7 +67,9 @@ class SnapshotService:
         if member is None:
             self.store.bump_authz_version(user_id, tenant_id)
             return
-        self._write_member(user_id=user_id, member=member, token_version=self.token_version(user_id))
+        self._write_member(
+            user_id=user_id, member=member, token_version=self.token_version(user_id)
+        )
 
     def refresh_role_members(self, *, tenant_id: int, role_id: int) -> None:
         """角色权限变更后刷新所有持有该角色的成员快照，使旧 JWT 立刻按新权限判定。"""

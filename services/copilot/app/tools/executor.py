@@ -76,11 +76,7 @@ class ToolExecutor:
         ]
         if allowed_tools is None:
             return definitions
-        return [
-            item
-            for item in definitions
-            if str(item["function"].get("name")) in allowed_tools
-        ]
+        return [item for item in definitions if str(item["function"].get("name")) in allowed_tools]
 
     async def execute(self, call: ModelToolCall, runtime: ToolRuntime) -> ToolExecutionResult:
         """在模型之外执行工具白名单、参数、权限、预算和结果大小校验。"""

@@ -14,9 +14,7 @@ def _case() -> dict:
             "optional": ["get_product"],
             "forbidden": ["adjust_inventory"],
         },
-        "expected_arguments": [
-            {"tool": "get_inventory", "path": "sku_code", "equals": "SKU-TEST"}
-        ],
+        "expected_arguments": [{"tool": "get_inventory", "path": "sku_code", "equals": "SKU-TEST"}],
         "expected_evidence": {"types": ["ERP"]},
         "expected_answer_assertions": [{"kind": "contains", "value": "库存"}],
         "forbidden_actions": ["ERP_WRITE"],
@@ -108,9 +106,7 @@ def test_comparison_pairs_cases_and_finds_regression() -> None:
 
 def test_v9_catalog_has_required_distribution_and_review_states() -> None:
     rows = json.loads(
-        (Path(__file__).parents[1] / "evals" / "v9_agent_100.json").read_text(
-            encoding="utf-8"
-        )
+        (Path(__file__).parents[1] / "evals" / "v9_agent_100.json").read_text(encoding="utf-8")
     )
     assert len(rows) == 100
     assert sum(item["status"] == "READY" for item in rows) == 40

@@ -20,6 +20,14 @@ from app.models.evaluation import (
     ModelCall,
     ModelPricing,
 )
+from app.models.insight import (
+    BusinessInsight,
+    InsightDetectionRun,
+    InsightEvent,
+    InsightNotification,
+    InsightRule,
+    InsightRuleRevision,
+)
 from app.models.workflow import WorkflowEvent, WorkflowInstance, WorkflowStep, WorkflowStepAttempt
 
 __all__ = [
@@ -51,4 +59,10 @@ __all__ = [
     "AgentEvaluationComparison",
     "ModelCall",
     "ModelPricing",
+    "InsightRule",
+    "InsightRuleRevision",
+    "InsightDetectionRun",
+    "BusinessInsight",
+    "InsightEvent",
+    "InsightNotification",
 ]

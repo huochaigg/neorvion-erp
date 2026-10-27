@@ -128,9 +128,7 @@ async def test_v9_dataset_freeze_replay_comparison_and_owner_isolation() -> None
             await ReplayEvaluationRunner(session, 901, 9001, "worker-a").execute(first.id)
             await ReplayEvaluationRunner(session, 901, 9001, "worker-b").execute(second.id)
             report = await service.compare(
-                EvaluationComparisonCreate(
-                    baseline_run_id=first.id, candidate_run_id=second.id
-                )
+                EvaluationComparisonCreate(baseline_run_id=first.id, candidate_run_id=second.id)
             )
             assert report.comparable is True
             assert report.report["paired_cases"] == 1
@@ -266,7 +264,9 @@ async def test_agent_trace_persists_with_owner_isolation() -> None:
             await session.commit()
             assert (await repo.agent_runs(conversation.id))[0].graph_type == "MULTI_AGENT"
             assert (await repo.agent_tasks([run.id]))[0].tool_calls == 2
-            assert await ConversationRepository(session, 801, 8002).agent_runs(conversation.id) == []
+            assert (
+                await ConversationRepository(session, 801, 8002).agent_runs(conversation.id) == []
+            )
         finally:
             await session.close()
     finally:

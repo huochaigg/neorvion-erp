@@ -35,10 +35,7 @@ class AgentRegistry:
             raise ValueError("Agent 名称重复")
         if known_tools is not None:
             invalid = {
-                tool
-                for spec in specs
-                for tool in spec.allowed_tools
-                if tool not in known_tools
+                tool for spec in specs for tool in spec.allowed_tools if tool not in known_tools
             }
             if invalid:
                 raise ValueError(f"Agent 引用了未注册工具：{', '.join(sorted(invalid))}")
@@ -58,94 +55,94 @@ def build_agent_registry() -> AgentRegistry:
     from app.tools.registry import build_tool_registry
 
     specs = [
-            AgentSpec(
-                "sales_agent",
-                1,
-                "销售订单、履约、销量与售后分析",
-                "SALES",
-                frozenset(
-                    {
-                        "get_sales_order",
-                        "list_sales_orders",
-                        "get_after_sale",
-                        "analyze_inventory_coverage",
-                    }
-                ),
-                (PermissionCode.ORDER_READ.value,),
-                "latest_user_query_only",
-                20,
-                4,
-                2,
-                3000,
+        AgentSpec(
+            "sales_agent",
+            1,
+            "销售订单、履约、销量与售后分析",
+            "SALES",
+            frozenset(
+                {
+                    "get_sales_order",
+                    "list_sales_orders",
+                    "get_after_sale",
+                    "analyze_inventory_coverage",
+                }
             ),
-            AgentSpec(
-                "inventory_agent",
-                1,
-                "商品、SKU、仓库、库存与覆盖分析",
-                "INVENTORY",
-                frozenset(
-                    {
-                        "get_inventory",
-                        "get_product",
-                        "search_products",
-                        "get_warehouse",
-                        "analyze_inventory_coverage",
-                    }
-                ),
-                (PermissionCode.INVENTORY_READ.value,),
-                "latest_user_query_only",
-                20,
-                4,
-                2,
-                3000,
+            (PermissionCode.ORDER_READ.value,),
+            "latest_user_query_only",
+            20,
+            4,
+            2,
+            3000,
+        ),
+        AgentSpec(
+            "inventory_agent",
+            1,
+            "商品、SKU、仓库、库存与覆盖分析",
+            "INVENTORY",
+            frozenset(
+                {
+                    "get_inventory",
+                    "get_product",
+                    "search_products",
+                    "get_warehouse",
+                    "analyze_inventory_coverage",
+                }
             ),
-            AgentSpec(
-                "procurement_agent",
-                1,
-                "采购历史、供应信息与补货建议",
-                "PROCUREMENT",
-                frozenset(
-                    {
-                        "list_purchase_orders",
-                        "get_inventory",
-                        "get_product",
-                        "search_products",
-                        "analyze_inventory_coverage",
-                    }
-                ),
-                (PermissionCode.PURCHASE_READ.value,),
-                "latest_user_query_only",
-                20,
-                4,
-                2,
-                3000,
+            (PermissionCode.INVENTORY_READ.value,),
+            "latest_user_query_only",
+            20,
+            4,
+            2,
+            3000,
+        ),
+        AgentSpec(
+            "procurement_agent",
+            1,
+            "采购历史、供应信息与补货建议",
+            "PROCUREMENT",
+            frozenset(
+                {
+                    "list_purchase_orders",
+                    "get_inventory",
+                    "get_product",
+                    "search_products",
+                    "analyze_inventory_coverage",
+                }
             ),
-            AgentSpec(
-                "knowledge_agent",
-                1,
-                "授权知识库规则检索与可验证引用",
-                "KNOWLEDGE",
-                frozenset({"list_knowledge_bases", "search_knowledge"}),
-                (PermissionCode.KNOWLEDGE_READ.value,),
-                "latest_user_query_only",
-                20,
-                3,
-                2,
-                3000,
-            ),
-            AgentSpec(
-                "supervisor_agent",
-                1,
-                "汇总结构化专业结果并识别冲突",
-                "SUPERVISOR",
-                frozenset(),
-                (),
-                "structured_results_only",
-                25,
-                0,
-                1,
-                4000,
-                concurrency_policy="coordinator",
-            ),
-        ]
+            (PermissionCode.PURCHASE_READ.value,),
+            "latest_user_query_only",
+            20,
+            4,
+            2,
+            3000,
+        ),
+        AgentSpec(
+            "knowledge_agent",
+            1,
+            "授权知识库规则检索与可验证引用",
+            "KNOWLEDGE",
+            frozenset({"list_knowledge_bases", "search_knowledge"}),
+            (PermissionCode.KNOWLEDGE_READ.value,),
+            "latest_user_query_only",
+            20,
+            3,
+            2,
+            3000,
+        ),
+        AgentSpec(
+            "supervisor_agent",
+            1,
+            "汇总结构化专业结果并识别冲突",
+            "SUPERVISOR",
+            frozenset(),
+            (),
+            "structured_results_only",
+            25,
+            0,
+            1,
+            4000,
+            concurrency_policy="coordinator",
+        ),
+    ]
     return AgentRegistry(specs, known_tools=build_tool_registry().names)

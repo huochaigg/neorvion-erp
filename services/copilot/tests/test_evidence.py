@@ -49,18 +49,31 @@ def service(client) -> ConversationService:
 
 @pytest.mark.asyncio
 async def test_history_evidence_marks_updated_document_stale() -> None:
-    output = await service(ChunkClient({
-        "id": 31, "knowledge_base_id": 11, "document_id": 21, "version": 5,
-    }))._evidence_out(evidence_row())
+    output = await service(
+        ChunkClient(
+            {
+                "id": 31,
+                "knowledge_base_id": 11,
+                "document_id": 21,
+                "version": 5,
+            }
+        )
+    )._evidence_out(evidence_row())
     assert output.access_status == "STALE"
     assert output.excerpt == "检索时的原文"
 
 
 @pytest.mark.asyncio
 async def test_history_evidence_hides_excerpt_after_access_revoked() -> None:
-    output = await service(ChunkClient(error=AppError(
-        "知识来源不存在或已无权访问", code=40474, status_code=404,
-    )))._evidence_out(evidence_row())
+    output = await service(
+        ChunkClient(
+            error=AppError(
+                "知识来源不存在或已无权访问",
+                code=40474,
+                status_code=404,
+            )
+        )
+    )._evidence_out(evidence_row())
     assert output.access_status == "MISSING"
     assert output.excerpt is None
 

@@ -30,7 +30,9 @@ def _wait_input(state: BusinessWorkflowState) -> dict[str, Any]:
 
 
 def _after_validate(state: BusinessWorkflowState) -> str:
-    return "finalize" if state.get("workflow_type") == "SALES_ORDER_REVIEW_WORKFLOW" else "wait_input"
+    return (
+        "finalize" if state.get("workflow_type") == "SALES_ORDER_REVIEW_WORKFLOW" else "wait_input"
+    )
 
 
 def _finalize(state: BusinessWorkflowState) -> dict[str, str]:

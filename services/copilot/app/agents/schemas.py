@@ -14,9 +14,7 @@ class AgentTaskInput(BaseModel):
 class AgentResult(BaseModel):
     agent_name: str = Field(description="产生结果的可信 Agent 名称")
     task_id: str = Field(description="父运行内稳定的 Agent 任务标识")
-    status: Literal["SUCCEEDED", "FAILED", "DEGRADED"] = Field(
-        description="Agent 任务终态"
-    )
+    status: Literal["SUCCEEDED", "FAILED", "DEGRADED"] = Field(description="Agent 任务终态")
     facts: list[str] = Field(default_factory=list, description="专业 Agent 确认的事实")
     findings: list[str] = Field(default_factory=list, description="基于证据得出的发现")
     recommendations: list[str] = Field(default_factory=list, description="只读分析建议")

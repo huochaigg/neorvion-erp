@@ -51,7 +51,10 @@ def authorize(
     member = TenantMemberRepository(session).get_by_tenant_user(tenant_id, user.id)
     if member is None or member.tenant is None:
         raise AppError("租户不存在或不可访问", code=40410, status_code=404)
-    if member.status != MemberStatus.ACTIVE.value or member.tenant.status != TenantStatus.ACTIVE.value:
+    if (
+        member.status != MemberStatus.ACTIVE.value
+        or member.tenant.status != TenantStatus.ACTIVE.value
+    ):
         raise AppError("无权访问该租户", code=40310, status_code=403)
     from neorvion_security.tenant import TenantContext
 

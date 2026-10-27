@@ -20,7 +20,9 @@ class AuthzRevision(Base):
     user_id: Mapped[int] = mapped_column(BigInteger, nullable=False, index=True)
     tenant_id: Mapped[int] = mapped_column(BigInteger, nullable=False, index=True)
     version: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
-    updated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, server_default=func.now()
+    )
 
 
 class AuthzOutbox(Base):
@@ -32,5 +34,7 @@ class AuthzOutbox(Base):
     user_id: Mapped[int] = mapped_column(BigInteger, nullable=False, index=True)
     tenant_id: Mapped[int] = mapped_column(BigInteger, nullable=False, index=True)
     version: Mapped[int] = mapped_column(Integer, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, server_default=func.now())
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, server_default=func.now()
+    )
     processed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, index=True)

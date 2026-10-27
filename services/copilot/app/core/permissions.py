@@ -4,6 +4,10 @@ from enum import StrEnum
 class PermissionCode(StrEnum):
     COPILOT_USE = "copilot:use"
     COPILOT_APPROVE = "copilot:approve"
+    COPILOT_INSIGHT_READ = "copilot:insight:read"
+    COPILOT_INSIGHT_MANAGE = "copilot:insight:manage"
+    COPILOT_EVALUATION_READ = "copilot:evaluation:read"
+    COPILOT_EVALUATION_MANAGE = "copilot:evaluation:manage"
     PRODUCT_READ = "product:read"
     ORDER_READ = "order:read"
     INVENTORY_READ = "inventory:read"

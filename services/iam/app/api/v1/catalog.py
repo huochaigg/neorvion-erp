@@ -102,7 +102,16 @@ class AuditOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
-def _write_audit(session, *, actor_user_id: int, action: str, target_type: str, target_id: str, detail: str, tenant_id: int | None = None) -> None:
+def _write_audit(
+    session,
+    *,
+    actor_user_id: int,
+    action: str,
+    target_type: str,
+    target_id: str,
+    detail: str,
+    tenant_id: int | None = None,
+) -> None:
     session.add(
         AuditLog(
             tenant_id=tenant_id,
@@ -117,7 +126,9 @@ def _write_audit(session, *, actor_user_id: int, action: str, target_type: str, 
 
 
 @router.get("/applications", response_model=ApiResponse[list[ApplicationOut]], summary="应用列表")
-def list_applications(_admin: PlatformAdmin, session: BootstrapDb) -> ApiResponse[list[ApplicationOut]]:
+def list_applications(
+    _admin: PlatformAdmin, session: BootstrapDb
+) -> ApiResponse[list[ApplicationOut]]:
     rows = list(session.scalars(select(Application).order_by(Application.id.asc())).all())
     return ok([ApplicationOut.model_validate(row) for row in rows])
 
@@ -128,7 +139,9 @@ def create_application(
     admin: PlatformAdmin,
     session: BootstrapDb,
 ) -> ApiResponse[ApplicationOut]:
-    exists = session.scalars(select(Application).where(Application.code == payload.code.strip().lower())).first()
+    exists = session.scalars(
+        select(Application).where(Application.code == payload.code.strip().lower())
+    ).first()
     if exists is not None:
         raise AppError("应用编码已存在", code=40930, status_code=409)
     row = Application(
@@ -151,7 +164,9 @@ def create_application(
     return ok(ApplicationOut.model_validate(row), "已注册应用")
 
 
-@router.patch("/applications/{application_id}", response_model=ApiResponse[ApplicationOut], summary="更新应用")
+@router.patch(
+    "/applications/{application_id}", response_model=ApiResponse[ApplicationOut], summary="更新应用"
+)
 def patch_application(
     application_id: int,
     payload: ApplicationPatchIn,
@@ -189,11 +204,16 @@ def list_menus(
     session: BootstrapDb,
     application_code: str | None = Query(default=None),
 ) -> ApiResponse[list[MenuOut]]:
-    if PermissionCode.IAM_MENUS_READ.value not in context.permission_codes and not context.is_platform_admin:
+    if (
+        PermissionCode.IAM_MENUS_READ.value not in context.permission_codes
+        and not context.is_platform_admin
+    ):
         raise AppError("缺少权限", code=40320, status_code=403)
     stmt = select(Menu).order_by(Menu.sort_no.asc(), Menu.id.asc())
     if application_code:
-        app = session.scalars(select(Application).where(Application.code == application_code)).first()
+        app = session.scalars(
+            select(Application).where(Application.code == application_code)
+        ).first()
         if app is None:
             return ok([])
         stmt = stmt.where(Menu.application_id == app.id)
@@ -305,7 +325,9 @@ def list_audit_logs(
     )
 
 
-@router.post("/internal/permissions/sync", response_model=ApiResponse[dict], summary="受控同步权限编码")
+@router.post(
+    "/internal/permissions/sync", response_model=ApiResponse[dict], summary="受控同步权限编码"
+)
 def sync_permissions(
     payload: PermissionSyncIn,
     session: BootstrapDb,

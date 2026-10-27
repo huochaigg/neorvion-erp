@@ -23,9 +23,7 @@ async def enqueue_evaluation(tenant_id: int, user_id: int, run_id: int) -> bool:
 
 async def pop_evaluation(timeout: int = 3) -> tuple[int, int, int] | None:
     try:
-        item = await cast(Any, redis_client()).brpop(
-            settings.evaluation_queue_key, timeout=timeout
-        )
+        item = await cast(Any, redis_client()).brpop(settings.evaluation_queue_key, timeout=timeout)
     except RedisError:
         return None
     if not item:

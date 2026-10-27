@@ -28,8 +28,12 @@ class AuthSession(Base):
     csrf_hash: Mapped[str] = mapped_column(String(64), nullable=False, server_default="")
     user_agent: Mapped[str] = mapped_column(String(255), nullable=False, server_default="")
     ip_address: Mapped[str] = mapped_column(String(64), nullable=False, server_default="")
-    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, server_default=func.now())
-    last_seen_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, server_default=func.now())
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, server_default=func.now()
+    )
+    last_seen_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, server_default=func.now()
+    )
     expires_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     revoke_reason: Mapped[str] = mapped_column(String(32), nullable=False, server_default="")

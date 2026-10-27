@@ -243,3 +243,24 @@ Copilot 最终应成为“受策略控制的 ERP 操作入口”：默认只读�
 - React 评测中心采用路由级懒加载，空数据不展示虚构图表。
 - 真实 DeepSeek/百炼 Single/Multi 对照仍需受控评测身份、固定数据快照和真实模型环境。
 
+
+### V10：主动业务洞察与预警
+
+- [x] 四类固定 Detector Registry 与结构化配置校验
+- [x] Rule CRUD、版本审计、手动真实只读 ERP 检测
+- [x] DetectionRun、Insight 去重状态机、事件与站内通知
+- [x] React 主动洞察中心及路由级懒加载
+- [ ] IAM 受控后台服务身份（安全门禁，缺失时不启用周期 Worker/LIVE Evaluation）
+- [ ] 真实模型 AI Insight 分析、四服务 E2E 与浏览器 E2E
+
+### 产品体验重构：企业智能工作台导航
+
+- [x] 一级导航按智能工作空间、AI 创作、管理与开发分组
+- [x] 聊天历史仅在 ERP 智能助手内展示，保留折叠与窄屏抽屉
+- [x] Proposal、Approval、Execution、Workflow 复用原 API 汇入“我的任务”
+- [x] Agent Evaluation 移入 AI 管理中心，并按读/管权限保护服务端 API
+- [x] Knowledge 检索评测通过 Shell/Wujie 路由提供授权入口，不合并评测数据
+- [x] 保留旧书签重定向和工作流详情深链接
+- [ ] Shell + 四服务真实浏览器回归（含 Wujie keep-alive、租户切换与退出）
+
+详细路由与安全边界见 [企业智能工作台导航](./ui-navigation.md)。

@@ -106,10 +106,19 @@ class RoleRepository(BaseRepository):
         """有效 OWNER 角色授权人数。用来挡住「卸掉最后一个所有者」。"""
         stmt = (
             select(MemberRoleGrant.id)
-            .join(Role, and_(Role.tenant_id == MemberRoleGrant.tenant_id,
-                Role.id == MemberRoleGrant.role_id))
-            .join(TenantMember, and_(TenantMember.tenant_id == MemberRoleGrant.tenant_id,
-                TenantMember.id == MemberRoleGrant.member_id))
+            .join(
+                Role,
+                and_(
+                    Role.tenant_id == MemberRoleGrant.tenant_id, Role.id == MemberRoleGrant.role_id
+                ),
+            )
+            .join(
+                TenantMember,
+                and_(
+                    TenantMember.tenant_id == MemberRoleGrant.tenant_id,
+                    TenantMember.id == MemberRoleGrant.member_id,
+                ),
+            )
             .where(
                 MemberRoleGrant.tenant_id == tenant_id,
                 Role.tenant_id == tenant_id,
@@ -157,8 +166,12 @@ class RoleRepository(BaseRepository):
             select(Permission.code)
             .join(RolePermission, RolePermission.permission_id == Permission.id)
             .join(MemberRoleGrant, MemberRoleGrant.role_id == RolePermission.role_id)
-            .join(Role, and_(Role.tenant_id == MemberRoleGrant.tenant_id,
-                Role.id == MemberRoleGrant.role_id))
+            .join(
+                Role,
+                and_(
+                    Role.tenant_id == MemberRoleGrant.tenant_id, Role.id == MemberRoleGrant.role_id
+                ),
+            )
             .where(
                 MemberRoleGrant.tenant_id == tenant_id,
                 MemberRoleGrant.member_id == member_id,

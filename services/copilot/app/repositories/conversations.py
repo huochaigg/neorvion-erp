@@ -281,7 +281,9 @@ class ConversationRepository:
                         agent_run_id=run_id,
                         agent_task_id=str(data.get("agent_task_id") or "")[:96] or None,
                         model_call_id=call_id,
-                        model_provider=str(data.get("model_provider") or settings.model_provider)[:64],
+                        model_provider=str(data.get("model_provider") or settings.model_provider)[
+                            :64
+                        ],
                         model_name=str(data.get("model_name") or settings.chat_model)[:128],
                         status="RUNNING",
                     )
@@ -322,8 +324,7 @@ class ConversationRepository:
         if pricing is None:
             return
         row.estimated_cost = (
-            row.input_tokens * pricing.input_price
-            + row.output_tokens * pricing.output_price
+            row.input_tokens * pricing.input_price + row.output_tokens * pricing.output_price
         ) / pricing.unit_tokens
         row.currency = pricing.currency
         row.pricing_version = pricing.pricing_version

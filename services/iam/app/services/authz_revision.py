@@ -58,6 +58,4 @@ def current_revision(session: Session, *, user_id: int, tenant_id: int) -> int:
 
 
 def list_tenant_members_for_user(session: Session, user_id: int) -> list[TenantMember]:
-    return list(
-        session.scalars(select(TenantMember).where(TenantMember.user_id == user_id)).all()
-    )
+    return list(session.scalars(select(TenantMember).where(TenantMember.user_id == user_id)).all())

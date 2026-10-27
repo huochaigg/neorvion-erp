@@ -135,7 +135,9 @@ class MultiAgentWorkflow:
     def _after_route(self, state: MultiAgentState) -> str | list[Send]:
         if state.get("route_mode") != "multi":
             return "single"
-        initial = [name for name in state.get("planned_agents") or [] if name != "procurement_agent"]
+        initial = [
+            name for name in state.get("planned_agents") or [] if name != "procurement_agent"
+        ]
         if not initial:
             return "single"
         return [
@@ -163,7 +165,9 @@ class MultiAgentWorkflow:
         started = time.monotonic()
         initial_model_calls = runtime.context.model_calls
         try:
-            async for event in self.single.stream(state.get("messages") or [], context=runtime.context):
+            async for event in self.single.stream(
+                state.get("messages") or [], context=runtime.context
+            ):
                 if event.get("event") == "done":
                     raw = event.get("data")
                     data = raw if isinstance(raw, dict) else {}
@@ -201,9 +205,7 @@ class MultiAgentWorkflow:
             evidence_count=len(runtime.context.tools.evidences) if runtime.context.tools else 0,
             usage=usage,
         )
-        runtime.stream_writer(
-            {"event": "done", "data": {"answer": answer, "usage": usage}}
-        )
+        runtime.stream_writer({"event": "done", "data": {"answer": answer, "usage": usage}})
         return {"answer": answer, "usage": usage}
 
     async def _specialist(
@@ -415,9 +417,7 @@ class MultiAgentWorkflow:
                 ):
                     if delta.text:
                         chunks.append(delta.text)
-                        runtime.stream_writer(
-                            {"event": "message", "data": {"delta": delta.text}}
-                        )
+                        runtime.stream_writer({"event": "message", "data": {"delta": delta.text}})
                     if delta.finished:
                         usage = delta.usage
                         finish_reason = delta.finish_reason
@@ -460,7 +460,9 @@ class MultiAgentWorkflow:
                     "duration_ms": round((time.monotonic() - started) * 1000),
                     "usage": usage,
                     "finish_reason": finish_reason,
-                    "usage_source": "PROVIDER" if usage and any(value is not None for value in usage.values()) else "UNKNOWN",
+                    "usage_source": "PROVIDER"
+                    if usage and any(value is not None for value in usage.values())
+                    else "UNKNOWN",
                 },
             }
         )

@@ -1,6 +1,17 @@
-from app.api.deps import get_tenant_context
+import asyncio
+
+import pytest
+from app.api.deps import (
+    get_evaluation_manage_context,
+    get_evaluation_read_context,
+    get_tenant_context,
+)
 from app.core.config import settings
+from app.core.exceptions import AppError
+from app.core.permissions import PermissionCode
 from app.main import app
+
+from conftest import make_context
 
 
 def test_health_is_public(client) -> None:
@@ -86,3 +97,27 @@ def test_identity_timeout_returns_explicit_503(client, monkeypatch) -> None:
     )
     assert response.status_code == 503
     assert response.json()["code"] == 50313
+
+
+def test_evaluation_context_requires_dedicated_read_permission() -> None:
+    with pytest.raises(AppError) as exc_info:
+        asyncio.run(get_evaluation_read_context(make_context()))
+    assert exc_info.value.status_code == 403
+
+    context = make_context(extra_permissions={PermissionCode.COPILOT_EVALUATION_READ.value})
+    assert asyncio.run(get_evaluation_read_context(context)) is context
+
+
+def test_evaluation_mutations_require_manage_permission() -> None:
+    read_only = make_context(extra_permissions={PermissionCode.COPILOT_EVALUATION_READ.value})
+    with pytest.raises(AppError) as exc_info:
+        asyncio.run(get_evaluation_manage_context(read_only))
+    assert exc_info.value.status_code == 403
+
+    manager = make_context(
+        extra_permissions={
+            PermissionCode.COPILOT_EVALUATION_READ.value,
+            PermissionCode.COPILOT_EVALUATION_MANAGE.value,
+        }
+    )
+    assert asyncio.run(get_evaluation_manage_context(manager)) is manager

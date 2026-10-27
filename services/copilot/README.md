@@ -310,3 +310,10 @@ python -m app.tasks.evaluation_worker
 `POST /api/v1/evaluations/datasets/{id}/cases/import-v8` 幂等导入；完整 V9-AGENT-100 可通过同路径的
 `import-v9` 端点导入，包含 40 READY、60 NEEDS_REVIEW。
 完整 API、指标数学定义、安全边界和迁移回滚见 `docs/copilot/v9-evaluation-observability.md`。
+
+## V10 主动业务洞察
+
+V10 新增四类固定 Detector、规则版本审计、手动只读检测、异常去重、状态事件与最小站内通知。当前真实 ERP 检测
+必须由用户主动触发，使用本次请求的短期 Access Token；Token 不写入 PostgreSQL 或 Redis。由于 IAM 尚无可签发、
+可实时撤销的后台评测/调度服务身份，周期后台执行和 V9 LIVE Evaluation 继续由服务端禁用，不能用管理员 Token
+或伪造 tenant/user 绕过。迁移：`7f803d545046`。详细边界见 `docs/copilot/v10-proactive-insights.md`。

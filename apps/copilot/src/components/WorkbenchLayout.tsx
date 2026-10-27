@@ -17,7 +17,8 @@ export function WorkbenchLayout() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const permission = useQuery({
     queryKey: ['tenant', tenantId, 'copilot-me'],
-    queryFn: ({ signal }) => unwrap(api.get<ApiResponse<{ permissions: string[] }>>('/api/v1/me', { signal })),
+    queryFn: ({ signal }) =>
+      unwrap(api.get<ApiResponse<{ permissions: string[] }>>('/api/v1/me', { signal })),
     enabled: tenantId != null,
   });
 
@@ -46,7 +47,9 @@ export function WorkbenchLayout() {
       <Result
         status="error"
         title="Copilot 服务不可用"
-        subTitle={permission.error instanceof Error ? permission.error.message : '无法加载身份与权限'}
+        subTitle={
+          permission.error instanceof Error ? permission.error.message : '无法加载身份与权限'
+        }
       />
     );
   }
@@ -71,6 +74,7 @@ export function WorkbenchLayout() {
             <Sidebar
               collapsed={!narrow && collapsed}
               narrow={narrow}
+              permissions={permission.data?.permissions ?? []}
               onToggle={() => (narrow ? setMobileOpen(false) : setCollapsed((value) => !value))}
               onNavigate={narrow ? () => setMobileOpen(false) : undefined}
             />
@@ -89,7 +93,9 @@ export function WorkbenchLayout() {
           </button>
         ) : null}
         <ModelStatusBanner />
-        <div className="min-h-0 flex-1"><Outlet /></div>
+        <div className="min-h-0 flex-1">
+          <Outlet />
+        </div>
       </main>
     </div>
   );
