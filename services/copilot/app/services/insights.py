@@ -415,6 +415,7 @@ class InsightService:
             self.session,
             self.context.tenant_id,
             max(1, (len(evidence_json) + 2) // 3) + settings.chat_max_output_tokens,
+            scenario="INSIGHT",
         )
         started = perf_counter()
         call = ModelCall(
@@ -458,7 +459,7 @@ class InsightService:
             call.usage_source = "PROVIDER" if usage_tokens(usage) is not None else "UNKNOWN"
             self._event(row.id, "INSIGHT_ANALYZED", self.context.user_id, {})
             await self.session.commit()
-            await reservation.settle(usage_tokens(usage))
+            await reservation.settle(usage_tokens(usage), usage_trusted=True)
             return BusinessInsightOut.model_validate(row)
         except Exception as exc:
             await self.session.rollback()

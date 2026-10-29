@@ -288,3 +288,15 @@ Copilot 最终应成为“受策略控制的 ERP 操作入口”：默认只读�
 - [ ] V9 LIVE Evaluation（继续禁用，不能因 V12 绕过服务身份门禁）
 
 详见 [V12 MCP + Skills](./v12-mcp-skills.md)。
+
+### V13：生产准备与集成加固（实现中，不可发布）
+
+- [x] ERP Service Token 资源参数/查询绑定与服务身份写操作拒绝
+- [x] 金额预算整数微单位、价格版本、Redis 原子预留/幂等结算与审计迁移
+- [x] 官方 MCP Python SDK 2.2.0 锁版与受控 Tools 协议测试
+- [ ] PostgreSQL V11/V12/V13 真实迁移与回滚演练（当前 Docker 不可用）
+- [ ] 真实 Redis 100 并发金额预算、幂等与故障关闭验收
+- [ ] 独立 Egress Proxy 网络 ACL 与远程 MCP Server 真实联调
+- [ ] LIVE Evaluation、四服务 HTTP、Worker、Nginx/SSE 与浏览器 E2E
+
+详见 [V13 生产加固](./v13-production-hardening.md)。

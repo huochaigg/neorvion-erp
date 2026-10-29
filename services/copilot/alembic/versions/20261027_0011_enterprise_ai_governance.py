@@ -38,9 +38,12 @@ def _timestamps() -> list[sa.Column]:
 
 
 def upgrade() -> None:
-    op.add_column(
-        "copilot_insight_detection_runs",
-        sa.Column("attempt_count", sa.Integer(), server_default="0", nullable=False),
+    # V10 历史迁移曾直接引用当前 ORM metadata；从空库回放时，
+    # 新版 ORM 可能已提前创建本列。IF NOT EXISTS 让新环境和已有 V10 环境
+    # 都能安全升级，且不触及任何业务数据。
+    op.execute(
+        "ALTER TABLE copilot_insight_detection_runs "
+        "ADD COLUMN IF NOT EXISTS attempt_count INTEGER DEFAULT 0 NOT NULL"
     )
     op.create_table(
         "copilot_ai_model_providers",

@@ -20,7 +20,7 @@ class Settings(BaseSettings):
     app_env: str = "development"
     app_host: str = "0.0.0.0"
     app_port: int = 8013
-    app_version: str = "12.0.0"
+    app_version: str = "13.0.0"
     git_sha: str = ""
     enable_api_docs: bool = True
     cors_origins: str = (
@@ -116,13 +116,13 @@ class Settings(BaseSettings):
     insight_max_concurrency: int = 2
     insight_max_attempts: int = 3
     quota_enforcement_enabled: bool = False
+    budget_max_model_calls_per_request: int = 12
     mcp_remote_execution_enabled: bool = False
     mcp_allowed_hosts: str = ""
     mcp_egress_proxy_url: str = ""
     mcp_network_isolation_acknowledged: bool = False
     mcp_budget_gate_verified: bool = False
     mcp_origin: str = "https://copilot.neorvion.invalid"
-    mcp_protocol_version: str = "2025-06-18"
     mcp_timeout_seconds: int = 15
     mcp_max_response_bytes: int = 262_144
     mcp_max_tools_per_server: int = 100

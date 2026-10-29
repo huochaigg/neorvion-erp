@@ -12,6 +12,7 @@ from app.core.context import set_tenant_context
 from app.core.exceptions import AppError, from_security_error
 from app.core.iam import authority_client, jwt_verifier, snapshot_store
 from app.core.identity_projection import project_display_user
+from app.core.resource_authorization import authorize_service_request_resources
 from app.core.tenant import TENANT_HEADER, TenantContext
 from app.db.session import open_identity_session, open_tenant_session
 
@@ -72,6 +73,13 @@ def get_tenant_context(request: Request, db: IdentityDb) -> TenantContext:
         raise from_security_error(exc) from exc
     if context.must_change_password:
         raise AppError("请先修改临时密码", code=40350, status_code=403)
+    if context.subject_type == "SERVICE" and request.method.upper() not in {
+        "GET",
+        "HEAD",
+        "OPTIONS",
+    }:
+        raise AppError("服务身份不能调用 ERP 写接口", code=40375, status_code=403)
+    authorize_service_request_resources(request, context)
     if context.subject_type == "USER":
         project_display_user(db, context)
         db.commit()

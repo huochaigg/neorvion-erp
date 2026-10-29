@@ -133,6 +133,31 @@ class TenantAIQuota(TimestampMixin, TenantMixin, Base):
     updated_by: Mapped[int] = mapped_column(BigInteger, nullable=False)
 
 
+class AIBudgetReservation(TimestampMixin, TenantMixin, Base):
+    """可追溯的金额预算预留；金额统一保存为币种的百万分之一。"""
+
+    __tablename__ = "copilot_ai_budget_reservations"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "reservation_id", name="uq_ai_budget_reservation"),
+        Index("ix_ai_budget_reservation_period", "tenant_id", "period_key", "status"),
+    )
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    reservation_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    scenario: Mapped[str] = mapped_column(String(24), nullable=False)
+    period_key: Mapped[str] = mapped_column(String(6), nullable=False)
+    status: Mapped[str] = mapped_column(String(20), nullable=False)
+    estimated_tokens: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    charged_tokens: Mapped[int | None] = mapped_column(BigInteger)
+    estimated_money_micros: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    charged_money_micros: Mapped[int | None] = mapped_column(BigInteger)
+    currency: Mapped[str] = mapped_column(String(8), nullable=False)
+    pricing_version: Mapped[str] = mapped_column(String(64), nullable=False)
+    usage_trusted: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=text("false")
+    )
+    settled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
 class AIGovernanceAudit(TenantMixin, Base):
     __tablename__ = "copilot_ai_governance_audits"
     __table_args__ = (Index("ix_ai_governance_audit_query", "tenant_id", "created_at", "action"),)

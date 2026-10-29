@@ -11,6 +11,13 @@ from app.api.rbac_deps import (
     InventoryTransactionReadContext,
     ProductReadContext,
 )
+from app.core.exceptions import AppError
+from app.core.resource_authorization import (
+    is_service,
+    require_any_service_resource,
+    require_service_resource,
+    require_service_resources,
+)
 from app.schemas.common import ApiResponse, ok
 from app.schemas.inventory import (
     InventoryAdjust,
@@ -39,6 +46,8 @@ def search_product_skus(
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
 ) -> ApiResponse[SkuOptionListOut]:
+    if is_service(context):
+        raise AppError("服务身份不能执行模糊 SKU 枚举", code=40373, status_code=403)
     return ok(
         InventoryService(session, context).search_sku_options(q=q, page=page, page_size=page_size)
     )
@@ -58,6 +67,17 @@ def list_inventory(
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
 ) -> ApiResponse[InventoryListOut]:
+    if is_service(context) and warehouse_id is None and sku_code is None:
+        if len(context.service_resources.get("warehouse", ())) == 1:
+            warehouse_id = require_service_resource(
+                context, "warehouse", None, allow_single_default=True
+            )
+        elif len(context.service_resources.get("sku", ())) == 1:
+            sku_code = require_service_resource(context, "sku", None, allow_single_default=True)
+    require_any_service_resource(
+        context,
+        (("warehouse", warehouse_id), ("sku", sku_code)),
+    )
     return ok(
         InventoryService(session, context).list_inventory(
             q=q,
@@ -98,6 +118,14 @@ def list_all_transactions(
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
 ) -> ApiResponse[InventoryTransactionListOut]:
+    if is_service(context) and warehouse_id is None and sku_id is None:
+        warehouse_id = require_service_resource(
+            context, "warehouse", None, allow_single_default=True
+        )
+    require_any_service_resource(
+        context,
+        (("warehouse", warehouse_id), ("sku_id", sku_id)),
+    )
     return ok(
         InventoryService(session, context).list_transactions(
             inventory_id=None,
@@ -131,6 +159,8 @@ def lookup_availability(
         if not text.isdigit():
             continue
         parsed.append(int(text))
+    require_service_resource(context, "warehouse", warehouse_id)
+    require_service_resources(context, "sku_id", parsed[:50])
     rows = InventoryService(session, context).lookup_availability(
         warehouse_id=warehouse_id,
         sku_ids=parsed[:50],
@@ -146,6 +176,7 @@ def get_inventory(
     context: InventoryReadContext,
     session: DbSession,
 ) -> ApiResponse[InventoryDetailOut]:
+    require_service_resource(context, "inventory", inventory_id)
     return ok(InventoryService(session, context).get_inventory(inventory_id))
 
 
@@ -179,6 +210,7 @@ def list_inventory_transactions(
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
 ) -> ApiResponse[InventoryTransactionListOut]:
+    require_service_resource(context, "inventory", inventory_id)
     return ok(
         InventoryService(session, context).list_transactions(
             inventory_id=inventory_id,

@@ -347,3 +347,18 @@ uv run --directory services/copilot alembic upgrade head
 V12 增加租户隔离 MCP Server、版本化 Tool Registry、声明式 Skill Registry 与运行记录。远程 MCP 默认关闭，Server、工具 Schema 和 Skill 均需人工审核；没有新权限自动授予内置角色。`credential_reference` 只保存部署 Secret 的环境变量名。
 
 生产启用必须同时配置 Host 白名单、受控 Egress Proxy 和网络隔离确认。三个示例 Skill 位于 `services/copilot/skills/`，通过管理 API 导入后仍为待审核。完整威胁模型、验证和回滚见 `docs/copilot/v12-mcp-skills.md`。
+
+## V13 生产加固
+
+V13 将 ERP Service Token 的资源 Claim 绑定到真实路径参数和查询条件，并统一拒绝服务身份的 ERP 写请求。金额预算使用币种百万分之一的整数单位、版本化价格、Redis Lua 原子预留和幂等结算；聊天多 Agent Usage 尚未形成可信聚合时，按事前上限保守扣减，不把缺失 Usage 当作 0。
+
+MCP 协议层使用锁定的官方 `mcp==2.2.0`，仅开放经 Gateway 二次授权的 Tools；Resources、Prompts、Sampling 和 stdio 仍不开放。远程 MCP 和 `MCP_BUDGET_GATE_VERIFIED` 保持 `false`，只有真实 Egress Proxy 与 Redis 并发验收后才能人工调整。
+
+升级前备份 Copilot 数据库，然后作为独立发布步骤执行：
+
+```bash
+uv run --directory services/copilot alembic upgrade 20261029_0013
+uv run --directory services/copilot pytest tests/test_v13_monetary_budget.py tests/test_v13_mcp_sdk.py
+```
+
+迁移会新增 `copilot_ai_budget_reservations`，不修改旧业务数据。回滚应先关闭模型流量，保存预算审计表，再由发布负责人执行 `alembic downgrade 20261028_0012`；该 downgrade 会删除 V13 审计表，不应在未备份时执行。完整验收状态见 `docs/copilot/v13-production-hardening.md`。

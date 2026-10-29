@@ -22,6 +22,7 @@ from app.models.evaluation import (
     ModelPricing,
 )
 from app.models.governance import (
+    AIBudgetReservation,
     AIGovernanceAudit,
     AIGovernancePolicy,
     AIModelDefinition,
@@ -76,6 +77,7 @@ __all__ = [
     "InsightRule",
     "InsightRuleRevision",
     "AIGovernanceAudit",
+    "AIBudgetReservation",
     "AIGovernancePolicy",
     "AIModelDefinition",
     "AIModelProvider",
