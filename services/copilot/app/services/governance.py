@@ -99,7 +99,9 @@ class GovernanceService:
                     f"{row.base_url.rstrip('/')}/models",
                     headers={"Authorization": f"Bearer {secret}"},
                 )
-            row.last_probe_status = "HEALTHY" if response.status_code < 400 else f"HTTP_{response.status_code}"
+            row.last_probe_status = (
+                "HEALTHY" if response.status_code < 400 else f"HTTP_{response.status_code}"
+            )
         except httpx.HTTPError:
             row.last_probe_status = "UNREACHABLE"
         row.last_probe_at = datetime.now(UTC)
@@ -127,8 +129,15 @@ class GovernanceService:
         provider = await self._provider(payload.provider_id)
         if payload.enabled and provider.status != "ACTIVE":
             raise AppError("Provider 未启用，模型不能启用", code=40972, status_code=409)
-        prices = (payload.input_price, payload.output_price, payload.currency, payload.pricing_version)
-        if any(value is not None for value in prices) and not all(value is not None for value in prices):
+        prices = (
+            payload.input_price,
+            payload.output_price,
+            payload.currency,
+            payload.pricing_version,
+        )
+        if any(value is not None for value in prices) and not all(
+            value is not None for value in prices
+        ):
             raise AppError("价格、币种和价格版本必须同时提供", code=42270, status_code=422)
         row = AIModelDefinition(
             tenant_id=self.context.tenant_id,
@@ -145,9 +154,7 @@ class GovernanceService:
 
     async def policy(self) -> AIGovernancePolicy | dict[str, Any]:
         row = await self.session.scalar(
-            select(AIGovernancePolicy).where(
-                AIGovernancePolicy.tenant_id == self.context.tenant_id
-            )
+            select(AIGovernancePolicy).where(AIGovernancePolicy.tenant_id == self.context.tenant_id)
         )
         return row or self._policy_defaults()
 
@@ -321,7 +328,9 @@ class GovernanceService:
 
     async def retention_preview(self, dry_run: bool) -> AIRetentionRun:
         if not dry_run:
-            raise AppError("物理清理需要独立审批流程，V11 API 仅开放 Dry Run", code=40375, status_code=403)
+            raise AppError(
+                "物理清理需要独立审批流程，V11 API 仅开放 Dry Run", code=40375, status_code=403
+            )
         policy = await self.policy()
         trace_days = int(self._value(policy, "trace_retention_days"))
         conversation_days = int(self._value(policy, "conversation_retention_days"))

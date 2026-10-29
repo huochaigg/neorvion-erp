@@ -9,6 +9,7 @@ from pathlib import Path
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 
+
 def _load_dotenv(path: Path) -> None:
     if not path.exists():
         return

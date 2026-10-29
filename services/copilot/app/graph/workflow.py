@@ -33,7 +33,7 @@ Proposal 只生成和预检草稿，绝不创建真实 ERP 单据。用户要求
 回答应区分“ERP 事实”“制度/知识库规则”“推断”和“未知”。引用 ERP 事实只能使用工具返回的 [E数字]，
 引用知识规则只能使用工具返回的 [K数字]；不得创造、修改或猜测引用编号。未明确知识库 ID 时先列出当前用户可访问的知识库；只有一个相关候选时可选择它，多个候选含义不清时请用户选择。禁止跨全部知识库默认检索。"""
 
-_CITATION_RE = re.compile(r"\[([EK]\d+)\]")
+_CITATION_RE = re.compile(r"\[([EKM]\d+)\]")
 
 
 async def _never_disconnected() -> bool:
@@ -118,6 +118,10 @@ class CopilotWorkflow:
                     if runtime.context.tools is not None
                     else None
                 ),
+                mcp_gateway=(
+                    runtime.context.tools.mcp_gateway if runtime.context.tools is not None else None
+                ),
+                agent_name=runtime.context.agent_name,
             )
             if self.executor
             else []
@@ -253,14 +257,19 @@ class CopilotWorkflow:
                         "message": "正在处理业务草稿"
                         if call.name in {"propose_action", "validate_action_proposal"}
                         else (
-                            "正在检索知识库"
-                            if spec and spec.source == "KNOWLEDGE"
-                            else "正在查询 ERP 数据"
+                            "正在调用已审核 MCP 工具"
+                            if call.name.startswith("mcp__")
+                            else (
+                                "正在检索知识库"
+                                if spec and spec.source == "KNOWLEDGE"
+                                else "正在查询 ERP 数据"
+                            )
                         )
                     },
                 }
             )
             try:
+                runtime.context.tools.agent_name = runtime.context.agent_name
                 result = await self.executor.execute(call, runtime.context.tools)
             except AppError as exc:
                 runtime.stream_writer(

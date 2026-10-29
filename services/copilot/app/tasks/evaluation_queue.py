@@ -11,9 +11,7 @@ logger = logging.getLogger(__name__)
 async def enqueue_evaluation(tenant_id: int, user_id: int, run_id: int) -> bool:
     """评测队列仅保存非敏感标识；JWT、Prompt 与密钥不会进入 Redis。"""
     try:
-        await async_redis().lpush(
-            settings.evaluation_queue_key, f"{tenant_id}:{user_id}:{run_id}"
-        )
+        await async_redis().lpush(settings.evaluation_queue_key, f"{tenant_id}:{user_id}:{run_id}")
         return True
     except RedisError:
         logger.warning("evaluation enqueue unavailable tenant_id=%s run_id=%s", tenant_id, run_id)

@@ -275,3 +275,16 @@ Copilot 最终应成为“受策略控制的 ERP 操作入口”：默认只读�
 - [ ] Shell + 四服务真实浏览器回归（含 Wujie keep-alive、租户切换与退出）
 
 详细路由与安全边界见 [企业智能工作台导航](./ui-navigation.md)。
+
+### V12：MCP + Agent Skills 受控生态（代码完成，真实网络待验收）
+
+- [x] 租户级 Server、工具 Schema 版本、审批、健康状态和审计
+- [x] HTTPS 白名单、DNS/IP 检查、禁止重定向、Secret 引用、大小/超时/Redis 并发门禁
+- [x] V5/V8 Tool Executor 动态工具交集与执行前二次授权
+- [x] Skill Registry、版本审核、幂等运行、输入/输出 Schema 和 Evidence 要求
+- [x] 库存分析、销售订单审查、授权知识研究三个只读模板
+- [x] AI 管理中心 MCP Servers、Tool Registry、Agent Skills 页面
+- [ ] 目标环境 Egress Proxy、真实 MCP Server、PostgreSQL/Redis 与浏览器 E2E 验收
+- [ ] V9 LIVE Evaluation（继续禁用，不能因 V12 绕过服务身份门禁）
+
+详见 [V12 MCP + Skills](./v12-mcp-skills.md)。

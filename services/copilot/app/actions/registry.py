@@ -34,6 +34,11 @@ class ActionRegistry:
     def all(self) -> tuple[ActionSpec, ...]:
         return tuple(self._specs.values())
 
+    @property
+    def names(self) -> frozenset[str]:
+        """返回模型可见的 Proposal 工具名，用于跨注册表冲突检测。"""
+        return frozenset({"propose_action", "validate_action_proposal"})
+
     @staticmethod
     def definitions(permissions: frozenset[str]) -> list[ModelToolDefinition]:
         """Proposal 工具定义与只读工具定义分离；服务端仍会再次鉴权。"""

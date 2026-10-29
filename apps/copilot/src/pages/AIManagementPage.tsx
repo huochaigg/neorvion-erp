@@ -9,6 +9,7 @@ import { useCopilotStore } from '@/store';
 
 const EvaluationCenterPage = lazy(() => import('@/pages/EvaluationCenterPage'));
 const GovernanceCenterPage = lazy(() => import('@/pages/GovernanceCenterPage'));
+const EcosystemManagementPage = lazy(() => import('@/pages/EcosystemManagementPage'));
 const { Text, Title } = Typography;
 
 export default function AIManagementPage() {
@@ -23,16 +24,29 @@ export default function AIManagementPage() {
   if (identity.isPending) return <Card loading className="m-6" />;
   const evaluationAllowed = identity.data?.permissions.includes('copilot:evaluation:read');
   const governanceAllowed = identity.data?.permissions.includes('copilot:governance:read');
-  if (!evaluationAllowed && !governanceAllowed)
+  const ecosystemAllowed = identity.data?.permissions.some((code) =>
+    ['copilot:mcp:read', 'copilot:skill:read'].includes(code),
+  );
+  if (!evaluationAllowed && !governanceAllowed && !ecosystemAllowed)
     return (
       <Result
         status="403"
         title="无权访问 AI 管理中心"
-        subTitle="需要 Agent 评测或 AI 治理读取权限"
+        subTitle="需要 Agent 评测、AI 治理、MCP 或 Skill 读取权限"
       />
     );
   const knowledgeAllowed = Boolean(identity.data?.permissions.includes('knowledge:read'));
   const items = [
+    ...(ecosystemAllowed ? [{
+      key: 'ecosystem',
+      label: 'MCP 与 Skills',
+      children: <Suspense fallback={<Card loading />}><EcosystemManagementPage
+        canMcpRead={Boolean(identity.data?.permissions.includes('copilot:mcp:read'))}
+        canMcpManage={Boolean(identity.data?.permissions.includes('copilot:mcp:manage'))}
+        canSkillRead={Boolean(identity.data?.permissions.includes('copilot:skill:read'))}
+        canSkillManage={Boolean(identity.data?.permissions.includes('copilot:skill:manage'))}
+      /></Suspense>,
+    }] : []),
     ...(governanceAllowed ? [{
       key: 'governance',
       label: '企业 AI 治理',
@@ -123,7 +137,7 @@ export default function AIManagementPage() {
           description="Agent 评测关注任务、工具、证据与安全；Knowledge 评测关注检索、重排与 Recall/MRR/nDCG。这里只统一入口，不合并数据库或 Runner。"
         />
         <Tabs
-          activeKey={items.some((item) => item.key === tab) ? tab : (governanceAllowed ? 'governance' : 'evaluation')}
+          activeKey={items.some((item) => item.key === tab) ? tab : (ecosystemAllowed ? 'ecosystem' : governanceAllowed ? 'governance' : 'evaluation')}
           onChange={(value) => setParams({ tab: value })}
           items={items}
         />

@@ -164,7 +164,10 @@ class Evidence(TenantMixin, Base):
             "tenant_id", "message_id", "citation_id", name="uq_copilot_evidence_citation"
         ),
         Index("ix_copilot_evidences_message", "tenant_id", "message_id"),
-        CheckConstraint("source_type IN ('ERP', 'KNOWLEDGE')", name="ck_copilot_evidences_source"),
+        CheckConstraint(
+            "source_type IN ('ERP', 'KNOWLEDGE', 'MCP')",
+            name="ck_copilot_evidences_source",
+        ),
     )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)

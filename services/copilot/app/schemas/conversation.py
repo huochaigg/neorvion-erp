@@ -35,7 +35,7 @@ class ToolRunOut(BaseModel):
 
 class EvidenceOut(BaseModel):
     citation_id: str = Field(description="服务端登记的稳定引用编号，例如 K1 或 E1")
-    source_type: str = Field(description="ERP 或 KNOWLEDGE")
+    source_type: str = Field(description="ERP、KNOWLEDGE 或已审核 MCP")
     resource_type: str = Field(description="来源资源类型或只读工具名")
     resource_id: str | None = Field(description="来源资源标识；来源无法精确定位时为空")
     knowledge_base_id: int | None = None

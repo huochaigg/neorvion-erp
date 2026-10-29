@@ -126,6 +126,38 @@ GovernanceReadContext = Annotated[TenantContext, Depends(get_governance_read_con
 GovernanceManageContext = Annotated[TenantContext, Depends(get_governance_manage_context)]
 
 
+async def get_mcp_read_context(context: CopilotContext) -> TenantContext:
+    AuthorizationService().require_all(context, (PermissionCode.COPILOT_MCP_READ,))
+    return context
+
+
+async def get_mcp_manage_context(context: CopilotContext) -> TenantContext:
+    AuthorizationService().require_all(
+        context,
+        (PermissionCode.COPILOT_MCP_READ, PermissionCode.COPILOT_MCP_MANAGE),
+    )
+    return context
+
+
+async def get_skill_read_context(context: CopilotContext) -> TenantContext:
+    AuthorizationService().require_all(context, (PermissionCode.COPILOT_SKILL_READ,))
+    return context
+
+
+async def get_skill_manage_context(context: CopilotContext) -> TenantContext:
+    AuthorizationService().require_all(
+        context,
+        (PermissionCode.COPILOT_SKILL_READ, PermissionCode.COPILOT_SKILL_MANAGE),
+    )
+    return context
+
+
+McpReadContext = Annotated[TenantContext, Depends(get_mcp_read_context)]
+McpManageContext = Annotated[TenantContext, Depends(get_mcp_manage_context)]
+SkillReadContext = Annotated[TenantContext, Depends(get_skill_read_context)]
+SkillManageContext = Annotated[TenantContext, Depends(get_skill_manage_context)]
+
+
 async def get_db(context: CopilotContext) -> AsyncIterator[AsyncSession]:
     """只为已认证租户打开带 SQL 守卫的会话。"""
     session = open_tenant_session(context.tenant_id)

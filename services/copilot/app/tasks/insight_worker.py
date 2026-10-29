@@ -156,9 +156,7 @@ async def _heartbeat(tenant_id: int, run_id: int, owner: str) -> None:
             )
             if row is None:
                 return
-            row.lease_until = datetime.now(UTC) + timedelta(
-                seconds=settings.insight_lease_seconds
-            )
+            row.lease_until = datetime.now(UTC) + timedelta(seconds=settings.insight_lease_seconds)
             await session.commit()
         finally:
             await session.close()
@@ -183,7 +181,9 @@ async def main() -> None:
         item = await pop_insight(settings.insight_worker_poll_seconds)
         items = [item] if item else await scan_recoverable_insights()
         if items:
-            await asyncio.gather(*(run_item(value) for value in items[: settings.insight_max_concurrency]))
+            await asyncio.gather(
+                *(run_item(value) for value in items[: settings.insight_max_concurrency])
+            )
 
 
 if __name__ == "__main__":

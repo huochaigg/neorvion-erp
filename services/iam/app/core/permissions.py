@@ -168,6 +168,10 @@ class PermissionCode(StrEnum):
     COPILOT_EVALUATION_MANAGE = "copilot:evaluation:manage"
     COPILOT_GOVERNANCE_READ = "copilot:governance:read"
     COPILOT_GOVERNANCE_MANAGE = "copilot:governance:manage"
+    COPILOT_MCP_READ = "copilot:mcp:read"
+    COPILOT_MCP_MANAGE = "copilot:mcp:manage"
+    COPILOT_SKILL_READ = "copilot:skill:read"
+    COPILOT_SKILL_MANAGE = "copilot:skill:manage"
 
     IAM_USERS_READ = "iam:users:read"
     IAM_USERS_UPDATE = "iam:users:update"
@@ -476,6 +480,10 @@ PERMISSION_CATALOG: tuple[tuple[str, str, str, str], ...] = (
         "copilot",
         "管理本租户模型用途、配额和 AI 安全策略",
     ),
+    (PermissionCode.COPILOT_MCP_READ, "查看 MCP 生态", "copilot", "查看本租户 MCP Server 与工具版本"),
+    (PermissionCode.COPILOT_MCP_MANAGE, "管理 MCP 生态", "copilot", "配置、审核和启停只读 MCP 工具"),
+    (PermissionCode.COPILOT_SKILL_READ, "查看 Agent Skills", "copilot", "查看本租户 Skill 与运行记录"),
+    (PermissionCode.COPILOT_SKILL_MANAGE, "管理 Agent Skills", "copilot", "创建、审核和运行受控 Skill"),
     (
         PermissionCode.COPILOT_APPROVE,
         "审批 Copilot 执行",
@@ -1834,6 +1842,30 @@ PERMISSION_TREE: tuple[PermissionTreeDef, ...] = (
                         title="管理 AI 治理",
                         type="ACTION",
                         permission_code=PermissionCode.COPILOT_GOVERNANCE_MANAGE,
+                    ),
+                    PermissionTreeDef(
+                        key="action:copilot-mcp-read",
+                        title="查看 MCP 生态",
+                        type="ACTION",
+                        permission_code=PermissionCode.COPILOT_MCP_READ,
+                    ),
+                    PermissionTreeDef(
+                        key="action:copilot-mcp-manage",
+                        title="管理 MCP 生态",
+                        type="ACTION",
+                        permission_code=PermissionCode.COPILOT_MCP_MANAGE,
+                    ),
+                    PermissionTreeDef(
+                        key="action:copilot-skill-read",
+                        title="查看 Agent Skills",
+                        type="ACTION",
+                        permission_code=PermissionCode.COPILOT_SKILL_READ,
+                    ),
+                    PermissionTreeDef(
+                        key="action:copilot-skill-manage",
+                        title="管理 Agent Skills",
+                        type="ACTION",
+                        permission_code=PermissionCode.COPILOT_SKILL_MANAGE,
                     ),
                 ),
             ),

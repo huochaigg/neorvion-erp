@@ -11,9 +11,7 @@ logger = logging.getLogger(__name__)
 async def enqueue_insight(tenant_id: int, run_id: int) -> bool:
     """队列仅保存租户与运行 ID，Service Token 永不进入 Redis。"""
     try:
-        await async_redis().lpush(
-            settings.insight_queue_key, f"{tenant_id}:{run_id}"
-        )
+        await async_redis().lpush(settings.insight_queue_key, f"{tenant_id}:{run_id}")
         return True
     except RedisError:
         logger.warning("insight enqueue unavailable tenant_id=%s run_id=%s", tenant_id, run_id)

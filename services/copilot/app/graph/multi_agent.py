@@ -261,6 +261,11 @@ class MultiAgentWorkflow:
             message="正在执行受控专业分析",
         )
         started = time.monotonic()
+        dynamic_tools = (
+            runtime.context.tools.mcp_gateway.allowed_names(agent_name)
+            if runtime.context.tools.mcp_gateway is not None
+            else frozenset()
+        )
         tool_runtime = replace(
             runtime.context.tools,
             started_at=time.monotonic(),
@@ -269,8 +274,9 @@ class MultiAgentWorkflow:
             proposal_service=None,
             conversation_id=None,
             source_message_id=None,
-            allowed_tools=spec.allowed_tools,
+            allowed_tools=spec.allowed_tools | dynamic_tools,
             max_calls_override=spec.max_tool_calls,
+            agent_name=agent_name,
         )
         child = AgentRuntime(
             tools=tool_runtime,

@@ -1,0 +1,17 @@
+{
+  "skill_key": "sales-order-review",
+  "name": "销售订单审查",
+  "description": "读取订单与库存证据，给出不包含审批或改单动作的审查结果。",
+  "version": {
+    "instructions": "读取指定销售订单及相关库存，只报告可验证事实、异常线索与需要人工确认的项目；不得审批、修改、发货或创建单据。",
+    "input_schema": {"type": "object", "properties": {"order_id": {"type": "integer"}}, "required": ["order_id"]},
+    "output_schema": {"type": "object", "properties": {"summary": {"type": "string", "maxLength": 4000}}, "required": ["summary"]},
+    "allowed_agents": ["sales_agent", "inventory_agent"],
+    "required_permissions": ["order:read", "inventory:read"],
+    "allowed_tools": ["get_sales_order", "get_inventory"],
+    "required_evidence": true,
+    "risk_level": "READ_ONLY",
+    "timeout_seconds": 30,
+    "token_budget": 3000
+  }
+}

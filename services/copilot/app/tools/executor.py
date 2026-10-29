@@ -22,6 +22,7 @@ from app.schemas.action_proposal import ActionProposalCreate
 from app.tools.registry import ToolRegistry
 
 if TYPE_CHECKING:
+    from app.mcp.gateway import McpGateway
     from app.services.action_proposals import ActionProposalService
 
 
@@ -42,6 +43,8 @@ class ToolRuntime:
     max_calls_override: int | None = None
     shared_calls: list[int] | None = None
     global_call_limit: int | None = None
+    mcp_gateway: McpGateway | None = None
+    agent_name: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -69,19 +72,27 @@ class ToolExecutor:
         permissions: frozenset[str],
         *,
         allowed_tools: frozenset[str] | None = None,
+        mcp_gateway: McpGateway | None = None,
+        agent_name: str | None = None,
     ) -> list[ModelToolDefinition]:
         definitions: list[ModelToolDefinition] = [
             *self.registry.definitions(permissions),
             *self.action_registry.definitions(permissions),
         ]
-        if allowed_tools is None:
-            return definitions
-        return [item for item in definitions if str(item["function"].get("name")) in allowed_tools]
+        if allowed_tools is not None:
+            definitions = [
+                item for item in definitions if str(item["function"].get("name")) in allowed_tools
+            ]
+        if mcp_gateway is not None:
+            definitions.extend(mcp_gateway.definitions(agent_name))
+        return definitions
 
     async def execute(self, call: ModelToolCall, runtime: ToolRuntime) -> ToolExecutionResult:
         """在模型之外执行工具白名单、参数、权限、预算和结果大小校验。"""
         if runtime.allowed_tools is not None and call.name not in runtime.allowed_tools:
             raise AppError("Agent 无权调用该工具", code=40378, status_code=403)
+        if call.name.startswith("mcp__"):
+            return await self._execute_mcp(call, runtime)
         if call.name in {"propose_action", "validate_action_proposal"}:
             return await self._execute_proposal(call, runtime)
         spec = self.registry.get(call.name)
@@ -156,6 +167,28 @@ class ToolExecutor:
             },
             evidences=tuple(evidences),
         )
+
+    async def _execute_mcp(self, call: ModelToolCall, runtime: ToolRuntime) -> ToolExecutionResult:
+        """MCP 仍共用 Agent 总预算；实际授权、Schema 和资源范围由网关复核。"""
+        if runtime.mcp_gateway is None:
+            raise AppError("MCP 工具未配置", code=50381, status_code=503)
+        call_limit = runtime.max_calls_override or settings.tool_max_calls
+        if runtime.calls >= call_limit:
+            raise AppError("工具调用次数已达上限", code=42972, status_code=429)
+        if time.monotonic() - runtime.started_at >= settings.tool_total_timeout_seconds:
+            raise AppError("工具执行总时限已到", code=50472, status_code=504)
+        if runtime.shared_calls is not None and runtime.global_call_limit is not None:
+            if runtime.shared_calls[0] >= runtime.global_call_limit:
+                raise AppError("多 Agent 工具总调用次数已达上限", code=42979, status_code=429)
+            runtime.shared_calls[0] += 1
+        runtime.calls += 1
+        result = await runtime.mcp_gateway.execute(call, runtime.agent_name)
+        evidences = list(result.evidences)
+        for evidence in evidences:
+            count = sum(item.get("source_type") == "MCP" for item in runtime.evidences)
+            evidence["citation_id"] = f"M{count + 1}"
+        runtime.evidences.extend(evidences)
+        return ToolExecutionResult(result.content, result.event, tuple(evidences))
 
     async def _execute_proposal(
         self, call: ModelToolCall, runtime: ToolRuntime

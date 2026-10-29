@@ -9,6 +9,7 @@ from app.models.action_execution import (
 from app.models.action_proposal import ActionProposal, ProposalRevision, ProposalValidation
 from app.models.agent_trace import AgentRun, AgentTaskRun
 from app.models.conversation import Conversation, Evidence, Message, ToolRun
+from app.models.ecosystem import McpServer, McpToolVersion, Skill, SkillRun, SkillVersion
 from app.models.evaluation import (
     AgentEvaluationCase,
     AgentEvaluationCaseRun,
@@ -67,6 +68,11 @@ __all__ = [
     "AgentEvaluationComparison",
     "ModelCall",
     "ModelPricing",
+    "McpServer",
+    "McpToolVersion",
+    "Skill",
+    "SkillVersion",
+    "SkillRun",
     "InsightRule",
     "InsightRuleRevision",
     "AIGovernanceAudit",

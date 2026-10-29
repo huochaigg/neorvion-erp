@@ -30,12 +30,17 @@ async def enforce_runtime_governance(
 ) -> RuntimeGovernance:
     """在模型入口执行租户策略与模型目录交集；空目录保持已有部署配置。"""
     if settings.app_env.lower() in {"test", "testing"}:
-        return RuntimeGovernance(None, True, settings.tool_max_calls, int(settings.tool_total_timeout_seconds))
+        return RuntimeGovernance(
+            None, True, settings.tool_max_calls, int(settings.tool_total_timeout_seconds)
+        )
     policy = await session.scalar(
         select(AIGovernancePolicy).where(AIGovernancePolicy.tenant_id == tenant_id)
     )
     if policy is not None:
-        if policy.allowed_provider_codes and settings.model_provider not in policy.allowed_provider_codes:
+        if (
+            policy.allowed_provider_codes
+            and settings.model_provider not in policy.allowed_provider_codes
+        ):
             raise AppError("当前模型 Provider 不符合租户策略", code=40377, status_code=403)
         if policy.allowed_model_names and settings.chat_model not in policy.allowed_model_names:
             raise AppError("当前模型不符合租户策略", code=40377, status_code=403)
@@ -68,6 +73,7 @@ async def enforce_runtime_governance(
         if quota
         else int(settings.tool_total_timeout_seconds),
     )
+
 
 _RESERVE_SCRIPT = """
 local rpm=tonumber(redis.call('GET',KEYS[1]) or '0')

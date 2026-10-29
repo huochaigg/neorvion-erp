@@ -204,7 +204,12 @@ class InsightService:
                 .with_for_update()
             )
             if failed_run is not None:
-                failed_run.status, failed_run.error_code, failed_run.safe_error, failed_run.finished_at = (
+                (
+                    failed_run.status,
+                    failed_run.error_code,
+                    failed_run.safe_error,
+                    failed_run.finished_at,
+                ) = (
                     "FAILED",
                     exc.code,
                     exc.message[:255],
@@ -373,19 +378,18 @@ class InsightService:
         """在无工具模型调用中分析已验证证据；模型失败不影响原始告警事实。"""
         row = await self._insight(insight_id, lock=True)
         policy = await self.session.scalar(
-            select(AIGovernancePolicy).where(
-                AIGovernancePolicy.tenant_id == self.context.tenant_id
-            )
+            select(AIGovernancePolicy).where(AIGovernancePolicy.tenant_id == self.context.tenant_id)
         )
         if policy is None or not policy.insight_analysis_enabled:
             raise AppError("租户未启用 AI 洞察分析", code=40376, status_code=403)
-        if policy.allowed_provider_codes and settings.model_provider not in policy.allowed_provider_codes:
+        if (
+            policy.allowed_provider_codes
+            and settings.model_provider not in policy.allowed_provider_codes
+        ):
             raise AppError("当前模型 Provider 不符合租户策略", code=40377, status_code=403)
         if policy.allowed_model_names and settings.chat_model not in policy.allowed_model_names:
             raise AppError("当前模型不符合租户策略", code=40377, status_code=403)
-        await enforce_runtime_governance(
-            self.session, self.context.tenant_id, "INSIGHT_ANALYSIS"
-        )
+        await enforce_runtime_governance(self.session, self.context.tenant_id, "INSIGHT_ANALYSIS")
         row.analysis_status = "RUNNING"
         await self.session.commit()
 

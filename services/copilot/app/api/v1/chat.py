@@ -14,6 +14,7 @@ from app.core.config import settings
 from app.core.exceptions import AppError
 from app.erp.client import get_erp_client
 from app.graph.workflow import AgentRuntime
+from app.mcp.gateway import McpGateway
 from app.schemas.chat import ChatRequest, ChatResponse, TokenUsageOut
 from app.schemas.common import ApiResponse, ok
 from app.services.action_proposals import ActionProposalService
@@ -51,6 +52,7 @@ def _runtime(
     conversation_id: int | None = None,
     source_message_id: int | None = None,
     governance: RuntimeGovernance | None = None,
+    mcp_gateway: McpGateway | None = None,
 ) -> AgentRuntime:
     audiences = frozenset(getattr(request.state, "jwt_audiences", ()))
     access_token = str(getattr(request.state, "access_token", ""))
@@ -77,6 +79,7 @@ def _runtime(
             allowed_tools=governance.allowed_tools if governance else None,
             max_calls_override=governance.max_tool_calls if governance else None,
             global_call_limit=governance.max_tool_calls if governance else None,
+            mcp_gateway=mcp_gateway,
         ),
         allow_multi_agent=governance.allow_multi_agent if governance else True,
     )
@@ -90,11 +93,15 @@ async def chat(
     workflow: WorkflowDep,
     db: DbSession,
 ) -> ApiResponse[ChatResponse]:
-    governance = await enforce_runtime_governance(
-        cast(AsyncSession, db), context.tenant_id, "CHAT"
-    )
+    governance = await enforce_runtime_governance(cast(AsyncSession, db), context.tenant_id, "CHAT")
     reservation = await reserve_chat_quota(
         cast(AsyncSession, db), context.tenant_id, _estimated_tokens(payload)
+    )
+    mcp_gateway = await McpGateway.load(
+        cast(AsyncSession, db),
+        context,
+        allowed_tools=governance.allowed_tools,
+        request_id=str(getattr(request.state, "request_id", "")),
     )
     usage = None
     try:
@@ -116,6 +123,7 @@ async def chat(
                     conversation_id=turn.conversation_id,
                     source_message_id=turn.message_id,
                     governance=governance,
+                    mcp_gateway=mcp_gateway,
                 ),
                 lambda: _false(),
             ):
@@ -132,7 +140,14 @@ async def chat(
             )
         else:
             answer, usage = await ChatService(workflow).complete(
-                _messages(payload), context=_runtime(request, context, db, governance=governance)
+                _messages(payload),
+                context=_runtime(
+                    request,
+                    context,
+                    db,
+                    governance=governance,
+                    mcp_gateway=mcp_gateway,
+                ),
             )
             response = ChatResponse(
                 answer=answer,
@@ -155,11 +170,15 @@ async def chat_stream(
     db: DbSession,
 ) -> StreamingResponse:
     stream_request_id = str(getattr(request.state, "request_id", "") or uuid4().hex)
-    governance = await enforce_runtime_governance(
-        cast(AsyncSession, db), context.tenant_id, "CHAT"
-    )
+    governance = await enforce_runtime_governance(cast(AsyncSession, db), context.tenant_id, "CHAT")
     reservation = await reserve_chat_quota(
         cast(AsyncSession, db), context.tenant_id, _estimated_tokens(payload)
+    )
+    mcp_gateway = await McpGateway.load(
+        cast(AsyncSession, db),
+        context,
+        allowed_tools=governance.allowed_tools,
+        request_id=stream_request_id,
     )
 
     async def event_stream():
@@ -185,6 +204,7 @@ async def chat_stream(
                         conversation_id=turn.conversation_id,
                         source_message_id=turn.message_id,
                         governance=governance,
+                        mcp_gateway=mcp_gateway,
                     ),
                     request.is_disconnected,
                 )
@@ -192,7 +212,13 @@ async def chat_stream(
                 events = ChatService(workflow).stream_events(
                     _messages(payload),
                     disconnected=request.is_disconnected,
-                    context=_runtime(request, context, db, governance=governance),
+                    context=_runtime(
+                        request,
+                        context,
+                        db,
+                        governance=governance,
+                        mcp_gateway=mcp_gateway,
+                    ),
                 )
             async for event in events:
                 name = str(event.get("event") or "message")

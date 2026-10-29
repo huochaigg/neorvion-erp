@@ -20,7 +20,7 @@ class Settings(BaseSettings):
     app_env: str = "development"
     app_host: str = "0.0.0.0"
     app_port: int = 8013
-    app_version: str = "11.0.0"
+    app_version: str = "12.0.0"
     git_sha: str = ""
     enable_api_docs: bool = True
     cors_origins: str = (
@@ -116,6 +116,16 @@ class Settings(BaseSettings):
     insight_max_concurrency: int = 2
     insight_max_attempts: int = 3
     quota_enforcement_enabled: bool = False
+    mcp_remote_execution_enabled: bool = False
+    mcp_allowed_hosts: str = ""
+    mcp_egress_proxy_url: str = ""
+    mcp_network_isolation_acknowledged: bool = False
+    mcp_budget_gate_verified: bool = False
+    mcp_origin: str = "https://copilot.neorvion.invalid"
+    mcp_protocol_version: str = "2025-06-18"
+    mcp_timeout_seconds: int = 15
+    mcp_max_response_bytes: int = 262_144
+    mcp_max_tools_per_server: int = 100
 
     @property
     def is_production(self) -> bool:
@@ -124,6 +134,14 @@ class Settings(BaseSettings):
     @property
     def cors_origin_list(self) -> list[str]:
         return [item.strip() for item in self.cors_origins.split(",") if item.strip()]
+
+    @property
+    def mcp_allowed_host_list(self) -> list[str]:
+        return [
+            item.strip().lower().rstrip(".")
+            for item in self.mcp_allowed_hosts.split(",")
+            if item.strip()
+        ]
 
     @property
     def cors_origin_regex(self) -> str | None:
@@ -160,6 +178,13 @@ class Settings(BaseSettings):
             raise RuntimeError("生产环境禁止关闭持久化 Action Execution Graph")
         if not self.quota_enforcement_enabled:
             raise RuntimeError("生产环境必须启用 QUOTA_ENFORCEMENT_ENABLED")
+        if self.mcp_remote_execution_enabled and (
+            not self.mcp_allowed_host_list
+            or not self.mcp_network_isolation_acknowledged
+            or not self.mcp_budget_gate_verified
+            or not self.mcp_egress_proxy_url.strip()
+        ):
+            raise RuntimeError("生产 MCP 必须配置网络隔离并确认预算硬门禁已验收")
 
 
 @lru_cache

@@ -1,0 +1,17 @@
+{
+  "skill_key": "inventory-analysis",
+  "name": "库存风险分析",
+  "description": "基于实时库存与历史销量证据生成只读风险摘要，不自动决定补货。",
+  "version": {
+    "instructions": "查询指定 SKU 的实时库存和销量覆盖天数，返回计算依据、查询时间和证据，区分事实、推断与未知；没有可信安全库存、交期或在途数据时不得编造风险阈值或补货数量。",
+    "input_schema": {"type": "object", "properties": {"sku_code": {"type": "string", "maxLength": 64}}, "required": ["sku_code"]},
+    "output_schema": {"type": "object", "properties": {"summary": {"type": "string", "maxLength": 4000}}, "required": ["summary"]},
+    "allowed_agents": ["inventory_agent"],
+    "required_permissions": ["inventory:read", "analytics:sales:read"],
+    "allowed_tools": ["analyze_inventory_coverage"],
+    "required_evidence": true,
+    "risk_level": "READ_ONLY",
+    "timeout_seconds": 30,
+    "token_budget": 3000
+  }
+}

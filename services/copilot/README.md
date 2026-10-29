@@ -341,3 +341,9 @@ uv run --directory services/copilot alembic upgrade head
 只登记 `SECRET_ENV_NAME`，前端仅显示“已配置/未配置”。数据保留接口在 V11 只允许 Dry Run；
 物理删除仍需要独立审批和备份。完整部署、回滚和安全门禁见
 `docs/copilot/v11-enterprise-ai-governance.md`。
+
+## V12 MCP 与 Agent Skills
+
+V12 增加租户隔离 MCP Server、版本化 Tool Registry、声明式 Skill Registry 与运行记录。远程 MCP 默认关闭，Server、工具 Schema 和 Skill 均需人工审核；没有新权限自动授予内置角色。`credential_reference` 只保存部署 Secret 的环境变量名。
+
+生产启用必须同时配置 Host 白名单、受控 Egress Proxy 和网络隔离确认。三个示例 Skill 位于 `services/copilot/skills/`，通过管理 API 导入后仍为待审核。完整威胁模型、验证和回滚见 `docs/copilot/v12-mcp-skills.md`。
