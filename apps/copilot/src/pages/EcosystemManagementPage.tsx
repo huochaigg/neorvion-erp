@@ -1,29 +1,126 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Alert, Button, Card, Form, Input, Modal, Space, Table, Tabs, Tag, Typography } from 'antd';
-import { useState } from 'react';
 import {
-  createMcpServer, createSkill, discoverMcpTools, listMcpServers, listMcpTools,
-  listSkills, probeMcpServer, reviewMcpServer, reviewMcpTool, reviewSkill,
-  setMcpServerEnabled,
+  Alert, Button, Card, Descriptions, Drawer, Empty, Form, Input, InputNumber, message,
+  Modal, Select, Space, Table, Tabs, Tag, Typography, Upload,
+} from 'antd';
+import { useMemo, useState } from 'react';
+import {
+  createMcpServer, createSkill, discoverMcpTools, getSkill, importSkillPackage, importSkillTemplates,
+  listMcpServers, listMcpTools, listSkillRuns, listSkills, probeMcpServer, reviewMcpServer,
+  reviewMcpTool, reviewSkill, runSkill, setMcpServerEnabled, setSkillEnabled,
+  type JsonSchema, type SkillRun,
 } from '@/api/ecosystem';
 
-const { Paragraph, Text } = Typography;
+const { Paragraph, Text, Title } = Typography;
 
-interface Props { canMcpRead: boolean; canMcpManage: boolean; canSkillRead: boolean; canSkillManage: boolean }
+interface Props {
+  canMcpRead: boolean;
+  canMcpManage: boolean;
+  canSkillRead: boolean;
+  canSkillManage: boolean;
+  canSkillRun: boolean;
+}
 
-export default function EcosystemManagementPage({ canMcpRead, canMcpManage, canSkillRead, canSkillManage }: Props) {
+const json = (value: unknown) => JSON.stringify(value, null, 2);
+
+function errorText(error: unknown) {
+  return error instanceof Error ? error.message : '请求失败，请稍后重试';
+}
+
+function inputForSchema(schema: JsonSchema) {
+  if (schema.type === 'integer' || schema.type === 'number') {
+    return <InputNumber className="w-full" min={schema.minimum} max={schema.maximum} />;
+  }
+  if (schema.type === 'boolean') {
+    return <Select options={[{ value: true, label: '是' }, { value: false, label: '否' }]} />;
+  }
+  if (schema.type === 'array' || schema.type === 'object') {
+    return <Input.TextArea rows={3} placeholder={schema.type === 'array' ? '[1, 2]' : '{"key":"value"}'} />;
+  }
+  return <Input placeholder={schema.format === 'date' ? 'YYYY-MM-DD' : schema.description} />;
+}
+
+function parseSchemaInput(schema: JsonSchema, values: Record<string, unknown>) {
+  const output: Record<string, unknown> = {};
+  for (const [name, value] of Object.entries(values)) {
+    const field = schema.properties?.[name];
+    if (value === undefined || value === '') continue;
+    if (field?.type === 'array' || field?.type === 'object') {
+      output[name] = JSON.parse(String(value));
+    } else output[name] = value;
+  }
+  return output;
+}
+
+export function RunDetail({ run }: { run: SkillRun }) {
+  const evidence = run.output_snapshot.evidence ?? [];
+  const toolCalls = run.output_snapshot.tool_calls ?? [];
+  return (
+    <Space direction="vertical" className="w-full" size="middle">
+      {run.safe_error && <Alert type="error" showIcon message={run.safe_error} />}
+      <Descriptions size="small" bordered column={2} items={[
+        { key: 'status', label: '状态', children: <Tag>{run.status}</Tag> },
+        { key: 'version', label: '版本', children: `v${run.skill_version}` },
+        { key: 'started', label: '开始', children: run.started_at ?? '-' },
+        { key: 'finished', label: '结束', children: run.finished_at ?? '-' },
+      ]} />
+      <div><Text strong>结构化结果</Text><pre className="mt-2 max-h-72 overflow-auto rounded bg-slate-950 p-3 text-xs text-slate-100">{json(run.output_snapshot.result ?? {})}</pre></div>
+      <div><Text strong>Tool 执行摘要</Text><pre className="mt-2 max-h-52 overflow-auto rounded bg-slate-100 p-3 text-xs">{json(toolCalls)}</pre></div>
+      <div><Text strong>Evidence</Text><pre className="mt-2 max-h-72 overflow-auto rounded bg-slate-100 p-3 text-xs">{json(evidence)}</pre></div>
+    </Space>
+  );
+}
+
+export default function EcosystemManagementPage({
+  canMcpRead, canMcpManage, canSkillRead, canSkillManage, canSkillRun,
+}: Props) {
   const queryClient = useQueryClient();
   const [serverOpen, setServerOpen] = useState(false);
   const [skillOpen, setSkillOpen] = useState(false);
+  const [selectedSkillId, setSelectedSkillId] = useState<number>();
+  const [search, setSearch] = useState('');
+  const [selectedRun, setSelectedRun] = useState<SkillRun>();
   const [serverForm] = Form.useForm();
   const [skillForm] = Form.useForm();
+  const [runForm] = Form.useForm();
   const servers = useQuery({ queryKey: ['mcp-servers'], queryFn: ({ signal }) => listMcpServers(signal), enabled: canMcpRead });
   const tools = useQuery({ queryKey: ['mcp-tools'], queryFn: ({ signal }) => listMcpTools(signal), enabled: canMcpRead });
   const skills = useQuery({ queryKey: ['agent-skills'], queryFn: ({ signal }) => listSkills(signal), enabled: canSkillRead });
+  const detail = useQuery({ queryKey: ['agent-skill', selectedSkillId], queryFn: ({ signal }) => getSkill(selectedSkillId!, signal), enabled: selectedSkillId != null });
+  const runs = useQuery({ queryKey: ['agent-skill-runs', selectedSkillId], queryFn: ({ signal }) => listSkillRuns(selectedSkillId!, signal), enabled: selectedSkillId != null });
+  const currentVersion = detail.data?.versions.find((item) => item.version === detail.data?.current_version);
+  const filteredSkills = useMemo(() => {
+    const keyword = search.trim().toLowerCase();
+    if (!keyword) return skills.data ?? [];
+    return (skills.data ?? []).filter((item) => `${item.name} ${item.skill_key} ${item.description}`.toLowerCase().includes(keyword));
+  }, [search, skills.data]);
   const refresh = async () => {
-    await Promise.all(['mcp-servers', 'mcp-tools', 'agent-skills'].map((key) => queryClient.invalidateQueries({ queryKey: [key] })));
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ['mcp-servers'] }),
+      queryClient.invalidateQueries({ queryKey: ['mcp-tools'] }),
+      queryClient.invalidateQueries({ queryKey: ['agent-skills'] }),
+      queryClient.invalidateQueries({ queryKey: ['agent-skill', selectedSkillId] }),
+      queryClient.invalidateQueries({ queryKey: ['agent-skill-runs', selectedSkillId] }),
+    ]);
   };
-  const action = useMutation({ mutationFn: (work: () => Promise<unknown>) => work(), onSuccess: refresh });
+  const action = useMutation({
+    mutationFn: (work: () => Promise<unknown>) => work(),
+    onSuccess: refresh,
+    onError: (error) => message.error(errorText(error)),
+  });
+  const execute = useMutation({
+    mutationFn: async () => {
+      if (!selectedSkillId || !currentVersion) throw new Error('请先选择 Skill');
+      const values = await runForm.validateFields();
+      return runSkill(selectedSkillId, {
+        input: parseSchemaInput(currentVersion.input_schema, values.input ?? {}),
+        agent_name: values.agent_name,
+        idempotency_key: crypto.randomUUID(),
+      });
+    },
+    onSuccess: async (result) => { setSelectedRun(result); await refresh(); },
+    onError: (error) => message.error(errorText(error)),
+  });
   const submitServer = async () => {
     const values = await serverForm.validateFields();
     await createMcpServer({ ...values, transport_type: 'STREAMABLE_HTTP', authentication_type: values.credential_reference ? 'BEARER_ENV' : 'NONE', allowed_tools: [], denied_tools: [], allowed_resources: {}, timeout_seconds: 10, max_retries: 1, concurrency_limit: 2 });
@@ -31,17 +128,18 @@ export default function EcosystemManagementPage({ canMcpRead, canMcpManage, canS
   };
   const submitSkill = async () => {
     const values = await skillForm.validateFields();
-    await createSkill({ skill_key: values.skill_key, name: values.name, description: values.description, version: {
-      instructions: values.instructions,
-      input_schema: { type: 'object', properties: { query: { type: 'string', maxLength: 1000 } }, required: ['query'] },
-      output_schema: { type: 'object', properties: { summary: { type: 'string', maxLength: 4000 } }, required: ['summary'] },
-      allowed_agents: ['inventory_agent'], required_permissions: ['inventory:read'], allowed_tools: ['analyze_inventory_coverage'],
-      required_evidence: true, risk_level: 'READ_ONLY', timeout_seconds: 30, token_budget: 3000,
-    } });
+    let version: Record<string, unknown>;
+    try {
+      version = JSON.parse(values.version_json);
+    } catch {
+      message.error('版本配置不是有效 JSON');
+      return;
+    }
+    await createSkill({ skill_key: values.skill_key, name: values.name, description: values.description, version });
     setSkillOpen(false); skillForm.resetFields(); await refresh();
   };
   return <>
-    <Alert className="mb-4" type="warning" showIcon message="外部能力默认关闭" description="只有域名白名单、健康检查、人工审核、IAM 权限和 Agent 白名单同时通过后，工具才会进入模型上下文。Secret 只保存环境变量名。" />
+    <Alert className="mb-4" type="warning" showIcon message="外部能力默认关闭" description="MCP 与 Skill 都要经过服务端审核、IAM、租户策略、Agent 和 Tool 白名单校验。手动运行始终可用；Chat 自动选择仅在服务端 SKILL_CHAT_ENABLED 灰度开关开启时生效。" />
     <Tabs items={[
       ...(canMcpRead ? [{ key: 'servers', label: 'MCP Servers', children: <Card extra={<Button disabled={!canMcpManage} onClick={() => setServerOpen(true)}>新增 Server</Button>}><Table rowKey="id" loading={servers.isPending} dataSource={servers.data ?? []} pagination={false} columns={[
         { title: 'Server', dataIndex: 'display_name' }, { title: 'Endpoint', dataIndex: 'endpoint', ellipsis: true },
@@ -59,16 +157,27 @@ export default function EcosystemManagementPage({ canMcpRead, canMcpManage, canS
         { title: 'Schema', dataIndex: 'schema_hash', render: (value: string) => <Text code>{value.slice(0, 12)}</Text> },
         { title: '状态', dataIndex: 'approval_status', render: (value: string) => <Tag>{value}</Tag> },
         { title: '操作', render: (_, row) => <Button size="small" disabled={!canMcpManage || row.approval_status === 'APPROVED'} onClick={() => action.mutate(() => reviewMcpTool(row.id, true))}>审核只读版本</Button> },
-      ]} /></Card> },
-      ] : []),
-      ...(canSkillRead ? [{ key: 'skills', label: 'Agent Skills', children: <Card extra={<Button disabled={!canSkillManage} onClick={() => setSkillOpen(true)}>新增 Skill</Button>}><Table rowKey="id" loading={skills.isPending} dataSource={skills.data ?? []} pagination={false} columns={[
+      ]} /></Card> } ] : []),
+      ...(canSkillRead ? [{ key: 'skills', label: 'Agent Skills', children: <Card title={<Input.Search allowClear placeholder="搜索名称、Key 或说明" onSearch={setSearch} onChange={(event) => setSearch(event.target.value)} />} extra={<Space><Button disabled={!canSkillManage} loading={action.isPending} onClick={() => action.mutate(async () => { const results = await importSkillTemplates(); message.success(results.map((item) => `${item.skill_key}: ${item.status}`).join('；')); })}>导入内置模板</Button><Upload accept=".zip" maxCount={1} showUploadList={false} disabled={!canSkillManage} beforeUpload={(file) => { action.mutate(async () => { const result = await importSkillPackage(file); message.success(`${result.skill_key}: ${result.status}`); }); return Upload.LIST_IGNORE; }}><Button disabled={!canSkillManage} loading={action.isPending}>导入 Skill 包</Button></Upload><Button disabled={!canSkillManage} onClick={() => setSkillOpen(true)}>新增 Skill</Button></Space>}><Table rowKey="id" loading={skills.isPending} dataSource={filteredSkills} pagination={{ pageSize: 10 }} columns={[
         { title: 'Skill', dataIndex: 'name' }, { title: 'Key', dataIndex: 'skill_key' }, { title: '版本', dataIndex: 'current_version' },
-        { title: '状态', dataIndex: 'approval_status', render: (value: string) => <Tag>{value}</Tag> },
-        { title: '操作', render: (_, row) => <Button size="small" disabled={!canSkillManage || row.approval_status === 'APPROVED'} onClick={() => action.mutate(() => reviewSkill(row.id, true))}>审核并启用</Button> },
-      ]} /></Card> },
-      ] : []),
+        { title: '审核', dataIndex: 'approval_status', render: (value: string) => <Tag>{value}</Tag> },
+        { title: '启用', dataIndex: 'enabled', render: (value: boolean) => <Tag color={value ? 'green' : 'default'}>{value ? '是' : '否'}</Tag> },
+        { title: '操作', render: (_, row) => <Space><Button size="small" onClick={() => { setSelectedSkillId(row.id); setSelectedRun(undefined); }}>详情 / 运行</Button><Button size="small" disabled={!canSkillManage || row.approval_status === 'APPROVED'} onClick={() => action.mutate(() => reviewSkill(row.id, true))}>审核</Button><Button size="small" disabled={!canSkillManage || row.approval_status !== 'APPROVED'} onClick={() => action.mutate(() => setSkillEnabled(row.id, !row.enabled))}>{row.enabled ? '停用' : '启用'}</Button></Space> },
+      ]} /></Card> }] : []),
     ]} />
     <Modal title="新增 MCP Server" open={serverOpen} onCancel={() => setServerOpen(false)} onOk={submitServer}><Paragraph type="secondary">Endpoint 必须先加入部署域名白名单；这里只填写 Secret 环境变量名。</Paragraph><Form layout="vertical" form={serverForm}><Form.Item name="server_key" label="Server Key" rules={[{ required: true }]}><Input /></Form.Item><Form.Item name="display_name" label="名称" rules={[{ required: true }]}><Input /></Form.Item><Form.Item name="description" label="说明"><Input.TextArea /></Form.Item><Form.Item name="endpoint" label="HTTPS Endpoint" rules={[{ required: true, type: 'url' }]}><Input /></Form.Item><Form.Item name="credential_reference" label="Secret 环境变量名"><Input placeholder="MCP_VENDOR_TOKEN" /></Form.Item></Form></Modal>
-    <Modal title="新增只读 Skill" open={skillOpen} onCancel={() => setSkillOpen(false)} onOk={submitSkill}><Form layout="vertical" form={skillForm}><Form.Item name="skill_key" label="Skill Key" rules={[{ required: true }]}><Input /></Form.Item><Form.Item name="name" label="名称" rules={[{ required: true }]}><Input /></Form.Item><Form.Item name="description" label="说明" rules={[{ required: true }]}><Input /></Form.Item><Form.Item name="instructions" label="业务指导" rules={[{ required: true, min: 10 }]}><Input.TextArea rows={6} /></Form.Item></Form></Modal>
+    <Modal width={760} title="新增只读 Skill" open={skillOpen} onCancel={() => setSkillOpen(false)} onOk={submitSkill}><Alert className="mb-3" type="info" message="完整版本配置采用严格 JSON" description="后端仍会校验 Schema、Agent、Tool、IAM 权限和 READ_ONLY 风险等级。" /><Form layout="vertical" form={skillForm}><Form.Item name="skill_key" label="Skill Key" rules={[{ required: true }]}><Input /></Form.Item><Form.Item name="name" label="名称" rules={[{ required: true }]}><Input /></Form.Item><Form.Item name="description" label="说明" rules={[{ required: true }]}><Input /></Form.Item><Form.Item name="version_json" label="版本配置 JSON" rules={[{ required: true }]}><Input.TextArea rows={14} /></Form.Item></Form></Modal>
+    <Drawer width={900} title={detail.data ? `${detail.data.name} · ${detail.data.skill_key}` : 'Skill 详情'} open={selectedSkillId != null} onClose={() => setSelectedSkillId(undefined)}>
+      {detail.isPending ? <Card loading /> : currentVersion ? <Tabs items={[
+        { key: 'config', label: '版本与配置', children: <Space direction="vertical" className="w-full" size="middle"><Descriptions bordered column={2} items={[
+          { key: 'version', label: '当前版本', children: `v${currentVersion.version}` }, { key: 'approval', label: '审核', children: currentVersion.approval_status },
+          { key: 'source', label: '来源格式', children: currentVersion.source_format }, { key: 'references', label: 'References', children: Object.keys(currentVersion.resources ?? {}).join(', ') || '-' },
+          { key: 'agents', label: 'Agents', children: currentVersion.allowed_agents.join(', ') }, { key: 'tools', label: 'Tools', children: currentVersion.allowed_tools.join(', ') },
+          { key: 'permissions', label: '权限', children: currentVersion.required_permissions.join(', ') }, { key: 'limits', label: '约束', children: `${currentVersion.timeout_seconds}s / ${currentVersion.token_budget} tokens / ${currentVersion.risk_level}` },
+        ]} /><div><Title level={5}>SKILL.md</Title><pre className="max-h-[32rem] overflow-auto rounded bg-slate-100 p-3 text-xs whitespace-pre-wrap">{`---\n${json(currentVersion.source_metadata ?? {})}\n---\n\n${currentVersion.instructions}`}</pre></div><div><Title level={5}>References</Title>{Object.entries(currentVersion.resources ?? {}).length ? <Tabs items={Object.entries(currentVersion.resources).map(([path, content]) => ({ key: path, label: path.split('/').at(-1), children: <pre className="max-h-80 overflow-auto rounded bg-slate-100 p-3 text-xs whitespace-pre-wrap">{content}</pre> }))} /> : <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="无 Reference" />}</div><div><Title level={5}>Input Schema</Title><pre className="overflow-auto rounded bg-slate-100 p-3 text-xs">{json(currentVersion.input_schema)}</pre></div><div><Title level={5}>Output Schema</Title><pre className="overflow-auto rounded bg-slate-100 p-3 text-xs">{json(currentVersion.output_schema)}</pre></div><Title level={5}>版本历史</Title><Table rowKey="id" size="small" pagination={false} dataSource={detail.data?.versions ?? []} columns={[{ title: '版本', dataIndex: 'version' }, { title: '格式', dataIndex: 'source_format' }, { title: '审核', dataIndex: 'approval_status' }, { title: 'Hash', dataIndex: 'content_hash', render: (value: string) => <Text code>{value.slice(0, 16)}</Text> }, { title: '创建时间', dataIndex: 'created_at' }]} /></Space> },
+        { key: 'run', label: '手动运行', children: canSkillRun ? <Space direction="vertical" className="w-full" size="middle"><Alert type="info" showIcon message="同步 HTTP 执行" description="页面会等待接口返回；关闭页面或 HTTP 断开不代表下游 Tool 已停止，最终状态以运行记录为准。" /><Form form={runForm} layout="vertical" initialValues={{ agent_name: currentVersion.allowed_agents[0] }}><Form.Item name="agent_name" label="专业 Agent" rules={[{ required: true }]}><Select options={currentVersion.allowed_agents.map((value) => ({ value, label: value }))} /></Form.Item><Title level={5}>输入参数</Title>{Object.entries(currentVersion.input_schema.properties ?? {}).map(([name, schema]) => <Form.Item key={name} name={['input', name]} label={schema.description || name} rules={[{ required: currentVersion.input_schema.required?.includes(name) }]}>{inputForSchema(schema)}</Form.Item>)}<Button type="primary" loading={execute.isPending} disabled={!detail.data?.enabled || detail.data.approval_status !== 'APPROVED'} onClick={() => execute.mutate()}>运行 Skill</Button></Form>{selectedRun && <RunDetail run={selectedRun} />}</Space> : <Alert type="warning" message="缺少 copilot:skill:run 权限" /> },
+        { key: 'history', label: `运行历史 (${runs.data?.length ?? 0})`, children: <Table rowKey="id" loading={runs.isPending} dataSource={runs.data ?? []} pagination={{ pageSize: 10 }} expandable={{ expandedRowRender: (run) => <RunDetail run={run} /> }} columns={[{ title: 'Run ID', dataIndex: 'id' }, { title: '状态', dataIndex: 'status', render: (value: string) => <Tag color={value === 'SUCCEEDED' ? 'green' : value === 'FAILED' ? 'red' : 'blue'}>{value}</Tag> }, { title: '版本', dataIndex: 'skill_version' }, { title: '开始', dataIndex: 'started_at' }, { title: '错误', dataIndex: 'safe_error', ellipsis: true }]} /> },
+      ]} /> : <Empty description="Skill 当前版本不存在" />}
+    </Drawer>
   </>;
 }

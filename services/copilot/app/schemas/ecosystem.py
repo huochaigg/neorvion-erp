@@ -117,6 +117,13 @@ class SkillVersionIn(BaseModel):
     risk_level: Literal["READ_ONLY"] = "READ_ONLY"
     timeout_seconds: int = Field(default=30, ge=5, le=120)
     token_budget: int = Field(default=3000, ge=256, le=20_000)
+    source_format: Literal["JSON_TEMPLATE", "SKILL_MD"] = "JSON_TEMPLATE"
+    source_metadata: dict[str, Any] = Field(
+        default_factory=dict, description="导入时固化的标准 Frontmatter；不参与运行时授权"
+    )
+    resources: dict[str, str] = Field(
+        default_factory=dict, description="导入时固化的只读 Reference 快照，键为 Skill 内相对路径"
+    )
 
     @field_validator("instructions")
     @classmethod
@@ -125,6 +132,20 @@ class SkillVersionIn(BaseModel):
         forbidden = ("```python", "```sql", "```bash", "subprocess", "os.system", "eval(")
         if any(item in lowered for item in forbidden):
             raise ValueError("Skill 不允许包含可执行代码或命令")
+        return value
+
+    @field_validator("resources")
+    @classmethod
+    def validate_resources(cls, value: dict[str, str]) -> dict[str, str]:
+        if len(value) > 8 or sum(len(item.encode("utf-8")) for item in value.values()) > 65_536:
+            raise ValueError("Skill Reference 数量或总大小超过限制")
+        if any(
+            not key.startswith("references/")
+            or ".." in key.split("/")
+            or key.startswith("/")
+            for key in value
+        ):
+            raise ValueError("Skill Reference 路径非法")
         return value
 
 
@@ -169,6 +190,27 @@ class SkillRunIn(BaseModel):
     input: dict[str, Any]
     idempotency_key: str = Field(min_length=8, max_length=96)
     conversation_id: int | None = Field(default=None, gt=0)
+    agent_name: str | None = Field(
+        default=None,
+        pattern=r"^[a-z][a-z0-9_]{2,63}$",
+        description="可选的已审核专业 Agent；必须属于 Skill allowed_agents",
+    )
+
+
+class SkillTemplateImportIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    skill_keys: list[str] | None = Field(
+        default=None,
+        max_length=20,
+        description="为空时导入全部内置模板；仅允许服务端已登记模板 Key",
+    )
+
+
+class SkillTemplateImportOut(BaseModel):
+    skill_key: str
+    skill_id: int
+    version: int
+    status: Literal["IMPORTED", "UNCHANGED", "PROTECTED"]
 
 
 class SkillRollbackIn(BaseModel):
@@ -180,8 +222,15 @@ class SkillRunOut(BaseModel):
     id: int
     skill_id: int
     skill_version: int
+    user_id: int
+    conversation_id: int | None = None
+    message_id: int | None = None
+    selection_method: str | None = None
+    idempotency_key: str
     status: str
     input_snapshot: dict[str, Any]
     output_snapshot: dict[str, Any]
     safe_error: str | None
+    started_at: datetime | None
+    finished_at: datetime | None
     created_at: datetime

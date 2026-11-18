@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import time
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -25,6 +26,8 @@ if TYPE_CHECKING:
     from app.mcp.gateway import McpGateway
     from app.services.action_proposals import ActionProposalService
 
+logger = logging.getLogger(__name__)
+
 
 @dataclass(slots=True)
 class ToolRuntime:
@@ -36,6 +39,7 @@ class ToolRuntime:
     started_at: float = field(default_factory=time.monotonic)
     calls: int = 0
     evidences: list[dict[str, Any]] = field(default_factory=list)
+    tool_events: list[dict[str, Any]] = field(default_factory=list)
     proposal_service: ActionProposalService | None = None
     conversation_id: int | None = None
     source_message_id: int | None = None
@@ -89,6 +93,13 @@ class ToolExecutor:
 
     async def execute(self, call: ModelToolCall, runtime: ToolRuntime) -> ToolExecutionResult:
         """在模型之外执行工具白名单、参数、权限、预算和结果大小校验。"""
+        logger.debug(
+            "tool_stage=started request_id=%s tool=%s agent=%s call_index=%s",
+            runtime.request_id or "-",
+            call.name,
+            runtime.agent_name or "-",
+            runtime.calls + 1,
+        )
         if runtime.allowed_tools is not None and call.name not in runtime.allowed_tools:
             raise AppError("Agent 无权调用该工具", code=40378, status_code=403)
         if call.name.startswith("mcp__"):
@@ -155,7 +166,7 @@ class ToolExecutor:
             + serialized
             + f"\n</untrusted_{spec.source.lower()}_tool_result>"
         )
-        return ToolExecutionResult(
+        execution = ToolExecutionResult(
             content=content,
             event={
                 "tool_call_id": call.id,
@@ -167,6 +178,15 @@ class ToolExecutor:
             },
             evidences=tuple(evidences),
         )
+        logger.debug(
+            "tool_stage=completed request_id=%s tool=%s agent=%s duration_ms=%s evidence_count=%s",
+            runtime.request_id or "-",
+            call.name,
+            runtime.agent_name or "-",
+            execution.event["duration_ms"],
+            len(evidences),
+        )
+        return execution
 
     async def _execute_mcp(self, call: ModelToolCall, runtime: ToolRuntime) -> ToolExecutionResult:
         """MCP 仍共用 Agent 总预算；实际授权、Schema 和资源范围由网关复核。"""

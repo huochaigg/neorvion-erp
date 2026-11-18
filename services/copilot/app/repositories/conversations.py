@@ -17,6 +17,7 @@ from app.models.conversation import (
     ToolRun,
     ToolRunStatus,
 )
+from app.models.ecosystem import Skill, SkillRun
 from app.models.evaluation import ModelCall, ModelPricing
 
 
@@ -141,6 +142,27 @@ class ConversationRepository:
                         AgentRun.conversation_id == conversation_id,
                     )
                     .order_by(AgentRun.started_at, AgentRun.id)
+                )
+            ).all()
+        )
+
+    async def skill_runs(self, conversation_id: int) -> list[tuple[SkillRun, Skill]]:
+        """只返回当前用户消息关联的 SkillRun，避免通过会话 ID 扩大可见范围。"""
+        return list(
+            (
+                await self.session.execute(
+                    select(SkillRun, Skill)
+                    .join(
+                        Skill,
+                        (Skill.id == SkillRun.skill_id) & (Skill.tenant_id == SkillRun.tenant_id),
+                    )
+                    .where(
+                        SkillRun.tenant_id == self.tenant_id,
+                        SkillRun.user_id == self.user_id,
+                        SkillRun.conversation_id == conversation_id,
+                        SkillRun.message_id.is_not(None),
+                    )
+                    .order_by(SkillRun.created_at, SkillRun.id)
                 )
             ).all()
         )

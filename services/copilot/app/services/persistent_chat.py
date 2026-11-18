@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass
 from typing import cast
@@ -15,6 +16,7 @@ from app.graph.multi_agent import MultiAgentWorkflow
 from app.graph.workflow import AgentRuntime
 from app.models.conversation import MessageStatus
 from app.repositories.conversations import ConversationRepository
+from app.skills.chat import ChatSkillSession, skill_timeout
 
 
 @dataclass(slots=True)
@@ -78,6 +80,13 @@ class PersistentChatService:
         history.append({"role": "user", "content": content})
         return PersistentTurn(conversation_id, assistant.id, request_id, history)
 
+    async def fail_before_run(self, turn: PersistentTurn, code: int) -> None:
+        """Skill 选择或加载在 AgentRun 建立前失败时，收敛已创建的助手占位消息。"""
+        await self.repo.finish_message(
+            turn.message_id, content="", status=MessageStatus.FAILED.value, error_code=code
+        )
+        await self.session.commit()
+
     @staticmethod
     def _build_history(rows) -> list[ModelMessage]:
         """按完整 turn 从最近向前裁剪；用保守估算控制 Token 且不拆工具协议。"""
@@ -113,6 +122,7 @@ class PersistentChatService:
         turn: PersistentTurn,
         runtime: AgentRuntime,
         disconnected: Callable[[], Awaitable[bool]],
+        skill_session: ChatSkillSession | None = None,
     ) -> AsyncIterator[dict]:
         if turn.duplicate_answer is not None:
             yield {"event": "run_start", "data": self._ids(turn) | {"replayed": True}}
@@ -129,51 +139,35 @@ class PersistentChatService:
         await self.session.commit()
         runtime.agent_run_id = agent_run.id
         yield {"event": "run_start", "data": self._ids(turn)}
+        if skill_session is not None:
+            for event in skill_session.lifecycle_events():
+                yield {"event": event["event"], "data": event["data"] | self._ids(turn)}
         completed = False
         terminal_written = False
         try:
-            async for event in self.workflow.stream(turn.history, context=runtime):
-                name = str(event.get("event") or "message")
-                raw = event.get("data")
-                data = raw if isinstance(raw, dict) else {}
-                if name.startswith("tool_"):
-                    await self.repo.record_tool_event(
-                        turn.conversation_id, turn.message_id, name, data
-                    )
-                    await self.session.commit()
-                elif name == "evidence":
-                    await self.repo.record_evidence(turn.conversation_id, turn.message_id, data)
-                    await self.session.commit()
-                elif name.startswith("agent_"):
-                    await self.repo.record_agent_event(agent_run.id, name, data)
-                    await self.session.commit()
-                elif name.startswith("model_call_"):
-                    await self.repo.record_model_event(
-                        agent_run.id,
-                        name,
-                        data | {"request_id": turn.request_id},
-                    )
-                    await self.session.commit()
-                enriched = data | self._ids(turn)
-                if name == "done":
-                    await self.repo.finish_message(
-                        turn.message_id,
-                        content=str(data.get("answer") or ""),
-                        status=MessageStatus.COMPLETED.value,
-                        protocol_data=runtime.protocol_messages,
-                    )
-                    await self.session.commit()
-                    raw_usage = data.get("usage")
-                    await self.repo.finish_agent_run(
-                        agent_run.id,
-                        status="DEGRADED" if data.get("degraded") else "SUCCEEDED",
-                        usage=raw_usage if isinstance(raw_usage, dict) else None,
-                    )
-                    await self.session.commit()
-                    completed = True
-                    terminal_written = True
-                yield {"event": name, "data": enriched}
+            messages = skill_session.messages(turn.history) if skill_session is not None else turn.history
+            async with skill_timeout(skill_session):
+                stream = self.workflow.stream(messages, context=runtime)
+                try:
+                    async for event in stream:
+                        async for output in self._record_event(
+                            event, turn, runtime, agent_run.id, skill_session
+                        ):
+                            if output["event"] == "done":
+                                completed = True
+                                terminal_written = True
+                            yield output
+                finally:
+                    await stream.aclose()
         except Exception as exc:
+            if skill_session is not None:
+                await skill_session.fail(exc, runtime, commit=False)
+                yield {
+                    "event": "skill_error",
+                    "data": skill_session.public_data
+                    | self._ids(turn)
+                    | {"status": "FAILED", "message": skill_session.row.safe_error},
+                }
             code = exc.code if isinstance(exc, AppError) else 50268
             status = (
                 MessageStatus.CANCELLED.value
@@ -190,6 +184,8 @@ class PersistentChatService:
             raise
         finally:
             if not completed and not terminal_written:
+                if skill_session is not None:
+                    await skill_session.fail(asyncio.CancelledError(), runtime, commit=False)
                 await self.repo.finish_message(
                     turn.message_id,
                     content="",
@@ -199,6 +195,72 @@ class PersistentChatService:
                 await self.session.commit()
                 await self.repo.finish_agent_run(agent_run.id, status="CANCELLED", error_code=49900)
                 await self.session.commit()
+
+    async def _record_event(
+        self,
+        event: dict,
+        turn: PersistentTurn,
+        runtime: AgentRuntime,
+        agent_run_id: int,
+        skill_session: ChatSkillSession | None,
+    ) -> AsyncIterator[dict]:
+        """记录一个 Graph 事件；Skill 校验发生在消息写成 COMPLETED 之前。"""
+        name = str(event.get("event") or "message")
+        raw = event.get("data")
+        data = raw if isinstance(raw, dict) else {}
+        if name.startswith("tool_"):
+            await self.repo.record_tool_event(turn.conversation_id, turn.message_id, name, data)
+            await self.session.commit()
+        elif name == "evidence":
+            await self.repo.record_evidence(turn.conversation_id, turn.message_id, data)
+            await self.session.commit()
+        elif name.startswith("agent_"):
+            await self.repo.record_agent_event(agent_run_id, name, data)
+            await self.session.commit()
+        elif name.startswith("model_call_"):
+            await self.repo.record_model_event(
+                agent_run_id,
+                name,
+                data | {"request_id": turn.request_id},
+            )
+            await self.session.commit()
+        if skill_session is not None and name == "message":
+            return
+        enriched = data | self._ids(turn)
+        if name == "done":
+            if skill_session is not None:
+                await skill_session.complete(
+                    str(data.get("answer") or ""),
+                    data.get("usage"),
+                    runtime,
+                    commit=False,
+                )
+                enriched |= skill_session.public_data
+                yield {
+                    "event": "skill_done",
+                    "data": skill_session.public_data
+                    | self._ids(turn)
+                    | {"status": "SUCCEEDED"},
+                }
+                yield {
+                    "event": "message",
+                    "data": self._ids(turn) | {"delta": str(data.get("answer") or "")},
+                }
+            await self.repo.finish_message(
+                turn.message_id,
+                content=str(data.get("answer") or ""),
+                status=MessageStatus.COMPLETED.value,
+                protocol_data=runtime.protocol_messages,
+            )
+            await self.session.commit()
+            raw_usage = data.get("usage")
+            await self.repo.finish_agent_run(
+                agent_run_id,
+                status="DEGRADED" if data.get("degraded") else "SUCCEEDED",
+                usage=raw_usage if isinstance(raw_usage, dict) else None,
+            )
+            await self.session.commit()
+        yield {"event": name, "data": enriched}
 
     @staticmethod
     def _ids(turn: PersistentTurn) -> dict:

@@ -20,7 +20,7 @@ class Settings(BaseSettings):
     app_env: str = "development"
     app_host: str = "0.0.0.0"
     app_port: int = 8013
-    app_version: str = "13.0.0"
+    app_version: str = "14.2.0"
     git_sha: str = ""
     enable_api_docs: bool = True
     cors_origins: str = (
@@ -126,6 +126,12 @@ class Settings(BaseSettings):
     mcp_timeout_seconds: int = 15
     mcp_max_response_bytes: int = 262_144
     mcp_max_tools_per_server: int = 100
+    skill_chat_enabled: bool = False
+    skill_file_max_bytes: int = 65_536
+    skill_reference_max_bytes: int = 32_768
+    skill_resources_max_bytes: int = 65_536
+    skill_resources_max_files: int = 8
+    skill_context_max_chars: int = 16_000
 
     @property
     def is_production(self) -> bool:

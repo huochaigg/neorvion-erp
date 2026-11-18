@@ -129,6 +129,7 @@ class SkillVersion(TenantMixin, Base):
             name="fk_skill_version_skill",
         ),
         UniqueConstraint("tenant_id", "skill_id", "version", name="uq_skill_version"),
+        UniqueConstraint("tenant_id", "id", name="uq_skill_version_tenant"),
     )
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     skill_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
@@ -145,6 +146,13 @@ class SkillVersion(TenantMixin, Base):
     risk_level: Mapped[str] = mapped_column(String(24), nullable=False, server_default="READ_ONLY")
     timeout_seconds: Mapped[int] = mapped_column(Integer, nullable=False, server_default="30")
     token_budget: Mapped[int] = mapped_column(Integer, nullable=False, server_default="3000")
+    source_format: Mapped[str] = mapped_column(
+        String(24), nullable=False, server_default="JSON_TEMPLATE"
+    )
+    source_metadata: Mapped[dict[str, Any]] = mapped_column(
+        JSONB, nullable=False, server_default="{}"
+    )
+    resources: Mapped[dict[str, str]] = mapped_column(JSONB, nullable=False, server_default="{}")
     content_hash: Mapped[str] = mapped_column(String(64), nullable=False)
     approval_status: Mapped[str] = mapped_column(
         String(24), nullable=False, server_default="PENDING_APPROVAL"
@@ -164,6 +172,12 @@ class SkillRun(TimestampMixin, TenantMixin, Base):
             ondelete="RESTRICT",
             name="fk_skill_run_skill",
         ),
+        ForeignKeyConstraint(
+            ["tenant_id", "message_id"],
+            ["copilot_messages.tenant_id", "copilot_messages.id"],
+            ondelete="RESTRICT",
+            name="fk_skill_run_message",
+        ),
         UniqueConstraint("tenant_id", "user_id", "idempotency_key", name="uq_skill_run_key"),
         Index("ix_skill_run_status", "tenant_id", "status", "created_at"),
     )
@@ -172,6 +186,8 @@ class SkillRun(TimestampMixin, TenantMixin, Base):
     skill_version: Mapped[int] = mapped_column(Integer, nullable=False)
     user_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
     conversation_id: Mapped[int | None] = mapped_column(BigInteger)
+    message_id: Mapped[int | None] = mapped_column(BigInteger)
+    selection_method: Mapped[str | None] = mapped_column(String(32))
     idempotency_key: Mapped[str] = mapped_column(String(96), nullable=False)
     status: Mapped[str] = mapped_column(String(24), nullable=False, server_default="CREATED")
     input_snapshot: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)

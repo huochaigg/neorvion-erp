@@ -45,6 +45,7 @@ export default function AIManagementPage() {
         canMcpManage={Boolean(identity.data?.permissions.includes('copilot:mcp:manage'))}
         canSkillRead={Boolean(identity.data?.permissions.includes('copilot:skill:read'))}
         canSkillManage={Boolean(identity.data?.permissions.includes('copilot:skill:manage'))}
+        canSkillRun={Boolean(identity.data?.permissions.includes('copilot:skill:run'))}
       /></Suspense>,
     }] : []),
     ...(governanceAllowed ? [{

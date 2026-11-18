@@ -98,3 +98,22 @@ async def test_budget_with_missing_price_fails_closed(monkeypatch: pytest.Monkey
     with pytest.raises(AppError) as error:
         await quotas.reserve_chat_quota(_Session(_quota(), None), 7, 100)
     assert error.value.code == 50377
+
+
+@pytest.mark.asyncio
+async def test_unused_skill_reservation_is_released_without_charge(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    redis = _Redis()
+    monkeypatch.setattr(quotas.settings, "quota_enforcement_enabled", True)
+    monkeypatch.setattr(quotas, "async_redis", lambda: redis)
+    reservation = await quotas.reserve_chat_quota(
+        _Session(_quota(), _pricing()), 7, 100, scenario="SKILL"
+    )
+
+    await reservation.release()
+
+    release = redis.calls[-1]
+    assert release[1] == 4
+    assert "ABORTED" in release[0]
+    assert reservation.audit_row.status == "ABORTED"

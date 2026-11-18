@@ -1,0 +1,110 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Knowledge: debug 8012",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "uvicorn",
+      "args": [
+        "app.main:app",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "8012",
+        "--loop",
+        "app.core.event_loop:selector_loop_factory"
+      ],
+      "cwd": "${workspaceFolder}/services/knowledge",
+      "python": "${workspaceFolder}/services/knowledge/.venv/Scripts/python.exe",
+      "env": {
+        "VIRTUAL_ENV": "${workspaceFolder}/services/knowledge/.venv"
+      },
+      "justMyCode": true,
+      "console": "integratedTerminal"
+    },
+    {
+      "name": "ERP: debug 8011",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "uvicorn",
+      "args": ["app.main:app", "--host", "0.0.0.0", "--port", "8011"],
+      "cwd": "${workspaceFolder}/services/erp",
+      "python": "${workspaceFolder}/services/erp/.venv/Scripts/python.exe",
+      "justMyCode": true,
+      "console": "integratedTerminal"
+    },
+    {
+      "name": "Copilot: debug 8013",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "uvicorn",
+      "args": [
+        "app.main:app",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "8013",
+        "--loop",
+        "app.core.event_loop:selector_loop_factory"
+      ],
+      "cwd": "${workspaceFolder}/services/copilot",
+      "python": "${workspaceFolder}/services/copilot/.venv/Scripts/python.exe",
+      "envFile": "${workspaceFolder}/services/copilot/.env",
+      "env": {
+        "VIRTUAL_ENV": "${workspaceFolder}/services/copilot/.venv",
+        "APP_ENV": "development"
+      },
+      "justMyCode": true,
+      "console": "integratedTerminal"
+    },
+    {
+      "name": "Copilot: debug inventory Skill walkthrough",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "pytest",
+      "args": [
+        "tests/test_v14_skill_walkthrough.py::test_inventory_skill_complete_mock_walkthrough",
+        "-s",
+        "-vv"
+      ],
+      "cwd": "${workspaceFolder}/services/copilot",
+      "python": "${workspaceFolder}/services/copilot/.venv/Scripts/python.exe",
+      "envFile": "${workspaceFolder}/services/copilot/.env",
+      "env": {
+        "VIRTUAL_ENV": "${workspaceFolder}/services/copilot/.venv",
+        "APP_ENV": "test"
+      },
+      "justMyCode": true,
+      "console": "integratedTerminal"
+    },
+    {
+      "name": "Copilot: debug V14.2 Chat Skill walkthrough",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "pytest",
+      "args": [
+        "tests/test_v14_skill_walkthrough.py::test_inventory_skill_complete_mock_walkthrough",
+        "-s",
+        "-vv"
+      ],
+      "cwd": "${workspaceFolder}/services/copilot",
+      "python": "${workspaceFolder}/services/copilot/.venv/Scripts/python.exe",
+      "envFile": "${workspaceFolder}/services/copilot/.env",
+      "env": {
+        "VIRTUAL_ENV": "${workspaceFolder}/services/copilot/.venv",
+        "APP_ENV": "test",
+        "SKILL_CHAT_ENABLED": "true"
+      },
+      "justMyCode": true,
+      "console": "integratedTerminal"
+    }
+  ],
+  "compounds": [
+    {
+      "name": "V14.1 Skill: Copilot + ERP",
+      "configurations": ["ERP: debug 8011", "Copilot: debug 8013"],
+      "stopAll": true
+    }
+  ]
+}

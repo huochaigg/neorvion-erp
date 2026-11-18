@@ -152,9 +152,18 @@ async def get_skill_manage_context(context: CopilotContext) -> TenantContext:
     return context
 
 
+async def get_skill_run_context(context: CopilotContext) -> TenantContext:
+    AuthorizationService().require_all(
+        context,
+        (PermissionCode.COPILOT_SKILL_READ, PermissionCode.COPILOT_SKILL_RUN),
+    )
+    return context
+
+
 McpReadContext = Annotated[TenantContext, Depends(get_mcp_read_context)]
 McpManageContext = Annotated[TenantContext, Depends(get_mcp_manage_context)]
 SkillReadContext = Annotated[TenantContext, Depends(get_skill_read_context)]
+SkillRunContext = Annotated[TenantContext, Depends(get_skill_run_context)]
 SkillManageContext = Annotated[TenantContext, Depends(get_skill_manage_context)]
 
 

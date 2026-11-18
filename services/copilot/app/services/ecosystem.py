@@ -1,9 +1,13 @@
 from __future__ import annotations
 
 import hashlib
+import io
 import json
 import os
+import tempfile
+import zipfile
 from datetime import UTC, datetime
+from pathlib import Path
 
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
@@ -28,13 +32,18 @@ from app.schemas.ecosystem import (
     SkillDetailOut,
     SkillOut,
     SkillRunOut,
+    SkillTemplateImportOut,
     SkillVersionIn,
     SkillVersionOut,
 )
+from app.skills.parser import SkillParser
 from app.tools.registry import build_tool_registry
 
 
 class EcosystemService:
+    _TEMPLATE_KEYS = frozenset(
+        {"inventory-analysis", "sales-order-review", "knowledge-research"}
+    )
     def __init__(self, session: AsyncSession, context: TenantContext, request_id: str = "") -> None:
         self.session = session
         self.context = context
@@ -264,6 +273,217 @@ class EcosystemService:
         await self.session.commit()
         return await self.skill(row.id)
 
+    async def import_skill_templates(
+        self, skill_keys: list[str] | None = None
+    ) -> list[SkillTemplateImportOut]:
+        """以 JSON 治理模板导入标准 SKILL.md 快照；已审核配置绝不被磁盘覆盖。"""
+        requested = set(skill_keys or self._TEMPLATE_KEYS)
+        unknown = requested - self._TEMPLATE_KEYS
+        if unknown:
+            raise AppError("包含未知 Skill 模板", code=42288, status_code=422)
+        base = Path(__file__).resolve().parents[2] / "skills"
+        outputs: list[SkillTemplateImportOut] = []
+        for key in sorted(requested):
+            try:
+                payload = SkillCreate.model_validate_json((base / f"{key}.json").read_text("utf-8"))
+                definition = SkillParser().parse_directory(base / key)
+                payload = payload.model_copy(
+                    update={
+                        "name": definition.name,
+                        "description": definition.description,
+                        "version": payload.version.model_copy(
+                            update={
+                                "instructions": definition.instructions,
+                                "source_format": "SKILL_MD",
+                                "source_metadata": definition.frontmatter,
+                                "resources": definition.resources,
+                            }
+                        ),
+                    }
+                )
+            except (OSError, ValueError) as exc:
+                raise AppError("内置 Skill 模板无效", code=50086, status_code=500) from exc
+            await self._validate_skill_dependencies(payload.version)
+            canonical = self._skill_content(payload.version)
+            content_hash = hashlib.sha256(canonical.encode()).hexdigest()
+            row = await self.session.scalar(
+                select(Skill).where(
+                    Skill.tenant_id == self.context.tenant_id,
+                    Skill.skill_key == key,
+                ).with_for_update()
+            )
+            if row is None:
+                row = Skill(
+                    tenant_id=self.context.tenant_id,
+                    skill_key=payload.skill_key,
+                    name=payload.name,
+                    description=payload.description,
+                    created_by=self.context.user_id,
+                    updated_by=self.context.user_id,
+                )
+                self.session.add(row)
+                await self.session.flush()
+                version = await self._add_skill_version(row, payload.version)
+                status = "IMPORTED"
+                self._audit("SKILL_TEMPLATE_IMPORTED", "skill", str(row.id), {"key": key})
+            else:
+                current = await self._current_skill_version(row)
+                current_payload = SkillVersionIn.model_validate(current, from_attributes=True)
+                current_semantic_hash = hashlib.sha256(
+                    self._skill_content(current_payload).encode()
+                ).hexdigest()
+                if current.content_hash == content_hash or current_semantic_hash == content_hash:
+                    version = current
+                    status = "UNCHANGED"
+                elif row.enabled or row.approval_status == "APPROVED" or current.approval_status == "APPROVED":
+                    version = current
+                    status = "PROTECTED"
+                else:
+                    row.name = payload.name
+                    row.description = payload.description
+                    row.updated_by = self.context.user_id
+                    version = await self._add_skill_version(row, payload.version)
+                    row.enabled = False
+                    row.approval_status = "PENDING_APPROVAL"
+                    status = "IMPORTED"
+                    self._audit(
+                        "SKILL_TEMPLATE_IMPORTED",
+                        "skill",
+                        str(row.id),
+                        {"key": key, "version": version.version},
+                    )
+            outputs.append(
+                SkillTemplateImportOut(
+                    skill_key=key,
+                    skill_id=row.id,
+                    version=version.version,
+                    status=status,
+                )
+            )
+        await self.session.commit()
+        return outputs
+
+    async def import_skill_package(self, archive: bytes) -> SkillTemplateImportOut:
+        """导入 SKILL.md、references 和治理 sidecar；不释放或执行任何脚本。"""
+        if not archive or len(archive) > 262_144:
+            raise AppError("Skill 包为空或超过 256 KiB", code=42292, status_code=422)
+        try:
+            zipped = zipfile.ZipFile(io.BytesIO(archive))
+        except zipfile.BadZipFile as exc:
+            raise AppError("Skill 包不是有效 ZIP", code=42292, status_code=422) from exc
+        members = [item for item in zipped.infolist() if not item.is_dir()]
+        if len(members) > 16 or sum(item.file_size for item in members) > 196_608:
+            raise AppError("Skill 包文件数量或解压大小超过限制", code=42292, status_code=422)
+        roots: set[str] = set()
+        selected: dict[str, bytes] = {}
+        for item in members:
+            normalized = item.filename.replace("\\", "/")
+            parts = Path(normalized).parts
+            if (
+                item.flag_bits & 0x1
+                or normalized.startswith("/")
+                or ".." in parts
+                or len(parts) < 2
+                or item.file_size > 65_536
+                or (item.compress_size and item.file_size / item.compress_size > 100)
+            ):
+                raise AppError("Skill 包包含不安全路径或压缩项", code=42292, status_code=422)
+            roots.add(parts[0])
+            relative = "/".join(parts[1:])
+            allowed = relative in {"SKILL.md", "governance.json"} or (
+                relative.startswith("references/")
+                and len(Path(relative).parts) == 2
+                and relative.endswith(".md")
+            )
+            if allowed:
+                selected[relative] = zipped.read(item)
+        if len(roots) != 1 or "SKILL.md" not in selected or "governance.json" not in selected:
+            raise AppError(
+                "Skill 包必须只有一个根目录并包含 SKILL.md 与 governance.json",
+                code=42292,
+                status_code=422,
+            )
+        with tempfile.TemporaryDirectory(prefix="neorvion-skill-") as temporary:
+            root = Path(temporary) / next(iter(roots))
+            for relative, content in selected.items():
+                target = root / relative
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_bytes(content)
+            definition = SkillParser().parse_directory(root)
+            try:
+                payload = SkillCreate.model_validate_json(selected["governance.json"])
+            except ValueError as exc:
+                raise AppError("governance.json 无效", code=42292, status_code=422) from exc
+        if payload.skill_key != definition.name:
+            raise AppError(
+                "governance.json skill_key 与 SKILL.md name 不一致",
+                code=42292,
+                status_code=422,
+            )
+        payload = payload.model_copy(
+            update={
+                "name": definition.name,
+                "description": definition.description,
+                "version": payload.version.model_copy(
+                    update={
+                        "instructions": definition.instructions,
+                        "source_format": "SKILL_MD",
+                        "source_metadata": definition.frontmatter,
+                        "resources": definition.resources,
+                    }
+                ),
+            }
+        )
+        await self._validate_skill_dependencies(payload.version)
+        content_hash = hashlib.sha256(self._skill_content(payload.version).encode()).hexdigest()
+        row = await self.session.scalar(
+            select(Skill)
+            .where(
+                Skill.tenant_id == self.context.tenant_id,
+                Skill.skill_key == payload.skill_key,
+            )
+            .with_for_update()
+        )
+        if row is None:
+            row = Skill(
+                tenant_id=self.context.tenant_id,
+                skill_key=payload.skill_key,
+                name=payload.name,
+                description=payload.description,
+                created_by=self.context.user_id,
+                updated_by=self.context.user_id,
+            )
+            self.session.add(row)
+            await self.session.flush()
+            version = await self._add_skill_version(row, payload.version)
+            status = "IMPORTED"
+        else:
+            current = await self._current_skill_version(row)
+            if current.content_hash == content_hash:
+                version, status = current, "UNCHANGED"
+            elif (
+                row.enabled
+                or row.approval_status == "APPROVED"
+                or current.approval_status == "APPROVED"
+            ):
+                version, status = current, "PROTECTED"
+            else:
+                row.name = payload.name
+                row.description = payload.description
+                row.updated_by = self.context.user_id
+                version = await self._add_skill_version(row, payload.version)
+                row.enabled = False
+                row.approval_status = "PENDING_APPROVAL"
+                status = "IMPORTED"
+        self._audit("SKILL_PACKAGE_IMPORTED", "skill", str(row.id), {"status": status})
+        await self.session.commit()
+        return SkillTemplateImportOut(
+            skill_key=row.skill_key,
+            skill_id=row.id,
+            version=version.version,
+            status=status,
+        )
+
     async def add_skill_version(self, skill_id: int, payload: SkillVersionIn) -> SkillDetailOut:
         row = await self._skill(skill_id, lock=True)
         await self._add_skill_version(row, payload)
@@ -283,7 +503,7 @@ class EcosystemService:
             )
         version.approval_status = "APPROVED" if approved else "REJECTED"
         row.approval_status = version.approval_status
-        row.enabled = approved
+        row.enabled = False
         row.updated_by = self.context.user_id
         self._audit("SKILL_REVIEWED", "skill", str(row.id), {"approved": approved})
         await self.session.commit()
@@ -352,23 +572,42 @@ class EcosystemService:
 
     async def skill_runs(self, skill_id: int, limit: int = 50) -> list[SkillRunOut]:
         await self._skill(skill_id)
+        filters = [
+            SkillRun.tenant_id == self.context.tenant_id,
+            SkillRun.skill_id == skill_id,
+        ]
+        if PermissionCode.COPILOT_SKILL_MANAGE.value not in self.context.permission_codes:
+            filters.append(SkillRun.user_id == self.context.user_id)
         rows = (
             await self.session.scalars(
                 select(SkillRun)
-                .where(
-                    SkillRun.tenant_id == self.context.tenant_id,
-                    SkillRun.skill_id == skill_id,
-                )
+                .where(*filters)
                 .order_by(SkillRun.created_at.desc())
                 .limit(min(max(limit, 1), 100))
             )
         ).all()
         return [SkillRunOut.model_validate(row) for row in rows]
 
+    async def skill_run(self, skill_id: int, run_id: int) -> SkillRunOut:
+        await self._skill(skill_id)
+        filters = [
+            SkillRun.tenant_id == self.context.tenant_id,
+            SkillRun.skill_id == skill_id,
+            SkillRun.id == run_id,
+        ]
+        if PermissionCode.COPILOT_SKILL_MANAGE.value not in self.context.permission_codes:
+            filters.append(SkillRun.user_id == self.context.user_id)
+        row = await self.session.scalar(
+            select(SkillRun).where(*filters)
+        )
+        if row is None:
+            raise AppError("SkillRun 不存在", code=40485, status_code=404)
+        return SkillRunOut.model_validate(row)
+
     async def _add_skill_version(self, row: Skill, payload: SkillVersionIn) -> SkillVersion:
         await self._validate_skill_dependencies(payload)
         version_number = row.current_version + 1
-        canonical = json.dumps(payload.model_dump(), sort_keys=True, default=str)
+        canonical = self._skill_content(payload)
         version = SkillVersion(
             tenant_id=self.context.tenant_id,
             skill_id=row.id,
@@ -386,10 +625,14 @@ class EcosystemService:
         known_permissions = {item.value for item in PermissionCode}
         if not set(payload.required_permissions).issubset(known_permissions):
             raise AppError("Skill 引用了未知权限", code=42286, status_code=422)
-        agents = {item.agent_name for item in build_agent_registry().all()}
+        registry = build_agent_registry()
+        agents = {item.agent_name for item in registry.all()}
         if not set(payload.allowed_agents).issubset(agents - {"supervisor_agent"}):
             raise AppError("Skill Agent 白名单无效", code=42286, status_code=422)
-        builtins = build_tool_registry().names | build_action_registry().names
+        tool_registry = build_tool_registry()
+        builtins = tool_registry.names
+        if set(payload.allowed_tools) & build_action_registry().names:
+            raise AppError("Skill 只允许使用只读查询工具", code=42286, status_code=422)
         dynamic_names = {
             item
             for item in (
@@ -406,8 +649,36 @@ class EcosystemService:
         for tool in payload.allowed_tools:
             if tool not in builtins and tool not in dynamic_names:
                 raise AppError("Skill 引用了未注册工具", code=42286, status_code=422)
+        for agent_name in payload.allowed_agents:
+            spec = registry.get(agent_name)
+            unsupported = set(payload.allowed_tools) - spec.allowed_tools - dynamic_names
+            if unsupported:
+                raise AppError("Skill Agent 与工具白名单不兼容", code=42286, status_code=422)
+        required = set(payload.required_permissions)
+        for tool_name in set(payload.allowed_tools) & builtins:
+            spec = tool_registry.get(tool_name)
+            assert spec is not None
+            if not {spec.permission, *spec.additional_permissions}.issubset(required):
+                raise AppError("Skill 未声明工具所需权限", code=42286, status_code=422)
+        if len(payload.allowed_tools) == 1:
+            spec = tool_registry.get(payload.allowed_tools[0])
+            if spec is not None:
+                tool_schema = spec.args_model.model_json_schema()
+                if not set(tool_schema.get("required", [])).issubset(
+                    set(payload.input_schema.get("required", []))
+                ):
+                    raise AppError("Skill 输入缺少工具必填参数", code=42286, status_code=422)
         validate_tool_schema(payload.input_schema)
         validate_tool_schema(payload.output_schema)
+
+    @staticmethod
+    def _skill_content(payload: SkillVersionIn) -> str:
+        return json.dumps(
+            payload.model_dump(mode="json"),
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=False,
+        )
 
     async def _server(self, server_id: int, lock: bool = False) -> McpServer:
         stmt = select(McpServer).where(

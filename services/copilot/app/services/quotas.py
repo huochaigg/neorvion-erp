@@ -196,12 +196,34 @@ class QuotaReservation:
     async def cancel(self) -> None:
         await self.settle(None)
 
+    async def release(self) -> None:
+        """释放尚未开始模型执行的预留，不把未使用额度记为消费。"""
+        if not self.active:
+            return
+        prefix = f"copilot:quota:{self.tenant_id}:{self.month_key}"
+        released = await async_redis().eval(
+            _ABORT_SCRIPT,
+            4,
+            f"{prefix}:reservation:{self.reservation_id}",
+            f"{prefix}:reserved",
+            f"copilot:quota:{self.tenant_id}:concurrent",
+            f"{prefix}:money:reserved",
+        )
+        if released:
+            self.audit_row.status = "ABORTED"
+            self.audit_row.settled_at = datetime.now(UTC)
+            await self.session.commit()
+        self.active = False
+
 
 class NoopReservation:
     async def settle(self, actual_tokens: int | None, *, usage_trusted: bool = False) -> None:
         del actual_tokens, usage_trusted
 
     async def cancel(self) -> None:
+        return None
+
+    async def release(self) -> None:
         return None
 
 

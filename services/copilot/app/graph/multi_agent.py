@@ -160,10 +160,11 @@ class MultiAgentWorkflow:
     async def _single(
         self, state: MultiAgentState, runtime: Runtime[AgentRuntime]
     ) -> dict[str, Any]:
-        task_id = "single-agent-1"
-        self._emit_agent(runtime, "agent_start", "single_agent", task_id, status="RUNNING")
+        agent_name = runtime.context.agent_name or "single_agent"
+        task_id = "single-agent-1" if agent_name == "single_agent" else f"{agent_name}-1"
+        self._emit_agent(runtime, "agent_start", agent_name, task_id, status="RUNNING")
         previous = (runtime.context.agent_name, runtime.context.agent_task_id)
-        runtime.context.agent_name, runtime.context.agent_task_id = "single_agent", task_id
+        runtime.context.agent_name, runtime.context.agent_task_id = agent_name, task_id
         answer = ""
         usage = None
         started = time.monotonic()
@@ -183,7 +184,7 @@ class MultiAgentWorkflow:
             self._emit_agent(
                 runtime,
                 "agent_error",
-                "single_agent",
+                agent_name,
                 task_id,
                 status="FAILED",
                 duration_ms=round((time.monotonic() - started) * 1000),
@@ -200,7 +201,7 @@ class MultiAgentWorkflow:
         self._emit_agent(
             runtime,
             "agent_end",
-            "single_agent",
+            agent_name,
             task_id,
             status="SUCCEEDED",
             duration_ms=round((time.monotonic() - started) * 1000),

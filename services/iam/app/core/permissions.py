@@ -171,6 +171,7 @@ class PermissionCode(StrEnum):
     COPILOT_MCP_READ = "copilot:mcp:read"
     COPILOT_MCP_MANAGE = "copilot:mcp:manage"
     COPILOT_SKILL_READ = "copilot:skill:read"
+    COPILOT_SKILL_RUN = "copilot:skill:run"
     COPILOT_SKILL_MANAGE = "copilot:skill:manage"
 
     IAM_USERS_READ = "iam:users:read"
@@ -483,7 +484,8 @@ PERMISSION_CATALOG: tuple[tuple[str, str, str, str], ...] = (
     (PermissionCode.COPILOT_MCP_READ, "查看 MCP 生态", "copilot", "查看本租户 MCP Server 与工具版本"),
     (PermissionCode.COPILOT_MCP_MANAGE, "管理 MCP 生态", "copilot", "配置、审核和启停只读 MCP 工具"),
     (PermissionCode.COPILOT_SKILL_READ, "查看 Agent Skills", "copilot", "查看本租户 Skill 与运行记录"),
-    (PermissionCode.COPILOT_SKILL_MANAGE, "管理 Agent Skills", "copilot", "创建、审核和运行受控 Skill"),
+    (PermissionCode.COPILOT_SKILL_RUN, "运行 Agent Skills", "copilot", "手动运行已审核启用的只读 Skill"),
+    (PermissionCode.COPILOT_SKILL_MANAGE, "管理 Agent Skills", "copilot", "导入、创建、审核和启停受控 Skill"),
     (
         PermissionCode.COPILOT_APPROVE,
         "审批 Copilot 执行",
@@ -1860,6 +1862,12 @@ PERMISSION_TREE: tuple[PermissionTreeDef, ...] = (
                         title="查看 Agent Skills",
                         type="ACTION",
                         permission_code=PermissionCode.COPILOT_SKILL_READ,
+                    ),
+                    PermissionTreeDef(
+                        key="action:copilot-skill-run",
+                        title="运行 Agent Skills",
+                        type="ACTION",
+                        permission_code=PermissionCode.COPILOT_SKILL_RUN,
                     ),
                     PermissionTreeDef(
                         key="action:copilot-skill-manage",

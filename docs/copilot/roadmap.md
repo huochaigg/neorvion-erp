@@ -1,5 +1,12 @@
 # Neorvion ERP Copilot 路线图
 
+## V14.2：Agent Skills 主流程
+
+- 标准 `SKILL.md`、安全 Parser、数据库发布快照与受控 ZIP 导入。
+- Metadata → Instructions → Resources Progressive Disclosure。
+- Feature Flag 控制的 Catalog、Selector、Loader 与 Chat/SSE 自动执行。
+- 运行源码入口：[V14.2 Agent Skills Walkthrough](./v14.2-agent-skills-walkthrough.md)。
+
 ## V11：Enterprise AI Governance（核心治理切片完成，发布门禁未全部关闭）
 
 - IAM 新增 USER/SERVICE/DELEGATED 声明模型和可轮换、可吊销的短期 Service Token；
@@ -300,3 +307,17 @@ Copilot 最终应成为“受策略控制的 ERP 操作入口”：默认只读�
 - [ ] LIVE Evaluation、四服务 HTTP、Worker、Nginx/SSE 与浏览器 E2E
 
 详见 [V13 生产加固](./v13-production-hardening.md)。
+
+### V14.1：Skill 手动执行闭环（代码完成，真实下游待验收）
+
+- [x] 三个内置模板与真实 Agent、Tool 参数和 IAM 权限对齐
+- [x] 管理员幂等导入，默认待审核/未启用，保护已审核生产配置
+- [x] 独立 `copilot:skill:run` 权限及审核、启停、运行职责分离
+- [x] 专业 Agent 身份、Tool 服务端白名单、租户治理和 V11/V13 配额闭环
+- [x] 有效 Tool Evidence、Tool 摘要、模型信息和 SkillRun 历史
+- [x] React 详情、Schema、模板导入、手动运行、结果与历史 UI
+- [x] 保持 Chat/SSE 不自动选择或执行 Skill
+- [ ] 专用 PostgreSQL、真实 Redis、ERP、IAM、Knowledge、真实模型与浏览器 E2E 验收
+
+详见 [V14.1 Skill 手动执行闭环](./v14.1-skill-execution.md)；首次阅读源码请从
+[inventory-analysis 全链路 Walkthrough](./v14.1-skill-walkthrough.md) 开始。

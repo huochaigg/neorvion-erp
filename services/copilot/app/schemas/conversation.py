@@ -73,6 +73,18 @@ class AgentRunOut(BaseModel):
     )
 
 
+class SkillRunSummaryOut(BaseModel):
+    id: int = Field(description="关联的 SkillRun ID")
+    skill_id: int
+    skill_key: str
+    skill_name: str
+    skill_version: int
+    status: str
+    selection_method: str | None = None
+    loaded_resources: list[str] = Field(default_factory=list)
+    safe_error: str | None = None
+
+
 class MessageOut(BaseModel):
     id: int = Field(description="消息 ID")
     role: str = Field(description="面向用户的 user 或 assistant 角色")
@@ -84,6 +96,7 @@ class MessageOut(BaseModel):
     tool_runs: list[ToolRunOut] = Field(default_factory=list)
     evidences: list[EvidenceOut] = Field(default_factory=list)
     agent_runs: list[AgentRunOut] = Field(default_factory=list)
+    skill_runs: list[SkillRunSummaryOut] = Field(default_factory=list)
 
 
 class ConversationOut(BaseModel):

@@ -13,6 +13,7 @@ class PermissionCode(StrEnum):
     COPILOT_MCP_READ = "copilot:mcp:read"
     COPILOT_MCP_MANAGE = "copilot:mcp:manage"
     COPILOT_SKILL_READ = "copilot:skill:read"
+    COPILOT_SKILL_RUN = "copilot:skill:run"
     COPILOT_SKILL_MANAGE = "copilot:skill:manage"
     PRODUCT_READ = "product:read"
     ORDER_READ = "order:read"

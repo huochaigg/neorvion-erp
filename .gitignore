@@ -33,6 +33,7 @@ knowledge/.env
 .vscode/*
 !.vscode/extensions.json
 !.vscode/settings.json
+!.vscode/launch.json
 *.swp
 
 # OS

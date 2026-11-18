@@ -1,4 +1,4 @@
-import type { AgentRun, ConversationDetail, Evidence, Message, ToolRun } from '@/types';
+import type { AgentRun, ConversationDetail, Evidence, Message, SkillRunSummary, ToolRun } from '@/types';
 
 export function pendingUserMessage(content: string, requestId: string): Message {
   const now = new Date().toISOString();
@@ -12,6 +12,7 @@ export function pendingUserMessage(content: string, requestId: string): Message 
     updated_at: now,
     tool_runs: [],
     evidences: [],
+    skill_runs: [],
   };
 }
 
@@ -61,6 +62,7 @@ export function composeVisibleMessages(input: {
   evidences: Evidence[];
   analysisStatus: string;
   agentRun: AgentRun | null;
+  skillRuns?: SkillRunSummary[];
 }): Message[] {
   const hasUser = turnHasUser(input.messages, input.pendingFromIndex, input.pendingUser);
   const list =
@@ -79,6 +81,7 @@ export function composeVisibleMessages(input: {
     evidences: input.evidences,
     analysis_status: input.analysisStatus,
     agent_runs: input.agentRun ? [input.agentRun] : [],
+    skill_runs: input.skillRuns ?? [],
   };
   const last = list[list.length - 1];
   if (last?.role === 'assistant' && (last.id < 0 || last.status === 'RUNNING')) {

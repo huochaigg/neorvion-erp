@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Request
+from typing import Annotated
+
+from fastapi import APIRouter, File, Request, UploadFile
 
 from app.api.deps import (
     DbSession,
@@ -8,8 +10,10 @@ from app.api.deps import (
     McpReadContext,
     SkillManageContext,
     SkillReadContext,
+    SkillRunContext,
     WorkflowDep,
 )
+from app.core.exceptions import AppError
 from app.schemas.common import ApiResponse, ok
 from app.schemas.ecosystem import (
     McpApprovalIn,
@@ -24,6 +28,8 @@ from app.schemas.ecosystem import (
     SkillRollbackIn,
     SkillRunIn,
     SkillRunOut,
+    SkillTemplateImportIn,
+    SkillTemplateImportOut,
     SkillVersionIn,
 )
 from app.services.ecosystem import EcosystemService
@@ -131,6 +137,29 @@ async def create_skill(
     return ok(await _service(request, db, context).create_skill(payload))
 
 
+@router.post("/skills/templates/import", response_model=ApiResponse[list[SkillTemplateImportOut]])
+async def import_skill_templates(
+    payload: SkillTemplateImportIn,
+    request: Request,
+    context: SkillManageContext,
+    db: DbSession,
+):
+    return ok(await _service(request, db, context).import_skill_templates(payload.skill_keys))
+
+
+@router.post("/skills/packages/import", response_model=ApiResponse[SkillTemplateImportOut])
+async def import_skill_package(
+    request: Request,
+    context: SkillManageContext,
+    db: DbSession,
+    archive: Annotated[UploadFile, File(description="Agent Skill ZIP 包")],
+):
+    if not archive.filename or not archive.filename.lower().endswith(".zip"):
+        raise AppError("只接受 ZIP Skill 包", code=42292, status_code=422)
+    content = await archive.read(262_145)
+    return ok(await _service(request, db, context).import_skill_package(content))
+
+
 @router.get("/skills/{skill_id}", response_model=ApiResponse[SkillDetailOut])
 async def get_skill(skill_id: int, request: Request, context: SkillReadContext, db: DbSession):
     return ok(await _service(request, db, context).skill(skill_id))
@@ -141,6 +170,13 @@ async def list_skill_runs(
     skill_id: int, request: Request, context: SkillReadContext, db: DbSession
 ):
     return ok(await _service(request, db, context).skill_runs(skill_id))
+
+
+@router.get("/skills/{skill_id}/runs/{run_id}", response_model=ApiResponse[SkillRunOut])
+async def get_skill_run(
+    skill_id: int, run_id: int, request: Request, context: SkillReadContext, db: DbSession
+):
+    return ok(await _service(request, db, context).skill_run(skill_id, run_id))
 
 
 @router.post("/skills/{skill_id}/versions", response_model=ApiResponse[SkillDetailOut])
@@ -192,7 +228,7 @@ async def run_skill(
     skill_id: int,
     payload: SkillRunIn,
     request: Request,
-    context: SkillManageContext,
+    context: SkillRunContext,
     db: DbSession,
     workflow: WorkflowDep,
 ):

@@ -19,6 +19,7 @@ from app.schemas.conversation import (
     ConversationOut,
     EvidenceOut,
     MessageOut,
+    SkillRunSummaryOut,
     ToolRunOut,
 )
 
@@ -65,6 +66,7 @@ class ConversationService:
         runs = await self.repo.tool_runs(conversation_id)
         evidence_rows = await self.repo.evidences(conversation_id)
         agent_runs = await self.repo.agent_runs(conversation_id)
+        skill_runs = await self.repo.skill_runs(conversation_id)
         agent_tasks = await self.repo.agent_tasks([item.id for item in agent_runs])
         by_message: dict[int, list[ToolRunOut]] = {}
         for run in runs:
@@ -98,6 +100,23 @@ class ConversationService:
                     tasks=tasks_by_run.get(run.id, []),
                 )
             )
+        skills_by_message: dict[int, list[SkillRunSummaryOut]] = {}
+        for skill_run, skill in skill_runs:
+            snapshot = skill_run.output_snapshot if isinstance(skill_run.output_snapshot, dict) else {}
+            resources = snapshot.get("loaded_resources", [])
+            skills_by_message.setdefault(skill_run.message_id, []).append(
+                SkillRunSummaryOut(
+                    id=skill_run.id,
+                    skill_id=skill.id,
+                    skill_key=skill.skill_key,
+                    skill_name=skill.name,
+                    skill_version=skill_run.skill_version,
+                    status=skill_run.status,
+                    selection_method=skill_run.selection_method,
+                    loaded_resources=resources if isinstance(resources, list) else [],
+                    safe_error=skill_run.safe_error,
+                )
+            )
         return ConversationDetailOut(
             **self._out(row).model_dump(),
             messages=[
@@ -113,6 +132,7 @@ class ConversationService:
                         "tool_runs": by_message.get(item.id, []),
                         "evidences": evidence_by_message.get(item.id, []),
                         "agent_runs": runs_by_message.get(item.id, []),
+                        "skill_runs": skills_by_message.get(item.id, []),
                     }
                 )
                 for item in messages

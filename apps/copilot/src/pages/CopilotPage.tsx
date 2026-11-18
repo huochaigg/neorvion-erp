@@ -17,7 +17,7 @@ import {
   turnHasTerminalAssistant,
 } from '@/lib/chatMessages';
 import { useCopilotStore } from '@/store';
-import type { AgentRun, ConversationDetail, Evidence, Message, StreamEvent, ToolRun } from '@/types';
+import type { AgentRun, ConversationDetail, Evidence, Message, SkillRunSummary, StreamEvent, ToolRun } from '@/types';
 
 function requestId() {
   return crypto.randomUUID().replaceAll('-', '');
@@ -40,6 +40,7 @@ export function CopilotPage() {
   const [evidences, setEvidences] = useState<Evidence[]>([]);
   const [analysisStatus, setAnalysisStatus] = useState('');
   const [agentRun, setAgentRun] = useState<AgentRun | null>(null);
+  const [skillRuns, setSkillRuns] = useState<SkillRunSummary[]>([]);
   const [error, setError] = useState('');
   const [running, setRunning] = useState(false);
   const [pendingUser, setPendingUser] = useState<Message | null>(null);
@@ -91,6 +92,7 @@ export function CopilotPage() {
       evidences,
       analysisStatus,
       agentRun,
+      skillRuns,
     });
   }, [
     agentRun,
@@ -102,11 +104,38 @@ export function CopilotPage() {
     pendingFromIndex,
     running,
     tools,
+    skillRuns,
   ]);
 
   const handleEvent = (item: StreamEvent, guard: string) => {
     if (runRef.current !== guard) return;
     const data = item.data;
+    if (item.event === 'skill_selected' || item.event === 'skill_start') {
+      setSkillRuns((value) => [{
+        id: Number(data.skill_run_id ?? 0),
+        skill_id: Number(data.skill_id ?? 0),
+        skill_key: String(data.skill_key ?? ''),
+        skill_name: String(data.skill_name ?? ''),
+        skill_version: Number(data.skill_version ?? 0),
+        status: item.event === 'skill_start' ? 'RUNNING' : 'SELECTED',
+        selection_method: String(data.selection_method ?? '') || null,
+        loaded_resources: value[0]?.loaded_resources ?? [],
+        safe_error: null,
+      }]);
+    }
+    if (item.event === 'skill_resource_loaded') {
+      setSkillRuns((value) => value.map((run) => ({
+        ...run,
+        loaded_resources: [...new Set([...run.loaded_resources, String(data.resource_path ?? '')])].filter(Boolean),
+      })));
+    }
+    if (item.event === 'skill_done' || item.event === 'skill_error') {
+      setSkillRuns((value) => value.map((run) => ({
+        ...run,
+        status: item.event === 'skill_done' ? 'SUCCEEDED' : 'FAILED',
+        safe_error: item.event === 'skill_error' ? String(data.message ?? 'Skill 执行失败') : null,
+      })));
+    }
     if (item.event === 'analysis_status') setAnalysisStatus(String(data.message ?? ''));
     if (item.event === 'agent_route')
       setAgentRun({
@@ -222,6 +251,7 @@ export function CopilotPage() {
     setEvidences([]);
     setAnalysisStatus('');
     setAgentRun(null);
+    setSkillRuns([]);
     setError('');
     setPendingUser(user);
     setPendingFromIndex(fromIndex);

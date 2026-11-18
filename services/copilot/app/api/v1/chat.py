@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 from typing import cast
 from uuid import uuid4
@@ -26,6 +27,7 @@ from app.services.quotas import (
     reserve_chat_quota,
     usage_tokens,
 )
+from app.skills.chat import prepare_chat_skill, skill_timeout
 from app.tools.executor import ToolRuntime
 
 router = APIRouter(prefix="/chat", tags=["copilot-chat"])
@@ -113,19 +115,38 @@ async def chat(
                 payload.client_request_id or "",
                 str(getattr(request.state, "request_id", "") or uuid4().hex),
             )
+            if turn.duplicate_answer is not None:
+                await reservation.release()
+            runtime = _runtime(
+                request,
+                context,
+                db,
+                conversation_id=turn.conversation_id,
+                source_message_id=turn.message_id,
+                governance=governance,
+                mcp_gateway=mcp_gateway,
+            )
+            skill_session = None
+            if turn.duplicate_answer is None:
+                try:
+                    skill_session = await prepare_chat_skill(
+                        cast(AsyncSession, db),
+                        context,
+                        payload.message or "",
+                        turn.request_id,
+                        runtime,
+                        conversation_id=turn.conversation_id,
+                        message_id=turn.message_id,
+                    )
+                except AppError as exc:
+                    await service.fail_before_run(turn, exc.code)
+                    raise
             answer = ""
             async for event in service.events(
                 turn,
-                _runtime(
-                    request,
-                    context,
-                    db,
-                    conversation_id=turn.conversation_id,
-                    source_message_id=turn.message_id,
-                    governance=governance,
-                    mcp_gateway=mcp_gateway,
-                ),
+                runtime,
                 lambda: _false(),
+                skill_session,
             ):
                 if event["event"] == "done":
                     answer = str(event["data"].get("answer") or "")
@@ -137,22 +158,43 @@ async def chat(
                 conversation_id=turn.conversation_id,
                 message_id=turn.message_id,
                 request_id=turn.request_id,
+                skill=skill_session.public_data if skill_session is not None else None,
             )
         else:
-            answer, usage = await ChatService(workflow).complete(
-                _messages(payload),
-                context=_runtime(
-                    request,
-                    context,
-                    db,
-                    governance=governance,
-                    mcp_gateway=mcp_gateway,
-                ),
+            messages = _messages(payload)
+            runtime = _runtime(
+                request,
+                context,
+                db,
+                governance=governance,
+                mcp_gateway=mcp_gateway,
             )
+            skill_session = await prepare_chat_skill(
+                cast(AsyncSession, db),
+                context,
+                str(messages[-1]["content"]),
+                str(getattr(request.state, "request_id", "") or uuid4().hex),
+                runtime,
+                conversation_id=None,
+                message_id=None,
+            )
+            try:
+                async with skill_timeout(skill_session):
+                    answer, usage = await ChatService(workflow).complete(
+                        skill_session.messages(messages) if skill_session is not None else messages,
+                        context=runtime,
+                    )
+                if skill_session is not None:
+                    await skill_session.complete(answer, usage, runtime)
+            except BaseException as exc:
+                if skill_session is not None:
+                    await skill_session.fail(exc, runtime)
+                raise
             response = ChatResponse(
                 answer=answer,
                 model=settings.chat_model,
                 usage=TokenUsageOut.model_validate(usage) if usage is not None else None,
+                skill=skill_session.public_data if skill_session is not None else None,
             )
         await reservation.settle(usage_tokens(usage))
         return ok(response)
@@ -183,52 +225,118 @@ async def chat_stream(
 
     async def event_stream():
         persistent_turn = None
+        persistent_service = None
+        skill_session = None
+        runtime = None
+        buffered_skill_answer = ""
         final_usage = None
         completed = False
         try:
             if payload.conversation_id is not None:
                 service = PersistentChatService(cast(AsyncSession, db), context, workflow)
+                persistent_service = service
                 turn = await service.prepare(
                     payload.conversation_id,
                     payload.message or "",
                     payload.client_request_id or "",
                     stream_request_id,
                 )
+                if turn.duplicate_answer is not None:
+                    await reservation.release()
                 persistent_turn = turn
+                runtime = _runtime(
+                    request,
+                    context,
+                    db,
+                    conversation_id=turn.conversation_id,
+                    source_message_id=turn.message_id,
+                    governance=governance,
+                    mcp_gateway=mcp_gateway,
+                )
+                if turn.duplicate_answer is None:
+                    skill_session = await prepare_chat_skill(
+                        cast(AsyncSession, db),
+                        context,
+                        payload.message or "",
+                        turn.request_id,
+                        runtime,
+                        conversation_id=turn.conversation_id,
+                        message_id=turn.message_id,
+                    )
                 events = service.events(
                     turn,
-                    _runtime(
-                        request,
-                        context,
-                        db,
-                        conversation_id=turn.conversation_id,
-                        source_message_id=turn.message_id,
-                        governance=governance,
-                        mcp_gateway=mcp_gateway,
-                    ),
+                    runtime,
                     request.is_disconnected,
+                    skill_session,
                 )
             else:
-                events = ChatService(workflow).stream_events(
-                    _messages(payload),
-                    disconnected=request.is_disconnected,
-                    context=_runtime(
-                        request,
-                        context,
-                        db,
-                        governance=governance,
-                        mcp_gateway=mcp_gateway,
-                    ),
+                messages = _messages(payload)
+                runtime = _runtime(
+                    request,
+                    context,
+                    db,
+                    governance=governance,
+                    mcp_gateway=mcp_gateway,
                 )
-            async for event in events:
-                name = str(event.get("event") or "message")
-                data = _event_data(event)
-                if name == "done":
-                    final_usage = data.get("usage")
-                    completed = True
-                data.setdefault("request_id", stream_request_id)
-                yield _sse(name, data)
+                skill_session = await prepare_chat_skill(
+                    cast(AsyncSession, db),
+                    context,
+                    str(messages[-1]["content"]),
+                    stream_request_id,
+                    runtime,
+                    conversation_id=None,
+                    message_id=None,
+                )
+                events = ChatService(workflow).stream_events(
+                    skill_session.messages(messages) if skill_session is not None else messages,
+                    disconnected=request.is_disconnected,
+                    context=runtime,
+                )
+                if skill_session is not None:
+                    for event in skill_session.lifecycle_events():
+                        yield _sse(event["event"], event["data"] | {"request_id": stream_request_id})
+            async with skill_timeout(skill_session if payload.conversation_id is None else None):
+                async for event in events:
+                    name = str(event.get("event") or "message")
+                    data = _event_data(event)
+                    if (
+                        payload.conversation_id is None
+                        and skill_session is not None
+                        and name == "message"
+                    ):
+                        buffered_skill_answer += str(data.get("delta") or "")
+                        continue
+                    if name == "done":
+                        final_usage = data.get("usage")
+                        if payload.conversation_id is None and skill_session is not None:
+                            await skill_session.complete(
+                                str(data.get("answer") or ""), final_usage, runtime
+                            )
+                            yield _sse(
+                                "skill_done",
+                                skill_session.public_data
+                                | {"request_id": stream_request_id, "status": "SUCCEEDED"},
+                            )
+                            yield _sse(
+                                "message",
+                                {
+                                    "request_id": stream_request_id,
+                                    "delta": str(data.get("answer") or buffered_skill_answer),
+                                },
+                            )
+                        completed = True
+                    data.setdefault("request_id", stream_request_id)
+                    yield _sse(name, data)
         except AppError as exc:
+            if persistent_turn is not None and persistent_service is not None:
+                await persistent_service.fail_before_run(persistent_turn, exc.code)
+            if payload.conversation_id is None and skill_session is not None and runtime is not None:
+                await skill_session.fail(exc, runtime)
+                yield _sse(
+                    "skill_error",
+                    skill_session.public_data
+                    | {"request_id": stream_request_id, "status": "FAILED", "message": exc.message},
+                )
             ids = (
                 {
                     "request_id": persistent_turn.request_id,
@@ -242,7 +350,20 @@ async def chat_stream(
                 "error",
                 {"code": exc.code, "message": exc.message, "request_id": stream_request_id} | ids,
             )
-        except Exception:
+        except Exception as exc:
+            if persistent_turn is not None and persistent_service is not None:
+                await persistent_service.fail_before_run(persistent_turn, 50268)
+            if payload.conversation_id is None and skill_session is not None and runtime is not None:
+                await skill_session.fail(exc, runtime)
+                yield _sse(
+                    "skill_error",
+                    skill_session.public_data
+                    | {
+                        "request_id": stream_request_id,
+                        "status": "FAILED",
+                        "message": skill_session.row.safe_error,
+                    },
+                )
             ids = (
                 {
                     "request_id": persistent_turn.request_id,
@@ -257,6 +378,14 @@ async def chat_stream(
                 {"code": 50268, "message": "模型生成失败", "request_id": stream_request_id} | ids,
             )
         finally:
+            if (
+                not completed
+                and payload.conversation_id is None
+                and skill_session is not None
+                and runtime is not None
+                and skill_session.row.status == "RUNNING"
+            ):
+                await skill_session.fail(asyncio.CancelledError(), runtime)
             if completed:
                 await reservation.settle(usage_tokens(final_usage))
             else:

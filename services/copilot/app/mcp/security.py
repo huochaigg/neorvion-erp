@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import asyncio
 import ipaddress
+import re
 import socket
+from datetime import date
 from urllib.parse import urlsplit
 
 from app.core.config import settings
@@ -141,9 +143,26 @@ def _validate_value(schema: dict, value: object, path: str) -> None:
         raise AppError(f"MCP 工具参数 {path} 类型无效", code=40081, status_code=400)
     if kind == "string" and len(value) > min(int(schema.get("maxLength", 4000)), 4000):
         raise AppError("MCP 工具字符串参数过长", code=40081, status_code=400)
+    if kind == "string" and len(value) < max(int(schema.get("minLength", 0)), 0):
+        raise AppError("MCP 工具字符串参数过短", code=40081, status_code=400)
+    if kind == "string" and schema.get("pattern"):
+        if re.fullmatch(str(schema["pattern"]), value) is None:
+            raise AppError("MCP 工具字符串参数格式无效", code=40081, status_code=400)
+    if kind == "string" and schema.get("format") == "date":
+        try:
+            date.fromisoformat(value)
+        except ValueError as exc:
+            raise AppError("MCP 工具日期参数格式无效", code=40081, status_code=400) from exc
+    if kind in {"integer", "number"}:
+        if "minimum" in schema and value < schema["minimum"]:
+            raise AppError("MCP 工具数值参数小于下限", code=40081, status_code=400)
+        if "maximum" in schema and value > schema["maximum"]:
+            raise AppError("MCP 工具数值参数超过上限", code=40081, status_code=400)
     if kind == "array":
         if len(value) > min(int(schema.get("maxItems", 100)), 100):
             raise AppError("MCP 工具数组参数过长", code=40081, status_code=400)
+        if len(value) < max(int(schema.get("minItems", 0)), 0):
+            raise AppError("MCP 工具数组参数过短", code=40081, status_code=400)
         for index, item in enumerate(value):
             _validate_value(schema["items"], item, f"{path}[{index}]")
     if kind == "object":

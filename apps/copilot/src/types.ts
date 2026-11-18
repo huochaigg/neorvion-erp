@@ -2,7 +2,8 @@ export interface ToolRun {id:number;message_id:number;tool_call_id:string;tool_n
 export interface Evidence {citation_id:string;source_type:'ERP'|'KNOWLEDGE';resource_type:string;resource_id:string|null;knowledge_base_id:number|null;document_id:number|null;chunk_id:number|null;title:string;excerpt:string|null;source_version:number|null;metadata:Record<string,unknown>;observed_at:string;access_status:'ACTIVE'|'STALE'|'FORBIDDEN'|'MISSING'|'UNAVAILABLE';source_agent?:string|null;agent_task_id?:string|null}
 export interface AgentTaskRun {agent_name:string;task_id:string;status:string;duration_ms:number|null;model_calls:number;tool_calls:number;evidence_count:number;error_code:number|null}
 export interface AgentRun {id:number|string;graph_type:string;status:string;route_reason:string|null;total_duration_ms:number|null;tasks:AgentTaskRun[]}
-export interface Message {id:number;role:string;content:string;status:string;request_id:string;created_at:string;updated_at:string;tool_runs:ToolRun[];evidences:Evidence[];agent_runs?:AgentRun[];analysis_status?:string}
+export interface SkillRunSummary {id:number;skill_id:number;skill_key:string;skill_name:string;skill_version:number;status:string;selection_method:string|null;loaded_resources:string[];safe_error:string|null}
+export interface Message {id:number;role:string;content:string;status:string;request_id:string;created_at:string;updated_at:string;tool_runs:ToolRun[];evidences:Evidence[];agent_runs?:AgentRun[];skill_runs?:SkillRunSummary[];analysis_status?:string}
 export interface Conversation {id:number;title:string;status:string;created_at:string;updated_at:string}
 export interface ConversationDetail extends Conversation {messages:Message[]}
 export interface ConversationList {items:Conversation[];total:number;page:number;page_size:number}

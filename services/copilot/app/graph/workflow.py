@@ -272,6 +272,14 @@ class CopilotWorkflow:
                 runtime.context.tools.agent_name = runtime.context.agent_name
                 result = await self.executor.execute(call, runtime.context.tools)
             except AppError as exc:
+                runtime.context.tools.tool_events.append(
+                    {
+                        "tool_call_id": event_id,
+                        "name": call.name,
+                        "status": "FAILED",
+                        "code": exc.code,
+                    }
+                )
                 runtime.stream_writer(
                     {
                         "event": "tool_error",
@@ -294,6 +302,7 @@ class CopilotWorkflow:
                     }
                 )
                 runtime.stream_writer({"event": "tool_end", "data": result.event})
+                runtime.context.tools.tool_events.append(result.event | {"status": "SUCCEEDED"})
                 proposal_event = result.event.get("proposal_event")
                 if proposal_event:
                     runtime.stream_writer(
