@@ -6,6 +6,7 @@ compatibility: Neorvion Copilot with authorized read-only ERP access
 metadata:
   neorvion-category: inventory
   neorvion-risk: read-only
+  neorvion-resource-triggers: 风险,risk,缺货,积压
 ---
 
 # 库存覆盖分析

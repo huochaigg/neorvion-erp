@@ -12,12 +12,14 @@ import {
   getEvaluationDataset,
   importV8EvaluationCases,
   importV9EvaluationCases,
+  importV14SkillCases,
   listEvaluationDatasets,
   listEvaluationRuns,
   listEvaluationVersions,
   type EvaluationDataset,
   type EvaluationRun,
   type EvaluationRunDetail,
+  getSkillEvaluationDiagnostics,
 } from '@/api/evaluations';
 import { useCopilotStore } from '@/store';
 
@@ -61,6 +63,10 @@ function DatasetPanel() {
     mutationFn: importV9EvaluationCases,
     onSuccess: () => void client.invalidateQueries({ queryKey: ['tenant', tenantId, 'agent-evaluation-dataset', selectedDataset] }),
   });
+  const importV14 = useMutation({
+    mutationFn: importV14SkillCases,
+    onSuccess: () => void client.invalidateQueries({ queryKey: ['tenant', tenantId, 'agent-evaluation-dataset', selectedDataset] }),
+  });
   const freeze = useMutation({
     mutationFn: freezeEvaluationDataset,
     onSuccess: () => void client.invalidateQueries({ queryKey: ['tenant', tenantId, 'agent-evaluation-datasets'] }),
@@ -86,6 +92,7 @@ function DatasetPanel() {
                 <Button size="small" onClick={() => setSelectedDataset(row.id)}>查看 Case</Button>
                 <Button size="small" loading={importV8.isPending} onClick={() => { setSelectedDataset(row.id); importV8.mutate(row.id); }}>导入 V8 30题</Button>
                 <Button size="small" loading={importV9.isPending} onClick={() => { setSelectedDataset(row.id); importV9.mutate(row.id); }}>导入 V9 100题</Button>
+                <Button size="small" loading={importV14.isPending} onClick={() => { setSelectedDataset(row.id); importV14.mutate(row.id); }}>导入 V14 Skill 100题</Button>
                 <Button size="small" loading={freeze.isPending} onClick={() => freeze.mutate(row.id)}>冻结新版本</Button>
               </Space>,
             },
@@ -134,10 +141,11 @@ function RunPanel() {
   const versions = useQuery({ queryKey: ['tenant', tenantId, 'agent-evaluation-versions', datasetId], queryFn: ({ signal }) => listEvaluationVersions(datasetId!, signal), enabled: datasetId != null });
   const [versionId, setVersionId] = useState<number>();
   const [mode, setMode] = useState<'SINGLE' | 'MULTI' | 'AUTO'>('AUTO');
+  const [selectorProfile, setSelectorProfile] = useState<'BASELINE' | 'BASIC' | 'HYBRID'>('HYBRID');
   const [selectedRun, setSelectedRun] = useState<number>();
   const detail = useQuery({ queryKey: ['tenant', tenantId, 'agent-evaluation-run', selectedRun], queryFn: ({ signal }) => getEvaluationRun(selectedRun!, signal), enabled: selectedRun != null });
   const create = useMutation({
-    mutationFn: () => createEvaluationRun({ dataset_version_id: versionId!, mode, execution_kind: 'REPLAY', idempotency_key: crypto.randomUUID() }),
+    mutationFn: () => createEvaluationRun({ dataset_version_id: versionId!, mode, execution_kind: 'REPLAY', idempotency_key: crypto.randomUUID(), config: { selector_profile: selectorProfile, skill_enabled: selectorProfile !== 'BASELINE' } }),
     onSuccess: () => void client.invalidateQueries({ queryKey: ['tenant', tenantId, 'agent-evaluation-runs'] }),
   });
   const rows = runs.data?.items ?? [];
@@ -159,6 +167,7 @@ function RunPanel() {
             onChange={setVersionId}
           />
           <Select value={mode} options={['SINGLE', 'MULTI', 'AUTO'].map((value) => ({ label: value, value }))} onChange={setMode} />
+          <Select value={selectorProfile} className="w-40" options={['BASELINE', 'BASIC', 'HYBRID'].map((value) => ({ label: value, value }))} onChange={setSelectorProfile} />
           <Button type="primary" disabled={!versionId} loading={create.isPending} onClick={() => create.mutate()}>启动 Replay Run</Button>
         </Space>
         <div className="mt-3 text-xs text-slate-500">LIVE 运行需要服务端配置受控评测身份；页面不会发送用户 JWT 给 Worker。</div>
@@ -214,8 +223,22 @@ function RunDetail({ detail }: { detail: EvaluationRunDetail }) {
         ]}
         expandable={{ expandedRowRender: (row) => <pre className="overflow-auto text-xs">{JSON.stringify({ answer: row.actual_answer, metrics: row.metrics, assertions: row.assertion_results }, null, 2)}</pre> }}
       />
+      <SkillDiagnostics runId={detail.id} />
     </Space>
   );
+}
+
+function SkillDiagnostics({ runId }: { runId: number }) {
+  const query = useQuery({ queryKey: ['skill-evaluation-diagnostics', runId], queryFn: ({ signal }) => getSkillEvaluationDiagnostics(runId, signal) });
+  if (!query.data?.failures.length) return <Alert type="success" showIcon message="没有确定性 Skill 失败分类" />;
+  return <Card size="small" title="Skill 失败诊断与人工优化建议">
+    <Table rowKey="category" size="small" pagination={false} dataSource={query.data.failures} columns={[
+      { title: '阶段', dataIndex: 'category' },
+      { title: '数量', dataIndex: 'count' },
+      { title: '建议', dataIndex: 'suggestion' },
+      { title: 'Case', dataIndex: 'case_keys', render: (value: string[]) => value.slice(0, 5).join(', ') },
+    ]} />
+  </Card>;
 }
 
 function ComparisonPanel() {

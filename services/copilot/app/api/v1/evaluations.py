@@ -99,6 +99,13 @@ async def import_v9_cases(dataset_id: int, context: EvaluationManageContext, db:
     return ok(await _service(db, context).import_v9_catalog(dataset_id))
 
 
+@router.post("/datasets/{dataset_id}/cases/import-v14-skills", response_model=ApiResponse[dict])
+async def import_v14_skill_cases(
+    dataset_id: int, context: EvaluationManageContext, db: DbSession
+):
+    return ok(await _service(db, context).import_v14_skill_catalog(dataset_id))
+
+
 @router.patch("/cases/{case_id}", response_model=ApiResponse[EvaluationCaseOut])
 async def patch_case(
     case_id: int,
@@ -173,6 +180,11 @@ async def review_case(
 @router.get("/runs/{run_id}/metrics", response_model=ApiResponse[dict])
 async def run_metrics(run_id: int, context: EvaluationReadContext, db: DbSession):
     return ok(await _service(db, context).metrics(run_id))
+
+
+@router.get("/runs/{run_id}/skill-diagnostics", response_model=ApiResponse[dict])
+async def skill_diagnostics(run_id: int, context: EvaluationReadContext, db: DbSession):
+    return ok(await _service(db, context).skill_diagnostics(run_id))
 
 
 @router.post("/runs/{run_id}/pause", response_model=ApiResponse[EvaluationRunOut])

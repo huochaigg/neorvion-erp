@@ -122,6 +122,32 @@ class EvaluationRunCreate(BaseModel):
     cost_budget: float | None = Field(default=None, ge=0)
     config: dict[str, Any] = Field(default_factory=dict, description="不可变运行配置补充项")
 
+    @field_validator("config")
+    @classmethod
+    def validate_skill_experiment_config(cls, value: dict[str, Any]) -> dict[str, Any]:
+        allowed = {
+            "selector_profile",
+            "selector_threshold",
+            "skill_version_overrides",
+            "skill_enabled",
+            "notes",
+        }
+        if set(value) - allowed:
+            raise ValueError("评测配置包含未知字段")
+        profile = value.get("selector_profile")
+        if profile is not None and profile not in {"BASELINE", "BASIC", "HYBRID"}:
+            raise ValueError("selector_profile 无效")
+        threshold = value.get("selector_threshold")
+        if threshold is not None and not 0 <= float(threshold) <= 1:
+            raise ValueError("selector_threshold 必须在 0 到 1 之间")
+        versions = value.get("skill_version_overrides")
+        if versions is not None and (
+            not isinstance(versions, dict)
+            or any(not isinstance(key, str) or not isinstance(number, int) or number <= 0 for key, number in versions.items())
+        ):
+            raise ValueError("skill_version_overrides 无效")
+        return value
+
 
 class EvaluationCaseRunOut(BaseModel):
     id: int

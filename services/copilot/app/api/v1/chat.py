@@ -28,6 +28,7 @@ from app.services.quotas import (
     usage_tokens,
 )
 from app.skills.chat import prepare_chat_skill, skill_timeout
+from app.skills.pending import PendingSkillPrompt
 from app.tools.executor import ToolRuntime
 
 router = APIRouter(prefix="/chat", tags=["copilot-chat"])
@@ -137,10 +138,25 @@ async def chat(
                         runtime,
                         conversation_id=turn.conversation_id,
                         message_id=turn.message_id,
+                        explicit_skill_key=payload.skill_key,
+                        selector_adapter=workflow.adapter,
                     )
                 except AppError as exc:
                     await service.fail_before_run(turn, exc.code)
                     raise
+            if isinstance(skill_session, PendingSkillPrompt):
+                await service.complete_without_run(turn, skill_session.answer)
+                await reservation.release()
+                return ok(
+                    ChatResponse(
+                        answer=skill_session.answer,
+                        model=settings.chat_model,
+                        conversation_id=turn.conversation_id,
+                        message_id=turn.message_id,
+                        request_id=turn.request_id,
+                        skill=skill_session.public_data,
+                    )
+                )
             answer = ""
             async for event in service.events(
                 turn,
@@ -177,7 +193,11 @@ async def chat(
                 runtime,
                 conversation_id=None,
                 message_id=None,
+                explicit_skill_key=payload.skill_key,
+                selector_adapter=workflow.adapter,
             )
+            if isinstance(skill_session, PendingSkillPrompt):
+                raise AppError("无会话模式不支持多轮参数补全", code=42293, status_code=422)
             try:
                 async with skill_timeout(skill_session):
                     answer, usage = await ChatService(workflow).complete(
@@ -231,6 +251,7 @@ async def chat_stream(
         buffered_skill_answer = ""
         final_usage = None
         completed = False
+        quota_released = False
         try:
             if payload.conversation_id is not None:
                 service = PersistentChatService(cast(AsyncSession, db), context, workflow)
@@ -262,7 +283,18 @@ async def chat_stream(
                         runtime,
                         conversation_id=turn.conversation_id,
                         message_id=turn.message_id,
+                        explicit_skill_key=payload.skill_key,
+                        selector_adapter=workflow.adapter,
                     )
+                    if isinstance(skill_session, PendingSkillPrompt):
+                        await service.complete_without_run(turn, skill_session.answer)
+                        await reservation.release()
+                        quota_released = True
+                        completed = True
+                        yield _sse("skill_input_required", skill_session.public_data | {"request_id": turn.request_id, "conversation_id": turn.conversation_id, "message_id": turn.message_id})
+                        yield _sse("message", {"request_id": turn.request_id, "conversation_id": turn.conversation_id, "message_id": turn.message_id, "delta": skill_session.answer})
+                        yield _sse("done", {"request_id": turn.request_id, "conversation_id": turn.conversation_id, "message_id": turn.message_id, "answer": skill_session.answer})
+                        return
                 events = service.events(
                     turn,
                     runtime,
@@ -286,7 +318,11 @@ async def chat_stream(
                     runtime,
                     conversation_id=None,
                     message_id=None,
+                    explicit_skill_key=payload.skill_key,
+                    selector_adapter=workflow.adapter,
                 )
+                if isinstance(skill_session, PendingSkillPrompt):
+                    raise AppError("无会话模式不支持多轮参数补全", code=42293, status_code=422)
                 events = ChatService(workflow).stream_events(
                     skill_session.messages(messages) if skill_session is not None else messages,
                     disconnected=request.is_disconnected,
@@ -386,9 +422,9 @@ async def chat_stream(
                 and skill_session.row.status == "RUNNING"
             ):
                 await skill_session.fail(asyncio.CancelledError(), runtime)
-            if completed:
+            if completed and not quota_released:
                 await reservation.settle(usage_tokens(final_usage))
-            else:
+            elif not completed and not quota_released:
                 await reservation.cancel()
 
     return StreamingResponse(

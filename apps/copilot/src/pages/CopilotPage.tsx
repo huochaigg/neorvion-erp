@@ -111,15 +111,36 @@ export function CopilotPage() {
     if (runRef.current !== guard) return;
     const data = item.data;
     if (item.event === 'skill_selected' || item.event === 'skill_start') {
-      setSkillRuns((value) => [{
-        id: Number(data.skill_run_id ?? 0),
-        skill_id: Number(data.skill_id ?? 0),
+      setSkillRuns((value) => {
+        const id = Number(data.skill_run_id ?? 0);
+        const next = {
+          id,
+          skill_id: Number(data.skill_id ?? 0),
+          skill_key: String(data.skill_key ?? ''),
+          skill_name: String(data.skill_name ?? ''),
+          skill_version: Number(data.skill_version ?? 0),
+          status: item.event === 'skill_start' ? 'RUNNING' : 'SELECTED',
+          selection_method: String(data.selection_method ?? '') || null,
+          selection_reason: String(data.selection_reason ?? '') || null,
+          plan_id: Number(data.plan_id ?? 0) || null,
+          plan_step_key: String(data.step_key ?? '') || null,
+          loaded_resources: value.find((row) => row.id === id)?.loaded_resources ?? [],
+          safe_error: null,
+        };
+        return [...value.filter((row) => row.id !== id), next];
+      });
+    }
+    if (item.event === 'skill_input_required') {
+      setSkillRuns([{
+        id: 0,
+        skill_id: 0,
         skill_key: String(data.skill_key ?? ''),
-        skill_name: String(data.skill_name ?? ''),
-        skill_version: Number(data.skill_version ?? 0),
-        status: item.event === 'skill_start' ? 'RUNNING' : 'SELECTED',
-        selection_method: String(data.selection_method ?? '') || null,
-        loaded_resources: value[0]?.loaded_resources ?? [],
+        skill_name: String(data.skill_key ?? '参数补全'),
+        skill_version: 0,
+        status: String(data.status ?? 'COLLECTING_INPUT'),
+        selection_method: null,
+        missing_fields: Array.isArray(data.missing_fields) ? data.missing_fields.map(String) : [],
+        loaded_resources: [],
         safe_error: null,
       }]);
     }
@@ -129,11 +150,11 @@ export function CopilotPage() {
         loaded_resources: [...new Set([...run.loaded_resources, String(data.resource_path ?? '')])].filter(Boolean),
       })));
     }
-    if (item.event === 'skill_done' || item.event === 'skill_error') {
+    if (item.event === 'skill_done' || item.event === 'skill_error' || item.event === 'skill_plan_done' || item.event === 'skill_plan_error') {
       setSkillRuns((value) => value.map((run) => ({
         ...run,
-        status: item.event === 'skill_done' ? 'SUCCEEDED' : 'FAILED',
-        safe_error: item.event === 'skill_error' ? String(data.message ?? 'Skill 执行失败') : null,
+        status: item.event === 'skill_done' || item.event === 'skill_plan_done' ? 'SUCCEEDED' : 'FAILED',
+        safe_error: item.event === 'skill_error' || item.event === 'skill_plan_error' ? String(data.message ?? 'Skill 执行失败') : null,
       })));
     }
     if (item.event === 'analysis_status') setAnalysisStatus(String(data.message ?? ''));

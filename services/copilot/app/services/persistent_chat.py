@@ -17,6 +17,7 @@ from app.graph.workflow import AgentRuntime
 from app.models.conversation import MessageStatus
 from app.repositories.conversations import ConversationRepository
 from app.skills.chat import ChatSkillSession, skill_timeout
+from app.skills.orchestration import MultiSkillChatSession
 
 
 @dataclass(slots=True)
@@ -87,6 +88,15 @@ class PersistentChatService:
         )
         await self.session.commit()
 
+    async def complete_without_run(self, turn: PersistentTurn, answer: str) -> None:
+        """参数澄清/取消不调用模型，也不建立虚假的 AgentRun 或 RUNNING SkillRun。"""
+        await self.repo.finish_message(
+            turn.message_id,
+            content=answer,
+            status=MessageStatus.COMPLETED.value,
+        )
+        await self.session.commit()
+
     @staticmethod
     def _build_history(rows) -> list[ModelMessage]:
         """按完整 turn 从最近向前裁剪；用保守估算控制 Token 且不拆工具协议。"""
@@ -122,7 +132,7 @@ class PersistentChatService:
         turn: PersistentTurn,
         runtime: AgentRuntime,
         disconnected: Callable[[], Awaitable[bool]],
-        skill_session: ChatSkillSession | None = None,
+        skill_session: ChatSkillSession | MultiSkillChatSession | None = None,
     ) -> AsyncIterator[dict]:
         if turn.duplicate_answer is not None:
             yield {"event": "run_start", "data": self._ids(turn) | {"replayed": True}}
@@ -163,10 +173,19 @@ class PersistentChatService:
             if skill_session is not None:
                 await skill_session.fail(exc, runtime, commit=False)
                 yield {
-                    "event": "skill_error",
+                    "event": "skill_plan_error"
+                    if isinstance(skill_session, MultiSkillChatSession)
+                    else "skill_error",
                     "data": skill_session.public_data
                     | self._ids(turn)
-                    | {"status": "FAILED", "message": skill_session.row.safe_error},
+                    | {
+                        "status": "FAILED",
+                        "message": (
+                            skill_session.plan.safe_error
+                            if isinstance(skill_session, MultiSkillChatSession)
+                            else skill_session.row.safe_error
+                        ),
+                    },
                 }
             code = exc.code if isinstance(exc, AppError) else 50268
             status = (
@@ -202,7 +221,7 @@ class PersistentChatService:
         turn: PersistentTurn,
         runtime: AgentRuntime,
         agent_run_id: int,
-        skill_session: ChatSkillSession | None,
+        skill_session: ChatSkillSession | MultiSkillChatSession | None,
     ) -> AsyncIterator[dict]:
         """记录一个 Graph 事件；Skill 校验发生在消息写成 COMPLETED 之前。"""
         name = str(event.get("event") or "message")
@@ -216,6 +235,8 @@ class PersistentChatService:
             await self.session.commit()
         elif name.startswith("agent_"):
             await self.repo.record_agent_event(agent_run_id, name, data)
+            if isinstance(skill_session, MultiSkillChatSession):
+                skill_session.record_agent_event(name, data)
             await self.session.commit()
         elif name.startswith("model_call_"):
             await self.repo.record_model_event(
@@ -237,10 +258,18 @@ class PersistentChatService:
                 )
                 enriched |= skill_session.public_data
                 yield {
-                    "event": "skill_done",
+                    "event": "skill_plan_done"
+                    if isinstance(skill_session, MultiSkillChatSession)
+                    else "skill_done",
                     "data": skill_session.public_data
                     | self._ids(turn)
-                    | {"status": "SUCCEEDED"},
+                    | {
+                        "status": (
+                            skill_session.plan.status
+                            if isinstance(skill_session, MultiSkillChatSession)
+                            else "SUCCEEDED"
+                        )
+                    },
                 }
                 yield {
                     "event": "message",

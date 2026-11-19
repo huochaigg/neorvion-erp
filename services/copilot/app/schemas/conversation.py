@@ -81,6 +81,9 @@ class SkillRunSummaryOut(BaseModel):
     skill_version: int
     status: str
     selection_method: str | None = None
+    selection_reason: str | None = None
+    plan_id: int | None = None
+    plan_step_key: str | None = None
     loaded_resources: list[str] = Field(default_factory=list)
     safe_error: str | None = None
 

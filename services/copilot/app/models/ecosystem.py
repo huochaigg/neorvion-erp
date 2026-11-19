@@ -6,6 +6,7 @@ from typing import Any
 from sqlalchemy import (
     BigInteger,
     Boolean,
+    CheckConstraint,
     DateTime,
     ForeignKeyConstraint,
     Index,
@@ -178,7 +179,15 @@ class SkillRun(TimestampMixin, TenantMixin, Base):
             ondelete="RESTRICT",
             name="fk_skill_run_message",
         ),
+        ForeignKeyConstraint(
+            ["tenant_id", "plan_id"],
+            ["copilot_skill_execution_plans.tenant_id", "copilot_skill_execution_plans.id"],
+            ondelete="RESTRICT",
+            name="fk_skill_run_plan",
+            use_alter=True,
+        ),
         UniqueConstraint("tenant_id", "user_id", "idempotency_key", name="uq_skill_run_key"),
+        UniqueConstraint("tenant_id", "id", name="uq_skill_run_tenant"),
         Index("ix_skill_run_status", "tenant_id", "status", "created_at"),
     )
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
@@ -188,12 +197,146 @@ class SkillRun(TimestampMixin, TenantMixin, Base):
     conversation_id: Mapped[int | None] = mapped_column(BigInteger)
     message_id: Mapped[int | None] = mapped_column(BigInteger)
     selection_method: Mapped[str | None] = mapped_column(String(32))
+    selection_snapshot: Mapped[dict[str, Any]] = mapped_column(
+        JSONB, nullable=False, server_default="{}"
+    )
+    plan_id: Mapped[int | None] = mapped_column(BigInteger)
+    plan_step_key: Mapped[str | None] = mapped_column(String(64))
     idempotency_key: Mapped[str] = mapped_column(String(96), nullable=False)
     status: Mapped[str] = mapped_column(String(24), nullable=False, server_default="CREATED")
     input_snapshot: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
     output_snapshot: Mapped[dict[str, Any]] = mapped_column(
         JSONB, nullable=False, server_default="{}"
     )
+    safe_error: Mapped[str | None] = mapped_column(String(255))
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class PendingSkillInvocation(TimestampMixin, TenantMixin, Base):
+    """持久化多轮参数收集；未准备完成前不制造 RUNNING SkillRun。"""
+
+    __tablename__ = "copilot_pending_skill_invocations"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["tenant_id", "user_id", "conversation_id"],
+            [
+                "copilot_conversations.tenant_id",
+                "copilot_conversations.user_id",
+                "copilot_conversations.id",
+            ],
+            ondelete="CASCADE",
+            name="fk_pending_skill_conversation_owner",
+        ),
+        ForeignKeyConstraint(
+            ["tenant_id", "skill_version_id"],
+            ["copilot_skill_versions.tenant_id", "copilot_skill_versions.id"],
+            ondelete="RESTRICT",
+            name="fk_pending_skill_version",
+        ),
+        CheckConstraint(
+            "status IN ('COLLECTING_INPUT','READY','CANCELLED','EXPIRED')",
+            name="ck_pending_skill_status",
+        ),
+        Index(
+            "uq_pending_skill_active_conversation",
+            "tenant_id",
+            "user_id",
+            "conversation_id",
+            unique=True,
+            postgresql_where=text("status = 'COLLECTING_INPUT'"),
+        ),
+        Index("ix_pending_skill_expiry", "status", "expires_at"),
+    )
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    conversation_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    skill_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    skill_version_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    status: Mapped[str] = mapped_column(String(24), nullable=False, server_default="COLLECTING_INPUT")
+    collected_input: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, server_default="{}")
+    missing_fields: Mapped[list[str]] = mapped_column(JSONB, nullable=False, server_default="[]")
+    selection_snapshot: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, server_default="{}")
+    plan_snapshot: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, server_default="{}")
+    clarification: Mapped[str] = mapped_column(String(500), nullable=False)
+    last_client_request_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class SkillExecutionPlan(TimestampMixin, TenantMixin, Base):
+    __tablename__ = "copilot_skill_execution_plans"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["tenant_id", "user_id", "conversation_id"],
+            [
+                "copilot_conversations.tenant_id",
+                "copilot_conversations.user_id",
+                "copilot_conversations.id",
+            ],
+            ondelete="CASCADE",
+            name="fk_skill_plan_conversation_owner",
+        ),
+        ForeignKeyConstraint(
+            ["tenant_id", "message_id"],
+            ["copilot_messages.tenant_id", "copilot_messages.id"],
+            ondelete="RESTRICT",
+            name="fk_skill_plan_message",
+        ),
+        UniqueConstraint("tenant_id", "id", name="uq_skill_plan_tenant"),
+        UniqueConstraint("tenant_id", "user_id", "idempotency_key", name="uq_skill_plan_key"),
+        CheckConstraint(
+            "status IN ('CREATED','RUNNING','SUCCEEDED','PARTIAL_FAILED','FAILED','CANCELLED','EXPIRED')",
+            name="ck_skill_plan_status",
+        ),
+        Index("ix_skill_plan_message", "tenant_id", "message_id"),
+    )
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    conversation_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    message_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    idempotency_key: Mapped[str] = mapped_column(String(96), nullable=False)
+    status: Mapped[str] = mapped_column(String(24), nullable=False, server_default="CREATED")
+    classification: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    selection_snapshot: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    budget_snapshot: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    safe_error: Mapped[str | None] = mapped_column(String(255))
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class SkillExecutionPlanStep(TimestampMixin, TenantMixin, Base):
+    __tablename__ = "copilot_skill_execution_plan_steps"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["tenant_id", "plan_id"],
+            ["copilot_skill_execution_plans.tenant_id", "copilot_skill_execution_plans.id"],
+            ondelete="CASCADE",
+            name="fk_skill_plan_step_plan",
+        ),
+        ForeignKeyConstraint(
+            ["tenant_id", "skill_version_id"],
+            ["copilot_skill_versions.tenant_id", "copilot_skill_versions.id"],
+            ondelete="RESTRICT",
+            name="fk_skill_plan_step_version",
+        ),
+        UniqueConstraint("tenant_id", "plan_id", "step_key", name="uq_skill_plan_step_key"),
+        CheckConstraint(
+            "status IN ('PENDING','RUNNING','SUCCEEDED','FAILED','SKIPPED','CANCELLED')",
+            name="ck_skill_plan_step_status",
+        ),
+        Index("ix_skill_plan_step_status", "tenant_id", "plan_id", "status"),
+    )
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    plan_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    step_key: Mapped[str] = mapped_column(String(64), nullable=False)
+    position: Mapped[int] = mapped_column(Integer, nullable=False)
+    skill_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    skill_version_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    agent_name: Mapped[str] = mapped_column(String(64), nullable=False)
+    depends_on: Mapped[list[str]] = mapped_column(JSONB, nullable=False, server_default="[]")
+    input_snapshot: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, server_default="{}")
+    result_snapshot: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, server_default="{}")
+    status: Mapped[str] = mapped_column(String(24), nullable=False, server_default="PENDING")
     safe_error: Mapped[str | None] = mapped_column(String(255))
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

@@ -6,6 +6,7 @@ compatibility: Neorvion Copilot with authorized read-only ERP access
 metadata:
   neorvion-category: sales
   neorvion-risk: read-only
+  neorvion-resource-triggers: 审查,风险,异常,review,audit
 ---
 
 # 销售订单审查

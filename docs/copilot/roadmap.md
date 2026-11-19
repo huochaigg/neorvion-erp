@@ -5,7 +5,10 @@
 - 标准 `SKILL.md`、安全 Parser、数据库发布快照与受控 ZIP 导入。
 - Metadata → Instructions → Resources Progressive Disclosure。
 - Feature Flag 控制的 Catalog、Selector、Loader 与 Chat/SSE 自动执行。
+- 混合 Selector、Intent/Complexity/Risk、多轮参数补全、持久化 Pending Invocation。
+- 受控多 Skill DAG、复用 V8 Multi-Agent、Plan/Step/SkillRun Trace 与 V9 Evaluation 扩展。
 - 运行源码入口：[V14.2 Agent Skills Walkthrough](./v14.2-agent-skills-walkthrough.md)。
+- 高级设计与完整调用链：[V14.2 Agent Skills 高级设计](./v14.2-skills-advanced.md)。
 
 ## V11：Enterprise AI Governance（核心治理切片完成，发布门禁未全部关闭）
 

@@ -132,6 +132,23 @@ class Settings(BaseSettings):
     skill_resources_max_bytes: int = 65_536
     skill_resources_max_files: int = 8
     skill_context_max_chars: int = 16_000
+    skill_selector_mode: str = "LEGACY"
+    skill_selector_top_k: int = 5
+    skill_selector_recall_threshold: float = 0.08
+    skill_selector_rule_threshold: float = 0.52
+    skill_selector_semantic_threshold: float = 0.20
+    skill_selector_ambiguity_margin: float = 0.08
+    skill_selector_llm_enabled: bool = False
+    skill_selector_llm_timeout_seconds: float = 8.0
+    skill_selector_llm_confidence_threshold: float = 0.72
+    skill_multi_enabled: bool = False
+    skill_plan_max_steps: int = 4
+    skill_plan_max_total_tokens: int = 12_000
+    skill_plan_timeout_seconds: float = 60.0
+    skill_pending_enabled: bool = False
+    skill_pending_ttl_seconds: int = 900
+    skill_business_timezone: str = "Asia/Shanghai"
+    skill_evaluation_enabled: bool = False
 
     @property
     def is_production(self) -> bool:

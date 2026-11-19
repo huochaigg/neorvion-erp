@@ -113,6 +113,9 @@ class ConversationService:
                     skill_version=skill_run.skill_version,
                     status=skill_run.status,
                     selection_method=skill_run.selection_method,
+                    selection_reason=(skill_run.selection_snapshot or {}).get("reason"),
+                    plan_id=skill_run.plan_id,
+                    plan_step_key=skill_run.plan_step_key,
                     loaded_resources=resources if isinstance(resources, list) else [],
                     safe_error=skill_run.safe_error,
                 )

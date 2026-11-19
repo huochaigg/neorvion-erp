@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from datetime import datetime
 from typing import Any, Literal
 
@@ -148,6 +149,17 @@ class SkillVersionIn(BaseModel):
             raise ValueError("Skill Reference 路径非法")
         return value
 
+    @field_validator("source_metadata")
+    @classmethod
+    def validate_source_metadata(cls, value: dict[str, Any]) -> dict[str, Any]:
+        dependencies = value.get("dependencies", [])
+        if not isinstance(dependencies, list) or len(dependencies) > 10 or any(
+            not isinstance(item, str) or not re.fullmatch(r"[a-z][a-z0-9-]{2,79}", item)
+            for item in dependencies
+        ):
+            raise ValueError("Skill dependencies 必须是最多 10 个合法 Skill Key")
+        return value
+
 
 class SkillCreate(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -226,6 +238,9 @@ class SkillRunOut(BaseModel):
     conversation_id: int | None = None
     message_id: int | None = None
     selection_method: str | None = None
+    selection_snapshot: dict[str, Any] = Field(default_factory=dict)
+    plan_id: int | None = None
+    plan_step_key: str | None = None
     idempotency_key: str
     status: str
     input_snapshot: dict[str, Any]
@@ -234,3 +249,45 @@ class SkillRunOut(BaseModel):
     started_at: datetime | None
     finished_at: datetime | None
     created_at: datetime
+
+
+class SkillPlanStepOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    step_key: str
+    position: int
+    skill_id: int
+    skill_version_id: int
+    agent_name: str
+    depends_on: list[str]
+    input_snapshot: dict[str, Any]
+    result_snapshot: dict[str, Any]
+    status: str
+    safe_error: str | None
+    started_at: datetime | None
+    finished_at: datetime | None
+
+
+class SkillPlanOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    user_id: int
+    conversation_id: int
+    message_id: int
+    status: str
+    classification: dict[str, Any]
+    selection_snapshot: dict[str, Any]
+    budget_snapshot: dict[str, Any]
+    safe_error: str | None
+    started_at: datetime | None
+    finished_at: datetime | None
+    created_at: datetime
+    steps: list[SkillPlanStepOut] = Field(default_factory=list)
+
+
+class SkillVersionDiffOut(BaseModel):
+    skill_id: int
+    from_version: int
+    to_version: int
+    changed_fields: list[str]
+    instructions_diff: list[str]

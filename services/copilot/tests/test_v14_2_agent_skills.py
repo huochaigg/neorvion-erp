@@ -15,6 +15,7 @@ from app.models.ecosystem import Skill, SkillRun, SkillVersion
 from app.services.ecosystem import EcosystemService
 from app.skills.catalog import SkillCatalog, SkillCatalogEntry
 from app.skills.chat import ChatSkillSession, _extract_input, prepare_chat_skill
+from app.skills.classification import TaskClassifier
 from app.skills.loader import LoadedSkill, SkillRuntimeLoader
 from app.skills.parser import SkillParser
 from app.skills.selector import SkillSelection, SkillSelector
@@ -83,7 +84,11 @@ def _models() -> tuple[Skill, SkillVersion]:
         timeout_seconds=30,
         token_budget=3000,
         source_format="SKILL_MD",
-        source_metadata={"name": "inventory-analysis", "description": "inventory"},
+        source_metadata={
+            "name": "inventory-analysis",
+            "description": "inventory",
+            "metadata": {"neorvion-resource-triggers": "风险,risk"},
+        },
         resources={"references/inventory-rules.md": "仅解释 Tool 已计算的覆盖天数。"},
         content_hash="a" * 64,
         approval_status="APPROVED",
@@ -160,18 +165,19 @@ async def test_package_import_rejects_zip_slip_before_database_access() -> None:
         await service.import_skill_package(content.getvalue())
 
 
-def test_selector_is_conservative_and_supports_no_skill() -> None:
+@pytest.mark.asyncio
+async def test_selector_is_conservative_and_supports_no_skill() -> None:
     catalog = [
         SkillCatalogEntry(1, 11, "inventory-analysis", "库存", "库存覆盖", 1),
         SkillCatalogEntry(2, 22, "sales-order-review", "销售", "销售订单审查", 1),
         SkillCatalogEntry(3, 33, "knowledge-research", "知识", "制度研究", 1),
     ]
     selector = SkillSelector()
-    assert selector.select("分析 SKU-001 的库存覆盖天数", catalog).selected.skill_key == "inventory-analysis"
-    assert selector.select("审查销售订单 SO-001", catalog).selected.skill_key == "sales-order-review"
-    assert selector.select("查一下公司的退货制度", catalog).selected.skill_key == "knowledge-research"
-    assert selector.select("你好", catalog).method == "NO_SKILL"
-    assert selector.select("我不想删除订单", catalog).selected is None
+    assert (await selector.select("分析 SKU-001 的库存覆盖天数", catalog)).selected.skill_key == "inventory-analysis"
+    assert (await selector.select("审查销售订单 SO-001", catalog)).selected.skill_key == "sales-order-review"
+    assert (await selector.select("查一下公司的退货制度", catalog)).selected.skill_key == "knowledge-research"
+    assert (await selector.select("你好", catalog)).method == "NO_SKILL"
+    assert (await selector.select("我不想删除订单", catalog)).selected is None
 
 
 def test_inventory_relative_date_is_deterministic_and_never_model_guessed() -> None:
@@ -273,9 +279,11 @@ async def test_chat_skill_session_binds_agent_tools_validates_output_and_evidenc
         database,  # type: ignore[arg-type]
         LoadedSkill(skill, version, {"references/inventory-rules.md": "只解释，不授权。"}),
         SkillSelection(
-            SkillCatalogEntry(10, 20, skill.skill_key, skill.name, skill.description, 1),
+            (SkillCatalogEntry(10, 20, skill.skill_key, skill.name, skill.description, 1),),
             "DETERMINISTIC_RULE",
             "matched",
+            1.0,
+            TaskClassifier().classify("库存分析"),
         ),
         row,
         {"sku_code": "SKU-001", "start_date": "2026-10-01", "end_date": "2026-10-31"},

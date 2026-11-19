@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -18,6 +19,7 @@ class SkillCatalogEntry:
     name: str
     description: str
     version: int
+    metadata: dict[str, Any] = field(default_factory=dict)
 
 
 class SkillCatalog:
@@ -40,6 +42,7 @@ class SkillCatalog:
                     Skill.description,
                     SkillVersion.version,
                     SkillVersion.required_permissions,
+                    SkillVersion.source_metadata,
                 )
                 .join(
                     SkillVersion,
@@ -66,6 +69,7 @@ class SkillCatalog:
                 name=row[3],
                 description=row[4],
                 version=row[5],
+                metadata=row[7] or {},
             )
             for row in rows
             if set(row[6]).issubset(permissions)

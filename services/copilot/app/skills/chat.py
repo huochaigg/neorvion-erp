@@ -13,6 +13,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.registry import build_agent_registry
+from app.ai.types import ChatAdapter
 from app.core.config import settings
 from app.core.exceptions import AppError
 from app.core.tenant import TenantContext
@@ -21,7 +22,16 @@ from app.mcp.security import validate_arguments
 from app.models.ecosystem import SkillRun
 from app.services.skill_execution import SkillExecutionService
 from app.skills.catalog import SkillCatalog
+from app.skills.classification import TaskClassifier
+from app.skills.inputs import SkillInputCollector
 from app.skills.loader import LoadedSkill, SkillRuntimeLoader
+from app.skills.orchestration import MultiSkillChatSession, prepare_multi_skill
+from app.skills.pending import (
+    PendingSkillPrompt,
+    PendingSkillService,
+    ResumedSkillInput,
+    ResumedSkillPlan,
+)
 from app.skills.selector import SkillSelection, SkillSelector
 from app.tools.registry import build_tool_registry
 
@@ -46,6 +56,8 @@ class ChatSkillSession:
             "skill_key": self.loaded.skill.skill_key,
             "skill_name": self.loaded.skill.name,
             "selection_method": self.selection.method,
+            "selection_reason": self.selection.reason,
+            "confidence": self.selection.confidence,
         }
 
     def apply_runtime(self, runtime: AgentRuntime) -> None:
@@ -97,7 +109,11 @@ class ChatSkillSession:
         events.extend(
             {
                 "event": "skill_resource_loaded",
-                "data": base | {"resource_path": path},
+                "data": base
+                | {
+                    "resource_path": path,
+                    "resource_metrics": self.loaded.resource_metrics.get(path, {}),
+                },
             }
             for path in self.loaded.loaded_resources
         )
@@ -120,6 +136,7 @@ class ChatSkillSession:
                 "evidence": evidence,
                 "tool_calls": tools.tool_events if tools is not None else [],
                 "loaded_resources": list(self.loaded.loaded_resources),
+                "resource_metrics": self.loaded.resource_metrics,
                 "execution": {
                     "agent_name": runtime.agent_name,
                     "skill_version_id": version.id,
@@ -151,6 +168,7 @@ class ChatSkillSession:
                 "evidence": tools.evidences if tools is not None else [],
                 "tool_calls": tools.tool_events if tools is not None else [],
                 "loaded_resources": list(self.loaded.loaded_resources),
+                "resource_metrics": self.loaded.resource_metrics,
             }
         )
         self.row.finished_at = datetime.now(UTC)
@@ -163,13 +181,20 @@ class ChatSkillSession:
 
 
 @asynccontextmanager
-async def skill_timeout(session: ChatSkillSession | None) -> AsyncIterator[None]:
+async def skill_timeout(
+    session: ChatSkillSession | MultiSkillChatSession | None,
+) -> AsyncIterator[None]:
     """只在 Skill 模式应用已审核版本超时；NO_SKILL 保持旧 Chat 语义。"""
     if session is None:
         yield
         return
     try:
-        async with asyncio.timeout(session.loaded.version.timeout_seconds):
+        timeout = (
+            session.loaded.version.timeout_seconds
+            if isinstance(session, ChatSkillSession)
+            else session.timeout_seconds
+        )
+        async with asyncio.timeout(timeout):
             yield
     except TimeoutError as exc:
         raise AppError("Chat Skill 执行超时", code=50484, status_code=504) from exc
@@ -184,17 +209,105 @@ async def prepare_chat_skill(
     *,
     conversation_id: int | None,
     message_id: int | None,
-) -> ChatSkillSession | None:
+    explicit_skill_key: str | None = None,
+    selector_adapter: ChatAdapter | None = None,
+) -> ChatSkillSession | MultiSkillChatSession | PendingSkillPrompt | None:
     """按 Metadata→Instructions→按需 Resources 三层加载，创建不重复计费的 Chat SkillRun。"""
     if not settings.skill_chat_enabled:
         return None
+    resumed: ResumedSkillInput | ResumedSkillPlan | None = None
+    if conversation_id is not None and settings.skill_pending_enabled:
+        pending_result = await PendingSkillService(db, context).resume(
+            conversation_id, task, request_id
+        )
+        if isinstance(pending_result, PendingSkillPrompt):
+            return pending_result
+        resumed = pending_result
     catalog = await SkillCatalog(db, context).available()
-    selection = SkillSelector().select(task, catalog)
-    if selection.selected is None:
+    selection = await SkillSelector().select(
+        task,
+        catalog,
+        explicit_skill_key=explicit_skill_key,
+        adapter=selector_adapter,
+    )
+    if isinstance(resumed, ResumedSkillInput):
+        selection = SkillSelection(
+            (resumed.entry,),
+            "RESUMED",
+            "从当前会话的持久化 Pending Skill 恢复并重新校验权限",
+            1.0,
+            TaskClassifier().classify(task),
+        )
+    elif isinstance(resumed, ResumedSkillPlan):
+        selection = SkillSelection(
+            resumed.entries,
+            "RESUMED",
+            "从当前会话的持久化 Pending Skill Plan 恢复并重新校验权限",
+            1.0,
+            TaskClassifier().classify(task),
+        )
+    if len(selection.selected_skills) > 1:
+        collected_inputs = resumed.values if isinstance(resumed, ResumedSkillPlan) else None
+        if collected_inputs is None and conversation_id is not None and settings.skill_pending_enabled:
+            collector = SkillInputCollector()
+            values: dict[str, dict[str, Any]] = {}
+            missing: dict[str, tuple[str, ...]] = {}
+            for selected_entry in selection.selected_skills:
+                selected_loaded = await SkillRuntimeLoader(db, context).load(selected_entry, task)
+                result = collector.collect(
+                    task,
+                    selected_loaded.version.input_schema,
+                )
+                values[selected_entry.skill_key] = result.values
+                if result.missing:
+                    missing[selected_entry.skill_key] = result.missing
+            if missing:
+                return await PendingSkillService(db, context).create_multi(
+                    conversation_id,
+                    selection.selected_skills,
+                    values,
+                    missing,
+                    request_id,
+                    _selection_snapshot(selection),
+                )
+            collected_inputs = values
+        return await prepare_multi_skill(
+            db,
+            context,
+            selection,
+            task,
+            request_id,
+            runtime,
+            conversation_id=conversation_id,
+            message_id=message_id,
+            collected_inputs=collected_inputs,
+        )
+    entry = resumed.entry if isinstance(resumed, ResumedSkillInput) else selection.selected
+    if entry is None:
         return None
-    loaded = await SkillRuntimeLoader(db, context).load(selection.selected, task)
-    validated_input = _extract_input(loaded.skill.skill_key, task)
-    validated_input = validate_arguments(loaded.version.input_schema, validated_input)
+    loaded = await SkillRuntimeLoader(db, context).load(entry, task)
+    collected = SkillInputCollector().collect(
+        task,
+        loaded.version.input_schema,
+        resumed.values if isinstance(resumed, ResumedSkillInput) else None,
+    )
+    if not collected.ready:
+        if conversation_id is not None and settings.skill_pending_enabled:
+            return await PendingSkillService(db, context).create(
+                conversation_id,
+                entry,
+                collected.values,
+                collected.missing,
+                collected.clarification or "请补充必填参数。",
+                request_id,
+                _selection_snapshot(selection),
+            )
+        raise AppError(
+            collected.clarification or "请补充 Skill 必填参数",
+            code=42291,
+            status_code=422,
+        )
+    validated_input = validate_arguments(loaded.version.input_schema, collected.values)
     if len(loaded.version.allowed_tools) == 1:
         spec = build_tool_registry().get(loaded.version.allowed_tools[0])
         if spec is not None:
@@ -220,6 +333,7 @@ async def prepare_chat_skill(
         conversation_id=conversation_id,
         message_id=message_id,
         selection_method=selection.method,
+        selection_snapshot=_selection_snapshot(selection),
         idempotency_key=key,
         status="RUNNING",
         input_snapshot=SkillExecutionService._redact(validated_input),
@@ -266,3 +380,17 @@ def _extract_input(skill_key: str, task: str) -> dict[str, Any]:
             raise AppError("请明确提供已授权的知识库 ID 后再执行知识研究", code=42291, status_code=422)
         return {"query": task, "knowledge_base_ids": list(dict.fromkeys(ids)), "top_k": 5}
     raise AppError("Skill 输入提取器不存在", code=50087, status_code=500)
+
+
+def _selection_snapshot(selection: SkillSelection) -> dict[str, Any]:
+    return {
+        "method": selection.method,
+        "reason": selection.reason,
+        "confidence": selection.confidence,
+        "classification": selection.classification.as_dict(),
+        "candidates": [
+            {"skill_key": item.skill_key, "score": item.score, "signals": list(item.signals)}
+            for item in selection.candidates
+        ],
+        "selected_skill_keys": [item.skill_key for item in selection.selected_skills],
+    }

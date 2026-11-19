@@ -98,6 +98,7 @@ class SkillExecutionService:
             idempotency_key=payload.idempotency_key,
             status="RUNNING",
             input_snapshot=self._redact(validated_input),
+            selection_snapshot={"method": "MANUAL", "reason": "管理员或业务用户显式运行"},
             started_at=datetime.now(UTC),
         )
         self.session.add(row)

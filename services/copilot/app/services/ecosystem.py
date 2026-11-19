@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import difflib
 import hashlib
 import io
 import json
@@ -20,7 +21,15 @@ from app.core.permissions import PermissionCode
 from app.core.tenant import TenantContext
 from app.mcp.security import validate_endpoint, validate_tool_schema
 from app.mcp.transport import StreamableHttpTransport
-from app.models.ecosystem import McpServer, McpToolVersion, Skill, SkillRun, SkillVersion
+from app.models.ecosystem import (
+    McpServer,
+    McpToolVersion,
+    Skill,
+    SkillExecutionPlan,
+    SkillExecutionPlanStep,
+    SkillRun,
+    SkillVersion,
+)
 from app.models.governance import AIGovernanceAudit
 from app.schemas.ecosystem import (
     McpServerCreate,
@@ -31,8 +40,11 @@ from app.schemas.ecosystem import (
     SkillCreate,
     SkillDetailOut,
     SkillOut,
+    SkillPlanOut,
+    SkillPlanStepOut,
     SkillRunOut,
     SkillTemplateImportOut,
+    SkillVersionDiffOut,
     SkillVersionIn,
     SkillVersionOut,
 )
@@ -498,9 +510,9 @@ class EcosystemService:
         row = await self._skill(skill_id, lock=True)
         version = await self._current_skill_version(row)
         if approved:
-            await self._validate_skill_dependencies(
-                SkillVersionIn.model_validate(version, from_attributes=True)
-            )
+            payload = SkillVersionIn.model_validate(version, from_attributes=True)
+            await self._validate_skill_dependencies(payload)
+            await self._validate_skill_graph(row, payload)
         version.approval_status = "APPROVED" if approved else "REJECTED"
         row.approval_status = version.approval_status
         row.enabled = False
@@ -513,6 +525,11 @@ class EcosystemService:
         row = await self._skill(skill_id, lock=True)
         if enabled and row.approval_status != "APPROVED":
             raise AppError("Skill 审核通过前不能启用", code=40984, status_code=409)
+        if enabled:
+            version = await self._current_skill_version(row)
+            payload = SkillVersionIn.model_validate(version, from_attributes=True)
+            await self._validate_skill_dependencies(payload)
+            await self._validate_skill_graph(row, payload)
         row.enabled = enabled
         row.updated_by = self.context.user_id
         self._audit(
@@ -520,6 +537,24 @@ class EcosystemService:
             "skill",
             str(row.id),
             {},
+        )
+        await self.session.commit()
+        return await self.skill(row.id)
+
+    async def set_skill_deprecated(self, skill_id: int, deprecated: bool) -> SkillDetailOut:
+        """标记弃用时立即禁止新选择；撤销弃用后必须重新审核，绝不恢复旧授权。"""
+        row = await self._skill(skill_id, lock=True)
+        version = await self._current_skill_version(row)
+        status = "DEPRECATED" if deprecated else "PENDING_APPROVAL"
+        row.approval_status = status
+        row.enabled = False
+        row.updated_by = self.context.user_id
+        version.approval_status = status
+        self._audit(
+            "SKILL_DEPRECATED" if deprecated else "SKILL_DEPRECATION_REVOKED",
+            "skill",
+            str(row.id),
+            {"version": version.version},
         )
         await self.session.commit()
         return await self.skill(row.id)
@@ -536,9 +571,9 @@ class EcosystemService:
         )
         if version is None:
             raise AppError("Skill 历史版本不存在", code=40484, status_code=404)
-        await self._validate_skill_dependencies(
-            SkillVersionIn.model_validate(version, from_attributes=True)
-        )
+        payload = SkillVersionIn.model_validate(version, from_attributes=True)
+        await self._validate_skill_dependencies(payload)
+        await self._validate_skill_graph(row, payload)
         row.current_version = version_number
         row.enabled = False
         row.approval_status = "PENDING_APPROVAL"
@@ -604,8 +639,81 @@ class EcosystemService:
             raise AppError("SkillRun 不存在", code=40485, status_code=404)
         return SkillRunOut.model_validate(row)
 
+    async def skill_plan(self, plan_id: int) -> SkillPlanOut:
+        filters = [
+            SkillExecutionPlan.tenant_id == self.context.tenant_id,
+            SkillExecutionPlan.id == plan_id,
+        ]
+        if PermissionCode.COPILOT_SKILL_MANAGE.value not in self.context.permission_codes:
+            filters.append(SkillExecutionPlan.user_id == self.context.user_id)
+        plan = await self.session.scalar(select(SkillExecutionPlan).where(*filters))
+        if plan is None:
+            raise AppError("Skill Plan 不存在", code=40488, status_code=404)
+        steps = (
+            await self.session.scalars(
+                select(SkillExecutionPlanStep)
+                .where(
+                    SkillExecutionPlanStep.tenant_id == self.context.tenant_id,
+                    SkillExecutionPlanStep.plan_id == plan.id,
+                )
+                .order_by(SkillExecutionPlanStep.position)
+            )
+        ).all()
+        return SkillPlanOut(
+            **SkillPlanOut.model_validate(plan).model_dump(exclude={"steps"}),
+            steps=[SkillPlanStepOut.model_validate(item) for item in steps],
+        )
+
+    async def skill_version_diff(
+        self, skill_id: int, from_version: int, to_version: int
+    ) -> SkillVersionDiffOut:
+        await self._skill(skill_id)
+        rows = (
+            await self.session.scalars(
+                select(SkillVersion).where(
+                    SkillVersion.tenant_id == self.context.tenant_id,
+                    SkillVersion.skill_id == skill_id,
+                    SkillVersion.version.in_({from_version, to_version}),
+                )
+            )
+        ).all()
+        versions = {item.version: item for item in rows}
+        if from_version not in versions or to_version not in versions:
+            raise AppError("Skill 对比版本不存在", code=40484, status_code=404)
+        before, after = versions[from_version], versions[to_version]
+        fields = (
+            "instructions",
+            "input_schema",
+            "output_schema",
+            "allowed_agents",
+            "required_permissions",
+            "allowed_tools",
+            "resources",
+            "source_metadata",
+            "timeout_seconds",
+            "token_budget",
+        )
+        changed = [name for name in fields if getattr(before, name) != getattr(after, name)]
+        lines = list(
+            difflib.unified_diff(
+                before.instructions.splitlines(),
+                after.instructions.splitlines(),
+                fromfile=f"v{from_version}",
+                tofile=f"v{to_version}",
+                lineterm="",
+            )
+        )[:500]
+        return SkillVersionDiffOut(
+            skill_id=skill_id,
+            from_version=from_version,
+            to_version=to_version,
+            changed_fields=changed,
+            instructions_diff=lines,
+        )
+
     async def _add_skill_version(self, row: Skill, payload: SkillVersionIn) -> SkillVersion:
         await self._validate_skill_dependencies(payload)
+        await self._validate_skill_graph(row, payload)
         version_number = row.current_version + 1
         canonical = self._skill_content(payload)
         version = SkillVersion(
@@ -670,6 +778,51 @@ class EcosystemService:
                     raise AppError("Skill 输入缺少工具必填参数", code=42286, status_code=422)
         validate_tool_schema(payload.input_schema)
         validate_tool_schema(payload.output_schema)
+
+    async def _validate_skill_graph(self, row: Skill, payload: SkillVersionIn) -> None:
+        """校验声明依赖存在、已审核且不会形成循环；依赖不会扩大本 Skill 权限。"""
+        dependencies = [str(item) for item in payload.source_metadata.get("dependencies", [])]
+        if row.skill_key in dependencies:
+            raise AppError("Skill 不能依赖自身", code=42288, status_code=422)
+        rows = (
+            await self.session.execute(
+                select(Skill, SkillVersion)
+                .join(
+                    SkillVersion,
+                    (SkillVersion.tenant_id == Skill.tenant_id)
+                    & (SkillVersion.skill_id == Skill.id)
+                    & (SkillVersion.version == Skill.current_version),
+                )
+                .where(Skill.tenant_id == self.context.tenant_id)
+            )
+        ).all()
+        known = {skill.skill_key: (skill, version) for skill, version in rows}
+        for key in dependencies:
+            pair = known.get(key)
+            if pair is None or pair[0].approval_status != "APPROVED" or pair[1].approval_status != "APPROVED":
+                raise AppError("Skill 依赖不存在或未审核", code=42288, status_code=422)
+            if not set(pair[1].required_permissions).issubset(payload.required_permissions):
+                raise AppError("Skill 依赖不能隐式扩大权限", code=42288, status_code=422)
+        graph = {
+            key: [str(item) for item in version.source_metadata.get("dependencies", [])]
+            for key, (_, version) in known.items()
+        }
+        graph[row.skill_key] = dependencies
+        visiting: set[str] = set()
+        visited: set[str] = set()
+
+        def visit(key: str) -> None:
+            if key in visiting:
+                raise AppError("Skill 依赖存在循环", code=42288, status_code=422)
+            if key in visited:
+                return
+            visiting.add(key)
+            for dependency in graph.get(key, []):
+                visit(dependency)
+            visiting.remove(key)
+            visited.add(key)
+
+        visit(row.skill_key)
 
     @staticmethod
     def _skill_content(payload: SkillVersionIn) -> str:

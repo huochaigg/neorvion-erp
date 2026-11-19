@@ -17,11 +17,14 @@ export function SkillRunCard({ runs }: { runs: SkillRunSummary[] }) {
             </div>
             <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-slate-500">
               <span>SkillRun #{run.id}</span>
+              {run.plan_id ? <span>Plan #{run.plan_id} · {run.plan_step_key}</span> : null}
               {run.selection_method ? <span>{run.selection_method}</span> : null}
               {run.loaded_resources.map((item) => (
                 <span key={item} className="inline-flex items-center gap-1"><BookOpen size={11} />{item}</span>
               ))}
             </div>
+            {run.selection_reason ? <div className="mt-1 text-slate-500">{run.selection_reason}</div> : null}
+            {run.missing_fields?.length ? <div className="mt-1 text-amber-700">待补参数：{run.missing_fields.join('、')}</div> : null}
             {run.safe_error ? <div className="mt-1 text-rose-600">{run.safe_error}</div> : null}
           </div>
         );

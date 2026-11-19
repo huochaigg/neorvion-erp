@@ -25,11 +25,13 @@ from app.schemas.ecosystem import (
     SkillCreate,
     SkillDetailOut,
     SkillOut,
+    SkillPlanOut,
     SkillRollbackIn,
     SkillRunIn,
     SkillRunOut,
     SkillTemplateImportIn,
     SkillTemplateImportOut,
+    SkillVersionDiffOut,
     SkillVersionIn,
 )
 from app.services.ecosystem import EcosystemService
@@ -179,6 +181,31 @@ async def get_skill_run(
     return ok(await _service(request, db, context).skill_run(skill_id, run_id))
 
 
+@router.get("/skill-plans/{plan_id}", response_model=ApiResponse[SkillPlanOut])
+async def get_skill_plan(
+    plan_id: int, request: Request, context: SkillReadContext, db: DbSession
+):
+    return ok(await _service(request, db, context).skill_plan(plan_id))
+
+
+@router.get(
+    "/skills/{skill_id}/versions/diff", response_model=ApiResponse[SkillVersionDiffOut]
+)
+async def diff_skill_versions(
+    skill_id: int,
+    from_version: int,
+    to_version: int,
+    request: Request,
+    context: SkillReadContext,
+    db: DbSession,
+):
+    return ok(
+        await _service(request, db, context).skill_version_diff(
+            skill_id, from_version, to_version
+        )
+    )
+
+
 @router.post("/skills/{skill_id}/versions", response_model=ApiResponse[SkillDetailOut])
 async def create_skill_version(
     skill_id: int,
@@ -221,6 +248,21 @@ async def rollback_skill(
     db: DbSession,
 ):
     return ok(await _service(request, db, context).rollback_skill(skill_id, payload.version))
+
+
+@router.post("/skills/{skill_id}/deprecated", response_model=ApiResponse[SkillDetailOut])
+async def deprecate_skill(
+    skill_id: int,
+    payload: McpApprovalIn,
+    request: Request,
+    context: SkillManageContext,
+    db: DbSession,
+):
+    return ok(
+        await _service(request, db, context).set_skill_deprecated(
+            skill_id, payload.approved
+        )
+    )
 
 
 @router.post("/skills/{skill_id}/runs", response_model=ApiResponse[SkillRunOut])

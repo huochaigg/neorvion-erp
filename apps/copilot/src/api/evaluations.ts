@@ -114,6 +114,9 @@ export const importV8EvaluationCases = (datasetId: number) =>
 export const importV9EvaluationCases = (datasetId: number) =>
   unwrap(api.post(`/api/v1/evaluations/datasets/${datasetId}/cases/import-v9`));
 
+export const importV14SkillCases = (datasetId: number) =>
+  unwrap(api.post(`/api/v1/evaluations/datasets/${datasetId}/cases/import-v14-skills`));
+
 export const freezeEvaluationDataset = (id: number) =>
   unwrap(api.post(`/api/v1/evaluations/datasets/${id}/freeze`));
 
@@ -132,6 +135,12 @@ export const createEvaluationRun = (payload: {
   mode: 'SINGLE' | 'MULTI' | 'AUTO';
   execution_kind: 'REPLAY' | 'LIVE';
   idempotency_key: string;
+  config?: {
+    selector_profile?: 'BASELINE' | 'BASIC' | 'HYBRID';
+    selector_threshold?: number;
+    skill_version_overrides?: Record<string, number>;
+    skill_enabled?: boolean;
+  };
 }) =>
   unwrap(api.post('/api/v1/evaluations/runs', payload)).then(
     (value) => value as EvaluationRun,
@@ -166,3 +175,8 @@ export interface EvaluationComparison {
 
 export const getAgentTrace = (id: number, signal?: AbortSignal) =>
   unwrap(api.get(`/api/v1/agent-runs/${id}/trace`, { signal }));
+
+export const getSkillEvaluationDiagnostics = (id: number, signal?: AbortSignal) =>
+  unwrap(api.get(`/api/v1/evaluations/runs/${id}/skill-diagnostics`, { signal })).then(
+    (value) => value as { run_id: number; failures: Array<{ category: string; count: number; case_keys: string[]; suggestion: string }>; automatic_change_applied: false },
+  );

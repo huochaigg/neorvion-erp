@@ -13,6 +13,11 @@ class ChatMessageIn(BaseModel):
 
 
 class ChatRequest(BaseModel):
+    skill_key: str | None = Field(
+        default=None,
+        pattern=r"^[a-z][a-z0-9-]{2,79}$",
+        description="用户显式指定的 Skill Key；服务端仍会重新检查租户、审核和权限",
+    )
     messages: list[ChatMessageIn] = Field(
         default_factory=list,
         description="本次请求携带的有限上下文，最后一条必须是 user",

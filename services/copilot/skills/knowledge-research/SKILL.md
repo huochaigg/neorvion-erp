@@ -6,6 +6,7 @@ compatibility: Neorvion Copilot with authorized Knowledge service access
 metadata:
   neorvion-category: knowledge
   neorvion-risk: read-only
+  neorvion-resource-triggers: 引用,来源,依据,citation,source
 ---
 
 # 授权知识研究

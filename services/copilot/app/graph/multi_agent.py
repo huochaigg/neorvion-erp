@@ -29,6 +29,7 @@ class MultiAgentState(TypedDict, total=False):
     route_mode: str
     route_reason: str
     planned_agents: list[str]
+    planned_agent_groups: list[list[tuple[str, str]]]
     agent_name: str
     task_id: str
     prior_results: list[AgentResult]
@@ -68,12 +69,14 @@ class MultiAgentWorkflow:
         builder.add_node("route", self._route)
         builder.add_node("single", self._single)
         builder.add_node("specialist", self._specialist)
+        builder.add_node("skill_plan", self._skill_plan)
         builder.add_node("procurement", self._procurement)
         builder.add_node("synthesize", self._synthesize)
         builder.add_edge(START, "route")
         builder.add_conditional_edges("route", self._after_route)
         builder.add_edge("single", END)
         builder.add_edge("specialist", "procurement")
+        builder.add_edge("skill_plan", "synthesize")
         builder.add_conditional_edges("procurement", self._after_procurement)
         builder.add_edge("synthesize", END)
         self.graph = builder.compile()
@@ -108,6 +111,19 @@ class MultiAgentWorkflow:
             if all(item in permissions for item in self.registry.get(name).required_permissions)
         ][: min(settings.multi_agent_max_agents, settings.multi_agent_max_parallel + 1)]
         mode = decision.mode
+        plan_groups = runtime.context.skill_agent_groups
+        if plan_groups:
+            requested = {agent for group in plan_groups for agent, _ in group}
+            # Skill Runtime 在进入 Graph 前已验证 Skill/Agent/IAM；这里再次按 Agent 权限收窄。
+            authorized = {
+                name
+                for name in requested
+                if all(item in permissions for item in self.registry.get(name).required_permissions)
+            }
+            if authorized != requested:
+                raise AppError("Skill Plan 包含无权限专业 Agent", code=40388, status_code=403)
+            mode = "skill_plan"
+            permitted = [agent for group in plan_groups for agent, _ in group]
         if (
             not settings.multi_agent_enabled
             or not runtime.context.allow_multi_agent
@@ -133,10 +149,13 @@ class MultiAgentWorkflow:
             "route_mode": mode,
             "route_reason": decision.reason,
             "planned_agents": permitted,
+            "planned_agent_groups": plan_groups or [],
             "results": [],
         }
 
     def _after_route(self, state: MultiAgentState) -> str | list[Send]:
+        if state.get("route_mode") == "skill_plan":
+            return "skill_plan"
         if state.get("route_mode") != "multi":
             return "single"
         initial = [
@@ -156,6 +175,32 @@ class MultiAgentWorkflow:
             )
             for index, name in enumerate(initial)
         ]
+
+    async def _skill_plan(
+        self, state: MultiAgentState, runtime: Runtime[AgentRuntime]
+    ) -> dict[str, list[AgentResult]]:
+        """按服务端已验证 DAG 的拓扑层执行；同层并行、跨层顺序传递结构化结果。"""
+        groups = runtime.context.skill_agent_groups or []
+        results: list[AgentResult] = []
+        original = str(state.get("query") or "")
+        for group in groups:
+            if await runtime.context.disconnected():
+                raise AppError("客户端已断开", code=49900, status_code=499)
+            prior = json.dumps(
+                [item.model_dump(mode="json", exclude={"evidences"}) for item in results],
+                ensure_ascii=False,
+            )[: settings.multi_agent_result_chars]
+            query = original if not prior else f"用户任务：{original}\n已完成依赖步骤：{prior}"
+            batch = await asyncio.gather(
+                *(
+                    self._run_specialist(agent, task_id, query, runtime)
+                    for agent, task_id in group
+                )
+            )
+            results.extend(batch)
+            if not any(item.status == "SUCCEEDED" for item in batch):
+                break
+        return {"results": results}
 
     async def _single(
         self, state: MultiAgentState, runtime: Runtime[AgentRuntime]
@@ -267,6 +312,10 @@ class MultiAgentWorkflow:
             if runtime.context.tools.mcp_gateway is not None
             else frozenset()
         )
+        parent_allowed = runtime.context.tools.allowed_tools
+        specialist_tools = spec.allowed_tools | dynamic_tools
+        if parent_allowed is not None:
+            specialist_tools &= parent_allowed
         tool_runtime = replace(
             runtime.context.tools,
             started_at=time.monotonic(),
@@ -275,7 +324,7 @@ class MultiAgentWorkflow:
             proposal_service=None,
             conversation_id=None,
             source_message_id=None,
-            allowed_tools=spec.allowed_tools | dynamic_tools,
+            allowed_tools=specialist_tools,
             max_calls_override=spec.max_tool_calls,
             agent_name=agent_name,
         )
@@ -336,7 +385,7 @@ class MultiAgentWorkflow:
                 tool_calls=tool_runtime.calls,
                 evidence_count=len(tool_runtime.evidences),
             )
-            return AgentResult(
+            result = AgentResult(
                 agent_name=agent_name,
                 task_id=task_id,
                 status="FAILED",
@@ -345,6 +394,9 @@ class MultiAgentWorkflow:
                 error_code=code,
                 duration_ms=duration,
             )
+            if runtime.context.agent_results is not None:
+                runtime.context.agent_results.append(result)
+            return result
         duration = round((time.monotonic() - started) * 1000)
         self._emit_agent(
             runtime,
@@ -358,7 +410,7 @@ class MultiAgentWorkflow:
             evidence_count=len(tool_runtime.evidences),
             usage=usage,
         )
-        return AgentResult(
+        result = AgentResult(
             agent_name=agent_name,
             task_id=task_id,
             status="SUCCEEDED",
@@ -367,6 +419,9 @@ class MultiAgentWorkflow:
             usage=usage,
             duration_ms=duration,
         )
+        if runtime.context.agent_results is not None:
+            runtime.context.agent_results.append(result)
+        return result
 
     async def _synthesize(
         self, state: MultiAgentState, runtime: Runtime[AgentRuntime]

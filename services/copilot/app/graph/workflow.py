@@ -10,6 +10,7 @@ from typing import cast
 from langgraph.graph import END, START, StateGraph
 from langgraph.runtime import Runtime
 
+from app.agents.schemas import AgentResult
 from app.ai.types import (
     ChatAdapter,
     ModelMessage,
@@ -51,6 +52,8 @@ class AgentRuntime:
     model_calls: int = 0
     max_model_calls: int | None = None
     allow_multi_agent: bool = True
+    agent_results: list[AgentResult] | None = None
+    skill_agent_groups: list[list[tuple[str, str]]] | None = None
 
 
 class CopilotWorkflow:
