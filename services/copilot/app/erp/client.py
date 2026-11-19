@@ -24,7 +24,11 @@ class ErpApiClient:
     ) -> None:
         self.base_url = base_url.rstrip("/")
         timeout = httpx.Timeout(read_timeout, connect=connect_timeout)
-        self._client = httpx.AsyncClient(timeout=timeout, transport=transport)
+        self._client = httpx.AsyncClient(
+            timeout=timeout,
+            transport=transport,
+            trust_env=False,
+        )
 
     async def get(
         self,

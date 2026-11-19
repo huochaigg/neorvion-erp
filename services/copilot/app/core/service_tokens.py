@@ -54,7 +54,7 @@ class ServiceTokenClient:
             if not self.token_url or not self.service_id or not self.client_secret:
                 raise AppError("后台服务身份未配置，周期任务保持禁用", code=50391, status_code=503)
             try:
-                async with httpx.AsyncClient(timeout=5.0) as client:
+                async with httpx.AsyncClient(timeout=5.0, trust_env=False) as client:
                     response = await client.post(
                         self.token_url,
                         json={

@@ -26,6 +26,18 @@ def make_client(handler) -> ErpApiClient:
     )
 
 
+def test_internal_http_clients_ignore_system_proxy() -> None:
+    erp = make_client(lambda request: httpx.Response(200, json={"code": 0, "data": {}}))
+    knowledge = KnowledgeApiClient(
+        base_url="https://knowledge.test",
+        connect_timeout=1,
+        read_timeout=1,
+        transport=httpx.MockTransport(lambda request: httpx.Response(200)),
+    )
+    assert erp._client._trust_env is False
+    assert knowledge._client._trust_env is False
+
+
 def runtime(*permissions: str, token: str = "user-token", audience: bool = True) -> ToolRuntime:
     return ToolRuntime(
         tenant=make_context(extra_permissions=set(permissions)),
