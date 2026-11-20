@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import io
 import os
+import zipfile
 from datetime import UTC, datetime
+from pathlib import Path
 
 import pytest
 from app.core.config import settings
@@ -9,9 +12,10 @@ from app.core.exceptions import AppError
 from app.core.tenant import TenantContext
 from app.db.base import Base
 from app.db.isolation import REGISTRY
-from app.schemas.ecosystem import SkillRunIn
+from app.schemas.ecosystem import SkillRunIn, SkillVersionIn
 from app.services.ecosystem import EcosystemService
 from app.services.skill_execution import SkillExecutionService
+from app.skills.catalog import SkillCatalog
 from neorvion_db import TenantAsyncSession
 from sqlalchemy.engine import make_url
 from sqlalchemy.ext.asyncio import create_async_engine
@@ -149,5 +153,76 @@ async def test_skill_template_import_run_idempotency_and_tenant_isolation_in_pos
             assert tenant_error.value.status_code == 404
         finally:
             await other_session.close()
+    finally:
+        await engine.dispose()
+
+
+def _dynamic_package(key: str) -> bytes:
+    root = Path(__file__).parent / "fixtures" / "skills" / key
+    output = io.BytesIO()
+    with zipfile.ZipFile(output, "w") as archive:
+        for source in sorted(root.rglob("*")):
+            if source.is_file():
+                archive.write(source, f"{key}/{source.relative_to(root).as_posix()}")
+    return output.getvalue()
+
+
+@pytest.mark.asyncio
+async def test_dynamic_package_catalog_lifecycle_and_version_switch_in_postgres() -> None:
+    """真实数据库证明动态包无需修改 Selector/Catalog 即可进入当前租户目录。"""
+    engine = create_async_engine(_integration_url())
+    try:
+        async with engine.begin() as connection:
+            await connection.run_sync(Base.metadata.drop_all)
+            await connection.run_sync(Base.metadata.create_all)
+        permissions = {
+            "copilot:skill:read",
+            "copilot:skill:run",
+            "copilot:skill:manage",
+            "inventory:read",
+            "analytics:sales:read",
+        }
+        context = _context(1431, 1441, permissions)
+        session = TenantAsyncSession(
+            1431, registry=REGISTRY, bind=engine, expire_on_commit=False, autoflush=False
+        )
+        try:
+            service = EcosystemService(session, context, "v14-3-dynamic")
+            assert await SkillCatalog(session, context).available() == []
+            imported = await service.import_skill_package(
+                _dynamic_package("inventory-coverage-summary")
+            )
+            assert imported.status == "IMPORTED"
+            assert await SkillCatalog(session, context).available() == []
+            await service.review_skill(imported.skill_id, True)
+            assert await SkillCatalog(session, context).available() == []
+            await service.set_skill_enabled(imported.skill_id, True)
+            first_catalog = await SkillCatalog(session, context).available()
+            assert [item.skill_key for item in first_catalog] == [
+                "inventory-coverage-summary"
+            ]
+            assert first_catalog[0].version == 1
+
+            detail = await service.skill(imported.skill_id)
+            version_data = detail.versions[0].model_dump()
+            payload = SkillVersionIn.model_validate(
+                {key: version_data[key] for key in SkillVersionIn.model_fields}
+            ).model_copy(
+                update={
+                    "instructions": detail.versions[0].instructions
+                    + "\n新版本必须额外说明数据观察时间。"
+                }
+            )
+            await service.add_skill_version(imported.skill_id, payload)
+            assert await SkillCatalog(session, context).available() == []
+            await service.review_skill(imported.skill_id, True)
+            await service.set_skill_enabled(imported.skill_id, True)
+            latest = await SkillCatalog(session, context).available()
+            assert latest[0].version == 2
+            await service.set_skill_enabled(imported.skill_id, False)
+            assert await SkillCatalog(session, context).available() == []
+            assert len((await service.skill(imported.skill_id)).versions) == 2
+        finally:
+            await session.close()
     finally:
         await engine.dispose()

@@ -13,9 +13,10 @@ from app.core.tenant import TenantContext
 from app.graph.workflow import AgentRuntime
 from app.models.ecosystem import Skill, SkillRun, SkillVersion
 from app.services.ecosystem import EcosystemService
-from app.skills.catalog import SkillCatalog, SkillCatalogEntry
-from app.skills.chat import ChatSkillSession, _extract_input, prepare_chat_skill
+from app.skills.catalog import SkillCatalog, SkillCatalogEntry, SkillCatalogSnapshot
+from app.skills.chat import ChatSkillSession, prepare_chat_skill
 from app.skills.classification import TaskClassifier
+from app.skills.inputs import SkillInputCollector
 from app.skills.loader import LoadedSkill, SkillRuntimeLoader
 from app.skills.parser import SkillParser
 from app.skills.selector import SkillSelection, SkillSelector
@@ -181,7 +182,18 @@ async def test_selector_is_conservative_and_supports_no_skill() -> None:
 
 
 def test_inventory_relative_date_is_deterministic_and_never_model_guessed() -> None:
-    value = _extract_input("inventory-analysis", "分析 SKU-001 最近30天库存风险")
+    value = SkillInputCollector().collect(
+        "分析 SKU-001 最近30天库存风险",
+        {
+            "type": "object",
+            "properties": {
+                "sku_code": {"type": "string"},
+                "start_date": {"type": "string", "format": "date"},
+                "end_date": {"type": "string", "format": "date"},
+            },
+            "required": ["sku_code", "start_date", "end_date"],
+        },
+    ).values
     assert value["sku_code"] == "SKU-001"
     start = datetime.fromisoformat(value["start_date"]).date()
     end = datetime.fromisoformat(value["end_date"]).date()
@@ -211,11 +223,11 @@ async def test_feature_flag_off_keeps_old_chat_without_touching_catalog(
 async def test_no_skill_falls_back_to_old_chat_when_flag_is_on(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    async def empty_catalog(_self) -> list[SkillCatalogEntry]:
-        return []
+    async def empty_catalog(_self) -> SkillCatalogSnapshot:
+        return SkillCatalogSnapshot((), 0, 0, {})
 
     monkeypatch.setattr(settings, "skill_chat_enabled", True)
-    monkeypatch.setattr(SkillCatalog, "available", empty_catalog)
+    monkeypatch.setattr(SkillCatalog, "snapshot", empty_catalog)
     assert (
         await prepare_chat_skill(
             SimpleNamespace(),  # type: ignore[arg-type]

@@ -11,6 +11,8 @@ export interface SkillPlanStep { id:number;step_key:string;position:number;skill
 export interface SkillPlan { id:number;conversation_id:number;message_id:number;status:string;classification:Record<string,unknown>;selection_snapshot:Record<string,unknown>;budget_snapshot:Record<string,unknown>;steps:SkillPlanStep[];safe_error?:string|null }
 export interface SkillVersionDiff { skill_id:number;from_version:number;to_version:number;changed_fields:string[];instructions_diff:string[] }
 export interface SkillTemplateImportResult { skill_key: string; skill_id: number; version: number; status: 'IMPORTED' | 'UNCHANGED' | 'PROTECTED' }
+export interface RunnableSkill { skill_id:number;version_id:number;skill_key:string;name:string;description:string;version:number;category:string;required_permissions:string[] }
+export interface RunnableSkillCatalog { auto_available:boolean;default_mode:'AUTO'|'NONE';selector_profile:string;query_latency_ms:number;items:RunnableSkill[] }
 
 export const listMcpServers = (signal?: AbortSignal) => unwrap<McpServer[]>(api.get('/api/v1/ecosystem/mcp/servers', { signal }));
 export const createMcpServer = (payload: Record<string, unknown>) => unwrap<McpServer>(api.post('/api/v1/ecosystem/mcp/servers', payload));
@@ -21,6 +23,7 @@ export const setMcpServerEnabled = (id: number, approved: boolean) => unwrap<Mcp
 export const listMcpTools = (signal?: AbortSignal) => unwrap<McpTool[]>(api.get('/api/v1/ecosystem/mcp/tools', { signal }));
 export const reviewMcpTool = (id: number, approved: boolean) => unwrap<McpTool>(api.post(`/api/v1/ecosystem/mcp/tools/${id}/review`, { approved, required_permissions: [], resource_requirements: {}, allowed_agents: [], timeout_seconds: 10 }));
 export const listSkills = (signal?: AbortSignal) => unwrap<Skill[]>(api.get('/api/v1/ecosystem/skills', { signal }));
+export const discoverRunnableSkills = (signal?: AbortSignal) => unwrap<RunnableSkillCatalog>(api.get('/api/v1/ecosystem/skills/catalog', { signal }));
 export const createSkill = (payload: Record<string, unknown>) => unwrap<Skill>(api.post('/api/v1/ecosystem/skills', payload));
 export const reviewSkill = (id: number, approved: boolean) => unwrap<Skill>(api.post(`/api/v1/ecosystem/skills/${id}/review`, { approved }));
 export const getSkill = (id: number, signal?: AbortSignal) => unwrap<SkillDetail>(api.get(`/api/v1/ecosystem/skills/${id}`, { signal }));

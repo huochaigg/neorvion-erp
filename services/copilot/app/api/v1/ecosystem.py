@@ -8,11 +8,13 @@ from app.api.deps import (
     DbSession,
     McpManageContext,
     McpReadContext,
+    SkillDiscoverContext,
     SkillManageContext,
     SkillReadContext,
     SkillRunContext,
     WorkflowDep,
 )
+from app.core.config import settings
 from app.core.exceptions import AppError
 from app.schemas.common import ApiResponse, ok
 from app.schemas.ecosystem import (
@@ -22,6 +24,8 @@ from app.schemas.ecosystem import (
     McpServerPatch,
     McpToolOut,
     McpToolReviewIn,
+    SkillCatalogItemOut,
+    SkillCatalogOut,
     SkillCreate,
     SkillDetailOut,
     SkillOut,
@@ -36,6 +40,7 @@ from app.schemas.ecosystem import (
 )
 from app.services.ecosystem import EcosystemService
 from app.services.skill_execution import SkillExecutionService
+from app.skills.catalog import SkillCatalog
 
 router = APIRouter(prefix="/ecosystem", tags=["copilot-ecosystem"])
 
@@ -127,6 +132,34 @@ async def review_tool(
 @router.get("/skills", response_model=ApiResponse[list[SkillOut]])
 async def list_skills(request: Request, context: SkillReadContext, db: DbSession):
     return ok(await _service(request, db, context).skills())
+
+
+@router.get("/skills/catalog", response_model=ApiResponse[SkillCatalogOut])
+async def discover_skill_catalog(context: SkillDiscoverContext, db: DbSession):
+    """返回普通用户当前可运行的轻量目录，不暴露 Instructions、References 或他租户信息。"""
+    snapshot = await SkillCatalog(db, context).snapshot()
+    auto = settings.skill_chat_enabled
+    return ok(
+        SkillCatalogOut(
+            auto_available=auto,
+            default_mode="AUTO" if auto else "NONE",
+            selector_profile=settings.skill_selector_mode.upper(),
+            query_latency_ms=snapshot.query_latency_ms,
+            items=[
+                SkillCatalogItemOut(
+                    skill_id=item.skill_id,
+                    version_id=item.version_id,
+                    skill_key=item.skill_key,
+                    name=item.name,
+                    description=item.description,
+                    version=item.version,
+                    category=item.category,
+                    required_permissions=list(item.required_permissions),
+                )
+                for item in snapshot.entries
+            ],
+        )
+    )
 
 
 @router.post("/skills", response_model=ApiResponse[SkillDetailOut])

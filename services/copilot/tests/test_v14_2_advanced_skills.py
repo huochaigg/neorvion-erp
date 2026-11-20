@@ -53,8 +53,8 @@ async def test_hybrid_selector_is_catalog_driven_and_supports_explicit(
     explicit = await selector.select("请处理这个任务", _catalog(), explicit_skill_key="supplier-risk")
     assert explicit.method == "EXPLICIT"
     assert explicit.confidence == 1
-    unavailable = await selector.select("请处理", _catalog(), explicit_skill_key="not-authorized")
-    assert unavailable.method == "NO_SKILL"
+    with pytest.raises(AppError, match="无权运行"):
+        await selector.select("请处理", _catalog(), explicit_skill_key="not-authorized")
 
 
 @pytest.mark.asyncio
@@ -89,7 +89,10 @@ class _SelectorAdapter:
         yield ChatDelta(
             text='{"selected_skill_keys":["knowledge-research"],"confidence":0.91,"reason":"制度查询"}'
         )
-        yield ChatDelta(finished=True)
+        yield ChatDelta(
+            finished=True,
+            usage={"prompt_tokens": 12, "completion_tokens": 5},
+        )
 
 
 @pytest.mark.asyncio
@@ -109,6 +112,7 @@ async def test_llm_selector_output_is_schema_and_candidate_constrained(
     assert result.method == "LLM"
     assert result.selected is not None
     assert result.selected.skill_key == "knowledge-research"
+    assert result.llm_usage == {"prompt_tokens": 12, "completion_tokens": 5}
 
 
 def test_input_collector_preserves_confirmed_fields_and_supports_correction() -> None:
@@ -159,7 +163,7 @@ def test_skill_evaluation_metrics_and_hundred_case_catalog() -> None:
         "transport_success": True,
         "agent_completed": True,
         "selected_skill_keys": ["inventory-analysis", "knowledge-research"],
-        "selection_method": "SEMANTIC",
+        "selection_method": "LEXICAL",
         "plan_valid": True,
         "plan_steps": 2,
         "multi_skill_success": True,
@@ -172,7 +176,7 @@ def test_skill_evaluation_metrics_and_hundred_case_catalog() -> None:
     aggregate = aggregate_metrics([{"task_outcome": outcome, "metrics": metrics}])
     assert aggregate["multi_skill_task_success_rate"]["value"] == 1
     bases = AgentEvaluationService._v14_skill_case_bases()
-    assert len(bases) == 10
+    assert len(bases) == 30
     inventory_profiles = bases[0]["scenario_config"]["replay_by_profile"]
     assert inventory_profiles["BASELINE"]["selected_skill_keys"] == []
     assert inventory_profiles["HYBRID"]["selected_skill_keys"] == ["inventory-analysis"]

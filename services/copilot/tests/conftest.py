@@ -62,6 +62,12 @@ def make_context(
 @pytest.fixture
 def client(monkeypatch: pytest.MonkeyPatch) -> Iterator[TestClient]:
     monkeypatch.setattr("app.api.v1.health.ping_iam_store", lambda: False)
+
+    async def load_empty_mcp_gateway(*_args, **_kwargs):
+        """API 单测不连接治理数据库；MCP Gateway 在其专属测试中覆盖。"""
+        return None
+
+    monkeypatch.setattr("app.api.v1.chat.McpGateway.load", load_empty_mcp_gateway)
     with TestClient(app, backend_options=_testclient_backend_options()) as test_client:
         yield test_client
     app.dependency_overrides.clear()

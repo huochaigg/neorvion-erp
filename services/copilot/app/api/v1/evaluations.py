@@ -187,6 +187,11 @@ async def skill_diagnostics(run_id: int, context: EvaluationReadContext, db: DbS
     return ok(await _service(db, context).skill_diagnostics(run_id))
 
 
+@router.get("/runs/{run_id}/skill-report", response_model=ApiResponse[dict])
+async def skill_report(run_id: int, context: EvaluationReadContext, db: DbSession):
+    return ok(await _service(db, context).skill_report(run_id))
+
+
 @router.post("/runs/{run_id}/pause", response_model=ApiResponse[EvaluationRunOut])
 async def pause_run(run_id: int, context: EvaluationManageContext, db: DbSession):
     return ok(await _service(db, context).pause(run_id))

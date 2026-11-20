@@ -1,11 +1,10 @@
 from __future__ import annotations
 
 import asyncio
-import re
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from typing import Any
 
 from pydantic import ValidationError
@@ -209,12 +208,24 @@ async def prepare_chat_skill(
     *,
     conversation_id: int | None,
     message_id: int | None,
+    skill_mode: str = "AUTO",
     explicit_skill_key: str | None = None,
     selector_adapter: ChatAdapter | None = None,
 ) -> ChatSkillSession | MultiSkillChatSession | PendingSkillPrompt | None:
     """按 Metadata→Instructions→按需 Resources 三层加载，创建不重复计费的 Chat SkillRun。"""
-    if not settings.skill_chat_enabled:
+    mode = skill_mode.upper()
+    if mode not in {"AUTO", "MANUAL", "NONE"}:
+        raise AppError("Skill 选择模式无效", code=42296, status_code=422)
+    if mode == "NONE":
+        if conversation_id is not None and settings.skill_pending_enabled:
+            await PendingSkillService(db, context).cancel_active(conversation_id, request_id)
         return None
+    if not settings.skill_chat_enabled:
+        if mode == "MANUAL":
+            raise AppError("会话 Skill 功能当前未启用", code=40397, status_code=403)
+        return None
+    if mode == "MANUAL" and explicit_skill_key is None:
+        raise AppError("手动 Skill 模式必须指定 Skill", code=42296, status_code=422)
     resumed: ResumedSkillInput | ResumedSkillPlan | None = None
     if conversation_id is not None and settings.skill_pending_enabled:
         pending_result = await PendingSkillService(db, context).resume(
@@ -223,12 +234,29 @@ async def prepare_chat_skill(
         if isinstance(pending_result, PendingSkillPrompt):
             return pending_result
         resumed = pending_result
-    catalog = await SkillCatalog(db, context).available()
+    if (
+        isinstance(resumed, ResumedSkillInput)
+        and explicit_skill_key is not None
+        and explicit_skill_key != resumed.entry.skill_key
+    ) or (isinstance(resumed, ResumedSkillPlan) and explicit_skill_key is not None):
+        raise AppError(
+            "当前会话存在其他待补全 Skill；请先选择 NONE 取消，再开始新任务",
+            code=40988,
+            status_code=409,
+        )
+    catalog_snapshot = await SkillCatalog(db, context).snapshot()
+    catalog = list(catalog_snapshot.entries)
     selection = await SkillSelector().select(
         task,
         catalog,
         explicit_skill_key=explicit_skill_key,
         adapter=selector_adapter,
+        catalog_trace={
+            "query_latency_ms": catalog_snapshot.query_latency_ms,
+            "scanned_count": catalog_snapshot.scanned_count,
+            "available_count": len(catalog_snapshot.entries),
+            "filtered_reasons": catalog_snapshot.filtered_reasons,
+        },
     )
     if isinstance(resumed, ResumedSkillInput):
         selection = SkillSelection(
@@ -237,6 +265,12 @@ async def prepare_chat_skill(
             "从当前会话的持久化 Pending Skill 恢复并重新校验权限",
             1.0,
             TaskClassifier().classify(task),
+            catalog_trace={
+                "query_latency_ms": catalog_snapshot.query_latency_ms,
+                "scanned_count": catalog_snapshot.scanned_count,
+                "available_count": len(catalog_snapshot.entries),
+                "filtered_reasons": catalog_snapshot.filtered_reasons,
+            },
         )
     elif isinstance(resumed, ResumedSkillPlan):
         selection = SkillSelection(
@@ -245,6 +279,12 @@ async def prepare_chat_skill(
             "从当前会话的持久化 Pending Skill Plan 恢复并重新校验权限",
             1.0,
             TaskClassifier().classify(task),
+            catalog_trace={
+                "query_latency_ms": catalog_snapshot.query_latency_ms,
+                "scanned_count": catalog_snapshot.scanned_count,
+                "available_count": len(catalog_snapshot.entries),
+                "filtered_reasons": catalog_snapshot.filtered_reasons,
+            },
         )
     if len(selection.selected_skills) > 1:
         collected_inputs = resumed.values if isinstance(resumed, ResumedSkillPlan) else None
@@ -347,41 +387,6 @@ async def prepare_chat_skill(
     return session
 
 
-def _extract_input(skill_key: str, task: str) -> dict[str, Any]:
-    """只提取用户明确给出的业务参数；缺失时要求补充，绝不猜测。"""
-    if skill_key == "inventory-analysis":
-        sku = re.search(r"\bSKU[-_A-Za-z0-9]+\b", task, re.I)
-        dates = re.findall(r"\b\d{4}-\d{2}-\d{2}\b", task)
-        if len(dates) < 2:
-            relative = re.search(r"(?:最近|近)\s*(\d{1,3})\s*天", task)
-            if relative and 1 <= int(relative.group(1)) <= 366:
-                end = datetime.now(UTC).date()
-                start = end - timedelta(days=int(relative.group(1)) - 1)
-                dates = [start.isoformat(), end.isoformat()]
-        if sku is None or len(dates) < 2:
-            raise AppError("请补充精确 SKU、开始日期和结束日期后再执行库存分析", code=42291, status_code=422)
-        value: dict[str, Any] = {
-            "sku_code": sku.group(0),
-            "start_date": dates[0],
-            "end_date": dates[1],
-        }
-        warehouse = re.search(r"(?:仓库|warehouse)\s*(?:id)?\s*[：:#-]?\s*(\d+)", task, re.I)
-        if warehouse:
-            value["warehouse_id"] = int(warehouse.group(1))
-        return value
-    if skill_key == "sales-order-review":
-        order = re.search(r"(?:订单主键|order[_\s-]*id|\bSO[-_])\D*(\d+)", task, re.I)
-        if order is None:
-            raise AppError("请补充销售订单主键后再执行订单审查", code=42291, status_code=422)
-        return {"order_id": int(order.group(1))}
-    if skill_key == "knowledge-research":
-        ids = [int(item) for item in re.findall(r"(?:知识库|\bKB)\s*(?:id)?\s*[：:#-]?\s*(\d+)", task, re.I)]
-        if not ids:
-            raise AppError("请明确提供已授权的知识库 ID 后再执行知识研究", code=42291, status_code=422)
-        return {"query": task, "knowledge_base_ids": list(dict.fromkeys(ids)), "top_k": 5}
-    raise AppError("Skill 输入提取器不存在", code=50087, status_code=500)
-
-
 def _selection_snapshot(selection: SkillSelection) -> dict[str, Any]:
     return {
         "method": selection.method,
@@ -393,4 +398,12 @@ def _selection_snapshot(selection: SkillSelection) -> dict[str, Any]:
             for item in selection.candidates
         ],
         "selected_skill_keys": [item.skill_key for item in selection.selected_skills],
+        "selected_skill_ids": [item.skill_id for item in selection.selected_skills],
+        "selected_version_ids": [item.version_id for item in selection.selected_skills],
+        "selector_latency_ms": selection.selector_latency_ms,
+        "llm_involved": selection.llm_involved,
+        "llm_usage": selection.llm_usage,
+        "recall_method": selection.recall_method,
+        "config_version": selection.config_version,
+        "catalog": selection.catalog_trace,
     }

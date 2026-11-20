@@ -13,6 +13,10 @@ class ChatMessageIn(BaseModel):
 
 
 class ChatRequest(BaseModel):
+    skill_mode: Literal["AUTO", "MANUAL", "NONE"] | None = Field(
+        default=None,
+        description="AUTO 自动选择、MANUAL 使用结构化 skill_key、NONE 本轮跳过 Skill",
+    )
     skill_key: str | None = Field(
         default=None,
         pattern=r"^[a-z][a-z0-9-]{2,79}$",
@@ -32,6 +36,12 @@ class ChatRequest(BaseModel):
 
     @model_validator(mode="after")
     def validate_context(self) -> "ChatRequest":
+        if self.skill_mode is None:
+            self.skill_mode = "MANUAL" if self.skill_key else "AUTO"
+        if self.skill_mode == "MANUAL" and not self.skill_key:
+            raise ValueError("MANUAL 模式必须提供 skill_key")
+        if self.skill_mode != "MANUAL" and self.skill_key is not None:
+            raise ValueError("只有 MANUAL 模式可以提供结构化 skill_key")
         if self.conversation_id is not None:
             if not self.client_request_id or not self.message or not self.message.strip():
                 raise ValueError("持久化会话必须提供 client_request_id 和 message")

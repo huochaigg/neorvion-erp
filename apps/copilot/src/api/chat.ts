@@ -10,6 +10,8 @@ export async function streamChat(input: {
   clientRequestId: string;
   signal: AbortSignal;
   onEvent: (e: StreamEvent) => void;
+  skillMode: 'AUTO' | 'MANUAL' | 'NONE';
+  skillKey?: string;
 }) {
   const token = shellProps().token;
   const tenant = useCopilotStore.getState().tenantId;
@@ -27,6 +29,8 @@ export async function streamChat(input: {
       body: JSON.stringify({
         client_request_id: input.clientRequestId,
         message: input.message,
+        skill_mode: input.skillMode,
+        skill_key: input.skillMode === 'MANUAL' ? input.skillKey : undefined,
       }),
     },
   );

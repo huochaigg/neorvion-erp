@@ -138,6 +138,7 @@ async def chat(
                         runtime,
                         conversation_id=turn.conversation_id,
                         message_id=turn.message_id,
+                        skill_mode=payload.skill_mode or "AUTO",
                         explicit_skill_key=payload.skill_key,
                         selector_adapter=workflow.adapter,
                     )
@@ -193,6 +194,7 @@ async def chat(
                 runtime,
                 conversation_id=None,
                 message_id=None,
+                skill_mode=payload.skill_mode or "AUTO",
                 explicit_skill_key=payload.skill_key,
                 selector_adapter=workflow.adapter,
             )
@@ -283,6 +285,7 @@ async def chat_stream(
                         runtime,
                         conversation_id=turn.conversation_id,
                         message_id=turn.message_id,
+                        skill_mode=payload.skill_mode or "AUTO",
                         explicit_skill_key=payload.skill_key,
                         selector_adapter=workflow.adapter,
                     )
@@ -318,6 +321,7 @@ async def chat_stream(
                     runtime,
                     conversation_id=None,
                     message_id=None,
+                    skill_mode=payload.skill_mode or "AUTO",
                     explicit_skill_key=payload.skill_key,
                     selector_adapter=workflow.adapter,
                 )

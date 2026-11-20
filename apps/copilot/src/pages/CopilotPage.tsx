@@ -4,6 +4,7 @@ import { AlertCircle, RotateCcw, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { streamChat } from '@/api/chat';
+import { discoverRunnableSkills } from '@/api/ecosystem';
 import { createConversation, getConversation } from '@/api/conversations';
 import { listProposals } from '@/api/proposals';
 import { ChatComposer } from '@/components/ChatComposer';
@@ -43,12 +44,15 @@ export function CopilotPage() {
   const [skillRuns, setSkillRuns] = useState<SkillRunSummary[]>([]);
   const [error, setError] = useState('');
   const [running, setRunning] = useState(false);
+  const [skillMode, setSkillMode] = useState<'AUTO' | 'MANUAL' | 'NONE'>('NONE');
+  const [skillKey, setSkillKey] = useState<string>();
   const [pendingUser, setPendingUser] = useState<Message | null>(null);
   const [pendingFromIndex, setPendingFromIndex] = useState(0);
   const [pendingConversationId, setPendingConversationId] = useState<number | null>(null);
   const bottom = useRef<HTMLDivElement>(null);
   const autoScroll = useRef(true);
   const runRef = useRef('');
+  const pickerTenant = useRef<number | null>(null);
 
   const create = useMutation({
     mutationFn: () => createConversation(),
@@ -67,6 +71,18 @@ export function CopilotPage() {
     queryFn: ({ signal }) => listProposals(signal, selected!),
     enabled: selected != null,
   });
+  const skillCatalog = useQuery({
+    queryKey: ['tenant', tenantId, 'runnable-skill-catalog'],
+    queryFn: ({ signal }) => discoverRunnableSkills(signal),
+    enabled: tenantId != null,
+  });
+
+  useEffect(() => {
+    if (!skillCatalog.data || pickerTenant.current === tenantId) return;
+    pickerTenant.current = tenantId;
+    setSkillKey(undefined);
+    setSkillMode(skillCatalog.data.default_mode);
+  }, [skillCatalog.data, tenantId]);
 
   const pendingForThisChat =
     pendingUser != null && (pendingConversationId == null || pendingConversationId === selected)
@@ -153,7 +169,7 @@ export function CopilotPage() {
     if (item.event === 'skill_done' || item.event === 'skill_error' || item.event === 'skill_plan_done' || item.event === 'skill_plan_error') {
       setSkillRuns((value) => value.map((run) => ({
         ...run,
-        status: item.event === 'skill_done' || item.event === 'skill_plan_done' ? 'SUCCEEDED' : 'FAILED',
+        status: item.event === 'skill_done' || item.event === 'skill_plan_done' ? String(data.status ?? 'SUCCEEDED') : 'FAILED',
         safe_error: item.event === 'skill_error' || item.event === 'skill_plan_error' ? String(data.message ?? 'Skill 执行失败') : null,
       })));
     }
@@ -302,6 +318,8 @@ export function CopilotPage() {
         clientRequestId: guard,
         signal: abort.signal,
         onEvent: (event) => handleEvent(event, guard),
+        skillMode,
+        skillKey,
       });
     } catch (cause) {
       if (!abort.signal.aborted) setError(cause instanceof Error ? cause.message : '生成失败');
@@ -387,6 +405,15 @@ export function CopilotPage() {
         onChange={setInput}
         onSend={() => void send()}
         onStop={() => controller?.abort()}
+        skillMode={skillMode}
+        skillKey={skillKey}
+        skills={skillCatalog.data?.items ?? []}
+        autoAvailable={Boolean(skillCatalog.data?.auto_available)}
+        onSkillModeChange={(mode) => {
+          setSkillMode(mode);
+          if (mode === 'MANUAL' && !skillKey) setSkillKey(skillCatalog.data?.items[0]?.skill_key);
+        }}
+        onSkillKeyChange={setSkillKey}
       />
     </div>
   );

@@ -149,6 +149,7 @@ class Settings(BaseSettings):
     skill_pending_ttl_seconds: int = 900
     skill_business_timezone: str = "Asia/Shanghai"
     skill_evaluation_enabled: bool = False
+    skill_evaluation_e2e_enabled: bool = False
 
     @property
     def is_production(self) -> bool:

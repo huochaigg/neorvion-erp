@@ -6,11 +6,12 @@ import os
 import time
 import uuid
 
-from sqlalchemy import text
+from sqlalchemy import select, text
 
 from app.core.config import settings
 from app.db.session import engine, open_tenant_session
-from app.services.evaluations import ReplayEvaluationRunner
+from app.models.evaluation import AgentEvaluationRun
+from app.services.evaluations import ReplayEvaluationRunner, SelectorLiveEvaluationRunner
 from app.tasks.evaluation_queue import pop_evaluation
 
 logger = logging.getLogger(__name__)
@@ -36,7 +37,21 @@ async def scan_recoverable_evaluations(limit: int = 100) -> list[tuple[int, int,
 async def execute_evaluation(tenant_id: int, user_id: int, run_id: int, owner: str) -> bool:
     session = open_tenant_session(tenant_id)
     try:
-        return await ReplayEvaluationRunner(session, tenant_id, user_id, owner).execute(run_id)
+        row = await session.scalar(
+            select(AgentEvaluationRun).where(
+                AgentEvaluationRun.tenant_id == tenant_id,
+                AgentEvaluationRun.user_id == user_id,
+                AgentEvaluationRun.id == run_id,
+            )
+        )
+        if row is None:
+            return False
+        runner_type = (
+            SelectorLiveEvaluationRunner
+            if row.execution_kind == "SELECTOR_LIVE"
+            else ReplayEvaluationRunner
+        )
+        return await runner_type(session, tenant_id, user_id, owner).execute(run_id)
     finally:
         await session.close()
 

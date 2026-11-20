@@ -70,6 +70,8 @@ async def send_conversation_message(
             conversation_id=conversation_id,
             client_request_id=payload.client_request_id,
             message=payload.message,
+            skill_mode=payload.skill_mode,
+            skill_key=payload.skill_key,
         ),
         request,
         context,

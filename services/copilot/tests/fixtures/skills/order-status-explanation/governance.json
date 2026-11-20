@@ -1,0 +1,17 @@
+{
+  "skill_key": "order-status-explanation",
+  "name": "销售订单状态解释",
+  "description": "查询一个既有销售订单并解释当前状态，区别于完整订单异常审查。",
+  "version": {
+    "instructions": "ZIP 导入后由 SKILL.md 正文覆盖。",
+    "input_schema":{"type":"object","properties":{"order_id":{"type":"integer","minimum":1,"description":"销售订单主键"}},"required":["order_id"]},
+    "output_schema":{"type":"object","properties":{"summary":{"type":"string"},"status":{"type":"string"},"evidence_refs":{"type":"array","items":{"type":"string"}}},"required":["summary","status","evidence_refs"]},
+    "allowed_agents":["sales_agent"],
+    "required_permissions":["order:read"],
+    "allowed_tools":["get_sales_order"],
+    "required_evidence":true,
+    "risk_level":"READ_ONLY",
+    "timeout_seconds":30,
+    "token_budget":2200
+  }
+}

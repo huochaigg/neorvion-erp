@@ -18,6 +18,11 @@ export interface EvaluationCase {
   difficulty: number;
   user_input: string;
   status: string;
+  expected_behavior: Record<string, unknown>;
+  expected_tools: Record<string, unknown>;
+  expected_arguments: Array<Record<string, unknown>>;
+  expected_evidence: Record<string, unknown>;
+  forbidden_actions: string[];
 }
 
 export interface EvaluationDatasetDetail extends EvaluationDataset {
@@ -28,7 +33,7 @@ export interface EvaluationRun {
   id: number;
   dataset_version_id: number;
   mode: 'SINGLE' | 'MULTI' | 'AUTO';
-  execution_kind: 'REPLAY' | 'LIVE';
+  execution_kind: 'REPLAY' | 'SELECTOR_LIVE' | 'END_TO_END';
   model_provider: string;
   model_name: string;
   environment_fingerprint: string;
@@ -133,13 +138,14 @@ export const listEvaluationRuns = (signal?: AbortSignal) =>
 export const createEvaluationRun = (payload: {
   dataset_version_id: number;
   mode: 'SINGLE' | 'MULTI' | 'AUTO';
-  execution_kind: 'REPLAY' | 'LIVE';
+  execution_kind: 'REPLAY' | 'SELECTOR_LIVE' | 'END_TO_END';
   idempotency_key: string;
   config?: {
     selector_profile?: 'BASELINE' | 'BASIC' | 'HYBRID';
     selector_threshold?: number;
     skill_version_overrides?: Record<string, number>;
     skill_enabled?: boolean;
+    selector_use_llm?: boolean;
   };
 }) =>
   unwrap(api.post('/api/v1/evaluations/runs', payload)).then(
@@ -179,4 +185,23 @@ export const getAgentTrace = (id: number, signal?: AbortSignal) =>
 export const getSkillEvaluationDiagnostics = (id: number, signal?: AbortSignal) =>
   unwrap(api.get(`/api/v1/evaluations/runs/${id}/skill-diagnostics`, { signal })).then(
     (value) => value as { run_id: number; failures: Array<{ category: string; count: number; case_keys: string[]; suggestion: string }>; automatic_change_applied: false },
+  );
+
+export interface SkillEvaluationReport {
+  protocol_version: string;
+  run: Record<string, unknown>;
+  metrics?: Record<string, unknown>;
+  diagnostics: Array<Record<string, unknown>>;
+  cases: Array<{
+    case_key: string;
+    status: string;
+    task_outcome: string;
+    selection_trace?: Record<string, unknown>;
+  }>;
+  automatic_change_applied: false;
+}
+
+export const getSkillEvaluationReport = (id: number, signal?: AbortSignal) =>
+  unwrap(api.get(`/api/v1/evaluations/runs/${id}/skill-report`, { signal })).then(
+    (value) => value as SkillEvaluationReport,
   );

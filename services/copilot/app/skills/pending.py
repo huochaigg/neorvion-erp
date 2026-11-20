@@ -44,6 +44,25 @@ class PendingSkillService:
         self.context = context
         self.collector = SkillInputCollector()
 
+    async def cancel_active(self, conversation_id: int, request_id: str) -> bool:
+        """NONE/MANUAL 新任务可显式终止旧参数收集，避免把无关消息套入旧 Skill。"""
+        row = await self.session.scalar(
+            select(PendingSkillInvocation)
+            .where(
+                PendingSkillInvocation.tenant_id == self.context.tenant_id,
+                PendingSkillInvocation.user_id == self.context.user_id,
+                PendingSkillInvocation.conversation_id == conversation_id,
+                PendingSkillInvocation.status == "COLLECTING_INPUT",
+            )
+            .with_for_update()
+        )
+        if row is None:
+            return False
+        row.status = "CANCELLED"
+        row.last_client_request_id = request_id[:64]
+        await self.session.commit()
+        return True
+
     async def resume(
         self, conversation_id: int, task: str, request_id: str
     ) -> ResumedSkillInput | ResumedSkillPlan | PendingSkillPrompt | None:

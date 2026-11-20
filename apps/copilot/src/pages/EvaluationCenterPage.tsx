@@ -20,6 +20,10 @@ import {
   type EvaluationRun,
   type EvaluationRunDetail,
   getSkillEvaluationDiagnostics,
+  getSkillEvaluationReport,
+  pauseEvaluationRun,
+  resumeEvaluationRun,
+  cancelEvaluationRun,
 } from '@/api/evaluations';
 import { useCopilotStore } from '@/store';
 
@@ -92,7 +96,7 @@ function DatasetPanel() {
                 <Button size="small" onClick={() => setSelectedDataset(row.id)}>查看 Case</Button>
                 <Button size="small" loading={importV8.isPending} onClick={() => { setSelectedDataset(row.id); importV8.mutate(row.id); }}>导入 V8 30题</Button>
                 <Button size="small" loading={importV9.isPending} onClick={() => { setSelectedDataset(row.id); importV9.mutate(row.id); }}>导入 V9 100题</Button>
-                <Button size="small" loading={importV14.isPending} onClick={() => { setSelectedDataset(row.id); importV14.mutate(row.id); }}>导入 V14 Skill 100题</Button>
+                <Button size="small" loading={importV14.isPending} onClick={() => { setSelectedDataset(row.id); importV14.mutate(row.id); }}>导入 V14.3 Skill 120题</Button>
                 <Button size="small" loading={freeze.isPending} onClick={() => freeze.mutate(row.id)}>冻结新版本</Button>
               </Space>,
             },
@@ -118,7 +122,7 @@ function DatasetPanel() {
           { title: '分类', dataIndex: 'case_type' },
           { title: '问题', dataIndex: 'user_input', ellipsis: true },
           { title: '审核', dataIndex: 'status', render: (value) => <Tag>{value}</Tag> },
-        ]} />
+        ]} expandable={{ expandedRowRender: (row) => <pre className="max-h-64 overflow-auto text-xs">{JSON.stringify({ expected_behavior: row.expected_behavior, expected_tools: row.expected_tools, expected_arguments: row.expected_arguments, expected_evidence: row.expected_evidence, forbidden_actions: row.forbidden_actions }, null, 2)}</pre> }} />
       </Modal>
       <Modal title="新增结构化 Case" open={caseOpen} onCancel={() => setCaseOpen(false)} onOk={() => caseForm.validateFields().then((values) => createCase.mutate(values))} confirmLoading={createCase.isPending}>
         <Form form={caseForm} layout="vertical" initialValues={{ status: 'NEEDS_REVIEW' }}>
@@ -141,11 +145,17 @@ function RunPanel() {
   const versions = useQuery({ queryKey: ['tenant', tenantId, 'agent-evaluation-versions', datasetId], queryFn: ({ signal }) => listEvaluationVersions(datasetId!, signal), enabled: datasetId != null });
   const [versionId, setVersionId] = useState<number>();
   const [mode, setMode] = useState<'SINGLE' | 'MULTI' | 'AUTO'>('AUTO');
+  const [executionKind, setExecutionKind] = useState<'REPLAY' | 'SELECTOR_LIVE' | 'END_TO_END'>('REPLAY');
   const [selectorProfile, setSelectorProfile] = useState<'BASELINE' | 'BASIC' | 'HYBRID'>('HYBRID');
   const [selectedRun, setSelectedRun] = useState<number>();
   const detail = useQuery({ queryKey: ['tenant', tenantId, 'agent-evaluation-run', selectedRun], queryFn: ({ signal }) => getEvaluationRun(selectedRun!, signal), enabled: selectedRun != null });
   const create = useMutation({
-    mutationFn: () => createEvaluationRun({ dataset_version_id: versionId!, mode, execution_kind: 'REPLAY', idempotency_key: crypto.randomUUID(), config: { selector_profile: selectorProfile, skill_enabled: selectorProfile !== 'BASELINE' } }),
+    mutationFn: () => createEvaluationRun({ dataset_version_id: versionId!, mode, execution_kind: executionKind, idempotency_key: crypto.randomUUID(), config: { selector_profile: selectorProfile, skill_enabled: selectorProfile !== 'BASELINE' } }),
+    onSuccess: () => void client.invalidateQueries({ queryKey: ['tenant', tenantId, 'agent-evaluation-runs'] }),
+  });
+  const updateRun = useMutation({
+    mutationFn: ({ action, id }: { action: 'pause' | 'resume' | 'cancel'; id: number }) =>
+      action === 'pause' ? pauseEvaluationRun(id) : action === 'resume' ? resumeEvaluationRun(id) : cancelEvaluationRun(id),
     onSuccess: () => void client.invalidateQueries({ queryKey: ['tenant', tenantId, 'agent-evaluation-runs'] }),
   });
   const rows = runs.data?.items ?? [];
@@ -167,10 +177,15 @@ function RunPanel() {
             onChange={setVersionId}
           />
           <Select value={mode} options={['SINGLE', 'MULTI', 'AUTO'].map((value) => ({ label: value, value }))} onChange={setMode} />
+          <Select value={executionKind} className="w-48" options={[
+            { label: '确定性 Replay', value: 'REPLAY' },
+            { label: 'Selector Live', value: 'SELECTOR_LIVE' },
+            { label: '端到端（需环境）', value: 'END_TO_END', disabled: true },
+          ]} onChange={setExecutionKind} />
           <Select value={selectorProfile} className="w-40" options={['BASELINE', 'BASIC', 'HYBRID'].map((value) => ({ label: value, value }))} onChange={setSelectorProfile} />
-          <Button type="primary" disabled={!versionId} loading={create.isPending} onClick={() => create.mutate()}>启动 Replay Run</Button>
+          <Button type="primary" disabled={!versionId} loading={create.isPending} onClick={() => create.mutate()}>启动 {executionKind} Run</Button>
         </Space>
-        <div className="mt-3 text-xs text-slate-500">LIVE 运行需要服务端配置受控评测身份；页面不会发送用户 JWT 给 Worker。</div>
+        <div className="mt-3 text-xs text-slate-500">Selector Live 只运行当前 Catalog/Selector，不调用 Tool；END_TO_END 需要专用只读身份，页面不会把用户 JWT 发送给 Worker。</div>
       </Card>
       <Card title="运行记录">
         {rows.length ? (
@@ -188,7 +203,12 @@ function RunPanel() {
                 render: (_, row) => <Progress percent={row.total_cases ? Math.round((row.completed_cases / row.total_cases) * 100) : 0} size="small" />,
               },
               { title: '失败', dataIndex: 'failed_cases' },
-              { title: '详情', render: (_, row) => <Button size="small" onClick={() => setSelectedRun(row.id)}>Case 与指标</Button> },
+              { title: '操作', render: (_, row) => <Space>
+                <Button size="small" onClick={() => setSelectedRun(row.id)}>Case 与指标</Button>
+                {row.status === 'RUNNING' || row.status === 'QUEUED' ? <Button size="small" onClick={() => updateRun.mutate({ action: 'pause', id: row.id })}>暂停</Button> : null}
+                {row.status === 'PAUSED' ? <Button size="small" onClick={() => updateRun.mutate({ action: 'resume', id: row.id })}>继续</Button> : null}
+                {['QUEUED', 'RUNNING', 'PAUSED'].includes(row.status) ? <Button size="small" danger onClick={() => updateRun.mutate({ action: 'cancel', id: row.id })}>终止后续 Case</Button> : null}
+              </Space> },
             ]}
           />
         ) : <Empty description="尚无评测运行；不会显示虚构指标" />}
@@ -230,14 +250,23 @@ function RunDetail({ detail }: { detail: EvaluationRunDetail }) {
 
 function SkillDiagnostics({ runId }: { runId: number }) {
   const query = useQuery({ queryKey: ['skill-evaluation-diagnostics', runId], queryFn: ({ signal }) => getSkillEvaluationDiagnostics(runId, signal) });
-  if (!query.data?.failures.length) return <Alert type="success" showIcon message="没有确定性 Skill 失败分类" />;
-  return <Card size="small" title="Skill 失败诊断与人工优化建议">
+  const report = useQuery({ queryKey: ['skill-evaluation-report', runId], queryFn: ({ signal }) => getSkillEvaluationReport(runId, signal) });
+  const traces = (report.data?.cases ?? []).filter((item) => item.selection_trace);
+  if (!query.data?.failures.length && !traces.length) return <Alert type="success" showIcon message="没有确定性 Skill 失败分类" />;
+  return <Card size="small" title="Skill 失败诊断、选择路径与人工优化建议">
+    {query.data?.failures.length ? (
     <Table rowKey="category" size="small" pagination={false} dataSource={query.data.failures} columns={[
       { title: '阶段', dataIndex: 'category' },
       { title: '数量', dataIndex: 'count' },
       { title: '建议', dataIndex: 'suggestion' },
       { title: 'Case', dataIndex: 'case_keys', render: (value: string[]) => value.slice(0, 5).join(', ') },
     ]} />
+    ) : <Alert type="success" showIcon message="没有确定性 Skill 失败分类" />}
+    {traces.length ? <Table className="mt-3" rowKey="case_key" size="small" pagination={{ pageSize: 5 }} dataSource={traces} columns={[
+      { title: 'Case', dataIndex: 'case_key' },
+      { title: '结果', dataIndex: 'task_outcome' },
+      { title: 'Selection Trace', dataIndex: 'selection_trace', render: (value) => <pre className="max-w-xl overflow-auto text-xs">{JSON.stringify(value, null, 2)}</pre> },
+    ]} /> : null}
   </Card>;
 }
 

@@ -113,8 +113,9 @@ class EvaluationDatasetVersionOut(BaseModel):
 class EvaluationRunCreate(BaseModel):
     dataset_version_id: int = Field(gt=0, description="必须指向不可变冻结版本")
     mode: Literal["SINGLE", "MULTI", "AUTO"]
-    execution_kind: Literal["REPLAY", "LIVE"] = Field(
-        default="REPLAY", description="REPLAY 使用冻结结果；LIVE 需要受控评测身份"
+    execution_kind: Literal["REPLAY", "SELECTOR_LIVE", "END_TO_END"] = Field(
+        default="REPLAY",
+        description="REPLAY 确定性回放；SELECTOR_LIVE 真实 Catalog/Selector；END_TO_END 需受控服务身份",
     )
     idempotency_key: str = Field(min_length=8, max_length=96)
     comparison_group: str | None = Field(default=None, max_length=64)
@@ -131,6 +132,7 @@ class EvaluationRunCreate(BaseModel):
             "skill_version_overrides",
             "skill_enabled",
             "notes",
+            "selector_use_llm",
         }
         if set(value) - allowed:
             raise ValueError("评测配置包含未知字段")
@@ -146,6 +148,8 @@ class EvaluationRunCreate(BaseModel):
             or any(not isinstance(key, str) or not isinstance(number, int) or number <= 0 for key, number in versions.items())
         ):
             raise ValueError("skill_version_overrides 无效")
+        if "selector_use_llm" in value and not isinstance(value["selector_use_llm"], bool):
+            raise ValueError("selector_use_llm 必须是布尔值")
         return value
 
 

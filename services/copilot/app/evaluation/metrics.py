@@ -66,6 +66,12 @@ def evaluate_case(case: dict[str, Any], result: dict[str, Any]) -> tuple[str, di
     if expected_methods:
         actual_method = str(result.get("selection_method") or "")
         assertions.append({"kind": "selection_method", "target": sorted(expected_methods), "actual": actual_method, "passed": actual_method in expected_methods})
+    candidate_skills = {str(item) for item in result.get("candidate_skill_keys", [])}
+    top_k_recall = (
+        len(expected_skills & candidate_skills) / len(expected_skills)
+        if expected_skills
+        else None
+    )
     expected_missing = {str(item) for item in behavior.get("expected_missing_fields", [])}
     if expected_missing:
         actual_missing = {str(item) for item in result.get("missing_fields", [])}
@@ -167,6 +173,8 @@ def evaluate_case(case: dict[str, Any], result: dict[str, Any]) -> tuple[str, di
         "false_positive": bool(actual_skills - expected_skills) if skill_applicable else None,
         "false_negative": bool(expected_skills - actual_skills) if skill_applicable else None,
         "no_skill_accuracy": (not actual_skills) == (not expected_skills) if skill_applicable else None,
+        "top_k_recall": top_k_recall,
+        "ambiguous": str(result.get("selection_method") or "") == "AMBIGUOUS",
         "plan_validity": bool(plan_validity) if plan_validity is not None else None,
         "dependency_success_rate": result.get("dependency_success_rate"),
         "multi_skill_success": result.get("multi_skill_success"),
@@ -201,6 +209,9 @@ def evaluate_case(case: dict[str, Any], result: dict[str, Any]) -> tuple[str, di
         "unsafe_action_executions": unsafe_executions,
         "prompt_injection_resisted": security_passed if security_applicable else None,
         "latency_ms": result.get("latency_ms"),
+        "selector_latency_ms": result.get("selector_latency_ms"),
+        "catalog_latency_ms": result.get("catalog_latency_ms"),
+        "embedding_calls": result.get("embedding_calls"),
         "model_calls": result.get("model_calls"),
         "input_tokens": usage.get("input_tokens"),
         "output_tokens": usage.get("output_tokens"),
@@ -222,11 +233,23 @@ def aggregate_metrics(rows: list[dict[str, Any]]) -> dict[str, Any]:
     latencies = sorted(
         int(item["latency_ms"]) for item in metrics if item.get("latency_ms") is not None
     )
+    selector_latencies = sorted(
+        float(item["selector_latency_ms"])
+        for item in metrics
+        if item.get("selector_latency_ms") is not None
+    )
+    catalog_latencies = sorted(
+        float(item["catalog_latency_ms"])
+        for item in metrics
+        if item.get("catalog_latency_ms") is not None
+    )
     token_rows = [
         item
         for item in metrics
         if item.get("input_tokens") is not None and item.get("output_tokens") is not None
     ]
+    model_call_rows = [item for item in metrics if item.get("model_calls") is not None]
+    embedding_call_rows = [item for item in metrics if item.get("embedding_calls") is not None]
     costs = [
         float(item["estimated_cost"]) for item in metrics if item.get("estimated_cost") is not None
     ]
@@ -246,6 +269,8 @@ def aggregate_metrics(rows: list[dict[str, Any]]) -> dict[str, Any]:
         "false_positive_rate": average("false_positive"),
         "false_negative_rate": average("false_negative"),
         "no_skill_accuracy": average("no_skill_accuracy"),
+        "top_k_recall": average("top_k_recall"),
+        "ambiguous_rate": average("ambiguous"),
         "plan_validity_rate": average("plan_validity"),
         "dependency_success_rate": average("dependency_success_rate"),
         "multi_skill_task_success_rate": average("multi_skill_success"),
@@ -271,8 +296,21 @@ def aggregate_metrics(rows: list[dict[str, Any]]) -> dict[str, Any]:
         "prompt_injection_resistance": average("prompt_injection_resisted"),
         "latency_p50_ms": _percentile(latencies, 0.50),
         "latency_p95_ms": _percentile(latencies, 0.95),
-        "model_calls": sum(int(item.get("model_calls") or 0) for item in metrics),
+        "selector_latency_p50_ms": _percentile(selector_latencies, 0.50),
+        "selector_latency_p95_ms": _percentile(selector_latencies, 0.95),
+        "catalog_latency_p50_ms": _percentile(catalog_latencies, 0.50),
+        "catalog_latency_p95_ms": _percentile(catalog_latencies, 0.95),
+        "model_calls": (
+            sum(int(item["model_calls"]) for item in model_call_rows)
+            if model_call_rows
+            else None
+        ),
         "tool_calls": sum(int(item.get("tool_calls") or 0) for item in metrics),
+        "embedding_calls": (
+            sum(int(item["embedding_calls"]) for item in embedding_call_rows)
+            if embedding_call_rows
+            else None
+        ),
         "input_tokens": sum(int(item["input_tokens"]) for item in token_rows)
         if token_rows
         else None,

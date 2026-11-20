@@ -1,0 +1,17 @@
+{
+  "skill_key": "inventory-coverage-summary",
+  "name": "库存覆盖天数摘要",
+  "description": "解释精确 SKU 在明确日期范围内已计算的覆盖天数，不执行广义风险诊断。",
+  "version": {
+    "instructions": "ZIP 导入后由 SKILL.md 正文覆盖。",
+    "input_schema": {"type":"object","properties":{"sku_code":{"type":"string","minLength":1,"description":"精确 SKU 编码"},"start_date":{"type":"string","format":"date","description":"开始日期 YYYY-MM-DD"},"end_date":{"type":"string","format":"date","description":"结束日期 YYYY-MM-DD"}},"required":["sku_code","start_date","end_date"]},
+    "output_schema": {"type":"object","properties":{"summary":{"type":"string"},"coverage_days":{"type":"number"},"evidence_refs":{"type":"array","items":{"type":"string"}}},"required":["summary","coverage_days","evidence_refs"]},
+    "allowed_agents":["inventory_agent"],
+    "required_permissions":["inventory:read","analytics:sales:read"],
+    "allowed_tools":["analyze_inventory_coverage"],
+    "required_evidence":true,
+    "risk_level":"READ_ONLY",
+    "timeout_seconds":30,
+    "token_budget":2400
+  }
+}

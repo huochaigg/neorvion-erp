@@ -73,6 +73,25 @@ class McpApprovalIn(BaseModel):
     approved: bool
 
 
+class SkillCatalogItemOut(BaseModel):
+    skill_id: int
+    version_id: int
+    skill_key: str
+    name: str
+    description: str
+    version: int
+    category: str = Field(description="来自已发布 Metadata 的业务分类")
+    required_permissions: list[str] = Field(description="当前用户已满足的运行权限提示")
+
+
+class SkillCatalogOut(BaseModel):
+    auto_available: bool = Field(description="当前 Feature Flag 是否允许 Chat AUTO")
+    default_mode: Literal["AUTO", "NONE"]
+    selector_profile: str
+    items: list[SkillCatalogItemOut]
+    query_latency_ms: float
+
+
 class McpToolReviewIn(BaseModel):
     approved: bool
     required_permissions: list[str] = Field(default_factory=list, max_length=30)
