@@ -301,7 +301,6 @@ class EcosystemService:
                 definition = SkillParser().parse_directory(base / key)
                 payload = payload.model_copy(
                     update={
-                        "name": definition.name,
                         "description": definition.description,
                         "version": payload.version.model_copy(
                             update={
@@ -344,6 +343,9 @@ class EcosystemService:
                 current_semantic_hash = hashlib.sha256(
                     self._skill_content(current_payload).encode()
                 ).hexdigest()
+                row.name = payload.name
+                row.description = payload.description
+                row.updated_by = self.context.user_id
                 if current.content_hash == content_hash or current_semantic_hash == content_hash:
                     version = current
                     status = "UNCHANGED"
@@ -351,9 +353,6 @@ class EcosystemService:
                     version = current
                     status = "PROTECTED"
                 else:
-                    row.name = payload.name
-                    row.description = payload.description
-                    row.updated_by = self.context.user_id
                     version = await self._add_skill_version(row, payload.version)
                     row.enabled = False
                     row.approval_status = "PENDING_APPROVAL"
@@ -434,7 +433,6 @@ class EcosystemService:
             )
         payload = payload.model_copy(
             update={
-                "name": definition.name,
                 "description": definition.description,
                 "version": payload.version.model_copy(
                     update={
@@ -471,6 +469,9 @@ class EcosystemService:
             status = "IMPORTED"
         else:
             current = await self._current_skill_version(row)
+            row.name = payload.name
+            row.description = payload.description
+            row.updated_by = self.context.user_id
             if current.content_hash == content_hash:
                 version, status = current, "UNCHANGED"
             elif (
@@ -480,9 +481,6 @@ class EcosystemService:
             ):
                 version, status = current, "PROTECTED"
             else:
-                row.name = payload.name
-                row.description = payload.description
-                row.updated_by = self.context.user_id
                 version = await self._add_skill_version(row, payload.version)
                 row.enabled = False
                 row.approval_status = "PENDING_APPROVAL"

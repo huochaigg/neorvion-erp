@@ -1,6 +1,6 @@
 ---
 name: inventory-analysis
-description: Analyze an exact SKU's inventory coverage and stock risk for an explicit date range. Use when the user asks about SKU inventory, stock coverage days, shortage risk, or overstock risk.
+description: 基于实时库存与历史销量证据，分析明确 SKU 在明确日期范围内的库存覆盖天数和库存风险，不自动决定补货。用户询问 SKU 库存、覆盖天数、缺货或积压风险时使用。
 license: Proprietary
 compatibility: Neorvion Copilot with authorized read-only ERP access
 metadata:

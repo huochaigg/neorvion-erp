@@ -9,6 +9,7 @@ from types import SimpleNamespace
 import pytest
 from app.core.config import settings
 from app.core.exceptions import AppError
+from app.schemas.ecosystem import SkillCreate
 from app.core.tenant import TenantContext
 from app.graph.workflow import AgentRuntime
 from app.models.ecosystem import Skill, SkillRun, SkillVersion
@@ -101,9 +102,17 @@ def _models() -> tuple[Skill, SkillVersion]:
 
 def test_builtin_skill_files_follow_open_format() -> None:
     root = Path(__file__).resolve().parents[1] / "skills"
-    for key in ("inventory-analysis", "sales-order-review", "knowledge-research"):
+    expected_names = {
+        "inventory-analysis": "库存风险分析",
+        "sales-order-review": "销售订单审查",
+        "knowledge-research": "授权知识研究",
+    }
+    for key, expected_name in expected_names.items():
         definition = SkillParser().parse_directory(root / key)
+        template = SkillCreate.model_validate_json((root / f"{key}.json").read_text("utf-8"))
         assert definition.name == key
+        assert template.name == expected_name
+        assert any("\u4e00" <= char <= "\u9fff" for char in definition.description)
         assert definition.instructions
         assert definition.resources
 

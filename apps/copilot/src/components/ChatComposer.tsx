@@ -1,6 +1,14 @@
-import { LoaderCircle, Send, Square } from 'lucide-react';
-import { Segmented, Select, Tooltip } from 'antd';
+import { useMemo, useState } from 'react';
+import { Dropdown, Input } from 'antd';
+import { Check, ChevronDown, LoaderCircle, MessagesSquare, Search, Send, Sparkles, Square } from 'lucide-react';
 import type { RunnableSkill } from '@/api/ecosystem';
+
+type SkillMode = 'AUTO' | 'MANUAL' | 'NONE';
+
+function matchesSkill(skill: RunnableSkill, query: string) {
+  const haystack = `${skill.name} ${skill.skill_key} ${skill.description} ${skill.category}`.toLowerCase();
+  return haystack.includes(query.trim().toLowerCase());
+}
 
 export function ChatComposer({
   value,
@@ -24,58 +32,162 @@ export function ChatComposer({
   onChange: (value: string) => void;
   onSend: () => void;
   onStop: () => void;
-  skillMode: 'AUTO' | 'MANUAL' | 'NONE';
+  skillMode: SkillMode;
   skillKey?: string;
   skills: RunnableSkill[];
   autoAvailable: boolean;
-  onSkillModeChange: (value: 'AUTO' | 'MANUAL' | 'NONE') => void;
+  onSkillModeChange: (value: SkillMode) => void;
   onSkillKeyChange: (value: string) => void;
 }) {
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [skillQuery, setSkillQuery] = useState('');
   const canSend = Boolean(value.trim()) && !disabled && !running && (skillMode !== 'MANUAL' || Boolean(skillKey));
   const selectedSkill = skills.find((item) => item.skill_key === skillKey);
+  const visibleSkills = useMemo(
+    () => skills.filter((skill) => matchesSkill(skill, skillQuery)),
+    [skills, skillQuery],
+  );
+  const triggerLabel =
+    skillMode === 'AUTO'
+      ? '按问题匹配'
+      : skillMode === 'NONE'
+        ? '普通对话'
+        : selectedSkill?.name ?? '选择 Skill';
+  const hint =
+    skillMode === 'NONE'
+      ? '不调用 Skill，仍可使用已授权工具'
+      : skillMode === 'AUTO'
+        ? '系统根据问题选择已启用 Skill'
+        : selectedSkill
+          ? selectedSkill.description
+          : '请从当前租户可运行的 Skill 中选一个';
+
+  const pick = (mode: SkillMode, key?: string) => {
+    onSkillModeChange(mode);
+    if (key) onSkillKeyChange(key);
+    setPickerOpen(false);
+    setSkillQuery('');
+  };
+
+  const optionClass = (active: boolean, enabled = true) =>
+    `flex w-full items-start gap-2 rounded-xl px-2.5 py-2 text-left ${
+      enabled ? 'hover:bg-slate-50' : 'cursor-not-allowed opacity-50'
+    } ${active ? 'bg-indigo-50' : ''}`;
+
   return (
     <div className="copilot-composer-fade pointer-events-none absolute inset-x-0 bottom-0 px-4 pb-5 pt-10">
       <div className="pointer-events-auto mx-auto flex w-full max-w-[900px] flex-col gap-2 rounded-[20px] border border-[#E2E8F0] bg-white p-3 shadow-[0_12px_40px_rgba(15,23,42,0.08)]">
-        <div className="flex flex-wrap items-center gap-2 border-b border-slate-100 pb-2">
-          <Tooltip title={autoAvailable ? '由服务端 Catalog 和 Selector 自动选择' : '服务端 AUTO Feature Flag 未开启'}>
-            <Segmented
-              size="small"
-              value={skillMode}
+        <div className="flex flex-wrap items-center gap-2">
+          <Dropdown
+            trigger={['click']}
+            open={pickerOpen}
+            placement="topLeft"
+            menu={{ items: [] }}
+            onOpenChange={(open) => {
+              if (disabled || running) return;
+              setPickerOpen(open);
+              if (!open) setSkillQuery('');
+            }}
+            popupRender={() => (
+              <div
+                className="w-[min(100vw-2rem,360px)] rounded-2xl border border-slate-200 bg-white p-2 shadow-[0_16px_40px_rgba(15,23,42,0.12)]"
+                onMouseDown={(event) => event.preventDefault()}
+              >
+                <Input
+                  allowClear
+                  size="small"
+                  prefix={<Search size={13} className="text-slate-400" />}
+                  placeholder="搜索 Skill 名称或用途"
+                  value={skillQuery}
+                  onChange={(event) => setSkillQuery(event.target.value)}
+                />
+                <div className="mt-2 max-h-72 overflow-y-auto">
+                  <button
+                    type="button"
+                    disabled={!autoAvailable}
+                    className={optionClass(skillMode === 'AUTO', autoAvailable)}
+                    onClick={() => autoAvailable && pick('AUTO')}
+                  >
+                    <Sparkles size={15} className="mt-0.5 shrink-0 text-indigo-500" />
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-[13px] font-medium text-slate-800">按问题匹配</span>
+                      <span className="mt-0.5 block text-[11px] leading-4 text-slate-500">
+                        {autoAvailable
+                          ? '不预先指定，由服务端根据问题选择已启用 Skill'
+                          : '当前环境未开放自动匹配'}
+                      </span>
+                    </span>
+                    {skillMode === 'AUTO' ? <Check size={14} className="mt-0.5 text-indigo-600" /> : null}
+                  </button>
+                  {visibleSkills.length ? (
+                    <div className="my-1 border-t border-slate-100 pt-1">
+                      {visibleSkills.map((skill) => {
+                        const active = skillMode === 'MANUAL' && skill.skill_key === skillKey;
+                        return (
+                          <button
+                            key={skill.skill_key}
+                            type="button"
+                            className={optionClass(active)}
+                            onClick={() => pick('MANUAL', skill.skill_key)}
+                          >
+                            <Sparkles size={15} className="mt-0.5 shrink-0 text-slate-400" />
+                            <span className="min-w-0 flex-1">
+                              <span className="block text-[13px] font-medium text-slate-800">
+                                {skill.name}
+                                <span className="ml-1 font-normal text-slate-400">v{skill.version}</span>
+                              </span>
+                              <span className="mt-0.5 block text-[11px] leading-4 text-slate-500">
+                                {skill.description}
+                              </span>
+                            </span>
+                            {active ? <Check size={14} className="mt-0.5 text-indigo-600" /> : null}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div className="px-2.5 py-3 text-[12px] leading-5 text-slate-500">
+                      {skills.length === 0
+                        ? '还没有可手动指定的 Skill。请到 AI 管理中心导入内置模板，审核并启用后，这里会出现具体 Skill 名称。'
+                        : '没有匹配的 Skill'}
+                    </div>
+                  )}
+                  <div className="border-t border-slate-100 pt-1">
+                    <button
+                      type="button"
+                      className={optionClass(skillMode === 'NONE')}
+                      onClick={() => pick('NONE')}
+                    >
+                      <MessagesSquare size={15} className="mt-0.5 shrink-0 text-slate-400" />
+                      <span className="min-w-0 flex-1">
+                        <span className="block text-[13px] font-medium text-slate-800">普通对话</span>
+                        <span className="mt-0.5 block text-[11px] leading-4 text-slate-500">
+                          不调用 Skill，仍可使用已授权工具
+                        </span>
+                      </span>
+                      {skillMode === 'NONE' ? <Check size={14} className="mt-0.5 text-indigo-600" /> : null}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+          >
+            <button
+              type="button"
               disabled={disabled || running}
-              options={[
-                { label: '自动', value: 'AUTO', disabled: !autoAvailable },
-                { label: '手动', value: 'MANUAL', disabled: skills.length === 0 },
-                { label: '不使用', value: 'NONE' },
-              ]}
-              onChange={(next) => onSkillModeChange(next as 'AUTO' | 'MANUAL' | 'NONE')}
-            />
-          </Tooltip>
-          {skillMode === 'MANUAL' ? (
-            <Select
-              showSearch
-              size="small"
-              className="min-w-64 flex-1"
-              value={skillKey}
-              placeholder="搜索当前租户可运行的 Skill"
-              optionFilterProp="searchText"
-              onChange={onSkillKeyChange}
-              options={skills.map((skill) => ({
-                value: skill.skill_key,
-                searchText: `${skill.name} ${skill.skill_key} ${skill.description} ${skill.category}`,
-                label: `${skill.name} · v${skill.version} · ${skill.category}`,
-                title: skill.description,
-              }))}
-            />
-          ) : null}
-          <span className="text-[11px] text-slate-400">
-            {skillMode === 'NONE'
-              ? '本轮跳过 Skill，其他 Agent/Tool 权限仍生效'
-              : skillMode === 'AUTO'
-                ? '仅发送候选 Metadata'
-                : selectedSkill
-                  ? `${selectedSkill.description} · 所需权限：${selectedSkill.required_permissions.join('、') || '无额外权限'}`
-                  : '请选择当前租户可运行的 Skill'}
-          </span>
+              className="inline-flex max-w-full items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-medium text-slate-700 hover:border-indigo-200 hover:bg-indigo-50 disabled:cursor-not-allowed disabled:opacity-50"
+              aria-label="选择 Skill"
+            >
+              {skillMode === 'NONE' ? (
+                <MessagesSquare size={13} className="shrink-0 text-slate-500" />
+              ) : (
+                <Sparkles size={13} className="shrink-0 text-indigo-500" />
+              )}
+              <span className="truncate">{triggerLabel}</span>
+              <ChevronDown size={12} className="shrink-0 text-slate-400" />
+            </button>
+          </Dropdown>
+          <span className="min-w-0 flex-1 text-[11px] leading-4 text-slate-400">{hint}</span>
         </div>
         <div className="flex items-end gap-2">
         <textarea

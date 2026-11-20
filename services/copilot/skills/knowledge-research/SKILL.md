@@ -1,6 +1,6 @@
 ---
 name: knowledge-research
-description: Research company policies and procedures in explicitly authorized knowledge bases with citations. Use for policy, process, rule, or internal knowledge questions.
+description: 在用户明确授权的知识库中检索制度与流程，并返回可重新鉴权的引用。适用于政策、流程、规则或内部知识问题。
 license: Proprietary
 compatibility: Neorvion Copilot with authorized Knowledge service access
 metadata:

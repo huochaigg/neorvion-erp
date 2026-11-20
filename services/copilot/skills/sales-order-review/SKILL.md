@@ -1,6 +1,6 @@
 ---
 name: sales-order-review
-description: Review an existing sales order using read-only ERP evidence. Use when the user asks to inspect, audit, or identify issues in a sales order.
+description: 基于只读 ERP 证据审查已有销售订单，不包含审批、改单或履约动作。用户要求查看、审查或排查销售订单问题时使用。
 license: Proprietary
 compatibility: Neorvion Copilot with authorized read-only ERP access
 metadata:
