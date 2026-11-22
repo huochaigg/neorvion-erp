@@ -41,6 +41,18 @@
         "packages/python/neorvion_db",
         "typings"
       ]
+    },
+    {
+      "root": "services/copilot",
+      "pythonVersion": "3.12",
+      "pythonPlatform": "All",
+      "extraPaths": [
+        "services/copilot",
+        "services/copilot/.venv/Lib/site-packages",
+        "packages/python/neorvion_security",
+        "packages/python/neorvion_db",
+        "typings"
+      ]
     }
   ]
 }

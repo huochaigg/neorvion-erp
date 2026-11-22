@@ -7,7 +7,7 @@ import time
 from dataclasses import dataclass, field, replace
 from typing import Any
 
-from app.ai.types import ChatAdapter
+from app.ai.types import ChatAdapter, ModelUsage
 from app.core.config import settings
 from app.core.exceptions import AppError
 from app.skills.catalog import SkillCatalogEntry
@@ -31,7 +31,7 @@ class SkillSelection:
     candidates: tuple[SkillCandidate, ...] = ()
     selector_latency_ms: float = 0
     llm_involved: bool = False
-    llm_usage: dict[str, int | None] | None = None
+    llm_usage: ModelUsage | None = None
     recall_method: str = "NONE"
     config_version: str = "v14.3"
     catalog_trace: dict[str, Any] = field(default_factory=dict)
@@ -219,14 +219,14 @@ class SkillSelector:
             f"候选：{json.dumps(payload, ensure_ascii=False)}\n任务：{task}"
         )
         chunks: list[str] = []
-        usage: dict[str, int | None] | None = None
+        usage: ModelUsage | None = None
         try:
             async with asyncio.timeout(settings.skill_selector_llm_timeout_seconds):
                 async for delta in adapter.stream([{"role": "user", "content": prompt}]):
                     if delta.text:
                         chunks.append(delta.text)
                     if delta.usage is not None:
-                        usage = dict(delta.usage)
+                        usage = delta.usage
             raw = json.loads("".join(chunks))
             keys = raw.get("selected_skill_keys")
             confidence = float(raw.get("confidence"))

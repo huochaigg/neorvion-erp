@@ -102,6 +102,8 @@ class ConversationService:
             )
         skills_by_message: dict[int, list[SkillRunSummaryOut]] = {}
         for skill_run, skill in skill_runs:
+            if skill_run.message_id is None:
+                continue
             snapshot = skill_run.output_snapshot if isinstance(skill_run.output_snapshot, dict) else {}
             resources = snapshot.get("loaded_resources", [])
             skills_by_message.setdefault(skill_run.message_id, []).append(

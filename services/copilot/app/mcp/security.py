@@ -67,7 +67,7 @@ async def validate_resolved_endpoint(endpoint: str) -> None:
         infos = await asyncio.to_thread(socket.getaddrinfo, host, 443, type=socket.SOCK_STREAM)
     except OSError as exc:
         raise AppError("MCP Endpoint DNS 解析失败", code=50381, status_code=503) from exc
-    addresses = {item[4][0] for item in infos}
+    addresses = {str(item[4][0]) for item in infos}
     if not addresses:
         raise AppError("MCP Endpoint 没有可用地址", code=50381, status_code=503)
     validate_resolved_addresses(addresses)
@@ -131,47 +131,64 @@ def validate_arguments(schema: dict, value: object) -> dict:
 
 def _validate_value(schema: dict, value: object, path: str) -> None:
     kind = schema.get("type")
-    checks = {
-        "string": lambda item: isinstance(item, str),
-        "integer": lambda item: isinstance(item, int) and not isinstance(item, bool),
-        "number": lambda item: isinstance(item, (int, float)) and not isinstance(item, bool),
-        "boolean": lambda item: isinstance(item, bool),
-        "array": lambda item: isinstance(item, list),
-        "object": lambda item: isinstance(item, dict),
-    }
-    if kind in checks and not checks[kind](value):
-        raise AppError(f"MCP 工具参数 {path} 类型无效", code=40081, status_code=400)
-    if kind == "string" and len(value) > min(int(schema.get("maxLength", 4000)), 4000):
-        raise AppError("MCP 工具字符串参数过长", code=40081, status_code=400)
-    if kind == "string" and len(value) < max(int(schema.get("minLength", 0)), 0):
-        raise AppError("MCP 工具字符串参数过短", code=40081, status_code=400)
-    if kind == "string" and schema.get("pattern"):
-        if re.fullmatch(str(schema["pattern"]), value) is None:
+    if kind == "string":
+        if not isinstance(value, str):
+            raise AppError(f"MCP 工具参数 {path} 类型无效", code=40081, status_code=400)
+        if len(value) > min(int(schema.get("maxLength", 4000)), 4000):
+            raise AppError("MCP 工具字符串参数过长", code=40081, status_code=400)
+        if len(value) < max(int(schema.get("minLength", 0)), 0):
+            raise AppError("MCP 工具字符串参数过短", code=40081, status_code=400)
+        if schema.get("pattern") and re.fullmatch(str(schema["pattern"]), value) is None:
             raise AppError("MCP 工具字符串参数格式无效", code=40081, status_code=400)
-    if kind == "string" and schema.get("format") == "date":
-        try:
-            date.fromisoformat(value)
-        except ValueError as exc:
-            raise AppError("MCP 工具日期参数格式无效", code=40081, status_code=400) from exc
-    if kind in {"integer", "number"}:
-        if "minimum" in schema and value < schema["minimum"]:
-            raise AppError("MCP 工具数值参数小于下限", code=40081, status_code=400)
-        if "maximum" in schema and value > schema["maximum"]:
-            raise AppError("MCP 工具数值参数超过上限", code=40081, status_code=400)
+        if schema.get("format") == "date":
+            try:
+                date.fromisoformat(value)
+            except ValueError as exc:
+                raise AppError("MCP 工具日期参数格式无效", code=40081, status_code=400) from exc
+        return
+    if kind == "integer":
+        if not isinstance(value, int) or isinstance(value, bool):
+            raise AppError(f"MCP 工具参数 {path} 类型无效", code=40081, status_code=400)
+        _validate_number_bounds(schema, value)
+        return
+    if kind == "number":
+        if not isinstance(value, (int, float)) or isinstance(value, bool):
+            raise AppError(f"MCP 工具参数 {path} 类型无效", code=40081, status_code=400)
+        _validate_number_bounds(schema, value)
+        return
+    if kind == "boolean":
+        if not isinstance(value, bool):
+            raise AppError(f"MCP 工具参数 {path} 类型无效", code=40081, status_code=400)
+        return
     if kind == "array":
+        if not isinstance(value, list):
+            raise AppError(f"MCP 工具参数 {path} 类型无效", code=40081, status_code=400)
         if len(value) > min(int(schema.get("maxItems", 100)), 100):
             raise AppError("MCP 工具数组参数过长", code=40081, status_code=400)
         if len(value) < max(int(schema.get("minItems", 0)), 0):
             raise AppError("MCP 工具数组参数过短", code=40081, status_code=400)
         for index, item in enumerate(value):
             _validate_value(schema["items"], item, f"{path}[{index}]")
+        return
     if kind == "object":
+        if not isinstance(value, dict):
+            raise AppError(f"MCP 工具参数 {path} 类型无效", code=40081, status_code=400)
         properties = schema.get("properties", {})
+        if not isinstance(properties, dict):
+            properties = {}
         unknown = set(value) - set(properties)
         if unknown:
             raise AppError("MCP 工具参数包含未声明字段", code=40081, status_code=400)
-        missing = set(schema.get("required", [])) - set(value)
+        required = schema.get("required", [])
+        missing = (set(required) if isinstance(required, list) else set()) - set(value)
         if missing:
             raise AppError("MCP 工具缺少必填参数", code=40081, status_code=400)
         for name, item in value.items():
             _validate_value(properties[name], item, f"{path}.{name}")
+
+
+def _validate_number_bounds(schema: dict, value: int | float) -> None:
+    if "minimum" in schema and value < schema["minimum"]:
+        raise AppError("MCP 工具数值参数小于下限", code=40081, status_code=400)
+    if "maximum" in schema and value > schema["maximum"]:
+        raise AppError("MCP 工具数值参数超过上限", code=40081, status_code=400)

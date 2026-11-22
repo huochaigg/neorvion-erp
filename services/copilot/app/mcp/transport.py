@@ -136,9 +136,10 @@ class StreamableHttpTransport:
             if len(body) > settings.mcp_max_response_bytes:
                 raise _UnsafeMcpResponse("MCP Server 响应过大")
         else:
-            response.stream = _LimitedAsyncByteStream(
-                response.stream, settings.mcp_max_response_bytes
-            )
+            stream = response.stream
+            if not isinstance(stream, httpx2.AsyncByteStream):
+                raise _UnsafeMcpResponse("MCP 响应流类型不受支持")
+            response.stream = _LimitedAsyncByteStream(stream, settings.mcp_max_response_bytes)
 
     def _assert_runtime_gate(self) -> None:
         if not settings.mcp_remote_execution_enabled:

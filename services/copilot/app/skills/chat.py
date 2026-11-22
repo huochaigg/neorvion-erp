@@ -12,7 +12,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.registry import build_agent_registry
-from app.ai.types import ChatAdapter
+from app.ai.types import ChatAdapter, ModelMessage
 from app.core.config import settings
 from app.core.exceptions import AppError
 from app.core.tenant import TenantContext
@@ -83,7 +83,7 @@ class ChatSkillSession:
             min(agent.max_model_calls, 4, version.token_budget // settings.chat_max_output_tokens),
         )
 
-    def messages(self, history: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    def messages(self, history: list[ModelMessage]) -> list[ModelMessage]:
         resource_text = "".join(
             f'\n<untrusted_skill_resource path="{path}">{content}</untrusted_skill_resource>'
             for path, content in self.loaded.loaded_resources.items()

@@ -36,7 +36,8 @@ class SkillInputCollector:
         today: date | None = None,
     ) -> InputCollection:
         values = dict(previous or {})
-        properties = schema.get("properties") if isinstance(schema.get("properties"), dict) else {}
+        raw_properties = schema.get("properties")
+        properties = raw_properties if isinstance(raw_properties, dict) else {}
         current = today or self.business_today()
         for name, spec in properties.items():
             extracted = self._extract(name, spec if isinstance(spec, dict) else {}, task, current)

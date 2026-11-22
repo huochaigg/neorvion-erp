@@ -176,7 +176,8 @@ async def test_package_import_rejects_zip_slip_before_database_access() -> None:
 
 
 @pytest.mark.asyncio
-async def test_selector_is_conservative_and_supports_no_skill() -> None:
+async def test_selector_is_conservative_and_supports_no_skill(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(settings, "skill_selector_mode", "LEGACY")
     catalog = [
         SkillCatalogEntry(1, 11, "inventory-analysis", "库存", "库存覆盖", 1),
         SkillCatalogEntry(2, 22, "sales-order-review", "销售", "销售订单审查", 1),

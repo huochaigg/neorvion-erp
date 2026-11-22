@@ -344,6 +344,7 @@ class SkillExecutionService:
         valid: list[dict[str, Any]] = []
         citations: set[str] = set()
         for item in items:
+            citation: str | None = None
             try:
                 citation = str(item["citation_id"])
                 observed = datetime.fromisoformat(str(item["observed_at"]).replace("Z", "+00:00"))
@@ -357,7 +358,7 @@ class SkillExecutionService:
                 )
             except (KeyError, TypeError, ValueError):
                 structurally_valid = False
-            if structurally_valid:
+            if structurally_valid and citation is not None:
                 citations.add(citation)
                 valid.append(item)
         if version.required_evidence and not valid:

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import math
 from collections import Counter
+from collections.abc import Sequence
 from typing import Any
 
 
@@ -412,7 +413,7 @@ def _is_subsequence(expected: list[str], actual: list[str]) -> bool:
     return all(any(item == wanted for item in iterator) for wanted in expected)
 
 
-def _percentile(values: list[int], quantile: float) -> float | None:
+def _percentile(values: Sequence[int | float], quantile: float) -> float | None:
     if not values:
         return None
     index = max(0, min(len(values) - 1, math.ceil(quantile * len(values)) - 1))

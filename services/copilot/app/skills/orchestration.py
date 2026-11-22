@@ -8,6 +8,7 @@ from typing import Any
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.registry import build_agent_registry
+from app.ai.types import ModelMessage
 from app.core.config import settings
 from app.core.exceptions import AppError
 from app.core.tenant import TenantContext
@@ -99,7 +100,7 @@ class MultiSkillChatSession:
         runtime.skill_agent_groups = self.agent_groups
         runtime.max_model_calls = min(settings.budget_max_model_calls_per_request, model_calls)
 
-    def messages(self, history: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    def messages(self, history: list[ModelMessage]) -> list[ModelMessage]:
         blocks = []
         for item in self.items:
             resources = "".join(

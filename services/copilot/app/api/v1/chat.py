@@ -27,15 +27,34 @@ from app.services.quotas import (
     reserve_chat_quota,
     usage_tokens,
 )
-from app.skills.chat import prepare_chat_skill, skill_timeout
+from app.skills.chat import ChatSkillSession, prepare_chat_skill, skill_timeout
+from app.skills.orchestration import MultiSkillChatSession
 from app.skills.pending import PendingSkillPrompt
 from app.tools.executor import ToolRuntime
+
+ActiveSkillSession = ChatSkillSession | MultiSkillChatSession
 
 router = APIRouter(prefix="/chat", tags=["copilot-chat"])
 
 
 def _messages(payload: ChatRequest) -> list[ModelMessage]:
     return [{"role": item.role, "content": item.content} for item in payload.messages]
+
+
+def _active_skill(session: object) -> ActiveSkillSession | None:
+    return session if isinstance(session, (ChatSkillSession, MultiSkillChatSession)) else None
+
+
+def _skill_fail_message(session: ActiveSkillSession) -> str:
+    if isinstance(session, ChatSkillSession):
+        return session.row.safe_error or "模型生成失败"
+    return session.plan.safe_error or "模型生成失败"
+
+
+def _skill_still_running(session: ActiveSkillSession) -> bool:
+    if isinstance(session, ChatSkillSession):
+        return session.row.status == "RUNNING"
+    return session.plan.status == "RUNNING"
 
 
 def _event_data(event: dict) -> dict:
@@ -302,7 +321,7 @@ async def chat_stream(
                     turn,
                     runtime,
                     request.is_disconnected,
-                    skill_session,
+                    _active_skill(skill_session),
                 )
             else:
                 messages = _messages(payload)
@@ -335,7 +354,9 @@ async def chat_stream(
                 if skill_session is not None:
                     for event in skill_session.lifecycle_events():
                         yield _sse(event["event"], event["data"] | {"request_id": stream_request_id})
-            async with skill_timeout(skill_session if payload.conversation_id is None else None):
+            async with skill_timeout(
+                _active_skill(skill_session) if payload.conversation_id is None else None
+            ):
                 async for event in events:
                     name = str(event.get("event") or "message")
                     data = _event_data(event)
@@ -368,13 +389,14 @@ async def chat_stream(
                     data.setdefault("request_id", stream_request_id)
                     yield _sse(name, data)
         except AppError as exc:
+            running_skill = _active_skill(skill_session)
             if persistent_turn is not None and persistent_service is not None:
                 await persistent_service.fail_before_run(persistent_turn, exc.code)
-            if payload.conversation_id is None and skill_session is not None and runtime is not None:
-                await skill_session.fail(exc, runtime)
+            if payload.conversation_id is None and running_skill is not None and runtime is not None:
+                await running_skill.fail(exc, runtime)
                 yield _sse(
                     "skill_error",
-                    skill_session.public_data
+                    running_skill.public_data
                     | {"request_id": stream_request_id, "status": "FAILED", "message": exc.message},
                 )
             ids = (
@@ -391,17 +413,18 @@ async def chat_stream(
                 {"code": exc.code, "message": exc.message, "request_id": stream_request_id} | ids,
             )
         except Exception as exc:
+            running_skill = _active_skill(skill_session)
             if persistent_turn is not None and persistent_service is not None:
                 await persistent_service.fail_before_run(persistent_turn, 50268)
-            if payload.conversation_id is None and skill_session is not None and runtime is not None:
-                await skill_session.fail(exc, runtime)
+            if payload.conversation_id is None and running_skill is not None and runtime is not None:
+                await running_skill.fail(exc, runtime)
                 yield _sse(
                     "skill_error",
-                    skill_session.public_data
+                    running_skill.public_data
                     | {
                         "request_id": stream_request_id,
                         "status": "FAILED",
-                        "message": skill_session.row.safe_error,
+                        "message": _skill_fail_message(running_skill),
                     },
                 )
             ids = (
@@ -418,14 +441,15 @@ async def chat_stream(
                 {"code": 50268, "message": "模型生成失败", "request_id": stream_request_id} | ids,
             )
         finally:
+            running_skill = _active_skill(skill_session)
             if (
                 not completed
                 and payload.conversation_id is None
-                and skill_session is not None
+                and running_skill is not None
                 and runtime is not None
-                and skill_session.row.status == "RUNNING"
+                and _skill_still_running(running_skill)
             ):
-                await skill_session.fail(asyncio.CancelledError(), runtime)
+                await running_skill.fail(asyncio.CancelledError(), runtime)
             if completed and not quota_released:
                 await reservation.settle(usage_tokens(final_usage))
             elif not completed and not quota_released:
