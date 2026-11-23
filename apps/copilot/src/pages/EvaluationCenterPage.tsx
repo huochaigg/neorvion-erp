@@ -13,6 +13,7 @@ import {
   importV8EvaluationCases,
   importV9EvaluationCases,
   importV14SkillCases,
+  importV15IntentCases,
   listEvaluationDatasets,
   listEvaluationRuns,
   listEvaluationVersions,
@@ -71,6 +72,10 @@ function DatasetPanel() {
     mutationFn: importV14SkillCases,
     onSuccess: () => void client.invalidateQueries({ queryKey: ['tenant', tenantId, 'agent-evaluation-dataset', selectedDataset] }),
   });
+  const importV15 = useMutation({
+    mutationFn: importV15IntentCases,
+    onSuccess: () => void client.invalidateQueries({ queryKey: ['tenant', tenantId, 'agent-evaluation-dataset', selectedDataset] }),
+  });
   const freeze = useMutation({
     mutationFn: freezeEvaluationDataset,
     onSuccess: () => void client.invalidateQueries({ queryKey: ['tenant', tenantId, 'agent-evaluation-datasets'] }),
@@ -97,6 +102,7 @@ function DatasetPanel() {
                 <Button size="small" loading={importV8.isPending} onClick={() => { setSelectedDataset(row.id); importV8.mutate(row.id); }}>导入 V8 30题</Button>
                 <Button size="small" loading={importV9.isPending} onClick={() => { setSelectedDataset(row.id); importV9.mutate(row.id); }}>导入 V9 100题</Button>
                 <Button size="small" loading={importV14.isPending} onClick={() => { setSelectedDataset(row.id); importV14.mutate(row.id); }}>导入 V14.3 Skill 120题</Button>
+                <Button size="small" loading={importV15.isPending} onClick={() => { setSelectedDataset(row.id); importV15.mutate(row.id); }}>导入 V15 Intent 125题</Button>
                 <Button size="small" loading={freeze.isPending} onClick={() => freeze.mutate(row.id)}>冻结新版本</Button>
               </Space>,
             },
@@ -145,12 +151,12 @@ function RunPanel() {
   const versions = useQuery({ queryKey: ['tenant', tenantId, 'agent-evaluation-versions', datasetId], queryFn: ({ signal }) => listEvaluationVersions(datasetId!, signal), enabled: datasetId != null });
   const [versionId, setVersionId] = useState<number>();
   const [mode, setMode] = useState<'SINGLE' | 'MULTI' | 'AUTO'>('AUTO');
-  const [executionKind, setExecutionKind] = useState<'REPLAY' | 'SELECTOR_LIVE' | 'END_TO_END'>('REPLAY');
+  const [executionKind, setExecutionKind] = useState<'REPLAY' | 'SELECTOR_LIVE' | 'INTENT_LIVE' | 'END_TO_END'>('REPLAY');
   const [selectorProfile, setSelectorProfile] = useState<'BASELINE' | 'BASIC' | 'HYBRID'>('HYBRID');
   const [selectedRun, setSelectedRun] = useState<number>();
   const detail = useQuery({ queryKey: ['tenant', tenantId, 'agent-evaluation-run', selectedRun], queryFn: ({ signal }) => getEvaluationRun(selectedRun!, signal), enabled: selectedRun != null });
   const create = useMutation({
-    mutationFn: () => createEvaluationRun({ dataset_version_id: versionId!, mode, execution_kind: executionKind, idempotency_key: crypto.randomUUID(), config: { selector_profile: selectorProfile, skill_enabled: selectorProfile !== 'BASELINE' } }),
+    mutationFn: () => createEvaluationRun({ dataset_version_id: versionId!, mode, execution_kind: executionKind, idempotency_key: crypto.randomUUID(), config: { selector_profile: selectorProfile, skill_enabled: selectorProfile !== 'BASELINE', intent_use_llm: executionKind === 'INTENT_LIVE' } }),
     onSuccess: () => void client.invalidateQueries({ queryKey: ['tenant', tenantId, 'agent-evaluation-runs'] }),
   });
   const updateRun = useMutation({
@@ -180,12 +186,13 @@ function RunPanel() {
           <Select value={executionKind} className="w-48" options={[
             { label: '确定性 Replay', value: 'REPLAY' },
             { label: 'Selector Live', value: 'SELECTOR_LIVE' },
+            { label: 'Intent Live', value: 'INTENT_LIVE' },
             { label: '端到端（需环境）', value: 'END_TO_END', disabled: true },
           ]} onChange={setExecutionKind} />
           <Select value={selectorProfile} className="w-40" options={['BASELINE', 'BASIC', 'HYBRID'].map((value) => ({ label: value, value }))} onChange={setSelectorProfile} />
           <Button type="primary" disabled={!versionId} loading={create.isPending} onClick={() => create.mutate()}>启动 {executionKind} Run</Button>
         </Space>
-        <div className="mt-3 text-xs text-slate-500">Selector Live 只运行当前 Catalog/Selector，不调用 Tool；END_TO_END 需要专用只读身份，页面不会把用户 JWT 发送给 Worker。</div>
+        <div className="mt-3 text-xs text-slate-500">Replay 对意图集跑确定性规则分类；Intent Live 才调用真实分类模型。Mock 成功不能当成生产验收。END_TO_END 需要专用只读身份。</div>
       </Card>
       <Card title="运行记录">
         {rows.length ? (
@@ -313,7 +320,7 @@ export default function EvaluationCenterPage() {
     <div className="copilot-scroll h-full overflow-y-auto p-4 md:p-6">
       <div className="mx-auto max-w-7xl">
         <Title level={3}>Agent Evaluation Center</Title>
-        <Text type="secondary">冻结数据集、异步 Run、真实 Trace、确定性指标与 Single/Multi 对照</Text>
+        <Text type="secondary">冻结数据集、异步 Run、真实 Trace、意图识别指标与 Single/Multi 对照</Text>
         <Tabs className="mt-4" items={[
           { key: 'datasets', label: '数据集', children: <DatasetPanel /> },
           { key: 'runs', label: '运行与指标', children: <RunPanel /> },

@@ -9,10 +9,10 @@ from types import SimpleNamespace
 import pytest
 from app.core.config import settings
 from app.core.exceptions import AppError
-from app.schemas.ecosystem import SkillCreate
 from app.core.tenant import TenantContext
 from app.graph.workflow import AgentRuntime
 from app.models.ecosystem import Skill, SkillRun, SkillVersion
+from app.schemas.ecosystem import SkillCreate
 from app.services.ecosystem import EcosystemService
 from app.skills.catalog import SkillCatalog, SkillCatalogEntry, SkillCatalogSnapshot
 from app.skills.chat import ChatSkillSession, prepare_chat_skill

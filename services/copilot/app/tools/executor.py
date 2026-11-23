@@ -49,6 +49,8 @@ class ToolRuntime:
     global_call_limit: int | None = None
     mcp_gateway: McpGateway | None = None
     agent_name: str | None = None
+    forbid_write_tools: bool = False
+    blocked_tools: frozenset[str] | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -78,6 +80,7 @@ class ToolExecutor:
         allowed_tools: frozenset[str] | None = None,
         mcp_gateway: McpGateway | None = None,
         agent_name: str | None = None,
+        blocked_tools: frozenset[str] | None = None,
     ) -> list[ModelToolDefinition]:
         definitions: list[ModelToolDefinition] = [
             *self.registry.definitions(permissions),
@@ -86,6 +89,12 @@ class ToolExecutor:
         if allowed_tools is not None:
             definitions = [
                 item for item in definitions if str(item["function"].get("name")) in allowed_tools
+            ]
+        if blocked_tools:
+            definitions = [
+                item
+                for item in definitions
+                if str(item["function"].get("name")) not in blocked_tools
             ]
         if mcp_gateway is not None:
             definitions.extend(mcp_gateway.definitions(agent_name))
@@ -102,6 +111,13 @@ class ToolExecutor:
         )
         if runtime.allowed_tools is not None and call.name not in runtime.allowed_tools:
             raise AppError("Agent 无权调用该工具", code=40378, status_code=403)
+        if runtime.blocked_tools and call.name in runtime.blocked_tools:
+            raise AppError("当前意图不允许调用该工具", code=40379, status_code=403)
+        if runtime.forbid_write_tools and call.name in {
+            "propose_action",
+            "validate_action_proposal",
+        }:
+            raise AppError("当前意图不允许创建业务草稿", code=40379, status_code=403)
         if call.name.startswith("mcp__"):
             return await self._execute_mcp(call, runtime)
         if call.name in {"propose_action", "validate_action_proposal"}:

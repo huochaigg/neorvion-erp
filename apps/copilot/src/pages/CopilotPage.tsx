@@ -18,7 +18,7 @@ import {
   turnHasTerminalAssistant,
 } from '@/lib/chatMessages';
 import { useCopilotStore } from '@/store';
-import type { AgentRun, ConversationDetail, Evidence, Message, SkillRunSummary, StreamEvent, ToolRun } from '@/types';
+import type { AgentRun, ConversationDetail, Evidence, IntentStatus, Message, SkillRunSummary, StreamEvent, ToolRun } from '@/types';
 
 function requestId() {
   return crypto.randomUUID().replaceAll('-', '');
@@ -42,6 +42,7 @@ export function CopilotPage() {
   const [analysisStatus, setAnalysisStatus] = useState('');
   const [agentRun, setAgentRun] = useState<AgentRun | null>(null);
   const [skillRuns, setSkillRuns] = useState<SkillRunSummary[]>([]);
+  const [intentStatus, setIntentStatus] = useState<IntentStatus | null>(null);
   const [error, setError] = useState('');
   const [running, setRunning] = useState(false);
   const [skillMode, setSkillMode] = useState<'AUTO' | 'MANUAL' | 'NONE'>('NONE');
@@ -109,6 +110,7 @@ export function CopilotPage() {
       analysisStatus,
       agentRun,
       skillRuns,
+      intentStatus,
     });
   }, [
     agentRun,
@@ -121,6 +123,7 @@ export function CopilotPage() {
     running,
     tools,
     skillRuns,
+    intentStatus,
   ]);
 
   const handleEvent = (item: StreamEvent, guard: string) => {
@@ -172,6 +175,21 @@ export function CopilotPage() {
         status: item.event === 'skill_done' || item.event === 'skill_plan_done' ? String(data.status ?? 'SUCCEEDED') : 'FAILED',
         safe_error: item.event === 'skill_error' || item.event === 'skill_plan_error' ? String(data.message ?? 'Skill 执行失败') : null,
       })));
+    }
+    if (item.event === 'intent_resolved' || item.event === 'intent_clarification') {
+      setIntentStatus({
+        resolution_id: String(data.resolution_id ?? ''),
+        status_text: String(data.status_text ?? data.clarification ?? ''),
+        decision: String(data.decision ?? ''),
+        intents: Array.isArray(data.intents) ? data.intents.map(String) : [],
+        problem_types: Array.isArray(data.problem_types) ? data.problem_types.map(String) : [],
+        missing_slots: Array.isArray(data.missing_slots) ? data.missing_slots.map(String) : [],
+        pending: Boolean(data.pending) || data.status === 'COLLECTING' || data.status === 'CLARIFY',
+        clarification: data.clarification ? String(data.clarification) : null,
+        agents: Array.isArray(data.agents) ? data.agents.map(String) : [],
+        skills: Array.isArray(data.skills) ? data.skills.map(String) : [],
+        mode: data.mode ? String(data.mode) : undefined,
+      });
     }
     if (item.event === 'analysis_status') setAnalysisStatus(String(data.message ?? ''));
     if (item.event === 'agent_route')
@@ -289,6 +307,7 @@ export function CopilotPage() {
     setAnalysisStatus('');
     setAgentRun(null);
     setSkillRuns([]);
+    setIntentStatus(null);
     setError('');
     setPendingUser(user);
     setPendingFromIndex(fromIndex);
@@ -366,7 +385,11 @@ export function CopilotPage() {
         ) : (
           <div className="mx-auto flex max-w-[900px] flex-col gap-6">
             {visible.map((message, index) => (
-              <ChatMessage key={`${message.role}-${message.id}-${message.request_id}-${index}`} message={message} />
+              <ChatMessage
+                key={`${message.role}-${message.id}-${message.request_id}-${index}`}
+                message={message}
+                onCancelIntent={message.id < 0 && intentStatus?.pending ? () => void send('取消') : undefined}
+              />
             ))}
             {(proposals.data?.items ?? []).map((proposal) => (
               <ProposalCard

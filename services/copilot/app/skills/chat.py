@@ -17,6 +17,7 @@ from app.core.config import settings
 from app.core.exceptions import AppError
 from app.core.tenant import TenantContext
 from app.graph.workflow import AgentRuntime
+from app.intent.schemas import IntentResolution
 from app.mcp.security import validate_arguments
 from app.models.ecosystem import SkillRun
 from app.services.skill_execution import SkillExecutionService
@@ -211,6 +212,7 @@ async def prepare_chat_skill(
     skill_mode: str = "AUTO",
     explicit_skill_key: str | None = None,
     selector_adapter: ChatAdapter | None = None,
+    intent_resolution: IntentResolution | None = None,
 ) -> ChatSkillSession | MultiSkillChatSession | PendingSkillPrompt | None:
     """按 Metadata→Instructions→按需 Resources 三层加载，创建不重复计费的 Chat SkillRun。"""
     mode = skill_mode.upper()
@@ -246,17 +248,23 @@ async def prepare_chat_skill(
         )
     catalog_snapshot = await SkillCatalog(db, context).snapshot()
     catalog = list(catalog_snapshot.entries)
+    routing_plan = (
+        intent_resolution.routing_plan
+        if intent_resolution is not None and intent_resolution.applied
+        else None
+    )
     selection = await SkillSelector().select(
         task,
         catalog,
         explicit_skill_key=explicit_skill_key,
-        adapter=selector_adapter,
+        adapter=None if routing_plan is not None else selector_adapter,
         catalog_trace={
             "query_latency_ms": catalog_snapshot.query_latency_ms,
             "scanned_count": catalog_snapshot.scanned_count,
             "available_count": len(catalog_snapshot.entries),
             "filtered_reasons": catalog_snapshot.filtered_reasons,
         },
+        routing_plan=routing_plan,
     )
     if isinstance(resumed, ResumedSkillInput):
         selection = SkillSelection(
@@ -342,6 +350,8 @@ async def prepare_chat_skill(
                 request_id,
                 _selection_snapshot(selection),
             )
+        if mode != "MANUAL" and routing_plan is not None:
+            return None
         raise AppError(
             collected.clarification or "请补充 Skill 必填参数",
             code=42291,

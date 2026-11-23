@@ -5,6 +5,7 @@
 ## 主题
 
 - [架构](architecture.md)
+- [Copilot V15 意图理解](copilot-v15-intent.md)
 - [租户与 RBAC](tenant-rbac.md)
 - [SQLAlchemy 事务](sqlalchemy-transaction.md)
 - [库存并发](inventory-concurrency.md)

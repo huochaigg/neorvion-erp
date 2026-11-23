@@ -15,6 +15,14 @@ from app.core.config import settings
 from app.core.exceptions import AppError
 from app.erp.client import get_erp_client
 from app.graph.workflow import AgentRuntime
+from app.intent.integration import (
+    IntentClarification,
+    apply_resolution_to_runtime,
+    clarification_response,
+    resolve_chat_intent,
+    should_clarify_without_run,
+)
+from app.intent.schemas import IntentResolution
 from app.mcp.gateway import McpGateway
 from app.schemas.chat import ChatRequest, ChatResponse, TokenUsageOut
 from app.schemas.common import ApiResponse, ok
@@ -33,6 +41,7 @@ from app.skills.pending import PendingSkillPrompt
 from app.tools.executor import ToolRuntime
 
 ActiveSkillSession = ChatSkillSession | MultiSkillChatSession
+PreparedSkill = ActiveSkillSession | PendingSkillPrompt | IntentClarification | None
 
 router = APIRouter(prefix="/chat", tags=["copilot-chat"])
 
@@ -147,10 +156,11 @@ async def chat(
                 mcp_gateway=mcp_gateway,
             )
             skill_session = None
+            intent_resolution = None
             if turn.duplicate_answer is None:
                 try:
-                    skill_session = await prepare_chat_skill(
-                        cast(AsyncSession, db),
+                    skill_session, intent_resolution = await _prepare_with_intent(
+                        db,
                         context,
                         payload.message or "",
                         turn.request_id,
@@ -160,11 +170,12 @@ async def chat(
                         skill_mode=payload.skill_mode or "AUTO",
                         explicit_skill_key=payload.skill_key,
                         selector_adapter=workflow.adapter,
+                        recent_messages=_history_dicts(turn.history),
                     )
                 except AppError as exc:
                     await service.fail_before_run(turn, exc.code)
                     raise
-            if isinstance(skill_session, PendingSkillPrompt):
+            if isinstance(skill_session, (PendingSkillPrompt, IntentClarification)):
                 await service.complete_without_run(turn, skill_session.answer)
                 await reservation.release()
                 return ok(
@@ -174,7 +185,8 @@ async def chat(
                         conversation_id=turn.conversation_id,
                         message_id=turn.message_id,
                         request_id=turn.request_id,
-                        skill=skill_session.public_data,
+                        skill=skill_session.public_data if isinstance(skill_session, PendingSkillPrompt) else None,
+                        intent=intent_resolution.public_payload() if intent_resolution else skill_session.public_data,
                     )
                 )
             answer = ""
@@ -195,6 +207,7 @@ async def chat(
                 message_id=turn.message_id,
                 request_id=turn.request_id,
                 skill=skill_session.public_data if skill_session is not None else None,
+                intent=intent_resolution.public_payload() if intent_resolution else None,
             )
         else:
             messages = _messages(payload)
@@ -205,8 +218,8 @@ async def chat(
                 governance=governance,
                 mcp_gateway=mcp_gateway,
             )
-            skill_session = await prepare_chat_skill(
-                cast(AsyncSession, db),
+            skill_session, intent_resolution = await _prepare_with_intent(
+                db,
                 context,
                 str(messages[-1]["content"]),
                 str(getattr(request.state, "request_id", "") or uuid4().hex),
@@ -216,9 +229,19 @@ async def chat(
                 skill_mode=payload.skill_mode or "AUTO",
                 explicit_skill_key=payload.skill_key,
                 selector_adapter=workflow.adapter,
+                recent_messages=[{"role": item.role, "content": item.content} for item in payload.messages[:-1]],
             )
             if isinstance(skill_session, PendingSkillPrompt):
                 raise AppError("无会话模式不支持多轮参数补全", code=42293, status_code=422)
+            if isinstance(skill_session, IntentClarification):
+                await reservation.release()
+                return ok(
+                    ChatResponse(
+                        answer=skill_session.answer,
+                        model=settings.chat_model,
+                        intent=intent_resolution.public_payload() if intent_resolution else skill_session.public_data,
+                    )
+                )
             try:
                 async with skill_timeout(skill_session):
                     answer, usage = await ChatService(workflow).complete(
@@ -236,6 +259,7 @@ async def chat(
                 model=settings.chat_model,
                 usage=TokenUsageOut.model_validate(usage) if usage is not None else None,
                 skill=skill_session.public_data if skill_session is not None else None,
+                intent=intent_resolution.public_payload() if intent_resolution else None,
             )
         await reservation.settle(usage_tokens(usage))
         return ok(response)
@@ -268,6 +292,7 @@ async def chat_stream(
         persistent_turn = None
         persistent_service = None
         skill_session = None
+        intent_resolution = None
         runtime = None
         buffered_skill_answer = ""
         final_usage = None
@@ -296,8 +321,8 @@ async def chat_stream(
                     mcp_gateway=mcp_gateway,
                 )
                 if turn.duplicate_answer is None:
-                    skill_session = await prepare_chat_skill(
-                        cast(AsyncSession, db),
+                    skill_session, intent_resolution = await _prepare_with_intent(
+                        db,
                         context,
                         payload.message or "",
                         turn.request_id,
@@ -307,13 +332,29 @@ async def chat_stream(
                         skill_mode=payload.skill_mode or "AUTO",
                         explicit_skill_key=payload.skill_key,
                         selector_adapter=workflow.adapter,
+                        recent_messages=_history_dicts(turn.history),
                     )
-                    if isinstance(skill_session, PendingSkillPrompt):
+                    if intent_resolution is not None and intent_resolution.public_status:
+                        yield _sse(
+                            "intent_resolved",
+                            intent_resolution.public_payload()
+                            | {
+                                "request_id": turn.request_id,
+                                "conversation_id": turn.conversation_id,
+                                "message_id": turn.message_id,
+                            },
+                        )
+                    if isinstance(skill_session, (PendingSkillPrompt, IntentClarification)):
                         await service.complete_without_run(turn, skill_session.answer)
                         await reservation.release()
                         quota_released = True
                         completed = True
-                        yield _sse("skill_input_required", skill_session.public_data | {"request_id": turn.request_id, "conversation_id": turn.conversation_id, "message_id": turn.message_id})
+                        event_name = (
+                            "skill_input_required"
+                            if isinstance(skill_session, PendingSkillPrompt)
+                            else "intent_clarification"
+                        )
+                        yield _sse(event_name, skill_session.public_data | {"request_id": turn.request_id, "conversation_id": turn.conversation_id, "message_id": turn.message_id})
                         yield _sse("message", {"request_id": turn.request_id, "conversation_id": turn.conversation_id, "message_id": turn.message_id, "delta": skill_session.answer})
                         yield _sse("done", {"request_id": turn.request_id, "conversation_id": turn.conversation_id, "message_id": turn.message_id, "answer": skill_session.answer})
                         return
@@ -332,8 +373,8 @@ async def chat_stream(
                     governance=governance,
                     mcp_gateway=mcp_gateway,
                 )
-                skill_session = await prepare_chat_skill(
-                    cast(AsyncSession, db),
+                skill_session, intent_resolution = await _prepare_with_intent(
+                    db,
                     context,
                     str(messages[-1]["content"]),
                     stream_request_id,
@@ -343,9 +384,22 @@ async def chat_stream(
                     skill_mode=payload.skill_mode or "AUTO",
                     explicit_skill_key=payload.skill_key,
                     selector_adapter=workflow.adapter,
+                    recent_messages=[
+                        {"role": item.role, "content": item.content} for item in payload.messages[:-1]
+                    ],
                 )
+                if intent_resolution is not None and intent_resolution.public_status:
+                    yield _sse("intent_resolved", intent_resolution.public_payload() | {"request_id": stream_request_id})
                 if isinstance(skill_session, PendingSkillPrompt):
                     raise AppError("无会话模式不支持多轮参数补全", code=42293, status_code=422)
+                if isinstance(skill_session, IntentClarification):
+                    yield _sse("intent_clarification", skill_session.public_data | {"request_id": stream_request_id})
+                    yield _sse("message", {"request_id": stream_request_id, "delta": skill_session.answer})
+                    yield _sse("done", {"request_id": stream_request_id, "answer": skill_session.answer})
+                    completed = True
+                    await reservation.release()
+                    quota_released = True
+                    return
                 events = ChatService(workflow).stream_events(
                     skill_session.messages(messages) if skill_session is not None else messages,
                     disconnected=request.is_disconnected,
@@ -473,3 +527,56 @@ async def _false() -> bool:
 def _estimated_tokens(payload: ChatRequest) -> int:
     text_size = len(payload.message or "") + sum(len(item.content) for item in payload.messages)
     return max(1, (text_size + 2) // 3) + settings.chat_max_output_tokens
+
+
+def _history_dicts(history: list[ModelMessage]) -> list[dict[str, str]]:
+    return [
+        {"role": str(item.get("role") or ""), "content": str(item.get("content") or "")}
+        for item in history
+        if item.get("role") in {"user", "assistant"} and item.get("content")
+    ]
+
+
+async def _prepare_with_intent(
+    db: DbSession,
+    context: CopilotContext,
+    text: str,
+    request_id: str,
+    runtime: AgentRuntime,
+    *,
+    conversation_id: int | None,
+    message_id: int | None,
+    skill_mode: str,
+    explicit_skill_key: str | None,
+    selector_adapter,
+    recent_messages: list[dict[str, str]],
+) -> tuple[PreparedSkill, IntentResolution | None]:
+    resolution = await resolve_chat_intent(
+        db=cast(AsyncSession, db),
+        context=context,
+        text=text,
+        request_id=request_id,
+        conversation_id=conversation_id,
+        message_id=message_id,
+        recent_messages=recent_messages,
+        adapter=selector_adapter,
+        skill_mode=skill_mode,
+        explicit_skill_key=explicit_skill_key,
+    )
+    apply_resolution_to_runtime(runtime, resolution)
+    if should_clarify_without_run(resolution):
+        return clarification_response(resolution), resolution
+    skill_session = await prepare_chat_skill(
+        cast(AsyncSession, db),
+        context,
+        text,
+        request_id,
+        runtime,
+        conversation_id=conversation_id,
+        message_id=message_id,
+        skill_mode=skill_mode,
+        explicit_skill_key=explicit_skill_key,
+        selector_adapter=selector_adapter,
+        intent_resolution=resolution,
+    )
+    return skill_session, resolution

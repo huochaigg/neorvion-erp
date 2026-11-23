@@ -85,3 +85,4 @@ class ChatResponse(BaseModel):
     message_id: int | None = None
     request_id: str | None = None
     skill: dict | None = Field(default=None, description="自动选择的 Skill 与运行标识；未选择时为空")
+    intent: dict | None = Field(default=None, description="意图识别摘要；未启用或未识别时为空")

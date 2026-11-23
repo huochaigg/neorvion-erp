@@ -3,7 +3,20 @@ export interface Evidence {citation_id:string;source_type:'ERP'|'KNOWLEDGE';reso
 export interface AgentTaskRun {agent_name:string;task_id:string;status:string;duration_ms:number|null;model_calls:number;tool_calls:number;evidence_count:number;error_code:number|null}
 export interface AgentRun {id:number|string;graph_type:string;status:string;route_reason:string|null;total_duration_ms:number|null;tasks:AgentTaskRun[]}
 export interface SkillRunSummary {id:number;skill_id:number;skill_key:string;skill_name:string;skill_version:number;status:string;selection_method:string|null;selection_reason?:string|null;plan_id?:number|null;plan_step_key?:string|null;missing_fields?:string[];loaded_resources:string[];safe_error:string|null}
-export interface Message {id:number;role:string;content:string;status:string;request_id:string;created_at:string;updated_at:string;tool_runs:ToolRun[];evidences:Evidence[];agent_runs?:AgentRun[];skill_runs?:SkillRunSummary[];analysis_status?:string}
+export interface IntentStatus {
+  resolution_id?: string
+  status_text?: string
+  decision?: string
+  intents?: string[]
+  problem_types?: string[]
+  missing_slots?: string[]
+  pending?: boolean
+  clarification?: string | null
+  agents?: string[]
+  skills?: string[]
+  mode?: string
+}
+export interface Message {id:number;role:string;content:string;status:string;request_id:string;created_at:string;updated_at:string;tool_runs:ToolRun[];evidences:Evidence[];agent_runs?:AgentRun[];skill_runs?:SkillRunSummary[];analysis_status?:string;intent_status?:IntentStatus|null}
 export interface Conversation {id:number;title:string;status:string;created_at:string;updated_at:string}
 export interface ConversationDetail extends Conversation {messages:Message[]}
 export interface ConversationList {items:Conversation[];total:number;page:number;page_size:number}

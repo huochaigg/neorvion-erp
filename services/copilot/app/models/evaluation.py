@@ -147,7 +147,7 @@ class AgentEvaluationRun(TimestampMixin, TenantMixin, Base):
         ),
         CheckConstraint("mode IN ('SINGLE','MULTI','AUTO')", name="ck_agent_eval_run_mode"),
         CheckConstraint(
-            "execution_kind IN ('REPLAY','LIVE','SELECTOR_LIVE','END_TO_END')",
+            "execution_kind IN ('REPLAY','LIVE','SELECTOR_LIVE','INTENT_LIVE','END_TO_END')",
             name="ck_agent_eval_execution_kind",
         ),
     )

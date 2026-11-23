@@ -13,6 +13,7 @@ describe('EvaluationCenterPage', () => {
     );
     expect(html).toContain('Agent Evaluation Center');
     expect(html).toContain('尚无评测数据集');
+    expect(html).toContain('意图识别');
     expect(html).not.toContain('100%');
   });
 });

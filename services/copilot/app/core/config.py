@@ -20,7 +20,7 @@ class Settings(BaseSettings):
     app_env: str = "development"
     app_host: str = "0.0.0.0"
     app_port: int = 8013
-    app_version: str = "14.2.0"
+    app_version: str = "15.0.0"
     git_sha: str = ""
     enable_api_docs: bool = True
     cors_origins: str = (
@@ -150,6 +150,14 @@ class Settings(BaseSettings):
     skill_business_timezone: str = "Asia/Shanghai"
     skill_evaluation_enabled: bool = False
     skill_evaluation_e2e_enabled: bool = False
+    intent_v15_mode: str = "DISABLED"
+    intent_classifier_llm_enabled: bool = True
+    intent_shadow_llm_enabled: bool = False
+    intent_classifier_timeout_seconds: float = 6.0
+    intent_classifier_model: str = ""
+    intent_pending_ttl_seconds: int = 900
+    intent_context_max_messages: int = 8
+    intent_evaluation_enabled: bool = False
 
     @property
     def is_production(self) -> bool:

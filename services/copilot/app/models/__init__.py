@@ -47,6 +47,7 @@ from app.models.insight import (
     InsightRule,
     InsightRuleRevision,
 )
+from app.models.intent import IntentContext
 from app.models.workflow import WorkflowEvent, WorkflowInstance, WorkflowStep, WorkflowStepAttempt
 
 __all__ = [
@@ -86,6 +87,7 @@ __all__ = [
     "SkillExecutionPlanStep",
     "SkillVersion",
     "SkillRun",
+    "IntentContext",
     "InsightRule",
     "InsightRuleRevision",
     "AIGovernanceAudit",

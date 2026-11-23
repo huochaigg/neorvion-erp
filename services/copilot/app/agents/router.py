@@ -23,7 +23,12 @@ class AgentRouter:
     _workflow_words = ("准备采购单", "生成采购单", "创建采购单", "启动工作流")
     _complex_words = ("分析", "为什么", "原因", "综合", "对比", "建议", "计划", "异常")
 
-    def route(self, query: str) -> AgentRoute:
+    def route(self, query: str, *, intent_route: AgentRoute | None = None) -> AgentRoute:
+        """关键词规则仍是回退路径；Intent RoutingPlan 存在时不再重新猜测。"""
+        if intent_route is not None and intent_route.agents:
+            return intent_route
+        if intent_route is not None and intent_route.mode:
+            return AgentRoute(intent_route.mode, intent_route.agents, intent_route.reason)
         lowered = query.strip().lower()
         if "无法出库" in lowered:
             return AgentRoute(

@@ -33,7 +33,7 @@ export interface EvaluationRun {
   id: number;
   dataset_version_id: number;
   mode: 'SINGLE' | 'MULTI' | 'AUTO';
-  execution_kind: 'REPLAY' | 'SELECTOR_LIVE' | 'END_TO_END';
+  execution_kind: 'REPLAY' | 'SELECTOR_LIVE' | 'INTENT_LIVE' | 'END_TO_END';
   model_provider: string;
   model_name: string;
   environment_fingerprint: string;
@@ -122,6 +122,9 @@ export const importV9EvaluationCases = (datasetId: number) =>
 export const importV14SkillCases = (datasetId: number) =>
   unwrap(api.post(`/api/v1/evaluations/datasets/${datasetId}/cases/import-v14-skills`));
 
+export const importV15IntentCases = (datasetId: number) =>
+  unwrap(api.post(`/api/v1/evaluations/datasets/${datasetId}/cases/import-v15-intents`));
+
 export const freezeEvaluationDataset = (id: number) =>
   unwrap(api.post(`/api/v1/evaluations/datasets/${id}/freeze`));
 
@@ -138,7 +141,7 @@ export const listEvaluationRuns = (signal?: AbortSignal) =>
 export const createEvaluationRun = (payload: {
   dataset_version_id: number;
   mode: 'SINGLE' | 'MULTI' | 'AUTO';
-  execution_kind: 'REPLAY' | 'SELECTOR_LIVE' | 'END_TO_END';
+  execution_kind: 'REPLAY' | 'SELECTOR_LIVE' | 'INTENT_LIVE' | 'END_TO_END';
   idempotency_key: string;
   config?: {
     selector_profile?: 'BASELINE' | 'BASIC' | 'HYBRID';
@@ -146,6 +149,7 @@ export const createEvaluationRun = (payload: {
     skill_version_overrides?: Record<string, number>;
     skill_enabled?: boolean;
     selector_use_llm?: boolean;
+    intent_use_llm?: boolean;
   };
 }) =>
   unwrap(api.post('/api/v1/evaluations/runs', payload)).then(

@@ -106,6 +106,13 @@ async def import_v14_skill_cases(
     return ok(await _service(db, context).import_v14_skill_catalog(dataset_id))
 
 
+@router.post("/datasets/{dataset_id}/cases/import-v15-intents", response_model=ApiResponse[dict])
+async def import_v15_intent_cases(
+    dataset_id: int, context: EvaluationManageContext, db: DbSession
+):
+    return ok(await _service(db, context).import_v15_intent_catalog(dataset_id))
+
+
 @router.patch("/cases/{case_id}", response_model=ApiResponse[EvaluationCaseOut])
 async def patch_case(
     case_id: int,

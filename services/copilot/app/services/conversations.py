@@ -67,6 +67,14 @@ class ConversationService:
         evidence_rows = await self.repo.evidences(conversation_id)
         agent_runs = await self.repo.agent_runs(conversation_id)
         skill_runs = await self.repo.skill_runs(conversation_id)
+        from app.intent.store import IntentContextStore
+
+        intent_by_message: dict[int, dict] = {}
+        intent_row = await IntentContextStore(self.session, self.context).load(conversation_id)
+        if intent_row is not None:
+            for item in intent_row.message_summaries or []:
+                if isinstance(item, dict) and item.get("message_id"):
+                    intent_by_message[int(item["message_id"])] = item.get("summary") or {}
         agent_tasks = await self.repo.agent_tasks([item.id for item in agent_runs])
         by_message: dict[int, list[ToolRunOut]] = {}
         for run in runs:
@@ -138,6 +146,7 @@ class ConversationService:
                         "evidences": evidence_by_message.get(item.id, []),
                         "agent_runs": runs_by_message.get(item.id, []),
                         "skill_runs": skills_by_message.get(item.id, []),
+                        "intent_status": intent_by_message.get(item.id),
                     }
                 )
                 for item in messages

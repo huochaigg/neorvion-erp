@@ -96,7 +96,8 @@ class MultiAgentWorkflow:
         query = str((messages[-1] if messages else {}).get("content") or "")[
             : settings.multi_agent_context_chars
         ]
-        decision = self.router.route(query)
+        intent_route = getattr(runtime.context, "intent_route", None)
+        decision = self.router.route(query, intent_route=intent_route)
         permissions = (
             runtime.context.tools.tenant.permission_codes
             if runtime.context.tools is not None

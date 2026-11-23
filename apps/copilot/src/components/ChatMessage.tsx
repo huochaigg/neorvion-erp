@@ -4,8 +4,9 @@ import { EvidenceCard } from '@/components/EvidenceCard';
 import type { Message } from '@/types';
 import { AgentExecutionPanel } from '@/components/AgentExecutionPanel';
 import { SkillRunCard } from '@/components/SkillRunCard';
+import { IntentStatusCard } from '@/components/IntentStatusCard';
 
-export function ChatMessage({ message }: { message: Message }) {
+export function ChatMessage({ message, onCancelIntent }: { message: Message; onCancelIntent?: () => void }) {
   const isUser = message.role === 'user';
   return (
     <div className={`copilot-fade flex ${isUser ? 'justify-end' : 'justify-start'}`}>
@@ -16,6 +17,7 @@ export function ChatMessage({ message }: { message: Message }) {
           </div>
         ) : (
           <div>
+            <IntentStatusCard status={message.intent_status} onCancel={onCancelIntent} />
             <SkillRunCard runs={message.skill_runs ?? []} />
             <AgentExecutionPanel runs={message.agent_runs ?? []} toolRuns={message.tool_runs} />
             {message.tool_runs.length ? <ToolRunCard runs={message.tool_runs} /> : null}

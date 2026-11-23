@@ -10,6 +10,7 @@ from typing import Any
 from app.ai.types import ChatAdapter, ModelUsage
 from app.core.config import settings
 from app.core.exceptions import AppError
+from app.intent.schemas import RoutingPlan
 from app.skills.catalog import SkillCatalogEntry
 from app.skills.classification import TaskClassification, TaskClassifier
 
@@ -72,6 +73,7 @@ class SkillSelector:
         explicit_skill_key: str | None = None,
         adapter: ChatAdapter | None = None,
         catalog_trace: dict[str, Any] | None = None,
+        routing_plan: RoutingPlan | None = None,
     ) -> SkillSelection:
         started = time.perf_counter()
 
@@ -83,8 +85,10 @@ class SkillSelector:
             )
 
         classification = self.classifier.classify(task)
+        if routing_plan is not None and routing_plan.forbid_skill_keys:
+            catalog = [item for item in catalog if item.skill_key not in routing_plan.forbid_skill_keys]
         available = {item.skill_key: item for item in catalog}
-        if settings.skill_selector_mode.upper() == "LEGACY" and explicit_skill_key is None:
+        if settings.skill_selector_mode.upper() == "LEGACY" and explicit_skill_key is None and routing_plan is None:
             return done(self._legacy(task, available, classification))
         text_explicit = self._explicit_key(task, available)
         if explicit_skill_key and text_explicit and explicit_skill_key != text_explicit:
@@ -103,6 +107,30 @@ class SkillSelector:
                     status_code=404,
                 )
             return done(SkillSelection((item,), "EXPLICIT", "用户显式指定已授权 Skill", 1, classification))
+        if routing_plan is not None and routing_plan.skill_policy == "SKIP":
+            return done(
+                SkillSelection(
+                    (),
+                    "NO_SKILL",
+                    routing_plan.reason or "意图路由要求跳过自动 Skill，避免截断或误选",
+                    1,
+                    classification,
+                )
+            )
+        if routing_plan is not None and routing_plan.skill_keys:
+            preferred = tuple(item for item in routing_plan.skill_keys if item in available)
+            if routing_plan.skill_policy in {"CANDIDATE", "MULTI"} and preferred:
+                selected = tuple(available[key] for key in preferred)
+                method = "MULTI" if len(selected) > 1 else "RULE"
+                return done(
+                    SkillSelection(
+                        selected,
+                        method,
+                        "使用 Intent Routing Planner 提供的 Skill 候选",
+                        1,
+                        classification,
+                    )
+                )
         if classification.negative_action:
             return done(SkillSelection(
                 (),

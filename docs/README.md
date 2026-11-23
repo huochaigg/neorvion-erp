@@ -5,6 +5,7 @@
 ## 架构与开发
 
 - [IAM 统一认证与权限架构手册](architecture/iam-authentication-authorization-guide.md)（能力矩阵 / 调用链 / 面试；区分已实现与未实现）
+- [Copilot V15 意图理解与路由](architecture/copilot-v15-intent-understanding.md)
 - [IAM V2 权限配置、会话与故障处理](iam-operations.md)
 - [架构](architecture.md)
 - [核心 ER](er.md)
@@ -41,6 +42,7 @@
 ## 面试与 Agent
 
 - [面试入口](interview/README.md)
+- [Copilot V15 意图理解面试](interview/copilot-v15-intent.md)
 - [Agent 接入准备](agent-readiness.md)
 - [ERP Copilot V1–VN 路线图](copilot/roadmap.md)
 - [Copilot V1-A ChatGPT 代码生成提示词](prompts/copilot-v1a-implementation.md)

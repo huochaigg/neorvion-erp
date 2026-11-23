@@ -191,6 +191,17 @@ class AgentEvaluationService:
         result.update({"catalog": "V14.3-SKILL-120", "ready": len(items)})
         return result
 
+    async def import_v15_intent_catalog(self, dataset_id: int) -> dict:
+        """导入人工标注的 V15 意图评测集；期望值不来自当前分类器输出。"""
+        if not settings.intent_evaluation_enabled:
+            raise AppError("Intent Evaluation Feature Flag 未开启", code=40396, status_code=403)
+        from app.intent.evaluation_catalog import v15_intent_cases
+
+        items = [EvaluationCaseCreate.model_validate(item) for item in v15_intent_cases()]
+        result = await self.import_cases(dataset_id, EvaluationCaseImport(items=items))
+        result.update({"catalog": "V15-INTENT-125", "ready": len(items)})
+        return result
+
     async def patch_case(self, case_id: int, payload: EvaluationCasePatch) -> EvaluationCaseOut:
         row = await self.repo.case(case_id)
         if row is None:
@@ -246,6 +257,12 @@ class AgentEvaluationService:
         version = await self.repo.version(payload.dataset_version_id)
         if version is None:
             raise AppError("冻结版本不存在", code=40491, status_code=404)
+        if payload.execution_kind == "INTENT_LIVE" and not settings.intent_evaluation_enabled:
+            raise AppError(
+                "INTENT LIVE 评测 Feature Flag 未开启",
+                code=40390,
+                status_code=403,
+            )
         if payload.execution_kind == "SELECTOR_LIVE" and not settings.skill_evaluation_enabled:
             raise AppError(
                 "SELECTOR LIVE 评测 Feature Flag 未开启",
@@ -756,6 +773,10 @@ class ReplayEvaluationRunner:
     ) -> dict[str, Any] | None:
         """Replay 只读取冻结 Fixture；子类可替换为严格受限的真实 Selector。"""
         scenario = case.get("scenario_config") or {}
+        if scenario.get("runner") == "intent_rules":
+            from app.intent.evaluation import run_intent_case
+
+            return await run_intent_case(case, adapter=None, tenant_id=run.tenant_id, user_id=run.user_id)
         profile = str((run.config_snapshot or {}).get("selector_profile") or "HYBRID")
         if (run.config_snapshot or {}).get("skill_enabled") is False:
             profile = "BASELINE"
@@ -977,3 +998,30 @@ class SelectorLiveEvaluationRunner(ReplayEvaluationRunner):
                 ],
             },
         }
+
+
+class IntentLiveEvaluationRunner(ReplayEvaluationRunner):
+    """真实运行意图分类器；不调用 Skill 执行、Proposal 或 ERP 写接口。"""
+
+    async def case_result(
+        self, run: AgentEvaluationRun, case: dict[str, Any]
+    ) -> dict[str, Any] | None:
+        from app.intent.evaluation import run_intent_case
+
+        config = run.config_snapshot or {}
+        use_llm = bool(config.get("intent_use_llm"))
+        adapter = get_chat_adapter() if use_llm else None
+        result = await run_intent_case(
+            case,
+            adapter=adapter,
+            tenant_id=run.tenant_id,
+            user_id=run.user_id,
+        )
+        if adapter is None:
+            result["test_mode"] = "INTENT_RULES"
+        elif settings.model_provider == "mock":
+            result["blocked"] = True
+            result["test_mode"] = "MOCK_NOT_PRODUCTION"
+        else:
+            result["test_mode"] = "INTENT_LIVE"
+        return result

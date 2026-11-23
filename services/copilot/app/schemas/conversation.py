@@ -113,6 +113,7 @@ class MessageOut(BaseModel):
     evidences: list[EvidenceOut] = Field(default_factory=list)
     agent_runs: list[AgentRunOut] = Field(default_factory=list)
     skill_runs: list[SkillRunSummaryOut] = Field(default_factory=list)
+    intent_status: dict | None = Field(default=None, description="该轮意图识别摘要")
 
 
 class ConversationOut(BaseModel):

@@ -1,5 +1,15 @@
 # Neorvion ERP Copilot 路线图
 
+## V15：Intent Understanding & Routing Foundation（代码完成，真实模型/E2E 未验收）
+
+- 独立 `app/intent/` 理解层：Registry、Context、规则+LLM 分类器、Decision、多意图计划、Routing Planner、写工具策略。
+- Feature Flag `DISABLED / SHADOW / ENABLED`；默认 DISABLED，不改变 V14 Chat 行为。
+- 接入 Chat/SSE、AgentRouter、SkillSelector、ToolExecutor 40379、PendingSkillService 与 Evaluation Center。
+- 125 条人工意图 Case；Replay 跑规则，INTENT_LIVE 才允许真实分类模型，Mock 不得写成生产验收。
+- 学习文档：[意图理解架构](../architecture/copilot-v15-intent-understanding.md)、[面试题](../interview/copilot-v15-intent.md)。
+- [ ] 打开 ENABLED 后的真实模型 INTENT_LIVE
+- [ ] PostgreSQL 迁移 `20261123_0017` 与四服务浏览器 E2E
+
 ## V14.2：Agent Skills 主流程
 
 - 标准 `SKILL.md`、安全 Parser、数据库发布快照与受控 ZIP 导入。

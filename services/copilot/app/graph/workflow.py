@@ -54,6 +54,8 @@ class AgentRuntime:
     allow_multi_agent: bool = True
     agent_results: list[AgentResult] | None = None
     skill_agent_groups: list[list[tuple[str, str]]] | None = None
+    intent_resolution: object | None = None
+    intent_route: object | None = None
 
 
 class CopilotWorkflow:
@@ -125,6 +127,11 @@ class CopilotWorkflow:
                     runtime.context.tools.mcp_gateway if runtime.context.tools is not None else None
                 ),
                 agent_name=runtime.context.agent_name,
+                blocked_tools=(
+                    runtime.context.tools.blocked_tools
+                    if runtime.context.tools is not None
+                    else None
+                ),
             )
             if self.executor
             else []

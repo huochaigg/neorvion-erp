@@ -11,7 +11,11 @@ from sqlalchemy import select, text
 from app.core.config import settings
 from app.db.session import engine, open_tenant_session
 from app.models.evaluation import AgentEvaluationRun
-from app.services.evaluations import ReplayEvaluationRunner, SelectorLiveEvaluationRunner
+from app.services.evaluations import (
+    IntentLiveEvaluationRunner,
+    ReplayEvaluationRunner,
+    SelectorLiveEvaluationRunner,
+)
 from app.tasks.evaluation_queue import pop_evaluation
 
 logger = logging.getLogger(__name__)
@@ -47,7 +51,9 @@ async def execute_evaluation(tenant_id: int, user_id: int, run_id: int, owner: s
         if row is None:
             return False
         runner_type = (
-            SelectorLiveEvaluationRunner
+            IntentLiveEvaluationRunner
+            if row.execution_kind == "INTENT_LIVE"
+            else SelectorLiveEvaluationRunner
             if row.execution_kind == "SELECTOR_LIVE"
             else ReplayEvaluationRunner
         )
