@@ -1,10 +1,16 @@
-import axios, { isAxiosError, isCancel, type AxiosError, type InternalAxiosRequestConfig } from 'axios';
+import axios, {
+  isAxiosError,
+  isCancel,
+  type AxiosError,
+  type InternalAxiosRequestConfig,
+} from 'axios';
 import {
   ApiError,
+  recoverExpiredRequest,
   decideTenantHeader,
   isTenantInaccessibleError,
+  isTerminalAuthFailure,
   MICRO_EVENTS,
-  SESSION_EXPIRED_MESSAGE,
   SHELL_ROUTES,
   TENANT_HEADER,
   type ApiResponse,
@@ -37,7 +43,11 @@ function toApiError(error: AxiosError<ApiResponse<unknown>>): ApiError {
 
 apiClient.interceptors.request.use((config) => {
   const token = getShellProps().token;
-  if (token) {
+  if (!config._retried) {
+    config.authTokenSent = token;
+    config.authContext = `${getShellProps().sessionVersion?.() ?? 0}:${getShellProps().user?.id ?? ''}:${useErpTenantStore.getState().epoch}:${useErpTenantStore.getState().currentTenantId ?? ''}`;
+  }
+  if (token && !config._retried) {
     config.headers.Authorization = `Bearer ${token}`;
   }
 
@@ -78,24 +88,49 @@ apiClient.interceptors.response.use(
       return Promise.reject(nextError);
     }
 
-    const unauthorized = nextError instanceof ApiError && nextError.status === 401;
-    if (unauthorized && original && !original._retried) {
-      original._retried = true;
-      const refreshSession = getShellProps().refreshSession;
-      if (refreshSession) {
-        try {
-          const token = await refreshSession();
-          original.headers.Authorization = `Bearer ${token}`;
-          return apiClient.request(original);
-        } catch {
-          return Promise.reject(
-            nextError instanceof ApiError
-              ? nextError
-              : new ApiError(SESSION_EXPIRED_MESSAGE, { status: 401, code: 40103 }),
-          );
-        }
+    if (
+      nextError instanceof ApiError &&
+      original &&
+      isTerminalAuthFailure(nextError.status, nextError.code) &&
+      original.authContext ===
+        `${getShellProps().sessionVersion?.() ?? 0}:${getShellProps().user?.id ?? ''}:${useErpTenantStore.getState().epoch}:${useErpTenantStore.getState().currentTenantId ?? ''}` &&
+      original.authTokenSent === getShellProps().token
+    ) {
+      getShellProps().expireSession?.();
+    }
+
+    if (nextError instanceof ApiError && original) {
+      if (
+        original._retried &&
+        nextError.status === 401 &&
+        original.authContext ===
+          `${getShellProps().sessionVersion?.() ?? 0}:${getShellProps().user?.id ?? ''}:${useErpTenantStore.getState().epoch}:${useErpTenantStore.getState().currentTenantId ?? ''}` &&
+        original.authTokenSent === getShellProps().token
+      )
+        getShellProps().expireSession?.();
+      try {
+        const result = await recoverExpiredRequest({
+          status: nextError.status,
+          code: nextError.code,
+          retried: original._retried,
+          skip: original.skipAuthRefresh,
+          tokenSent: original.authTokenSent ?? null,
+          contextSent: original.authContext ?? '',
+          context: () =>
+            `${getShellProps().sessionVersion?.() ?? 0}:${getShellProps().user?.id ?? ''}:${useErpTenantStore.getState().epoch}:${useErpTenantStore.getState().currentTenantId ?? ''}`,
+          getToken: () => getShellProps().token,
+          refresh: getShellProps().refreshSession,
+          retry: (token) => {
+            original._retried = true;
+            original.authTokenSent = token;
+            original.headers.Authorization = `Bearer ${token}`;
+            return apiClient.request(original);
+          },
+        });
+        if (result) return result;
+      } catch (retryError) {
+        return Promise.reject(retryError);
       }
-      window.$wujie?.bus.$emit(MICRO_EVENTS.unauthorized);
     }
 
     if (nextError instanceof ApiError && nextError.status >= 500) {

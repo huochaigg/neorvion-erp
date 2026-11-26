@@ -164,6 +164,7 @@ export {
   taskStatusLabel,
 } from './types/platform';
 export { ApiError } from './errors/api-error';
+export { createSessionRefresh, isRecoverableExpiry, isTerminalAuthFailure, recoverExpiredRequest, prepareStreamResubmission } from './auth/session';
 export type { TokenPayload, UserProfile, AuthPublicKey, EncryptedPasswordPayload } from './types/auth';
 export { AUTH_ERROR_CODE, SESSION_EXPIRED_MESSAGE } from './types/auth';
 export type {

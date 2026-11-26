@@ -4,7 +4,7 @@ import { Alert, Button } from 'antd';
 import { useMemo, useState } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { fetchCurrentUser } from '@/api/auth';
-import { refreshSessionFromShell } from '@/api/client';
+import { expireSessionFromShell, getAuthSessionVersion, refreshSessionFromShell } from '@/api/client';
 import { buildMicroAppUrl, getMicroApp } from '@/micro/apps';
 import { consumeLegacyWujieSyncQuery, emitHostNavigate, useMicroHostRouteSync } from '@/micro/route-sync';
 import { WujieHost } from '@/micro/wujie-host';
@@ -27,6 +27,8 @@ export function CopilotMicroApp() {
       tenantId,
       user: user ? { id: user.id, displayName: user.display_name } : null,
       refreshSession: refreshSessionFromShell,
+      expireSession: expireSessionFromShell,
+      sessionVersion: getAuthSessionVersion,
     }),
     [token, tenantId, user],
   );

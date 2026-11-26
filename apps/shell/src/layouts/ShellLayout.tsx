@@ -23,6 +23,7 @@ import type { ReactNode } from 'react';
 import { useMemo } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { fetchCurrentUser, logoutAccount } from '@/api/auth';
+import { invalidatePendingRefresh } from '@/api/client';
 import { fetchMyPermissions, myPermissionsQueryKey } from '@/api/permissions';
 import { TenantSwitcher } from '@/components/TenantSwitcher';
 import { AppLogo } from '@/components/AppLogo';
@@ -90,6 +91,7 @@ export function ShellLayout({ children }: ShellLayoutProps) {
   );
 
   const onLogout = async () => {
+    invalidatePendingRefresh();
     try {
       await logoutAccount();
     } finally {

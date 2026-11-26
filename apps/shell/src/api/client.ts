@@ -1,11 +1,12 @@
 import axios, { isCancel, type AxiosError, type InternalAxiosRequestConfig } from 'axios';
 import {
   ApiError,
-  AUTH_ERROR_CODE,
+  createSessionRefresh,
+  recoverExpiredRequest,
   decideTenantHeader,
   isTenantInaccessibleError,
+  isTerminalAuthFailure,
   myTenantsQueryKey,
-  SESSION_EXPIRED_MESSAGE,
   SHELL_ROUTES,
   TENANT_HEADER,
   type ApiResponse,
@@ -28,7 +29,37 @@ export const apiClient = axios.create({
 
 const AUTH_REFRESH_URL = '/api/v1/auth/refresh';
 
-let refreshPromise: Promise<string> | null = null;
+const sessionRefresh = createSessionRefresh({
+  refresh: async (signal) =>
+    (
+      await unwrapApi(
+        authClient.post<ApiResponse<TokenPayload>>(AUTH_REFRESH_URL, undefined, { signal }),
+      )
+    ).access_token,
+  getToken: () => useAuthStore.getState().accessToken,
+  updateToken: (token) => {
+    useAuthStore.getState().markAuthenticated(token);
+    syncTokenToAliveSandboxes(token);
+  },
+  onExpired: endSessionDueToExpiry,
+  isInvalidRefresh: (error) => error instanceof ApiError && error.status === 401,
+});
+let tenantVersion = 0;
+useTenantStore.subscribe((state, previous) => {
+  if (state.currentTenantId !== previous.currentTenantId) tenantVersion++;
+});
+export function getAuthSessionVersion() {
+  return sessionRefresh.version();
+}
+
+/** Explicit login/logout invalidates an in-flight refresh before it can write an old token. */
+export function invalidatePendingRefresh() {
+  sessionRefresh.invalidate();
+}
+export function expireSessionFromShell() {
+  sessionRefresh.invalidate();
+  endSessionDueToExpiry();
+}
 
 useAuthStore.subscribe((state, previous) => {
   if (state.accessToken && state.accessToken !== previous.accessToken) {
@@ -51,18 +82,7 @@ function handleTenantInaccessible() {
  * 启动恢复、业务 401、React Strict Mode 双调用共享同一 Promise，避免轮换后第二次 401 把会话清掉。
  */
 function refreshAccessToken(): Promise<string> {
-  if (!refreshPromise) {
-    refreshPromise = unwrapApi(authClient.post<ApiResponse<TokenPayload>>(AUTH_REFRESH_URL))
-      .then((tokens) => {
-        useAuthStore.getState().markAuthenticated(tokens.access_token);
-        syncTokenToAliveSandboxes(tokens.access_token);
-        return tokens.access_token;
-      })
-      .finally(() => {
-        refreshPromise = null;
-      });
-  }
-  return refreshPromise;
+  return sessionRefresh.refresh();
 }
 
 /** ERP 与 Shell 业务 401 共用。失败会清会话并提示重新登录。 */
@@ -70,14 +90,17 @@ export async function refreshSessionFromShell(): Promise<string> {
   try {
     return await refreshAccessToken();
   } catch (error) {
-    endSessionDueToExpiry();
     throw error;
   }
 }
 
 apiClient.interceptors.request.use((config) => {
   const token = useAuthStore.getState().accessToken;
-  if (token) {
+  if (!config._retried) {
+    config.authTokenSent = token;
+    config.authContext = `${sessionRefresh.version()}:${tenantVersion}:${useTenantStore.getState().currentTenantId ?? ''}`;
+  }
+  if (token && !config._retried) {
     config.headers.Authorization = `Bearer ${token}`;
   }
 
@@ -125,21 +148,57 @@ apiClient.interceptors.response.use(
       return Promise.reject(apiError);
     }
 
-    if (status !== 401 || !original || original._retried || skipRefresh) {
-      return Promise.reject(apiError);
+    if (
+      apiError instanceof ApiError &&
+      original &&
+      isTerminalAuthFailure(apiError.status, apiError.code) &&
+      original.authContext ===
+        `${sessionRefresh.version()}:${tenantVersion}:${useTenantStore.getState().currentTenantId ?? ''}` &&
+      original.authTokenSent === useAuthStore.getState().accessToken
+    ) {
+      expireSessionFromShell();
     }
 
-    original._retried = true;
-    try {
-      const token = await refreshAccessToken();
-      original.headers.Authorization = `Bearer ${token}`;
-      return apiClient.request(original);
-    } catch {
-      endSessionDueToExpiry();
-      return Promise.reject(
-        new ApiError(SESSION_EXPIRED_MESSAGE, { status: 401, code: AUTH_ERROR_CODE.revoked }),
-      );
+    if (
+      status !== 401 ||
+      !original ||
+      original._retried ||
+      skipRefresh ||
+      !(apiError instanceof ApiError)
+    ) {
+      return Promise.reject(apiError);
     }
+    try {
+      const result = await recoverExpiredRequest({
+        status,
+        code: apiError.code,
+        tokenSent: original.authTokenSent ?? null,
+        contextSent: original.authContext ?? '',
+        context: () =>
+          `${sessionRefresh.version()}:${tenantVersion}:${useTenantStore.getState().currentTenantId ?? ''}`,
+        getToken: () => useAuthStore.getState().accessToken,
+        refresh: refreshAccessToken,
+        retry: (token) => {
+          original._retried = true;
+          original.authTokenSent = token;
+          original.headers.Authorization = `Bearer ${token}`;
+          return apiClient.request(original);
+        },
+      });
+      if (result) return result;
+    } catch (retryError) {
+      if (
+        retryError instanceof ApiError &&
+        retryError.status === 401 &&
+        original._retried &&
+        original.authContext ===
+          `${sessionRefresh.version()}:${tenantVersion}:${useTenantStore.getState().currentTenantId ?? ''}` &&
+        original.authTokenSent === useAuthStore.getState().accessToken
+      )
+        expireSessionFromShell();
+      return Promise.reject(retryError);
+    }
+    return Promise.reject(apiError);
   },
 );
 

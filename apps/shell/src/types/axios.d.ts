@@ -6,5 +6,7 @@ declare module 'axios' {
     skipTenantHeader?: boolean;
     tenantContextId?: number | null;
     _retried?: boolean;
+    authTokenSent?: string | null;
+    authContext?: string;
   }
 }

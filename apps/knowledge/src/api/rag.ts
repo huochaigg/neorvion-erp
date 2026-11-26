@@ -1,5 +1,7 @@
 import {
   ApiError,
+  isTerminalAuthFailure,
+  prepareStreamResubmission,
   TENANT_HEADER,
   type ApiResponse,
   type KnowledgeChatAskPayload,
@@ -19,16 +21,24 @@ import { consumeSse } from '@/lib/sse';
 import { useKnowledgeTenantStore } from '@/stores/tenant-runtime';
 
 export function searchKnowledge(payload: KnowledgeSearchPayload, signal?: AbortSignal) {
-  return unwrapApi(apiClient.post<ApiResponse<KnowledgeSearchResult>>('/api/v1/search', payload, { signal }));
+  return unwrapApi(
+    apiClient.post<ApiResponse<KnowledgeSearchResult>>('/api/v1/search', payload, { signal }),
+  );
 }
 
 export function fetchRetrievalDefaults(signal?: AbortSignal) {
-  return unwrapApi(apiClient.get<ApiResponse<KnowledgeRetrievalDefaults>>('/api/v1/retrieval/defaults', { signal }));
+  return unwrapApi(
+    apiClient.get<ApiResponse<KnowledgeRetrievalDefaults>>('/api/v1/retrieval/defaults', {
+      signal,
+    }),
+  );
 }
 
 export function testRetrieval(payload: KnowledgeSearchPayload, signal?: AbortSignal) {
   return unwrapApi(
-    apiClient.post<ApiResponse<KnowledgeSearchResult>>('/api/v1/retrieval/test', payload, { signal }),
+    apiClient.post<ApiResponse<KnowledgeSearchResult>>('/api/v1/retrieval/test', payload, {
+      signal,
+    }),
   );
 }
 
@@ -43,11 +53,16 @@ export function fetchIndexStatus(knowledgeBaseId: number, signal?: AbortSignal) 
 
 export function reindexKnowledgeBase(knowledgeBaseId: number) {
   return unwrapApi(
-    apiClient.post<ApiResponse<{ queued: number }>>(`/api/v1/knowledge-bases/${knowledgeBaseId}/reindex`),
+    apiClient.post<ApiResponse<{ queued: number }>>(
+      `/api/v1/knowledge-bases/${knowledgeBaseId}/reindex`,
+    ),
   );
 }
 
-export function fetchConversations(params: { page: number; pageSize: number }, signal?: AbortSignal) {
+export function fetchConversations(
+  params: { page: number; pageSize: number },
+  signal?: AbortSignal,
+) {
   return unwrapApi(
     apiClient.get<ApiResponse<KnowledgeConversationList>>('/api/v1/conversations', {
       params: { page: params.page, page_size: params.pageSize },
@@ -58,19 +73,25 @@ export function fetchConversations(params: { page: number; pageSize: number }, s
 
 export function fetchConversation(id: number, signal?: AbortSignal) {
   return unwrapApi(
-    apiClient.get<ApiResponse<KnowledgeConversationDetail>>(`/api/v1/conversations/${id}`, { signal }),
+    apiClient.get<ApiResponse<KnowledgeConversationDetail>>(`/api/v1/conversations/${id}`, {
+      signal,
+    }),
   );
 }
 
 export function createConversation(payload: { title?: string; knowledge_base_ids?: number[] }) {
-  return unwrapApi(apiClient.post<ApiResponse<KnowledgeConversation>>('/api/v1/conversations', payload));
+  return unwrapApi(
+    apiClient.post<ApiResponse<KnowledgeConversation>>('/api/v1/conversations', payload),
+  );
 }
 
 export function updateConversation(
   id: number,
   payload: { title?: string; knowledge_base_ids?: number[] },
 ) {
-  return unwrapApi(apiClient.patch<ApiResponse<KnowledgeConversation>>(`/api/v1/conversations/${id}`, payload));
+  return unwrapApi(
+    apiClient.patch<ApiResponse<KnowledgeConversation>>(`/api/v1/conversations/${id}`, payload),
+  );
 }
 
 export function deleteConversation(id: number) {
@@ -78,11 +99,15 @@ export function deleteConversation(id: number) {
 }
 
 export function fetchModels(signal?: AbortSignal) {
-  return unwrapApi(apiClient.get<ApiResponse<KnowledgeModelProfile[]>>('/api/v1/models', { signal }));
+  return unwrapApi(
+    apiClient.get<ApiResponse<KnowledgeModelProfile[]>>('/api/v1/models', { signal }),
+  );
 }
 
 export function testModel(kind: string) {
-  return unwrapApi(apiClient.post<ApiResponse<KnowledgeModelProfile>>('/api/v1/models/test', { kind }));
+  return unwrapApi(
+    apiClient.post<ApiResponse<KnowledgeModelProfile>>('/api/v1/models/test', { kind }),
+  );
 }
 
 export async function streamConversationMessage(
@@ -101,6 +126,7 @@ export async function streamConversationMessage(
   }
   const token = getShellProps().token;
   const tenantId = useKnowledgeTenantStore.getState().currentTenantId;
+  const contextSent = `${getShellProps().sessionVersion?.() ?? 0}:${getShellProps().user?.id ?? ''}:${useKnowledgeTenantStore.getState().epoch}:${tenantId ?? ''}`;
   const headers: Record<string, string> = {
     Accept: 'text/event-stream',
     'Content-Type': 'application/json',
@@ -124,6 +150,31 @@ export async function streamConversationMessage(
     try {
       const body = (await response.json()) as ApiResponse<unknown>;
       message = body.message || message;
+      if (
+        isTerminalAuthFailure(response.status, body.code) &&
+        token === getShellProps().token &&
+        contextSent ===
+          `${getShellProps().sessionVersion?.() ?? 0}:${getShellProps().user?.id ?? ''}:${useKnowledgeTenantStore.getState().epoch}:${useKnowledgeTenantStore.getState().currentTenantId ?? ''}`
+      ) {
+        getShellProps().expireSession?.();
+      }
+      if (
+        await prepareStreamResubmission({
+          status: response.status,
+          code: body.code,
+          tokenSent: token,
+          getToken: () => getShellProps().token,
+          contextSent,
+          context: () =>
+            `${getShellProps().sessionVersion?.() ?? 0}:${getShellProps().user?.id ?? ''}:${useKnowledgeTenantStore.getState().epoch}:${useKnowledgeTenantStore.getState().currentTenantId ?? ''}`,
+          refresh: getShellProps().refreshSession,
+        })
+      ) {
+        throw new ApiError('登录已恢复。请手动重新发送问题，避免重复生成。', {
+          status: 401,
+          code: body.code,
+        });
+      }
       throw new ApiError(message, { status: response.status, code: body.code });
     } catch (error) {
       if (error instanceof ApiError) {

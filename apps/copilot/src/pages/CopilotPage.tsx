@@ -3,6 +3,7 @@ import { Skeleton } from 'antd';
 import { AlertCircle, RotateCcw, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation } from 'react-router-dom';
+import { ApiError } from '@neorvion/shared';
 import { streamChat } from '@/api/chat';
 import { discoverRunnableSkills } from '@/api/ecosystem';
 import { createConversation, getConversation } from '@/api/conversations';
@@ -52,7 +53,7 @@ export function CopilotPage() {
   const [pendingUser, setPendingUser] = useState<Message | null>(null);
   const [pendingFromIndex, setPendingFromIndex] = useState(0);
   const [pendingConversationId, setPendingConversationId] = useState<number | null>(null);
-  const scroller = useRef<HTMLSectionElement>(null);
+  const scroller = useRef<HTMLElement>(null);
   const bottom = useRef<HTMLDivElement>(null);
   const autoScroll = useRef(true);
   const scrollFrame = useRef(0);
@@ -388,6 +389,11 @@ export function CopilotPage() {
         skillKey,
       });
     } catch (cause) {
+      if (cause instanceof ApiError && cause.status === 401 && cause.message.startsWith('登录已恢复')) {
+        setInput(text);
+        setPendingUser(null);
+        setPendingConversationId(null);
+      }
       if (!abort.signal.aborted) setError(cause instanceof Error ? cause.message : '生成失败');
       if (conversationId == null) {
         setPendingUser(null);

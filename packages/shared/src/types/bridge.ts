@@ -5,6 +5,8 @@ export interface ShellToErpProps {
   user: ShellUserSnapshot | null;
   /** Shell 单飞 Refresh。ERP 遇到 401 时调用，禁止自己打 /auth/refresh。 */
   refreshSession?: () => Promise<string>;
+  expireSession?: () => void;
+  sessionVersion?: () => number;
 }
 
 export interface ShellUserSnapshot {

@@ -1,7 +1,6 @@
 import axios from 'axios';
-import { TENANT_HEADER, type ApiResponse } from '@neorvion/shared';
-import { shellProps } from '@/runtime';
-import { useCopilotStore } from '@/store';
+import { type ApiResponse } from '@neorvion/shared';
+import { installCopilotAuth } from './client';
 
 export type ErpOptionKind = 'supplier'|'customer'|'warehouse'|'sku';
 export interface ErpOption { value:number; label:string }
@@ -10,13 +9,7 @@ const erpApi = axios.create({
   baseURL: import.meta.env.VITE_ERP_API_BASE_URL || (import.meta.env.PROD ? '' : 'http://localhost:8011'),
   timeout: 8000,
 });
-erpApi.interceptors.request.use((config) => {
-  const token = shellProps().token;
-  const tenantId = useCopilotStore.getState().tenantId;
-  if (token) config.headers.Authorization = `Bearer ${token}`;
-  if (tenantId) config.headers[TENANT_HEADER] = String(tenantId);
-  return config;
-});
+installCopilotAuth(erpApi);
 
 export async function listErpOptions(kind:ErpOptionKind, q:string, signal?:AbortSignal):Promise<ErpOption[]> {
   const path = kind === 'supplier' ? '/api/v1/suppliers' : kind === 'customer' ? '/api/v1/customers' : kind === 'warehouse' ? '/api/v1/warehouses' : '/api/v1/product-skus';

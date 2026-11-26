@@ -4,6 +4,7 @@ import { useEffect } from 'react';
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { fetchCurrentUser, loginAccount } from '@/api/auth';
+import { invalidatePendingRefresh } from '@/api/client';
 import { AuthLayout } from '@/layouts/AuthLayout';
 import { consumePendingAuthNotice } from '@/lib/session-notice';
 import { useAuthStore } from '@/stores/auth-store';
@@ -32,11 +33,13 @@ export function LoginPage() {
   }, [message]);
 
   const onFinish = async (values: LoginFormValues) => {
+    invalidatePendingRefresh();
     try {
       const tokens = await loginAccount({
         email: values.email,
         password: values.password,
       });
+      invalidatePendingRefresh();
       markAuthenticated(tokens.access_token);
       const profile = await fetchCurrentUser();
       queryClient.setQueryData<UserProfile>(currentUserQueryKey(), profile);

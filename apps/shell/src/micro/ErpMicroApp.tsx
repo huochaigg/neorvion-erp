@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Alert, Button } from 'antd';
 import { useMemo, useState } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
-import { refreshSessionFromShell } from '@/api/client';
+import { expireSessionFromShell, getAuthSessionVersion, refreshSessionFromShell } from '@/api/client';
 import { fetchCurrentUser } from '@/api/auth';
 import { buildMicroAppUrl, getMicroApp } from '@/micro/apps';
 import { consumeLegacyWujieSyncQuery, emitHostNavigate, useMicroHostRouteSync } from '@/micro/route-sync';
@@ -36,6 +36,8 @@ export function ErpMicroApp() {
         ? { id: currentUser.id, displayName: currentUser.display_name }
         : null,
       refreshSession: refreshSessionFromShell,
+      expireSession: expireSessionFromShell,
+      sessionVersion: getAuthSessionVersion,
     }),
     [accessToken, currentUser, tenantId],
   );
