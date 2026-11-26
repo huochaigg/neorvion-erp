@@ -91,3 +91,8 @@ export function composeVisibleMessages(input: {
   }
   return [...list, streaming];
 }
+
+export function visibleMessageKey(message: Message, index: number) {
+  if (message.id > 0) return `msg-${message.id}`;
+  return `live-${message.role}-${message.request_id || index}-${message.id}`;
+}

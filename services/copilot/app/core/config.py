@@ -145,7 +145,7 @@ class Settings(BaseSettings):
     skill_plan_max_steps: int = 4
     skill_plan_max_total_tokens: int = 12_000
     skill_plan_timeout_seconds: float = 60.0
-    skill_pending_enabled: bool = False
+    skill_pending_enabled: bool = True
     skill_pending_ttl_seconds: int = 900
     skill_business_timezone: str = "Asia/Shanghai"
     skill_evaluation_enabled: bool = False

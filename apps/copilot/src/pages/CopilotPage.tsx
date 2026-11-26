@@ -16,7 +16,9 @@ import {
   pendingUserMessage,
   seedConversationWithUser,
   turnHasTerminalAssistant,
+  visibleMessageKey,
 } from '@/lib/chatMessages';
+import { createStreamFrameQueue, shouldApplyStreamEvent, type StreamFrameQueue } from '@/lib/streamUi';
 import { useCopilotStore } from '@/store';
 import type { AgentRun, ConversationDetail, Evidence, IntentStatus, Message, SkillRunSummary, StreamEvent, ToolRun } from '@/types';
 
@@ -50,10 +52,17 @@ export function CopilotPage() {
   const [pendingUser, setPendingUser] = useState<Message | null>(null);
   const [pendingFromIndex, setPendingFromIndex] = useState(0);
   const [pendingConversationId, setPendingConversationId] = useState<number | null>(null);
+  const scroller = useRef<HTMLSectionElement>(null);
   const bottom = useRef<HTMLDivElement>(null);
   const autoScroll = useRef(true);
+  const scrollFrame = useRef(0);
   const runRef = useRef('');
   const pickerTenant = useRef<number | null>(null);
+  const queueRef = useRef<StreamFrameQueue | null>(null);
+  const selectedRef = useRef(selected);
+  const pendingConversationRef = useRef(pendingConversationId);
+  selectedRef.current = selected;
+  pendingConversationRef.current = pendingConversationId;
 
   const create = useMutation({
     mutationFn: () => createConversation(),
@@ -90,10 +99,20 @@ export function CopilotPage() {
       ? pendingUser
       : null;
 
-  useEffect(() => () => useCopilotStore.getState().controller?.abort(), []);
   useEffect(() => {
-    if (autoScroll.current) bottom.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [detail.data?.messages, draft, tools, pendingForThisChat]);
+    return () => {
+      queueRef.current?.close();
+      useCopilotStore.getState().controller?.abort();
+      if (scrollFrame.current) cancelAnimationFrame(scrollFrame.current);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (pendingConversationId != null && selected != null && selected !== pendingConversationId) {
+      queueRef.current?.close();
+      useCopilotStore.getState().controller?.abort();
+    }
+  }, [pendingConversationId, selected]);
 
   const visible = useMemo(() => {
     const messages = detail.data?.messages ?? [];
@@ -126,8 +145,27 @@ export function CopilotPage() {
     intentStatus,
   ]);
 
+  useEffect(() => {
+    if (!autoScroll.current || scrollFrame.current) return;
+    scrollFrame.current = requestAnimationFrame(() => {
+      scrollFrame.current = 0;
+      const el = scroller.current;
+      if (!el || !autoScroll.current) return;
+      el.scrollTop = el.scrollHeight;
+    });
+  }, [agentRun, draft, pendingForThisChat, running, skillRuns, tools, visible.length]);
+
   const handleEvent = (item: StreamEvent, guard: string) => {
-    if (runRef.current !== guard) return;
+    if (
+      !shouldApplyStreamEvent({
+        runId: guard,
+        activeRunId: runRef.current,
+        pendingConversationId: pendingConversationRef.current,
+        selectedConversationId: selectedRef.current,
+      })
+    ) {
+      return;
+    }
     const data = item.data;
     if (item.event === 'skill_selected' || item.event === 'skill_start') {
       setSkillRuns((value) => {
@@ -285,7 +323,9 @@ export function CopilotPage() {
       setEvidences((value) => [...value, { ...data, access_status: 'ACTIVE' } as unknown as Evidence]);
     }
     if (['proposal_created', 'proposal_updated', 'proposal_validation'].includes(item.event)) {
-      void query.invalidateQueries({ queryKey: ['tenant', tenantId, 'action-proposals', selected] });
+      void query.invalidateQueries({
+        queryKey: ['tenant', tenantId, 'action-proposals', selectedRef.current],
+      });
     }
   };
 
@@ -298,6 +338,11 @@ export function CopilotPage() {
     const abort = new AbortController();
     autoScroll.current = true;
     runRef.current = guard;
+    queueRef.current?.close();
+    const queue = createStreamFrameQueue({
+      onEvent: (event) => handleEvent(event, guard),
+    });
+    queueRef.current = queue;
     setController(abort);
     setLastMessage(text);
     setInput('');
@@ -336,7 +381,9 @@ export function CopilotPage() {
         message: text,
         clientRequestId: guard,
         signal: abort.signal,
-        onEvent: (event) => handleEvent(event, guard),
+        onEvent: (event) => {
+          queue.push(event);
+        },
         skillMode,
         skillKey,
       });
@@ -348,6 +395,13 @@ export function CopilotPage() {
         setInput(text);
       }
     } finally {
+      if (abort.signal.aborted) {
+        queue.close();
+      } else {
+        queue.flush();
+        queue.close();
+      }
+      if (queueRef.current === queue) queueRef.current = null;
       if (runRef.current === guard) {
         setRunning(false);
         setController(null);
@@ -370,6 +424,7 @@ export function CopilotPage() {
         </header>
       ) : null}
       <section
+        ref={scroller}
         onScroll={(event) => {
           const el = event.currentTarget;
           autoScroll.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
@@ -386,7 +441,7 @@ export function CopilotPage() {
           <div className="mx-auto flex max-w-[900px] flex-col gap-6">
             {visible.map((message, index) => (
               <ChatMessage
-                key={`${message.role}-${message.id}-${message.request_id}-${index}`}
+                key={visibleMessageKey(message, index)}
                 message={message}
                 onCancelIntent={message.id < 0 && intentStatus?.pending ? () => void send('取消') : undefined}
               />
@@ -427,7 +482,10 @@ export function CopilotPage() {
         placeholder={selected ? '询问 ERP 数据，或指定知识库 ID 查询制度与流程' : '先提问，或选择一个快捷问题开始'}
         onChange={setInput}
         onSend={() => void send()}
-        onStop={() => controller?.abort()}
+        onStop={() => {
+          queueRef.current?.close();
+          controller?.abort();
+        }}
         skillMode={skillMode}
         skillKey={skillKey}
         skills={skillCatalog.data?.items ?? []}

@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { SafeMarkdown } from '@/components/SafeMarkdown';
 import { ToolRunCard } from '@/components/ToolRunCard';
 import { EvidenceCard } from '@/components/EvidenceCard';
@@ -6,7 +7,13 @@ import { AgentExecutionPanel } from '@/components/AgentExecutionPanel';
 import { SkillRunCard } from '@/components/SkillRunCard';
 import { IntentStatusCard } from '@/components/IntentStatusCard';
 
-export function ChatMessage({ message, onCancelIntent }: { message: Message; onCancelIntent?: () => void }) {
+export const ChatMessage = memo(function ChatMessage({
+  message,
+  onCancelIntent,
+}: {
+  message: Message;
+  onCancelIntent?: () => void;
+}) {
   const isUser = message.role === 'user';
   return (
     <div className={`copilot-fade flex ${isUser ? 'justify-end' : 'justify-start'}`}>
@@ -36,4 +43,4 @@ export function ChatMessage({ message, onCancelIntent }: { message: Message; onC
       </div>
     </div>
   );
-}
+});

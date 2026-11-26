@@ -37,5 +37,5 @@ export async function streamChat(input: {
   if (!response.ok) {
     throw new Error((await response.json().catch(() => null))?.message || '请求失败');
   }
-  await consumeSse(response, input.onEvent);
+  await consumeSse(response, input.onEvent, input.signal);
 }

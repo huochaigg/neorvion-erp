@@ -5,6 +5,7 @@ import {
   seedConversationWithUser,
   turnHasTerminalAssistant,
   turnHasUser,
+  visibleMessageKey,
 } from './chatMessages';
 import type { Message } from '@/types';
 
@@ -88,6 +89,40 @@ describe('composeVisibleMessages', () => {
       agentRun: null,
     });
     expect(visible.map((item) => item.content)).toEqual(['你好', '在', '你好', '']);
+  });
+
+  it('流式 token 更新时保留历史消息对象引用，便于 memo 跳过重渲染', () => {
+    const history = [user(1, '你好'), assistant(2, '# 库存\n\n| SKU | 数量 |\n| --- | --- |\n| A | 1 |')];
+    const pending = pendingUserMessage('再问一次', 'req-9');
+    const first = composeVisibleMessages({
+      messages: history,
+      pendingUser: pending,
+      pendingFromIndex: 2,
+      showLiveAssistant: true,
+      draft: '现',
+      tools: [],
+      evidences: [],
+      analysisStatus: '',
+      agentRun: null,
+    });
+    const second = composeVisibleMessages({
+      messages: history,
+      pendingUser: pending,
+      pendingFromIndex: 2,
+      showLiveAssistant: true,
+      draft: '现在',
+      tools: [],
+      evidences: [],
+      analysisStatus: '',
+      agentRun: null,
+    });
+    expect(first[0]).toBe(history[0]);
+    expect(first[1]).toBe(history[1]);
+    expect(second[0]).toBe(first[0]);
+    expect(second[1]).toBe(first[1]);
+    expect(second[3]).not.toBe(first[3]);
+    expect(visibleMessageKey(history[1]!, 1)).toBe('msg-2');
+    expect(visibleMessageKey(second[3]!, 3)).toContain('live-assistant-req-9');
   });
 
   it('终态助手到达后停止直播占位', () => {

@@ -14,7 +14,7 @@ export function AgentExecutionPanel({ runs, toolRuns = [] }: { runs: AgentRun[];
   if (!runs.length) return null;
   return (
     <Collapse
-      className="mb-3"
+      className="mb-3!"
       size="small"
       defaultActiveKey={runs.map((run) => String(run.id))}
       items={runs.map((run) => ({

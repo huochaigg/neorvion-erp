@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { memo, type ReactNode } from 'react';
 
 function renderInline(text: string): ReactNode[] {
   const nodes: ReactNode[] = [];
@@ -43,11 +43,28 @@ function splitRow(row: string) {
     .map((cell) => cell.trim());
 }
 
-function parseBlocks(text: string): Block[] {
+const ATX_HEADING = /^(#{1,3})\s+(.*)$/;
+
+function isParagraphBreak(line: string) {
+  return (
+    !line.trim() ||
+    line.startsWith('```') ||
+    ATX_HEADING.test(line) ||
+    line.startsWith('> ') ||
+    /^[-*]\s+/.test(line) ||
+    /^\d+\.\s+/.test(line)
+  );
+}
+
+export function parseMarkdownBlocks(text: string): Block[] {
   const lines = text.split('\n');
   const blocks: Block[] = [];
   let index = 0;
-  while (index < lines.length) {
+  const limit = lines.length + 2;
+  let steps = 0;
+  while (index < lines.length && steps < limit) {
+    steps += 1;
+    const started = index;
     const line = lines[index] ?? '';
     if (line.startsWith('```')) {
       const body: string[] = [];
@@ -60,9 +77,9 @@ function parseBlocks(text: string): Block[] {
       index += 1;
       continue;
     }
-    const heading = /^(#{1,3})\s+(.+)$/.exec(line);
+    const heading = ATX_HEADING.exec(line);
     if (heading) {
-      blocks.push({ type: 'heading', level: heading[1].length, text: heading[2] });
+      blocks.push({ type: 'heading', level: heading[1].length, text: heading[2] ?? '' });
       index += 1;
       continue;
     }
@@ -106,27 +123,22 @@ function parseBlocks(text: string): Block[] {
     const body: string[] = [];
     while (index < lines.length) {
       const current = lines[index] ?? '';
-      if (
-        !current.trim() ||
-        current.startsWith('```') ||
-        /^#{1,3}\s+/.test(current) ||
-        current.startsWith('> ') ||
-        /^[-*]\s+/.test(current) ||
-        /^\d+\.\s+/.test(current)
-      ) {
-        break;
-      }
+      if (isParagraphBreak(current)) break;
       body.push(current);
       index += 1;
     }
-    blocks.push({ type: 'paragraph', text: body.join('\n') });
+    if (body.length) blocks.push({ type: 'paragraph', text: body.join('\n') });
+    if (index <= started) {
+      if (line) blocks.push({ type: 'paragraph', text: line });
+      index += 1;
+    }
   }
   return blocks;
 }
 
 /** 仅构造 React 文本节点的轻量 Markdown，不解析 HTML、链接或可执行内容。 */
-export function SafeMarkdown({ text }: { text: string }) {
-  const blocks = parseBlocks(text);
+export const SafeMarkdown = memo(function SafeMarkdown({ text }: { text: string }) {
+  const blocks = parseMarkdownBlocks(text);
   return (
     <div className="space-y-3 text-[15px] leading-7 text-[#0F172A]">
       {blocks.map((block, index) => {
@@ -207,4 +219,4 @@ export function SafeMarkdown({ text }: { text: string }) {
       })}
     </div>
   );
-}
+});
