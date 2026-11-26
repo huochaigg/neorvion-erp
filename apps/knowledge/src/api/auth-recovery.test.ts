@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { AxiosError } from 'axios';
 import { apiClient } from './client';
 import { streamConversationMessage } from './rag';
 
@@ -92,6 +93,31 @@ describe('Knowledge IAM recovery', () => {
       expect(state.refreshSession).toHaveBeenCalledTimes(1);
     } finally {
       vi.unstubAllGlobals();
+    }
+  });
+
+  it('ignores a late tenant-inaccessible response from the previous tenant', async () => {
+    const previous = apiClient.defaults.adapter;
+    apiClient.defaults.adapter = async (config) => {
+      state.tenantId = 2;
+      state.epoch++;
+      throw new AxiosError('old tenant', 'ERR_BAD_RESPONSE', config, undefined, {
+        config,
+        status: 403,
+        statusText: '',
+        headers: {},
+        data: { code: 40310 },
+      });
+    };
+    try {
+      await expect(apiClient.get('/api/v1/knowledge-bases')).rejects.toMatchObject({
+        status: 403,
+        code: 40310,
+      });
+      expect(state.tenantId).toBe(2);
+      expect(state.refreshSession).not.toHaveBeenCalled();
+    } finally {
+      apiClient.defaults.adapter = previous;
     }
   });
 });

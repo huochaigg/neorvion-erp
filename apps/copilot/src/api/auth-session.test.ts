@@ -140,6 +140,24 @@ describe('shared IAM session recovery', () => {
     expect(retry).not.toHaveBeenCalled();
   });
 
+  it('does not start another refresh after the session has been cleared', async () => {
+    const refresh = vi.fn(async () => 'new');
+    const retry = vi.fn(async () => 'result');
+    const result = await recoverExpiredRequest({
+      status: 401,
+      code: 40103,
+      tokenSent: 'old',
+      getToken: () => null,
+      contextSent: 'a',
+      context: () => 'a',
+      refresh,
+      retry,
+    });
+    expect(result).toBeUndefined();
+    expect(refresh).not.toHaveBeenCalled();
+    expect(retry).not.toHaveBeenCalled();
+  });
+
   it('refreshes a stream session without automatically replaying the POST', async () => {
     const refresh = vi.fn(async () => 'new');
     expect(

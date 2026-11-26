@@ -1,6 +1,7 @@
 import {
   ApiError,
   isTerminalAuthFailure,
+  microAuthContext,
   prepareStreamResubmission,
   TENANT_HEADER,
   type ApiResponse,
@@ -126,7 +127,12 @@ export async function streamConversationMessage(
   }
   const token = getShellProps().token;
   const tenantId = useKnowledgeTenantStore.getState().currentTenantId;
-  const contextSent = `${getShellProps().sessionVersion?.() ?? 0}:${getShellProps().user?.id ?? ''}:${useKnowledgeTenantStore.getState().epoch}:${tenantId ?? ''}`;
+  const context = () =>
+    microAuthContext(getShellProps(), {
+      epoch: useKnowledgeTenantStore.getState().epoch,
+      tenantId: useKnowledgeTenantStore.getState().currentTenantId,
+    });
+  const contextSent = context();
   const headers: Record<string, string> = {
     Accept: 'text/event-stream',
     'Content-Type': 'application/json',
@@ -153,8 +159,7 @@ export async function streamConversationMessage(
       if (
         isTerminalAuthFailure(response.status, body.code) &&
         token === getShellProps().token &&
-        contextSent ===
-          `${getShellProps().sessionVersion?.() ?? 0}:${getShellProps().user?.id ?? ''}:${useKnowledgeTenantStore.getState().epoch}:${useKnowledgeTenantStore.getState().currentTenantId ?? ''}`
+        contextSent === context()
       ) {
         getShellProps().expireSession?.();
       }
@@ -165,8 +170,7 @@ export async function streamConversationMessage(
           tokenSent: token,
           getToken: () => getShellProps().token,
           contextSent,
-          context: () =>
-            `${getShellProps().sessionVersion?.() ?? 0}:${getShellProps().user?.id ?? ''}:${useKnowledgeTenantStore.getState().epoch}:${useKnowledgeTenantStore.getState().currentTenantId ?? ''}`,
+          context,
           refresh: getShellProps().refreshSession,
         })
       ) {

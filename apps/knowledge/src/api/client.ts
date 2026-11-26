@@ -6,11 +6,12 @@ import axios, {
 } from 'axios';
 import {
   ApiError,
-  recoverExpiredRequest,
+  createAuthRequestAdapter,
   decideTenantHeader,
   isTenantInaccessibleError,
-  isTerminalAuthFailure,
+  microAuthContext,
   MICRO_EVENTS,
+  responseApiError,
   SHELL_ROUTES,
   TENANT_HEADER,
   type ApiResponse,
@@ -24,32 +25,21 @@ export const apiClient = axios.create({
   withCredentials: true,
 });
 
-function toApiError(error: AxiosError<ApiResponse<unknown>>): ApiError {
-  const status = error.response?.status ?? 0;
-  const code = error.response?.data?.code ?? 0;
-  if (!error.response) {
-    return new ApiError('网络异常', { status, code });
-  }
-  if (status >= 500) {
-    return new ApiError(error.response.data?.message || '服务暂时不可用', { status, code });
-  }
-  return new ApiError(error.response.data?.message || error.message, {
-    status,
-    code,
-    data: error.response.data?.data,
-  });
-}
+const auth = createAuthRequestAdapter({
+  getToken: () => getShellProps().token,
+  getContext: () => {
+    const tenant = useKnowledgeTenantStore.getState();
+    return microAuthContext(getShellProps(), {
+      epoch: tenant.epoch,
+      tenantId: tenant.currentTenantId,
+    });
+  },
+  getRefresh: () => getShellProps().refreshSession,
+  expireSession: () => getShellProps().expireSession?.(),
+});
 
 apiClient.interceptors.request.use((config) => {
-  const token = getShellProps().token;
-  if (!config._retried) {
-    config.authTokenSent = token;
-    config.authContext = `${getShellProps().sessionVersion?.() ?? 0}:${getShellProps().user?.id ?? ''}:${useKnowledgeTenantStore.getState().epoch}:${useKnowledgeTenantStore.getState().currentTenantId ?? ''}`;
-  }
-  if (token && !config._retried) {
-    config.headers.Authorization = `Bearer ${token}`;
-  }
-
+  auth.attach(config);
   const tenantState = useKnowledgeTenantStore.getState();
   const decision = decideTenantHeader({
     method: config.method ?? 'get',
@@ -59,81 +49,33 @@ apiClient.interceptors.request.use((config) => {
     currentTenantId: tenantState.currentTenantId,
     isSwitching: false,
   });
-
   if (decision.action === 'attach') {
     config.headers[TENANT_HEADER] = String(decision.tenantId);
     config.tenantContextId = decision.tenantId;
   }
-
   return config;
 });
 
 apiClient.interceptors.response.use(
   (response) => response,
   async (error: unknown) => {
-    if (isCancel(error)) {
-      return Promise.reject(error);
-    }
-    const axiosError = isAxiosError(error) ? error : null;
+    if (isCancel(error)) return Promise.reject(error);
+    const axiosError = isAxiosError(error) ? (error as AxiosError<ApiResponse<unknown>>) : null;
     const original = axiosError?.config as InternalAxiosRequestConfig | undefined;
-    const nextError = axiosError ? toApiError(axiosError) : error;
+    const nextError = axiosError ? responseApiError(axiosError) : error;
 
     if (nextError instanceof ApiError && nextError.code === 40350) {
-      window.location.assign(SHELL_ROUTES.changePassword);
+      if (auth.isCurrent(original)) window.location.assign(SHELL_ROUTES.changePassword);
       return Promise.reject(nextError);
     }
     if (nextError instanceof ApiError && isTenantInaccessibleError(nextError.code)) {
-      window.$wujie?.bus.$emit(MICRO_EVENTS.tenantInaccessible);
+      if (auth.isCurrent(original)) window.$wujie?.bus.$emit(MICRO_EVENTS.tenantInaccessible);
       return Promise.reject(nextError);
     }
-
-    if (
-      nextError instanceof ApiError &&
-      original &&
-      isTerminalAuthFailure(nextError.status, nextError.code) &&
-      original.authContext ===
-        `${getShellProps().sessionVersion?.() ?? 0}:${getShellProps().user?.id ?? ''}:${useKnowledgeTenantStore.getState().epoch}:${useKnowledgeTenantStore.getState().currentTenantId ?? ''}` &&
-      original.authTokenSent === getShellProps().token
-    ) {
-      getShellProps().expireSession?.();
-    }
-
-    if (nextError instanceof ApiError && original) {
-      if (
-        original._retried &&
-        nextError.status === 401 &&
-        original.authContext ===
-          `${getShellProps().sessionVersion?.() ?? 0}:${getShellProps().user?.id ?? ''}:${useKnowledgeTenantStore.getState().epoch}:${useKnowledgeTenantStore.getState().currentTenantId ?? ''}` &&
-        original.authTokenSent === getShellProps().token
-      )
-        getShellProps().expireSession?.();
-      try {
-        const result = await recoverExpiredRequest({
-          status: nextError.status,
-          code: nextError.code,
-          retried: original._retried,
-          skip: original.skipAuthRefresh,
-          tokenSent: original.authTokenSent ?? null,
-          contextSent: original.authContext ?? '',
-          context: () =>
-            `${getShellProps().sessionVersion?.() ?? 0}:${getShellProps().user?.id ?? ''}:${useKnowledgeTenantStore.getState().epoch}:${useKnowledgeTenantStore.getState().currentTenantId ?? ''}`,
-          getToken: () => getShellProps().token,
-          refresh: getShellProps().refreshSession,
-          retry: (token) => {
-            original._retried = true;
-            original.authTokenSent = token;
-            original.headers.Authorization = `Bearer ${token}`;
-            return apiClient.request(original);
-          },
-        });
-        if (result) return result;
-      } catch (retryError) {
-        return Promise.reject(retryError);
-      }
-    }
-
-    if (nextError instanceof ApiError && nextError.status >= 500) {
-      console.error('[knowledge-api]', nextError.message);
+    if (nextError instanceof ApiError) {
+      const result = await auth.recover(original, nextError, (config) => apiClient.request(config));
+      if (result) return result;
+      if (nextError.status >= 500) console.error('[knowledge-api]', nextError.message);
     }
     return Promise.reject(nextError);
   },
@@ -141,8 +83,6 @@ apiClient.interceptors.response.use(
 
 export async function unwrapApi<T>(promise: Promise<{ data: ApiResponse<T> }>): Promise<T> {
   const { data } = await promise;
-  if (data.code !== 0) {
-    throw new ApiError(data.message, { code: data.code });
-  }
+  if (data.code !== 0) throw new ApiError(data.message, { code: data.code });
   return data.data;
 }

@@ -2,10 +2,9 @@ import axios, { isCancel, type AxiosError, type InternalAxiosRequestConfig } fro
 import {
   ApiError,
   createSessionRefresh,
-  recoverExpiredRequest,
+  createAuthRequestAdapter,
   decideTenantHeader,
   isTenantInaccessibleError,
-  isTerminalAuthFailure,
   myTenantsQueryKey,
   SHELL_ROUTES,
   TENANT_HEADER,
@@ -39,15 +38,24 @@ const sessionRefresh = createSessionRefresh({
   getToken: () => useAuthStore.getState().accessToken,
   updateToken: (token) => {
     useAuthStore.getState().markAuthenticated(token);
-    syncTokenToAliveSandboxes(token);
   },
-  onExpired: endSessionDueToExpiry,
+  onExpired: expireSessionFromShell,
   isInvalidRefresh: (error) => error instanceof ApiError && error.status === 401,
 });
 let tenantVersion = 0;
 useTenantStore.subscribe((state, previous) => {
   if (state.currentTenantId !== previous.currentTenantId) tenantVersion++;
 });
+function shellAuthContext() {
+  return `${sessionRefresh.version()}:${tenantVersion}:${useTenantStore.getState().currentTenantId ?? ''}`;
+}
+const auth = createAuthRequestAdapter({
+  getToken: () => useAuthStore.getState().accessToken,
+  getContext: shellAuthContext,
+  getRefresh: () => refreshSessionFromShell,
+  expireSession: expireSessionFromShell,
+});
+
 export function getAuthSessionVersion() {
   return sessionRefresh.version();
 }
@@ -77,32 +85,13 @@ function handleTenantInaccessible() {
   useTenantStore.getState().clearCurrentTenant();
 }
 
-/**
- * 全局只允许一个正在执行的 Refresh。
- * 启动恢复、业务 401、React Strict Mode 双调用共享同一 Promise，避免轮换后第二次 401 把会话清掉。
- */
-function refreshAccessToken(): Promise<string> {
+/** Shell alone performs the single-flight IAM refresh for all micro apps. */
+export function refreshSessionFromShell(): Promise<string> {
   return sessionRefresh.refresh();
 }
 
-/** ERP 与 Shell 业务 401 共用。失败会清会话并提示重新登录。 */
-export async function refreshSessionFromShell(): Promise<string> {
-  try {
-    return await refreshAccessToken();
-  } catch (error) {
-    throw error;
-  }
-}
-
 apiClient.interceptors.request.use((config) => {
-  const token = useAuthStore.getState().accessToken;
-  if (!config._retried) {
-    config.authTokenSent = token;
-    config.authContext = `${sessionRefresh.version()}:${tenantVersion}:${useTenantStore.getState().currentTenantId ?? ''}`;
-  }
-  if (token && !config._retried) {
-    config.headers.Authorization = `Bearer ${token}`;
-  }
+  auth.attach(config);
 
   const tenantState = useTenantStore.getState();
   const decision = decideTenantHeader({
@@ -128,75 +117,23 @@ apiClient.interceptors.request.use((config) => {
 apiClient.interceptors.response.use(
   (response) => response,
   async (error: AxiosError<ApiResponse<unknown>>) => {
-    if (isCancel(error)) {
-      return Promise.reject(error);
-    }
+    if (isCancel(error)) return Promise.reject(error);
     const original = error.config as InternalAxiosRequestConfig | undefined;
-    const status = error.response?.status;
-    const skipRefresh = Boolean(original?.skipAuthRefresh);
     const apiError = toApiError(error);
 
     if (apiError instanceof ApiError && apiError.code === 40350) {
-      if (window.location.pathname !== SHELL_ROUTES.changePassword) {
+      if (auth.isCurrent(original) && window.location.pathname !== SHELL_ROUTES.changePassword) {
         window.location.assign(SHELL_ROUTES.changePassword);
       }
       return Promise.reject(apiError);
     }
-
     if (apiError instanceof ApiError && isTenantInaccessibleError(apiError.code)) {
-      handleTenantInaccessible();
+      if (auth.isCurrent(original)) handleTenantInaccessible();
       return Promise.reject(apiError);
     }
-
-    if (
-      apiError instanceof ApiError &&
-      original &&
-      isTerminalAuthFailure(apiError.status, apiError.code) &&
-      original.authContext ===
-        `${sessionRefresh.version()}:${tenantVersion}:${useTenantStore.getState().currentTenantId ?? ''}` &&
-      original.authTokenSent === useAuthStore.getState().accessToken
-    ) {
-      expireSessionFromShell();
-    }
-
-    if (
-      status !== 401 ||
-      !original ||
-      original._retried ||
-      skipRefresh ||
-      !(apiError instanceof ApiError)
-    ) {
-      return Promise.reject(apiError);
-    }
-    try {
-      const result = await recoverExpiredRequest({
-        status,
-        code: apiError.code,
-        tokenSent: original.authTokenSent ?? null,
-        contextSent: original.authContext ?? '',
-        context: () =>
-          `${sessionRefresh.version()}:${tenantVersion}:${useTenantStore.getState().currentTenantId ?? ''}`,
-        getToken: () => useAuthStore.getState().accessToken,
-        refresh: refreshAccessToken,
-        retry: (token) => {
-          original._retried = true;
-          original.authTokenSent = token;
-          original.headers.Authorization = `Bearer ${token}`;
-          return apiClient.request(original);
-        },
-      });
+    if (apiError instanceof ApiError) {
+      const result = await auth.recover(original, apiError, (config) => apiClient.request(config));
       if (result) return result;
-    } catch (retryError) {
-      if (
-        retryError instanceof ApiError &&
-        retryError.status === 401 &&
-        original._retried &&
-        original.authContext ===
-          `${sessionRefresh.version()}:${tenantVersion}:${useTenantStore.getState().currentTenantId ?? ''}` &&
-        original.authTokenSent === useAuthStore.getState().accessToken
-      )
-        expireSessionFromShell();
-      return Promise.reject(retryError);
     }
     return Promise.reject(apiError);
   },
@@ -207,7 +144,7 @@ export { unwrapApi };
 /** 仅用于应用启动恢复会话。401 表示没有有效 Refresh Cookie，属于预期结果。 */
 export async function restoreSession(): Promise<string | null> {
   try {
-    return await refreshAccessToken();
+    return await refreshSessionFromShell();
   } catch (error) {
     if (useAuthStore.getState().status !== 'authenticated') {
       useAuthStore.getState().markUnauthenticated();

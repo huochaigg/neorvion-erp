@@ -1,8 +1,8 @@
 import axios, { isCancel, type AxiosInstance } from 'axios';
 import {
   ApiError,
-  isTerminalAuthFailure,
-  recoverExpiredRequest,
+  createAuthRequestAdapter,
+  microAuthContext,
   TENANT_HEADER,
   type ApiResponse,
 } from '@neorvion/shared';
@@ -16,18 +16,19 @@ export const api = axios.create({
 
 export function copilotAuthContext() {
   const state = useCopilotStore.getState();
-  return `${shellProps().sessionVersion?.() ?? 0}:${shellProps().user?.id ?? ''}:${state.epoch}:${state.tenantId ?? ''}`;
+  return microAuthContext(shellProps(), { epoch: state.epoch, tenantId: state.tenantId });
 }
 
 export function installCopilotAuth(client: AxiosInstance) {
+  const auth = createAuthRequestAdapter({
+    getToken: () => shellProps().token,
+    getContext: copilotAuthContext,
+    getRefresh: () => shellProps().refreshSession,
+    expireSession: () => shellProps().expireSession?.(),
+  });
   client.interceptors.request.use((config) => {
-    const token = shellProps().token;
+    auth.attach(config);
     const tenant = useCopilotStore.getState().tenantId;
-    if (!config._retried) {
-      config.authTokenSent = token;
-      config.authContext = copilotAuthContext();
-    }
-    if (token && !config._retried) config.headers.Authorization = `Bearer ${token}`;
     if (tenant) config.headers[TENANT_HEADER] = String(tenant);
     return config;
   });
@@ -43,44 +44,8 @@ export function installCopilotAuth(client: AxiosInstance) {
           (axiosError?.code === 'ECONNABORTED' ? '请求超时，请检查会话或稍后重试' : '请求异常'),
         { status: axiosError?.response?.status ?? 0, code: body?.code ?? 0 },
       );
-      if (original) {
-        if (
-          isTerminalAuthFailure(nextError.status, nextError.code) &&
-          original.authContext === copilotAuthContext() &&
-          original.authTokenSent === shellProps().token
-        ) {
-          shellProps().expireSession?.();
-        }
-        if (
-          original._retried &&
-          nextError.status === 401 &&
-          original.authContext === copilotAuthContext() &&
-          original.authTokenSent === shellProps().token
-        )
-          shellProps().expireSession?.();
-        try {
-          const result = await recoverExpiredRequest({
-            status: nextError.status,
-            code: nextError.code,
-            retried: original._retried,
-            skip: original.skipAuthRefresh,
-            tokenSent: original.authTokenSent ?? null,
-            contextSent: original.authContext ?? '',
-            context: copilotAuthContext,
-            getToken: () => shellProps().token,
-            refresh: shellProps().refreshSession,
-            retry: (token) => {
-              original._retried = true;
-              original.authTokenSent = token;
-              original.headers.Authorization = `Bearer ${token}`;
-              return client.request(original);
-            },
-          });
-          if (result) return result;
-        } catch (retryError) {
-          return Promise.reject(retryError);
-        }
-      }
+      const result = await auth.recover(original, nextError, (config) => client.request(config));
+      if (result) return result;
       return Promise.reject(nextError);
     },
   );

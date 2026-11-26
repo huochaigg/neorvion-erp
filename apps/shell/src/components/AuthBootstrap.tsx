@@ -17,7 +17,7 @@ export function AuthBootstrap({ children }: AuthBootstrapProps) {
 
   useEffect(() => {
     const onUnauthorized = () => {
-      void refreshSessionFromShell();
+      void refreshSessionFromShell().catch(() => undefined);
     };
     bus.$on(MICRO_EVENTS.unauthorized, onUnauthorized);
     return () => {

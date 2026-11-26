@@ -102,6 +102,7 @@ export async function recoverExpiredRequest<T>(options: {
     return undefined;
   if (options.context() !== options.contextSent || !options.refresh) return undefined;
   const current = options.getToken();
+  if (!current) return undefined;
   const token = current && current !== options.tokenSent ? current : await options.refresh();
   if (options.context() !== options.contextSent || !options.getToken()) {
     throw new Error('登录或租户已变化，请重新发起请求');

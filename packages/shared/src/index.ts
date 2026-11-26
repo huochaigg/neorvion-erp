@@ -164,8 +164,21 @@ export {
   taskStatusLabel,
 } from './types/platform';
 export { ApiError } from './errors/api-error';
-export { createSessionRefresh, isRecoverableExpiry, isTerminalAuthFailure, recoverExpiredRequest, prepareStreamResubmission } from './auth/session';
-export type { TokenPayload, UserProfile, AuthPublicKey, EncryptedPasswordPayload } from './types/auth';
+export {
+  createSessionRefresh,
+  isRecoverableExpiry,
+  isTerminalAuthFailure,
+  recoverExpiredRequest,
+  prepareStreamResubmission,
+} from './auth/session';
+export { createAuthRequestAdapter, microAuthContext, responseApiError } from './auth/request';
+export type { AuthRequestConfig } from './auth/request';
+export type {
+  TokenPayload,
+  UserProfile,
+  AuthPublicKey,
+  EncryptedPasswordPayload,
+} from './types/auth';
 export { AUTH_ERROR_CODE, SESSION_EXPIRED_MESSAGE } from './types/auth';
 export type {
   ShellToErpProps,
@@ -648,7 +661,12 @@ export {
   isTenantScopedQueryKey,
   tenantIdFromQueryKey,
 } from './query/keys';
-export { isUsableTenant, listUsableTenants, pickTenantSelection, lastTenantStorageKey } from './tenant/access';
+export {
+  isUsableTenant,
+  listUsableTenants,
+  pickTenantSelection,
+  lastTenantStorageKey,
+} from './tenant/access';
 export type { TenantPickResult } from './tenant/access';
 export { safePathAfterTenantChange } from './tenant/erp-route';
 export { safeKnowledgePathAfterTenantChange } from './tenant/knowledge-route';
