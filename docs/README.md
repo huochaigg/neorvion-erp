@@ -45,6 +45,7 @@
 - [Copilot V15 意图理解面试](interview/copilot-v15-intent.md)
 - [Agent 接入准备](agent-readiness.md)
 - [ERP Copilot V1–VN 路线图](copilot/roadmap.md)
+- [Copilot 问题中心](copilot/questions/README.md)
 - [Copilot V1-A ChatGPT 代码生成提示词](prompts/copilot-v1a-implementation.md)
 
 ## 版本文档
