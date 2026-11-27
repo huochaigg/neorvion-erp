@@ -1,8 +1,7 @@
 import {
   ApiError,
-  isTerminalAuthFailure,
   microAuthContext,
-  prepareStreamResubmission,
+  fetchWithAuthRecovery,
   TENANT_HEADER,
   type ApiResponse,
   type KnowledgeChatAskPayload,
@@ -133,59 +132,39 @@ export async function streamConversationMessage(
       tenantId: useKnowledgeTenantStore.getState().currentTenantId,
     });
   const contextSent = context();
-  const headers: Record<string, string> = {
-    Accept: 'text/event-stream',
-    'Content-Type': 'application/json',
-  };
-  if (token) {
-    headers.Authorization = `Bearer ${token}`;
-  }
-  if (tenantId != null) {
-    headers[TENANT_HEADER] = String(tenantId);
-  }
   const baseURL = apiClient.defaults.baseURL ?? '';
-  const response = await fetch(`${baseURL}/api/v1/conversations/${conversationId}/messages`, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify(payload),
-    credentials: 'include',
+  const url = `${baseURL}/api/v1/conversations/${conversationId}/messages`;
+  const body = JSON.stringify(payload);
+  const response = await fetchWithAuthRecovery({
+    tokenSent: token,
+    contextSent,
+    getToken: () => getShellProps().token,
+    getContext: context,
+    getRefresh: () => getShellProps().refreshSession,
+    expireSession: () => getShellProps().expireSession?.(),
     signal: controller.signal,
+    send: (accessToken) => {
+      const headers: Record<string, string> = {
+        Accept: 'text/event-stream',
+        'Content-Type': 'application/json',
+      };
+      if (accessToken) headers.Authorization = `Bearer ${accessToken}`;
+      if (tenantId != null) headers[TENANT_HEADER] = String(tenantId);
+      return fetch(url, {
+        method: 'POST',
+        headers,
+        body,
+        credentials: 'include',
+        signal: controller.signal,
+      });
+    },
   });
   if (!response.ok) {
-    let message = '问答请求失败';
-    try {
-      const body = (await response.json()) as ApiResponse<unknown>;
-      message = body.message || message;
-      if (
-        isTerminalAuthFailure(response.status, body.code) &&
-        token === getShellProps().token &&
-        contextSent === context()
-      ) {
-        getShellProps().expireSession?.();
-      }
-      if (
-        await prepareStreamResubmission({
-          status: response.status,
-          code: body.code,
-          tokenSent: token,
-          getToken: () => getShellProps().token,
-          contextSent,
-          context,
-          refresh: getShellProps().refreshSession,
-        })
-      ) {
-        throw new ApiError('登录已恢复。请手动重新发送问题，避免重复生成。', {
-          status: 401,
-          code: body.code,
-        });
-      }
-      throw new ApiError(message, { status: response.status, code: body.code });
-    } catch (error) {
-      if (error instanceof ApiError) {
-        throw error;
-      }
-      throw new ApiError(message, { status: response.status });
-    }
+    const failure = await response.json().catch(() => null) as ApiResponse<unknown> | null;
+    throw new ApiError(failure?.message || '问答请求失败', {
+      status: response.status,
+      code: failure?.code ?? 0,
+    });
   }
   await consumeSse(response, { onEvent });
 }

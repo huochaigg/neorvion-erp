@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
   createSessionRefresh,
-  prepareStreamResubmission,
+  fetchWithAuthRecovery,
   recoverExpiredRequest,
 } from '@neorvion/shared';
 
@@ -158,41 +158,101 @@ describe('shared IAM session recovery', () => {
     expect(retry).not.toHaveBeenCalled();
   });
 
-  it('refreshes a stream session without automatically replaying the POST', async () => {
-    const refresh = vi.fn(async () => 'new');
-    expect(
-      await prepareStreamResubmission({
-        status: 401,
-        code: 40103,
-        tokenSent: 'old',
-        getToken: () => 'old',
-        contextSent: 'a',
-        context: () => 'a',
-        refresh,
-      }),
-    ).toBe(true);
-    expect(
-      await prepareStreamResubmission({
-        status: 403,
-        code: 40310,
-        tokenSent: 'old',
-        getToken: () => 'old',
-        contextSent: 'a',
-        context: () => 'a',
-        refresh,
-      }),
-    ).toBe(false);
-    expect(
-      await prepareStreamResubmission({
-        status: 401,
-        code: 40103,
-        tokenSent: 'old',
-        getToken: () => 'old',
-        contextSent: 'a',
-        context: () => 'b',
-        refresh,
-      }),
-    ).toBe(false);
+  it('retries only a pre-stream HTTP 40103, preserving the same request payload', async () => {
+    let token = 'old';
+    const body = JSON.stringify({ client_request_id: 'same-id', message: 'hello' });
+    const refresh = vi.fn(async () => { token = 'new'; return token; });
+    const send = vi.fn(async (accessToken: string) => accessToken === 'old'
+      ? Response.json({ code: 40103 }, { status: 401 })
+      : new Response('event: done\ndata: {"answer":"ok"}\n\n', { status: 200 }));
+    const result = await fetchWithAuthRecovery({
+      tokenSent: token, contextSent: 'a', getToken: () => token, getContext: () => 'a',
+      getRefresh: () => refresh, expireSession: vi.fn(),
+      send: (accessToken) => { expect(body).toContain('same-id'); return send(accessToken); },
+    });
+    expect(result.status).toBe(200);
+    expect(await result.text()).toContain('answer');
+    expect(send.mock.calls.map(([accessToken]) => accessToken)).toEqual(['old', 'new']);
     expect(refresh).toHaveBeenCalledTimes(1);
+  });
+
+  it('never replays an established SSE response or a forbidden request', async () => {
+    const refresh = vi.fn(async () => 'new');
+    for (const initial of [
+      new Response('event: error\ndata: {"code":40103}\n\n', { status: 200 }),
+      new Response('event: tool_call\ndata: {"name":"write"}\n\nevent: error\ndata: {"code":40103}\n\n', { status: 200 }),
+      Response.json({ code: 40310 }, { status: 403 })]) {
+      const send = vi.fn(async () => initial);
+      const result = await fetchWithAuthRecovery({
+        tokenSent: 'old', contextSent: 'a', getToken: () => 'old', getContext: () => 'a',
+        getRefresh: () => refresh, expireSession: vi.fn(), send,
+      });
+      expect(result).toBe(initial);
+      expect(send).toHaveBeenCalledTimes(1);
+    }
+    expect(refresh).not.toHaveBeenCalled();
+  });
+
+  it('ends a revoked session without refreshing or resending the stream', async () => {
+    const refresh = vi.fn(async () => 'new');
+    const expireSession = vi.fn();
+    const send = vi.fn(async () => Response.json({ code: 40104 }, { status: 401 }));
+    const response = await fetchWithAuthRecovery({
+      tokenSent: 'old', contextSent: 'a', getToken: () => 'old', getContext: () => 'a',
+      getRefresh: () => refresh, expireSession, send,
+    });
+    expect(response.status).toBe(401);
+    expect(send).toHaveBeenCalledTimes(1);
+    expect(refresh).not.toHaveBeenCalled();
+    expect(expireSession).toHaveBeenCalledTimes(1);
+  });
+
+  it('uses an already refreshed token without rotating the cookie again', async () => {
+    const refresh = vi.fn(async () => 'new');
+    const send = vi.fn(async (token: string) => token === 'old'
+      ? Response.json({ code: 40103 }, { status: 401 }) : new Response('ok'));
+    const response = await fetchWithAuthRecovery({
+      tokenSent: 'old', contextSent: 'a', getToken: () => 'new', getContext: () => 'a',
+      getRefresh: () => refresh, expireSession: vi.fn(), send,
+    });
+    expect(response.status).toBe(200);
+    expect(send.mock.calls.map(([token]) => token)).toEqual(['old', 'new']);
+    expect(refresh).not.toHaveBeenCalled();
+  });
+
+  it('stops after one retry when the new token is also rejected', async () => {
+    let token = 'old';
+    const expireSession = vi.fn();
+    const refresh = vi.fn(async () => { token = 'new'; return token; });
+    const send = vi.fn(async () => Response.json({ code: 40103 }, { status: 401 }));
+    const response = await fetchWithAuthRecovery({
+      tokenSent: token, contextSent: 'a', getToken: () => token, getContext: () => 'a',
+      getRefresh: () => refresh, expireSession, send,
+    });
+    expect(response.status).toBe(401);
+    expect(send).toHaveBeenCalledTimes(2);
+    expect(refresh).toHaveBeenCalledTimes(1);
+    expect(expireSession).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not resend when cancelled or switched to another tenant during refresh', async () => {
+    for (const change of ['abort', 'tenant']) {
+      const controller = new AbortController();
+      let context = 'tenant-1';
+      let token = 'old';
+      let complete!: (token: string) => void;
+      const refresh = vi.fn(() => new Promise<string>((resolve) => { complete = resolve; }));
+      const send = vi.fn(async () => Response.json({ code: 40103 }, { status: 401 }));
+      const pending = fetchWithAuthRecovery({
+        tokenSent: token, contextSent: context, getToken: () => token, getContext: () => context,
+        getRefresh: () => refresh, expireSession: vi.fn(), signal: controller.signal, send,
+      });
+      await vi.waitFor(() => expect(refresh).toHaveBeenCalledTimes(1));
+      if (change === 'abort') controller.abort(); else context = 'tenant-2';
+      token = 'new';
+      complete(token);
+      await expect(pending).rejects.toThrow();
+      expect(send).toHaveBeenCalledTimes(1);
+    }
   });
 });

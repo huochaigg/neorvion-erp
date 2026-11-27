@@ -60,27 +60,6 @@ export function isTerminalAuthFailure(status: number, code: number): boolean {
   );
 }
 
-/** POST streams can have side effects; refresh the session but leave resubmission to the user. */
-export async function prepareStreamResubmission(options: {
-  status: number;
-  code: number;
-  tokenSent: string | null;
-  getToken: () => string | null;
-  contextSent: string;
-  context: () => string;
-  refresh?: () => Promise<string>;
-}): Promise<boolean> {
-  if (
-    !options.tokenSent ||
-    !isRecoverableExpiry(options.status, options.code) ||
-    !options.refresh ||
-    options.context() !== options.contextSent
-  )
-    return false;
-  if (options.getToken() === options.tokenSent) await options.refresh();
-  return options.context() === options.contextSent;
-}
-
 /** A late response may belong to an old tenant or a login that has since been replaced. */
 export async function recoverExpiredRequest<T>(options: {
   status: number;

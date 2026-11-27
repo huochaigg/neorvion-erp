@@ -74,26 +74,23 @@ describe('Knowledge IAM recovery', () => {
     }
   });
 
-  it('refreshes a stream session and asks for an explicit resend', async () => {
-    const send = vi.fn(async () => ({
-      ok: false,
-      status: 401,
-      json: async () => ({ code: 40103, message: 'expired' }),
-    }));
+  it('silently refreshes and retries the same RAG Chat POST before SSE starts', async () => {
+    const send = vi.fn(async (_url: string, init: RequestInit) =>
+      (init.headers as Record<string, string>).Authorization === 'Bearer old'
+        ? Response.json({ code: 40103 }, { status: 401 })
+        : new Response('event: done\ndata: {"answer":"ok"}\n\n', { status: 200 }));
     vi.stubGlobal('fetch', send);
     try {
-      await expect(
-        streamConversationMessage(
-          1,
-          { content: 'hello', strategy: 'HYBRID', rerank: true },
-          vi.fn(),
-        ),
-      ).rejects.toThrow('请手动重新发送');
-      expect(send).toHaveBeenCalledTimes(1);
+      const onEvent = vi.fn();
+      await streamConversationMessage(
+        1, { content: 'hello', strategy: 'HYBRID', rerank: true }, onEvent,
+      );
+      expect(send).toHaveBeenCalledTimes(2);
+      expect(send.mock.calls[0][1].body).toBe(send.mock.calls[1][1].body);
+      expect(send.mock.calls[0][1].signal).toBe(send.mock.calls[1][1].signal);
+      expect((send.mock.calls[1][1].headers as Record<string, string>).Authorization).toBe('Bearer new');
       expect(state.refreshSession).toHaveBeenCalledTimes(1);
-    } finally {
-      vi.unstubAllGlobals();
-    }
+    } finally { vi.unstubAllGlobals(); }
   });
 
   it('ignores a late tenant-inaccessible response from the previous tenant', async () => {

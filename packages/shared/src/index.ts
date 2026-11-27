@@ -169,9 +169,9 @@ export {
   isRecoverableExpiry,
   isTerminalAuthFailure,
   recoverExpiredRequest,
-  prepareStreamResubmission,
 } from './auth/session';
 export { createAuthRequestAdapter, microAuthContext, responseApiError } from './auth/request';
+export { fetchWithAuthRecovery } from './auth/fetch';
 export type { AuthRequestConfig } from './auth/request';
 export type {
   TokenPayload,

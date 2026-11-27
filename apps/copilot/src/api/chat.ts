@@ -1,7 +1,6 @@
 import {
   ApiError,
-  isTerminalAuthFailure,
-  prepareStreamResubmission,
+  fetchWithAuthRecovery,
   TENANT_HEADER,
 } from '@neorvion/shared';
 import { shellProps } from '@/runtime';
@@ -22,53 +21,38 @@ export async function streamChat(input: {
   const token = shellProps().token;
   const tenant = useCopilotStore.getState().tenantId;
   const contextSent = copilotAuthContext();
-  const response = await fetch(
-    `${import.meta.env.VITE_API_BASE_URL || 'http://localhost:8013'}/api/v1/conversations/${input.conversationId}/messages`,
-    {
+  const url = `${import.meta.env.VITE_API_BASE_URL || 'http://localhost:8013'}/api/v1/conversations/${input.conversationId}/messages`;
+  const body = JSON.stringify({
+    client_request_id: input.clientRequestId,
+    message: input.message,
+    skill_mode: input.skillMode,
+    skill_key: input.skillMode === 'MANUAL' ? input.skillKey : undefined,
+  });
+  const response = await fetchWithAuthRecovery({
+    tokenSent: token,
+    contextSent,
+    getToken: () => shellProps().token,
+    getContext: copilotAuthContext,
+    getRefresh: () => shellProps().refreshSession,
+    expireSession: () => shellProps().expireSession?.(),
+    signal: input.signal,
+    send: (accessToken) => fetch(url, {
       method: 'POST',
       signal: input.signal,
       headers: {
         Accept: 'text/event-stream',
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${token ?? ''}`,
+        Authorization: `Bearer ${accessToken}`,
         [TENANT_HEADER]: String(tenant ?? ''),
       },
-      body: JSON.stringify({
-        client_request_id: input.clientRequestId,
-        message: input.message,
-        skill_mode: input.skillMode,
-        skill_key: input.skillMode === 'MANUAL' ? input.skillKey : undefined,
-      }),
-    },
-  );
+      body,
+    }),
+  });
   if (!response.ok) {
-    const body = await response.json().catch(() => null);
-    if (
-      isTerminalAuthFailure(response.status, body?.code ?? 0) &&
-      contextSent === copilotAuthContext() &&
-      token === shellProps().token
-    ) {
-      shellProps().expireSession?.();
-    }
-    if (
-      await prepareStreamResubmission({
-        status: response.status,
-        code: body?.code ?? 0,
-        tokenSent: token,
-        getToken: () => shellProps().token,
-        contextSent,
-        context: copilotAuthContext,
-        refresh: shellProps().refreshSession,
-      })
-    ) {
-      throw new ApiError('登录已恢复。请手动重新发送消息，避免重复执行任务。', {
-        status: 401,
-        code: body?.code ?? 0,
-      });
-    }
-    throw new ApiError(body?.message || '请求失败', {
+    const failure = await response.json().catch(() => null);
+    throw new ApiError(failure?.message || '请求失败', {
       status: response.status,
-      code: body?.code ?? 0,
+      code: failure?.code ?? 0,
     });
   }
   await consumeSse(response, input.onEvent, input.signal);

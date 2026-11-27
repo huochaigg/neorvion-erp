@@ -2,6 +2,7 @@ import axios, { AxiosError, type AxiosAdapter, type AxiosRequestConfig } from 'a
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { installCopilotAuth } from './client';
 import { streamChat } from './chat';
+import { createSessionRefresh } from '@neorvion/shared';
 
 const { state } = vi.hoisted(() => ({
   state: {
@@ -132,28 +133,68 @@ describe('Copilot axios IAM adapter', () => {
     expect(state.expireSession).not.toHaveBeenCalled();
   });
 
-  it('refreshes on a pre-stream 401 but never resends the chat POST automatically', async () => {
-    const send = vi.fn(async () => ({
-      ok: false,
-      status: 401,
-      json: async () => ({ code: 40103 }),
-    }));
+  it('silently retries Chat with the same message, request ID, tenant and AbortSignal', async () => {
+    const signal = new AbortController().signal;
+    const send = vi.fn(async (_url: string, init: RequestInit) =>
+      init.headers && (init.headers as Record<string, string>).Authorization === 'Bearer old'
+        ? Response.json({ code: 40103 }, { status: 401 })
+        : new Response('event: done\ndata: {"answer":"ok"}\n\n', {
+            status: 200, headers: { 'Content-Type': 'text/event-stream' },
+          }));
     vi.stubGlobal('fetch', send);
     try {
-      await expect(
-        streamChat({
-          conversationId: 1,
-          message: 'hello',
-          clientRequestId: 'one',
-          signal: new AbortController().signal,
-          onEvent: vi.fn(),
-          skillMode: 'NONE',
-        }),
-      ).rejects.toThrow('请手动重新发送');
-      expect(send).toHaveBeenCalledTimes(1);
+      const onEvent = vi.fn();
+      await streamChat({
+        conversationId: 1, message: 'hello', clientRequestId: 'same-id',
+        signal, onEvent, skillMode: 'NONE',
+      });
+      expect(send).toHaveBeenCalledTimes(2);
+      const [first, second] = send.mock.calls;
+      expect(first[0]).toBe(second[0]);
+      expect(first[1].body).toBe(second[1].body);
+      expect(first[1].body).toContain('same-id');
+      expect(first[1].signal).toBe(signal);
+      expect(second[1].signal).toBe(signal);
+      expect((first[1].headers as Record<string, string>)['X-Tenant-ID'])
+        .toBe((second[1].headers as Record<string, string>)['X-Tenant-ID']);
+      expect((second[1].headers as Record<string, string>).Authorization).toBe('Bearer new');
       expect(state.refreshSession).toHaveBeenCalledTimes(1);
-    } finally {
-      vi.unstubAllGlobals();
-    }
+      expect(onEvent).toHaveBeenCalledTimes(1);
+    } finally { vi.unstubAllGlobals(); }
+  });
+
+  it('shares one Shell refresh between an ordinary API and an expired Chat stream', async () => {
+    let finishRefresh!: (token: string) => void;
+    const refresh = vi.fn(() => new Promise<string>((resolve) => { finishRefresh = resolve; }));
+    const coordinator = createSessionRefresh({
+      refresh,
+      getToken: () => state.token,
+      updateToken: (token) => { state.token = token; },
+      onExpired: state.expireSession,
+      isInvalidRefresh: () => true,
+    });
+    state.refreshSession = vi.fn(() => coordinator.refresh());
+    const client = axios.create({ adapter: mockClient((config) =>
+      config.headers?.Authorization === 'Bearer old' ? 401 : 200) });
+    installCopilotAuth(client);
+    const fetchMock = vi.fn(async (_url: string, init: RequestInit) =>
+      (init.headers as Record<string, string>).Authorization === 'Bearer old'
+        ? Response.json({ code: 40103 }, { status: 401 })
+        : new Response('event: done\ndata: {"answer":"ok"}\n\n', { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+    try {
+      const onEvent = vi.fn();
+      const api = client.post('/api/v1/conversations', { title: 'one' });
+      const chat = streamChat({
+        conversationId: 1, message: 'hello', clientRequestId: 'same-id',
+        skillMode: 'NONE', signal: new AbortController().signal, onEvent,
+      });
+      await vi.waitFor(() => expect(refresh).toHaveBeenCalledTimes(1));
+      finishRefresh('new');
+      await Promise.all([api, chat]);
+      expect(refresh).toHaveBeenCalledTimes(1);
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      expect(onEvent).toHaveBeenCalledTimes(1);
+    } finally { vi.unstubAllGlobals(); }
   });
 });
