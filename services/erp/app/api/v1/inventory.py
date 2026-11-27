@@ -69,11 +69,17 @@ def list_inventory(
 ) -> ApiResponse[InventoryListOut]:
     if is_service(context) and warehouse_id is None and sku_code is None:
         if len(context.service_resources.get("warehouse", ())) == 1:
-            warehouse_id = require_service_resource(
+            bound_warehouse = require_service_resource(
                 context, "warehouse", None, allow_single_default=True
             )
+            if isinstance(bound_warehouse, int):
+                warehouse_id = bound_warehouse
         elif len(context.service_resources.get("sku", ())) == 1:
-            sku_code = require_service_resource(context, "sku", None, allow_single_default=True)
+            bound_sku = require_service_resource(context, "sku", None, allow_single_default=True)
+            if isinstance(bound_sku, str):
+                sku_code = bound_sku
+            elif isinstance(bound_sku, int):
+                sku_code = str(bound_sku)
     require_any_service_resource(
         context,
         (("warehouse", warehouse_id), ("sku", sku_code)),
@@ -119,9 +125,11 @@ def list_all_transactions(
     page_size: int = Query(default=20, ge=1, le=100),
 ) -> ApiResponse[InventoryTransactionListOut]:
     if is_service(context) and warehouse_id is None and sku_id is None:
-        warehouse_id = require_service_resource(
+        bound_warehouse = require_service_resource(
             context, "warehouse", None, allow_single_default=True
         )
+        if isinstance(bound_warehouse, int):
+            warehouse_id = bound_warehouse
     require_any_service_resource(
         context,
         (("warehouse", warehouse_id), ("sku_id", sku_id)),

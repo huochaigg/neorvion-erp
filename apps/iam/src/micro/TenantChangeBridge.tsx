@@ -1,6 +1,6 @@
 import { SHELL_EVENTS, isTenantChangedPayload, safePathAfterTenantChange } from '@neorvion/shared';
 import { useQueryClient } from '@tanstack/react-query';
-import { useEffect, useRef } from 'react';
+import { useEffect, useLayoutEffect, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { isolateTenantQueries } from '@/lib/query-tenant';
 import { getShellProps, isEmbeddedInWujie } from '@/lib/runtime';
@@ -12,7 +12,9 @@ export function TenantChangeBridge() {
   const navigate = useNavigate();
   const location = useLocation();
   const locationRef = useRef(location);
-  locationRef.current = location;
+  useLayoutEffect(() => {
+    locationRef.current = location;
+  }, [location]);
   const hydrateFromShell = useErpTenantStore((state) => state.hydrateFromShell);
   const applyTenantChange = useErpTenantStore((state) => state.applyTenantChange);
 

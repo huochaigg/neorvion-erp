@@ -1,5 +1,6 @@
 import pytest
 from fastapi import Request
+from fastapi.routing import APIRoute
 from neorvion_security import SecurityError
 
 from app.api.deps import get_request_context, get_tenant_context
@@ -17,7 +18,7 @@ def _has_dependency(dependant, function) -> bool:
 def test_expired_token_is_rejected_by_chat_auth_dependency_before_handler(monkeypatch) -> None:
     route = next(
         item for item in router.routes
-        if item.path.endswith("/{conversation_id}/messages")
+        if isinstance(item, APIRoute) and item.path.endswith("/{conversation_id}/messages")
     )
     assert _has_dependency(route.dependant, get_request_context)
     calls = []

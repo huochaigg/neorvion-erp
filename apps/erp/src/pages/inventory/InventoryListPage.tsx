@@ -473,7 +473,7 @@ function AdjustForm({
       }}
     >
       <p className="mb-3 text-sm text-slate-600">
-        实际 {inventory.quantity}　预占 {inventory.reserved_quantity}　可用 {inventory.available_quantity}
+        实际 {inventory.quantity} 预占 {inventory.reserved_quantity} 可用 {inventory.available_quantity}
       </p>
       <Form.Item name="type" label="调整类型" rules={[{ required: true }]}>
         <Select

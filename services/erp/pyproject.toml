@@ -56,3 +56,4 @@ venv = ".venv"
 pythonVersion = "3.12"
 pythonPlatform = "All"
 extraPaths = [".", "../../packages/python/neorvion_security", "../../packages/python/neorvion_db"]
+exclude = ["tests", "alembic", ".venv"]

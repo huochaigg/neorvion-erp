@@ -137,8 +137,10 @@ def _callees(fn: ast.AST) -> frozenset[str]:
     return frozenset(names)
 
 
-def _functions(tree: ast.AST, prefix: str = "") -> list[tuple[str, ast.AST]]:
-    found: list[tuple[str, ast.AST]] = []
+def _functions(
+    tree: ast.AST, prefix: str = ""
+) -> list[tuple[str, ast.FunctionDef | ast.AsyncFunctionDef]]:
+    found: list[tuple[str, ast.FunctionDef | ast.AsyncFunctionDef]] = []
     body = getattr(tree, "body", [])
     for node in body:
         if isinstance(node, ast.ClassDef):

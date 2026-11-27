@@ -319,6 +319,8 @@ class LocalJwtSigner:
     @staticmethod
     def _jwk(public_pem: bytes, kid: str) -> dict[str, str]:
         public_key = serialization.load_pem_public_key(public_pem)
+        if not isinstance(public_key, rsa.RSAPublicKey):
+            raise SecurityError("JWKS 只支持 RSA 公钥", code=50014, status_code=500)
         data = json.loads(RSAAlgorithm.to_jwk(public_key))
         data.update({"kid": kid, "use": "sig", "alg": "RS256"})
         return data

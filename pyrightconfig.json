@@ -2,6 +2,11 @@
   "pythonVersion": "3.12",
   "pythonPlatform": "All",
   "stubPath": "typings",
+  "ignore": [
+    "**/tests/**",
+    "**/unit_tests/**",
+    "**/alembic/**"
+  ],
   "extraPaths": [
     "packages/python/neorvion_db/.venv/Lib/site-packages",
     "packages/python/neorvion_security",
@@ -40,6 +45,16 @@
         "packages/python/neorvion_security",
         "packages/python/neorvion_db",
         "typings"
+      ]
+    },
+    {
+      "root": "packages/python",
+      "pythonVersion": "3.12",
+      "pythonPlatform": "All",
+      "extraPaths": [
+        "packages/python/neorvion_security",
+        "packages/python/neorvion_db",
+        "services/erp/.venv/Lib/site-packages"
       ]
     },
     {

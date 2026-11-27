@@ -21,7 +21,7 @@ def request_id_from_headers(headers: object | None) -> str | None:
     if headers is None:
         return None
     getter = getattr(headers, "get", None)
-    if getter is None:
+    if not callable(getter):
         return None
     for key in ("x-request-id", "x-dashscope-request-id", "request-id", "x-requestid"):
         raw = getter(key)
@@ -34,9 +34,10 @@ def request_id_from_headers(headers: object | None) -> str | None:
 
 
 def retry_after_seconds(headers: object | None) -> float | None:
-    if headers is None or not hasattr(headers, "get"):
+    getter = getattr(headers, "get", None)
+    if headers is None or not callable(getter):
         return None
-    raw = str(headers.get("retry-after") or "").strip()
+    raw = str(getter("retry-after") or "").strip()
     if not raw:
         return None
     try:

@@ -40,7 +40,10 @@ class TenantAsyncSession(AsyncSession):
 
     @property
     def registry(self) -> IsolationRegistry:
-        return self.sync_session.registry
+        sync = self.sync_session
+        if not isinstance(sync, TenantSession):
+            raise TenantIsolationError("异步租户会话的内部会话不是 TenantSession")
+        return sync.registry
 
 
 class GlobalIdentityAsyncSession(AsyncSession):
@@ -64,11 +67,17 @@ class GlobalIdentityAsyncSession(AsyncSession):
 
     @property
     def purpose(self) -> GlobalIdentityPurpose:
-        return self.sync_session.purpose
+        sync = self.sync_session
+        if not isinstance(sync, GlobalIdentitySession):
+            raise TenantIsolationError("异步全局身份会话的内部会话不是 GlobalIdentitySession")
+        return sync.purpose
 
     @property
     def registry(self) -> IsolationRegistry:
-        return self.sync_session.registry
+        sync = self.sync_session
+        if not isinstance(sync, GlobalIdentitySession):
+            raise TenantIsolationError("异步全局身份会话的内部会话不是 GlobalIdentitySession")
+        return sync.registry
 
 
 class PrivilegedAsyncSession(AsyncSession):
@@ -100,7 +109,10 @@ class PrivilegedAsyncSession(AsyncSession):
 
     @property
     def registry(self) -> IsolationRegistry:
-        return self.sync_session.registry
+        sync = self.sync_session
+        if not isinstance(sync, PrivilegedSystemSession):
+            raise PrivilegeError("异步特权会话的内部会话不是 PrivilegedSystemSession")
+        return sync.registry
 
 
 def open_privileged_async_session(

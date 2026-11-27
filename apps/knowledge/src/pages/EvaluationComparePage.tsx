@@ -111,7 +111,7 @@ export function EvaluationComparePage() {
     enabled: tenantId != null && selected.length >= 2,
   });
 
-  const runs = compareQuery.data?.runs ?? [];
+  const runs = useMemo(() => compareQuery.data?.runs ?? [], [compareQuery.data?.runs]);
   const series = useMemo(
     () =>
       runs.map((run, index) => ({

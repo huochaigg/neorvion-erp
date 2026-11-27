@@ -47,7 +47,7 @@ export function probeAliveSandbox(name: string): AliveSandboxProbe {
     return { present: false, stale: false };
   }
 
-  let sandboxWindow: SandboxWindow | null = null;
+  let sandboxWindow: SandboxWindow | null;
   try {
     sandboxWindow = iframe.contentWindow as SandboxWindow | null;
   } catch {

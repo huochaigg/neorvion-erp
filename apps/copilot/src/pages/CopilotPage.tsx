@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Skeleton } from 'antd';
 import { AlertCircle, RotateCcw, X } from 'lucide-react';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { streamChat } from '@/api/chat';
 import { discoverRunnableSkills } from '@/api/ecosystem';
@@ -61,8 +61,10 @@ export function CopilotPage() {
   const queueRef = useRef<StreamFrameQueue | null>(null);
   const selectedRef = useRef(selected);
   const pendingConversationRef = useRef(pendingConversationId);
-  selectedRef.current = selected;
-  pendingConversationRef.current = pendingConversationId;
+  useLayoutEffect(() => {
+    selectedRef.current = selected;
+    pendingConversationRef.current = pendingConversationId;
+  }, [selected, pendingConversationId]);
 
   const create = useMutation({
     mutationFn: () => createConversation(),

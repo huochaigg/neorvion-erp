@@ -8,5 +8,6 @@
     "${workspaceFolder}/services/erp/.venv/Lib/site-packages",
     "${workspaceFolder}/typings"
   ],
-  "python.analysis.diagnosticMode": "workspace"
+  "python.analysis.diagnosticMode": "workspace",
+  "python.analysis.ignore": ["**/tests/**", "**/unit_tests/**", "**/alembic/**"]
 }

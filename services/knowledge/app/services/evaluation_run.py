@@ -624,8 +624,9 @@ class EvaluationRunService:
                 case_id=int(case["id"]),
             )
             judge_usage = None
-            if isinstance(judge_raw, dict) and isinstance(judge_raw.get("usage"), dict):
-                judge_usage = judge_raw.get("usage")
+            raw_usage = judge_raw.get("usage") if isinstance(judge_raw, dict) else None
+            if isinstance(raw_usage, dict):
+                judge_usage = raw_usage
                 row.usage = _merge_usage(
                     row.usage,
                     judge_usage,

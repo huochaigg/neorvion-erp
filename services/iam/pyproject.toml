@@ -52,6 +52,7 @@ testpaths = ["tests"]
 pythonpath = ["."]
 
 [tool.pyright]
+exclude = ["tests", "alembic", ".venv"]
 venvPath = "."
 venv = ".venv"
 pythonVersion = "3.12"

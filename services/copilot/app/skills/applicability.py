@@ -13,7 +13,9 @@ def assess_skill(task: str, allowed_tools: tuple[str, ...] | list[str], metadata
     tools = set(allowed_tools)
     if allowed_agents and query.entity in {"sales_order", "customer"} and "sales_agent" not in allowed_agents:
         return False, "该 Skill 的 Agent 不支持销售领域"
-    capability_metadata = (metadata or {}).get("metadata") if isinstance((metadata or {}).get("metadata"), dict) else (metadata or {})
+    payload = metadata or {}
+    nested = payload.get("metadata")
+    capability_metadata = nested if isinstance(nested, dict) else payload
     domains = capability_metadata.get("domains")
     if isinstance(domains, list) and query.entity in {"sales_order", "customer"} and "SALES" not in {str(item).upper() for item in domains}:
         return False, "该 Skill 声明的领域不包含销售"

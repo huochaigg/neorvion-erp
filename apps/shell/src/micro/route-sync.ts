@@ -7,7 +7,7 @@ import {
   isMicroLocationPayload,
   type MicroLocationPayload,
 } from '@neorvion/shared';
-import { useEffect, useRef } from 'react';
+import { useEffect, useLayoutEffect, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { stripMicroSyncParam, type MicroAppDefinition } from '@/micro/apps';
 import { setLastMicroHref } from '@/micro/last-location';
@@ -51,7 +51,9 @@ export function useMicroHostRouteSync(app: MicroAppDefinition) {
   const navigate = useNavigate();
   const locationRef = useRef(location);
   const syncingFromChildRef = useRef(false);
-  locationRef.current = location;
+  useLayoutEffect(() => {
+    locationRef.current = location;
+  }, [location]);
 
   useEffect(() => {
     const onChildLocation = (...args: unknown[]) => {

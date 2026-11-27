@@ -6,7 +6,6 @@ import {
   KNOWLEDGE_MESSAGE_STATUS,
   type KnowledgeCitation,
   type KnowledgeConversation,
-  type KnowledgeMessage,
 } from '@neorvion/shared';
 import { DeleteOutlined, PlusOutlined, StopOutlined } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -112,7 +111,10 @@ export function ChatPage() {
     onError: (error: Error) => message.error(error.message),
   });
 
-  const messages: KnowledgeMessage[] = detailQuery.data?.messages ?? [];
+  const messages = useMemo(
+    () => detailQuery.data?.messages ?? [],
+    [detailQuery.data?.messages],
+  );
   const conversations: KnowledgeConversation[] = listQuery.data?.items ?? [];
 
   useEffect(() => {

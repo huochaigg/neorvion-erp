@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components */
 import { Spin } from 'antd';
 import { Suspense, type ReactNode } from 'react';
 import { Navigate, Route } from 'react-router-dom';

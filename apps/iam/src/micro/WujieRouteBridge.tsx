@@ -9,7 +9,9 @@ export function WujieRouteBridge() {
   const navigationType = useNavigationType();
   const locationRef = useRef(location);
   const applyingHostRef = useRef(false);
-  locationRef.current = location;
+  useLayoutEffect(() => {
+    locationRef.current = location;
+  }, [location]);
 
   useLayoutEffect(() => {
     if (!isEmbeddedInWujie()) {

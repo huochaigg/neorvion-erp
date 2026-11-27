@@ -1,5 +1,5 @@
 import { SHELL_EVENTS, isTenantChangedPayload } from '@neorvion/shared';
-import { useEffect, useRef } from 'react';
+import { useEffect, useLayoutEffect, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { bus } from 'wujie';
 import { hostPathToResetAfterTenantChange, resetUnsafeMicroLastLocations } from '@/micro/reset-tenant-routes';
@@ -9,7 +9,9 @@ export function MicroTenantRouteReset() {
   const location = useLocation();
   const navigate = useNavigate();
   const locationRef = useRef(location);
-  locationRef.current = location;
+  useLayoutEffect(() => {
+    locationRef.current = location;
+  }, [location]);
 
   useEffect(() => {
     const onTenantChanged = (...args: unknown[]) => {

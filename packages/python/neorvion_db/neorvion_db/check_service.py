@@ -19,9 +19,9 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     root = args.service_root.resolve()
     sys.path.insert(0, str(root))
-    from app.db.isolation import REGISTRY
-    from app.db.query_allowlist import ALLOWLIST
-    from app.db.system_access import PRIVILEGED_CALLERS
+    from app.db.isolation import REGISTRY  # pyright: ignore[reportMissingImports]
+    from app.db.query_allowlist import ALLOWLIST  # pyright: ignore[reportMissingImports]
+    from app.db.system_access import PRIVILEGED_CALLERS  # pyright: ignore[reportMissingImports]
 
     print(f"service={root.name}")
     for kind, tables in REGISTRY.summary().items():

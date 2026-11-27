@@ -134,7 +134,7 @@ describe('IAM TabBar 关闭与上限', () => {
   });
 
   it('超过 MAX_TABS 时关掉最早的非固定非当前 Tab', () => {
-    let tabs = [createPinnedDashboardTab()];
+    const tabs = [createPinnedDashboardTab()];
     for (let index = 1; index <= MAX_TABS + 2; index += 1) {
       tabs.push({
         key: `/system/members/${index}`,

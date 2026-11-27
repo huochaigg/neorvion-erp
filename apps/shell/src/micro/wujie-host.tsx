@@ -1,6 +1,6 @@
 import type { ShellToErpProps } from '@neorvion/shared';
 import { destroyApp, startApp, type plugin } from 'wujie';
-import { useEffect, useRef, useState, type CSSProperties } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from 'react';
 import {
   claimMicroGeneration,
   enqueueMicroJob,
@@ -74,20 +74,22 @@ export function WujieHost({
     activated,
     loadError,
   });
-  optionsRef.current = {
-    url,
-    sync,
-    fiber,
-    alive,
-    prefix,
-    props,
-    plugins,
-    degrade,
-    prepareRestart,
-    afterMount,
-    activated,
-    loadError,
-  };
+  useLayoutEffect(() => {
+    optionsRef.current = {
+      url,
+      sync,
+      fiber,
+      alive,
+      prefix,
+      props,
+      plugins,
+      degrade,
+      prepareRestart,
+      afterMount,
+      activated,
+      loadError,
+    };
+  });
 
   useEffect(() => {
     if (!alive) {
