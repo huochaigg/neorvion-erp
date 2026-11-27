@@ -94,15 +94,20 @@ class PendingSkillService:
             return None
         if row.last_client_request_id == request_id[:64]:
             return PendingSkillPrompt(row.clarification, self._public(row, "pending") | {"relation": "DUPLICATE"})
-        if row.expires_at <= datetime.now(UTC):
-            row.status = "EXPIRED"
-            await self.session.commit()
-            if pending_relation(task, missing_fields=list(row.missing_fields), skill_key="") == "NEW_TASK":
-                return None
-            return PendingSkillPrompt("之前的 Skill 参数收集已过期，请重新描述任务。", {"pending_id": row.id, "status": "EXPIRED"})
         key = next(iter(row.selection_snapshot.get("selected_skill_keys", [])), "")
         relation = pending_relation(task, missing_fields=list(row.missing_fields), skill_key=key)
         logger.info("pending_relation request_id=%s pending_id=%s relation=%s skill=%s version_id=%s", request_id, row.id, relation, key, row.skill_version_id)
+        if row.expires_at <= datetime.now(UTC):
+            row.status = "EXPIRED"
+            row.last_client_request_id = request_id[:64]
+            await self.session.commit()
+            logger.info("pending_expired request_id=%s pending_id=%s relation=%s", request_id, row.id, relation)
+            if relation == "CANCEL":
+                return PendingSkillPrompt("之前的参数收集已结束。", {"pending_id": row.id, "status": "EXPIRED"})
+            if relation in {"SUPPLEMENT", "MODIFY", "AMBIGUOUS"}:
+                return PendingSkillPrompt("之前的参数收集已过期，请说明现在要处理的任务。", {"pending_id": row.id, "status": "EXPIRED"})
+            # 完整任务即使仍与旧 Skill 相关，也应当在本轮作为新请求继续选择。
+            return None
         if relation == "NEW_TASK":
             row.status = "CANCELLED"
             row.last_client_request_id = request_id[:64]
@@ -143,7 +148,7 @@ class PendingSkillService:
             raise AppError("权限已变化，待补全 Skill 已取消", code=40385, status_code=403)
         applicable, reason = assess_skill(
             task, version.allowed_tools, version.source_metadata, version.allowed_agents,
-            version.input_schema,
+            version.input_schema, skill_key=skill.skill_key if relation != "SUPPLEMENT" else None,
         )
         if not applicable:
             # Pending 的固定版本也必须先通过适用性检查，不能绕过新候选的门禁直接补参。

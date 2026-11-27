@@ -86,6 +86,10 @@ def test_skill_retrieval_never_implies_applicability_or_pending():
     assert assess_skill(question, ["list_sales_orders"])[0] is True
     assert assess_skill(question, ["get_sales_order", "list_sales_orders"],
                         input_schema={"required": ["order_id"]})[0] is False
+    assert assess_skill("查询销售订单 SO2026000004", ["get_sales_order"],
+                        skill_key="sales-order-review")[0] is False
+    assert assess_skill("帮我审查一笔销售订单", ["get_sales_order"],
+                        input_schema={"required": ["order_id"]}, skill_key="sales-order-review")[0] is True
     assert assess_skill("哪个客户累计采购金额最高？", ["list_sales_orders"])[0] is False
     assert pending_relation(question, missing_fields=["order_id"], skill_key="sales-order-review") == "NEW_TASK"
     assert pending_relation("SO2026000004", missing_fields=["order_id"], skill_key="sales-order-review") == "SUPPLEMENT"
@@ -328,6 +332,37 @@ async def test_pending_real_supplement_and_cancel_paths(reply, expected_status):
         assert isinstance(result, PendingSkillPrompt)
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize("message,blocks", [
+    ("查询 ERP 数据 销售订单 哪个订单金额最大", False),
+    ("帮我审查一笔销售订单", False),
+    ("1", True),
+    ("继续", True),
+    ("刚才那个", True),
+])
+async def test_expired_pending_does_not_end_a_complete_new_request(message, blocks):
+    from app.skills.pending import PendingSkillPrompt, PendingSkillService
+
+    row = SimpleNamespace(
+        id=41, skill_version_id=19, status="COLLECTING_INPUT", missing_fields=["order_id"],
+        selection_snapshot={"selected_skill_keys": ["sales-order-review"]},
+        last_client_request_id="old-request", clarification="请补充订单主键",
+        expires_at=datetime.now(UTC) - timedelta(minutes=1),
+    )
+
+    class Session:
+        async def scalar(self, _statement):
+            return row
+
+        async def commit(self):
+            pass
+
+    result = await PendingSkillService(Session(), make_context()).resume(12, message, "new-request")
+    assert row.status == "EXPIRED"
+    assert row.last_client_request_id == "new-request"
+    assert isinstance(result, PendingSkillPrompt) is blocks
+
+
 class _RankAnswerAdapter:
     def __init__(self):
         self.calls = 0
@@ -411,9 +446,9 @@ def test_auto_chat_entry_rejects_wrong_skill_and_executes_rank_tool(
 
 
 @pytest.mark.parametrize("stream", [False, True])
-@pytest.mark.parametrize("has_pending", [False, True])
+@pytest.mark.parametrize("pending_status", ["NONE", "ACTIVE", "EXPIRED"])
 def test_existing_pending_auto_chat_entry_switches_to_rank(
-    client, authorize, use_workflow, monkeypatch, stream, has_pending,
+    client, authorize, use_workflow, monkeypatch, stream, pending_status,
 ):
     """新旧会话的 Chat/SSE 请求走真实入口及恢复判断；持久层、模型与 ERP 为替身。"""
     from app.api.deps import get_db
@@ -426,12 +461,12 @@ def test_existing_pending_auto_chat_entry_switches_to_rank(
         missing_fields=["order_id"], collected_input={},
         selection_snapshot={"selected_skill_keys": ["sales-order-review"]}, plan_snapshot={},
         last_client_request_id="old-request", clarification="请补充销售订单主键",
-        expires_at=datetime.now(UTC) + timedelta(minutes=10),
+        expires_at=datetime.now(UTC) + timedelta(minutes=-1 if pending_status == "EXPIRED" else 10),
     )
 
     class Session:
         async def scalar(self, _statement):
-            return row if has_pending else None
+            return row if pending_status != "NONE" and row.status == "COLLECTING_INPUT" else None
 
         async def commit(self):
             pass
@@ -484,16 +519,21 @@ def test_existing_pending_auto_chat_entry_switches_to_rank(
     monkeypatch.setattr(SkillSelector, "select", selected)
     monkeypatch.setattr("app.skills.chat.SkillRuntimeLoader.load", loaded)
     path = "/api/v1/conversations/12/messages" if stream else "/api/v1/chat"
-    response = client.post(path, json={
-        "conversation_id": 12, "message": question, "client_request_id": "new-request", "skill_mode": "AUTO",
-    })
-    assert response.status_code == 200, response.text
-    assert row.status == ("CANCELLED" if has_pending else "COLLECTING_INPUT")
-    assert "skill_input_required" not in response.text
-    assert "请补充销售订单主键" not in response.text
-    assert "SO2026000001" in response.text
-    assert tool_calls == ["total_amount"]
-    assert adapter.calls == 2
+    repeats = 2 if pending_status == "EXPIRED" and stream else 1
+    for index in range(repeats):
+        response = client.post(path, json={
+            "conversation_id": 12, "message": question, "client_request_id": f"new-request-{index}",
+            "skill_mode": "AUTO",
+        })
+        assert response.status_code == 200, response.text
+        assert "skill_input_required" not in response.text
+        assert "已过期" not in response.text
+        assert "请补充销售订单主键" not in response.text
+        assert "SO2026000001" in response.text
+    expected = {"NONE": "COLLECTING_INPUT", "ACTIVE": "CANCELLED", "EXPIRED": "EXPIRED"}
+    assert row.status == expected[pending_status]
+    assert tool_calls == ["total_amount"] * repeats
+    assert adapter.calls == 2 * repeats
     asyncio.run(erp.aclose())
 
 

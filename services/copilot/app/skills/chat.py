@@ -316,6 +316,7 @@ async def prepare_chat_skill(
                 getattr(version.version, "source_metadata", candidate.metadata),
                 getattr(version.version, "allowed_agents", ()),
                 getattr(version.version, "input_schema", {}),
+                skill_key=candidate.skill_key,
             )
             if valid:
                 applicable.append(candidate)

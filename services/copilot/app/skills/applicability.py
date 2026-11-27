@@ -7,7 +7,7 @@ import re
 from app.intent.query import describe_query
 
 
-def assess_skill(task: str, allowed_tools: tuple[str, ...] | list[str], metadata: dict | None = None, allowed_agents: tuple[str, ...] | list[str] = (), input_schema: dict | None = None) -> tuple[bool, str]:
+def assess_skill(task: str, allowed_tools: tuple[str, ...] | list[str], metadata: dict | None = None, allowed_agents: tuple[str, ...] | list[str] = (), input_schema: dict | None = None, *, skill_key: str | None = None) -> tuple[bool, str]:
     """依据固定版本的工具及可选能力元数据，在 InputCollector 前拒绝错误补参。"""
     query = describe_query(task)
     tools = set(allowed_tools)
@@ -22,6 +22,8 @@ def assess_skill(task: str, allowed_tools: tuple[str, ...] | list[str], metadata
         return False, f"该 Skill 不支持 {query.shape} 查询"
     if query.negative:
         return False, "当前消息否定了该查询任务"
+    if skill_key == "sales-order-review" and not _review_task(task):
+        return False, "订单审查 Skill 仅适用于明确要求审查订单的任务"
     if query.shape == "RANK" and "order_id" in (input_schema or {}).get("required", ()):
         return False, "排名任务不能由必填单笔订单主键的 Skill 执行"
     if query.entity == "sales_order" and query.shape == "RANK" and "list_sales_orders" not in tools:
@@ -57,10 +59,10 @@ def pending_relation(text: str, *, missing_fields: list[str], skill_key: str) ->
     query = describe_query(stripped)
     if query.shape == "RANK" and query.metric == "total_amount":
         return "NEW_TASK"
+    if skill_key == "sales-order-review" and query.entity == "sales_order" and _review_task(stripped):
+        return "CONTINUE"
     if stripped.startswith(("改成", "改为", "换成")) and not any(word in stripped for word in ("订单", "客户", "销售")):
         return "MODIFY"
     if re.search(r"查询|查一下|哪个|多少|最高|最低|最大|最小|趋势|对比|排名", stripped):
-        if skill_key == "sales-order-review" and _review_task(stripped):
-            return "CONTINUE"
         return "NEW_TASK"
     return "AMBIGUOUS"
