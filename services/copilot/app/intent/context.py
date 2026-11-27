@@ -104,12 +104,12 @@ class ContextResolver:
         for sku in _SKU.findall(current):
             add("sku_code", sku, "current_message", True)
         for order in _ORDER.findall(current):
-            add("order_id", order, "current_message", True)
+            add("order_no", order, "current_message", True)
         for text in user_texts:
             for sku in _SKU.findall(text):
                 add("sku_code", sku, "recent_user_message", True)
             for order in _ORDER.findall(text):
-                add("order_id", order, "recent_user_message", True)
+                add("order_no", order, "recent_user_message", True)
         for text in assistant_texts:
             for sku in _SKU.findall(text):
                 add("sku_code", sku, "recent_assistant_message", False)

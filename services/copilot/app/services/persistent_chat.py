@@ -88,8 +88,15 @@ class PersistentChatService:
         )
         await self.session.commit()
 
-    async def complete_without_run(self, turn: PersistentTurn, answer: str) -> None:
+    async def complete_without_run(self, turn: PersistentTurn, answer: str, runtime: AgentRuntime | None = None) -> None:
         """参数澄清/取消不调用模型，也不建立虚假的 AgentRun 或 RUNNING SkillRun。"""
+        if runtime is not None:
+            for event in runtime.preflight_events:
+                name, data = event["event"], event["data"]
+                if name.startswith("tool_"):
+                    await self.repo.record_tool_event(turn.conversation_id, turn.message_id, name, data)
+                elif name == "evidence":
+                    await self.repo.record_evidence(turn.conversation_id, turn.message_id, data)
         await self.repo.finish_message(
             turn.message_id,
             content=answer,
@@ -149,6 +156,9 @@ class PersistentChatService:
         await self.session.commit()
         runtime.agent_run_id = agent_run.id
         yield {"event": "run_start", "data": self._ids(turn)}
+        for preflight in runtime.preflight_events:
+            async for output in self._record_event(preflight, turn, runtime, agent_run.id, skill_session):
+                yield output
         if skill_session is not None:
             for event in skill_session.lifecycle_events():
                 yield {"event": event["event"], "data": event["data"] | self._ids(turn)}

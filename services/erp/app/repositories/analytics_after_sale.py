@@ -37,6 +37,7 @@ class AfterSaleAnalyticsRepository(BaseRepository):
         start: datetime,
         end_exclusive: datetime,
         warehouse_id: int | None = None,
+        currency_code: str | None = None,
     ) -> dict[str, int]:
         """
         统计口径：有效售后排除 REJECTED / CANCELLED。
@@ -66,7 +67,7 @@ class AfterSaleAnalyticsRepository(BaseRepository):
                 0,
             ),
         ).select_from(AfterSaleOrder)
-        if warehouse_id is not None:
+        if warehouse_id is not None or currency_code is not None:
             typed = typed.join(
                 SalesOrder,
                 (AfterSaleOrder.tenant_id == SalesOrder.tenant_id)
@@ -78,6 +79,7 @@ class AfterSaleAnalyticsRepository(BaseRepository):
             AfterSaleOrder.created_at < end_exclusive,
             self._valid(),
             self._warehouse_join_filter(warehouse_id),
+            SalesOrder.currency_code == currency_code if currency_code else true(),
         )
         total, distinct_orders, refund_only, return_only, both = self.session.execute(typed).one()
 
@@ -90,7 +92,7 @@ class AfterSaleAnalyticsRepository(BaseRepository):
                 & (AfterSaleItem.after_sale_order_id == AfterSaleOrder.id),
             )
         )
-        if warehouse_id is not None:
+        if warehouse_id is not None or currency_code is not None:
             qty_stmt = qty_stmt.join(
                 SalesOrder,
                 (AfterSaleOrder.tenant_id == SalesOrder.tenant_id)
@@ -101,6 +103,7 @@ class AfterSaleAnalyticsRepository(BaseRepository):
             AfterSaleOrder.created_at >= start,
             AfterSaleOrder.created_at < end_exclusive,
             self._valid(),
+            SalesOrder.currency_code == currency_code if currency_code else true(),
             self._warehouse_join_filter(warehouse_id),
         )
         return {

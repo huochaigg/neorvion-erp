@@ -22,6 +22,7 @@ def _case(
     unknown: bool = False,
     difficulty: int = 2,
     context: dict[str, Any] | None = None,
+    query_shapes: list[str] | None = None,
 ) -> dict[str, Any]:
     return {
         "external_key": f"v15-intent-{key}",
@@ -31,6 +32,7 @@ def _case(
         "expected_behavior": {
             "expected_problem_types": problem_types,
             "expected_intent_keys": intents,
+            **({"expected_query_shapes": query_shapes} if query_shapes is not None else {}),
             "expected_decision": decision,
             "expected_mode": mode,
             "expected_skill_keys": skills or [],
@@ -290,4 +292,13 @@ def v15_intent_cases() -> list[dict[str, Any]]:
             _case("125", "high_risk_write", "我只是问问，不要真的创建采购单", problem_types=["GUIDE"], intents=["procurement.how_to"], decision="CLEAR"),
         ]
     )
+    rows.extend([
+        _case("126", "sales_rank", "哪个销售订单金额最大？", problem_types=["QUERY"], intents=["sales.order_query"], decision="CLEAR", query_shapes=["RANK"]),
+        _case("127", "sales_rank", "查询 ERP 数据 销售订单 哪个订单金额最大", problem_types=["QUERY"], intents=["sales.order_query"], decision="CLEAR", query_shapes=["RANK"]),
+        _case("128", "sales_rank", "哪个订单金额最小？", problem_types=["QUERY"], intents=["sales.order_query"], decision="CLEAR", query_shapes=["RANK"]),
+        _case("129", "sales_rank", "金额最高的十笔销售订单", problem_types=["QUERY"], intents=["sales.order_query"], decision="CLEAR", query_shapes=["RANK"]),
+        _case("130", "sales_aggregate", "最近七天销售订单总金额", problem_types=["QUERY"], intents=["sales.order_query"], decision="CLEAR", query_shapes=["AGGREGATE"]),
+        _case("131", "customer_rank", "哪个客户累计采购金额最高？", problem_types=["QUERY"], intents=["sales.summary"], decision="CLEAR", query_shapes=["RANK"]),
+        _case("132", "sales_trend", "最近六个月销售趋势", problem_types=["QUERY"], intents=["sales.summary"], decision="CLEAR", query_shapes=["TREND"]),
+    ])
     return rows

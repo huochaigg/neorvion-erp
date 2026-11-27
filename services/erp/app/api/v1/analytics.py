@@ -94,8 +94,9 @@ def sales_summary(
     start_date: StartDate = None,
     end_date: EndDate = None,
     warehouse_id: WarehouseId = None,
+    currency_code: str | None = Query(default=None, pattern="^[A-Z]{3}$"),
 ) -> ApiResponse[SalesSummaryOut]:
-    return ok(AnalyticsService(session, context).sales_summary(start_date, end_date, warehouse_id))
+    return ok(AnalyticsService(session, context).sales_summary(start_date, end_date, warehouse_id, currency_code))
 
 
 @router.get("/sales/trend", response_model=ApiResponse[list[SalesTrendPoint]], summary="销售趋势")
@@ -105,8 +106,9 @@ def sales_trend(
     start_date: StartDate = None,
     end_date: EndDate = None,
     warehouse_id: WarehouseId = None,
+    currency_code: str | None = Query(default=None, pattern="^[A-Z]{3}$"),
 ) -> ApiResponse[list[SalesTrendPoint]]:
-    return ok(AnalyticsService(session, context).sales_trend(start_date, end_date, warehouse_id))
+    return ok(AnalyticsService(session, context).sales_trend(start_date, end_date, warehouse_id, currency_code))
 
 
 @router.get(
@@ -188,9 +190,10 @@ def sales_top_customers(
     end_date: EndDate = None,
     warehouse_id: WarehouseId = None,
     limit: Limit = 10,
+    currency_code: str | None = Query(default=None, pattern="^[A-Z]{3}$"),
 ) -> ApiResponse[list[TopCustomerOut]]:
     return ok(
-        AnalyticsService(session, context).top_customers(start_date, end_date, limit, warehouse_id)
+        AnalyticsService(session, context).top_customers(start_date, end_date, limit, warehouse_id, currency_code)
     )
 
 

@@ -5,6 +5,7 @@ from __future__ import annotations
 import re
 
 from app.ai.types import ChatAdapter
+from app.intent.query import describe_query
 from app.intent.registry import IntentRegistry, get_intent_registry
 from app.intent.schemas import (
     ClassificationResult,
@@ -78,7 +79,13 @@ class RulesIntentClassifier:
             )
         if self._greet.fullmatch(text):
             return self._single("general.chat", "CHAT", "GENERAL", 0.99, ("greeting",), context)
-        if context.pending_intent_key and not self._is_cancel(text) and not self._is_restart(text):
+        if describe_query(text).negative and not self._action_verb.search(text) and not re.search(r"[，,；;].*(?:查|查询|排名)", text):
+            return self._single("general.chat", "CHAT", "GENERAL", 0.95, ("negated_query",), context)
+        new_query = describe_query(text)
+        explicit_new_task = new_query.shape in {"RANK", "AGGREGATE", "COMPARE", "TREND"} or (
+            "查询" in text and len(text) > 12 and not re.fullmatch(r"(?:订单主键|order[_ ]?id)?\s*\d+", text, re.I)
+        )
+        if context.pending_intent_key and not self._is_cancel(text) and not self._is_restart(text) and not explicit_new_task:
             pending = self._pending_continuation(context, text)
             if pending is not None:
                 return pending
@@ -186,6 +193,11 @@ class RulesIntentClassifier:
             return self._candidate(key, slots, 0.86, ("inventory_analyze",))
         if self._hot.search(text):
             return self._candidate("sales.hot_selling", slots, 0.92, ("hot_selling",))
+        query = describe_query(text)
+        if query.entity == "customer" and query.metric == "total_amount" and query.shape == "RANK":
+            return self._candidate("sales.summary", slots, 0.9, ("customer_sales_rank",))
+        if "销售" in text and query.shape == "TREND":
+            return self._candidate("sales.summary", slots, 0.88, ("sales_trend",))
         if self._review.search(text) and (self._sales.search(text) or slots.get("order_id") or "订单" in text):
             return self._candidate("sales.order_review", slots, 0.9, ("order_review",))
         if self._sales_perf.search(text) and self._analyze.search(text):
@@ -310,7 +322,10 @@ class RulesIntentClassifier:
             for name, value in slots.items()
             if name in definition.required_slots or name in definition.optional_slots
         )
-        missing = tuple(name for name in definition.required_slots if name not in slots)
+        missing = tuple(
+            name for name in definition.required_slots
+            if name not in slots and not (name == "order_id" and key == "sales.order_review" and "order_no" in slots)
+        )
         return IntentCandidate(
             intent_key=key,
             problem_type=definition.problem_type,
@@ -335,7 +350,7 @@ class RulesIntentClassifier:
                 slots["sku_code"] = inherited
         order = self._order.search(text)
         if order:
-            slots["order_id"] = order.group(0).upper()
+            slots["order_no"] = order.group(0).upper()
         if self._date_yesterday.search(text):
             slots["start_date"] = "yesterday"
             slots["end_date"] = "yesterday"

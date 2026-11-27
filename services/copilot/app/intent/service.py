@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import re
 import time
+from dataclasses import replace
 from uuid import uuid4
 
 from app.ai.types import ChatAdapter
@@ -12,6 +14,7 @@ from app.intent.decision import DecisionEngine
 from app.intent.flags import intent_applied, intent_mode
 from app.intent.planner import MultiIntentTaskPlanner
 from app.intent.policy import ToolAvailabilityPolicy
+from app.intent.query import describe_query
 from app.intent.registry import IntentRegistry, get_intent_registry
 from app.intent.routing import RoutingPlanner
 from app.intent.schemas import ConversationContext, IntentResolution, RoutingPlan, ToolPolicy
@@ -52,13 +55,45 @@ class IntentUnderstandingService:
             return self._disabled(started)
         if cancel_requested:
             return self._cancelled(started)
+        current_text = context.current_text
+        previous_query = None
+        if re.search(r"改为|改成|换成|改成前|改为前|top\s*\d+", current_text, re.I) and context.recent_user_texts:
+            previous = context.recent_user_texts[-1]
+            candidate = describe_query(previous)
+            if candidate.entity in {"sales_order", "customer"} and candidate.shape in {"RANK", "AGGREGATE", "COMPARE", "TREND"}:
+                previous_query = candidate
+                current_text = f"{previous}；{current_text}"
+        effective_context = context.model_copy(update={"current_text": current_text, "context_dependent": False}) if previous_query else context
         classification = await self.classifier.classify(
-            context,
+            effective_context,
             adapter=adapter,
             allow_llm=bool(adapter) if force_mode == "ENABLED" else None,
         )
-        decision, tasks, reason = self.decision.decide(classification, context)
+        decision, tasks, reason = self.decision.decide(classification, effective_context)
         tasks = self.planner.plan(tasks)
+        query = describe_query(current_text)
+        if previous_query:
+            query = replace(query,
+                entity=query.entity or previous_query.entity,
+                metric=query.metric or previous_query.metric,
+                time_range=query.time_range or previous_query.time_range,
+                sort_order=query.sort_order or previous_query.sort_order,
+                limit=query.limit if query.shape == "RANK" else previous_query.limit,
+            )
+        tasks = tuple(
+            task.model_copy(update={
+                "query_shape": query.shape,
+                "entity": query.entity,
+                "metric": query.metric,
+                "aggregation": query.aggregation,
+                "group_by": query.group_by,
+                "sort_order": query.sort_order,
+                "limit": query.limit,
+                "currency_code": query.currency_code,
+                "time_range": query.time_range,
+            }) if task.domain == "SALES" and task.problem_type in {"QUERY", "ANALYZE"} else task
+            for task in tasks
+        )
         routing = self.router.plan(
             tasks,
             decision=decision,

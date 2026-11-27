@@ -31,6 +31,7 @@ def list_sales_orders(
     session: DbSession,
     q: str | None = Query(default=None, max_length=64),
     order_no: str | None = Query(default=None, max_length=32),
+    order_no_exact: str | None = Query(default=None, max_length=32, description="精确订单编号，用于把业务订单号定位到主键"),
     external_order_no: str | None = Query(default=None, max_length=64),
     customer_id: int | None = Query(default=None, gt=0),
     warehouse_id: int | None = Query(default=None, gt=0),
@@ -42,11 +43,15 @@ def list_sales_orders(
     created_to: Annotated[datetime | None, Query()] = None,
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
+    currency_code: str | None = Query(default=None, pattern="^[A-Z]{3}$"),
+    sort_by: str = Query(default="created_at", pattern="^(created_at|total_amount)$"),
+    sort_order: str = Query(default="desc", pattern="^(asc|desc)$"),
 ) -> ApiResponse[SalesOrderListOut]:
     return ok(
         SalesOrderService(session, context).list_orders(
             q=q,
             order_no=order_no,
+            order_no_exact=order_no_exact,
             external_order_no=external_order_no,
             customer_id=customer_id,
             warehouse_id=warehouse_id,
@@ -58,6 +63,9 @@ def list_sales_orders(
             created_to=created_to,
             page=page,
             page_size=page_size,
+            currency_code=currency_code,
+            sort_by=sort_by,
+            sort_order=sort_order,
         )
     )
 

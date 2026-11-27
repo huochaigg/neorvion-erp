@@ -62,6 +62,13 @@ class ErpApiClient:
             raise AppError("ERP 查询过于频繁", code=42970, status_code=429)
         if response.status_code >= 500:
             raise AppError("ERP 服务暂时不可用", code=50270, status_code=502)
+        if response.status_code == 422:
+            try:
+                issue = response.json()
+            except ValueError:
+                issue = {}
+            if isinstance(issue, dict) and issue.get("code") == 42272:
+                raise AppError("查询范围包含多个币种，请指定币种后再比较金额", code=42272, status_code=422)
         if response.status_code >= 400:
             raise AppError("ERP 查询参数无效", code=40070, status_code=400)
         try:

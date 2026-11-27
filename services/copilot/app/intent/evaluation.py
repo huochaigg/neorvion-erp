@@ -55,6 +55,7 @@ async def run_intent_case(
         "resolved_intents": list(resolution.resolved_intents),
         "problem_types": list(resolution.problem_types),
         "decision": resolution.decision,
+        "query_shapes": [task.query_shape for task in resolution.tasks if task.query_shape],
         "clarification": bool(resolution.clarification),
         "missing_slots": list(resolution.missing_slots),
         "selected_skill_keys": list(resolution.routing_plan.skill_keys),

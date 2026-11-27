@@ -11,3 +11,7 @@
 | [0005](0005-conversation-create-and-title.md) | 方案整理 | 会话创建立即落库致空会话；标题仅默认「新对话」；手动重命名已有，自动标题与创建幂等待做 |
 | [0007](0007-breakpoint-zombie-running-loading.md) | 待修复 | 断点挂起过久后助手消息永久 RUNNING / loading |
 | [性能](copilot-chat-performance-investigation.md) | 已修复（待真机确认死循环） | 流式 `# ` 标题使 Markdown 解析死循环；另有 token 全量重渲染与 smooth 滚动 |
+
+## V15 意图与能力匹配
+
+- [订单金额排名误入订单审查 Skill：真实 A/B、Pending、数据库排名、Evidence 与验收](0007-intent-skill-tool-capability-matching.md)

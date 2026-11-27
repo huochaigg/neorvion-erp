@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session, selectinload
 from app.models.customer import Customer
 from app.models.identity import IdentityNameSnapshot
 from app.models.product import Product, ProductSku
-from app.models.sales_order import SalesOrder, SalesOrderItem
+from app.models.sales_order import SalesOrder, SalesOrderItem, SalesOrderStatus
 from app.models.warehouse import Warehouse
 from app.repositories.base import BaseRepository
 
@@ -84,6 +84,7 @@ class SalesOrderRepository(BaseRepository):
         *,
         q: str | None,
         order_no: str | None,
+        order_no_exact: str | None = None,
         external_order_no: str | None,
         customer_id: int | None,
         warehouse_id: int | None,
@@ -95,12 +96,17 @@ class SalesOrderRepository(BaseRepository):
         created_to: datetime | None,
         page: int,
         page_size: int,
+        currency_code: str | None = None,
+        sort_by: str = "created_at",
+        sort_order: str = "desc",
     ) -> tuple[list[tuple], int]:
-        """列表 JOIN 客户/仓库/创建人，SQL 聚合 SKU 种类、数量和金额，避免 N+1。"""
+        """在租户过滤后的完整集合上聚合、排序和分页；金额排序须先确定单一币种。"""
         tenant_id = self.ensure_tenant()
         filters = [SalesOrder.tenant_id == tenant_id]
         if order_no:
             filters.append(SalesOrder.order_no.like(f"%{order_no}%"))
+        if order_no_exact:
+            filters.append(SalesOrder.order_no == order_no_exact)
         if external_order_no:
             filters.append(SalesOrder.external_order_no.like(f"%{external_order_no}%"))
         if customer_id:
@@ -109,6 +115,26 @@ class SalesOrderRepository(BaseRepository):
             filters.append(SalesOrder.warehouse_id == warehouse_id)
         if status:
             filters.append(SalesOrder.status == status)
+        elif sort_by == "total_amount":
+            filters.append(
+                SalesOrder.status.notin_(
+                    (SalesOrderStatus.DRAFT.value, SalesOrderStatus.CANCELLED.value)
+                )
+            )
+        if sort_by == "total_amount":
+            # 未定价的订单没有可信金额；零金额保留参与升序排名。
+            priced_items = (
+                select(SalesOrderItem.id)
+                .where(
+                    SalesOrderItem.tenant_id == tenant_id,
+                    SalesOrderItem.sales_order_id == SalesOrder.id,
+                )
+                .correlate(SalesOrder)
+            )
+            filters.append(priced_items.exists())
+            filters.append(~priced_items.where(SalesOrderItem.unit_price.is_(None)).exists())
+        if currency_code:
+            filters.append(SalesOrder.currency_code == currency_code)
         if source:
             filters.append(SalesOrder.source == source)
         if created_from is not None:
@@ -169,10 +195,39 @@ class SalesOrderRepository(BaseRepository):
             .where(*filters)
         )
         total = int(self.session.scalar(count_stmt) or 0)
+        if sort_by == "total_amount" and not currency_code and total:
+            currencies = (
+                self.session.execute(
+                    select(SalesOrder.currency_code)
+                    .select_from(SalesOrder)
+                    .join(
+                        Customer,
+                        and_(
+                            Customer.tenant_id == SalesOrder.tenant_id,
+                            Customer.id == SalesOrder.customer_id,
+                        ),
+                    )
+                    .where(*filters)
+                    .distinct()
+                    .limit(2)
+                )
+                .scalars()
+                .all()
+            )
+            if len(currencies) > 1:
+                from app.core.exceptions import AppError
+
+                raise AppError(
+                    "订单包含多个币种，请指定 currency_code 后再按金额排名",
+                    code=42272,
+                    status_code=422,
+                )
         sku_count = func.count(func.distinct(SalesOrderItem.sku_id))
         total_qty = func.coalesce(func.sum(SalesOrderItem.quantity), 0)
         priced = SalesOrderItem.quantity * SalesOrderItem.unit_price
         total_amount = func.sum(priced)
+        sort_column = total_amount if sort_by == "total_amount" else SalesOrder.created_at
+        ordering = sort_column.asc() if sort_order == "asc" else sort_column.desc()
         stmt = (
             select(
                 SalesOrder,
@@ -215,7 +270,9 @@ class SalesOrderRepository(BaseRepository):
                 Warehouse.name,
                 IdentityNameSnapshot.display_name,
             )
-            .order_by(SalesOrder.created_at.desc(), SalesOrder.id.desc())
+            .order_by(
+                ordering, SalesOrder.id.asc() if sort_by == "total_amount" else SalesOrder.id.desc()
+            )
             .offset((page - 1) * page_size)
             .limit(page_size)
         )

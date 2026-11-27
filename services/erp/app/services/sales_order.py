@@ -84,6 +84,7 @@ class SalesOrderService:
         *,
         q: str | None,
         order_no: str | None,
+        order_no_exact: str | None = None,
         external_order_no: str | None,
         customer_id: int | None,
         warehouse_id: int | None,
@@ -95,15 +96,23 @@ class SalesOrderService:
         created_to: datetime | None,
         page: int,
         page_size: int,
+        currency_code: str | None = None,
+        sort_by: str = "created_at",
+        sort_order: str = "desc",
     ) -> SalesOrderListOut:
         self.auth.require_all(self.context, (PermissionCode.ORDER_READ,))
         if status and status not in {item.value for item in SalesOrderStatus}:
             raise AppError("销售订单状态不合法", code=40110, status_code=400)
         if source and source not in {item.value for item in SalesOrderSource}:
             raise AppError("订单来源不合法", code=40118, status_code=400)
+        if sort_by not in {"created_at", "total_amount"} or sort_order not in {"asc", "desc"}:
+            raise AppError("销售订单排序参数不合法", code=42271, status_code=422)
+        if currency_code and not _CURRENCY.fullmatch(currency_code):
+            raise AppError("币种必须是三个大写字母", code=40122, status_code=400)
         rows, total = self.orders.list_page(
             q=(q or "").strip() or None,
             order_no=(order_no or "").strip() or None,
+            order_no_exact=(order_no_exact or "").strip() or None,
             external_order_no=(external_order_no or "").strip() or None,
             customer_id=customer_id,
             warehouse_id=warehouse_id,
@@ -115,6 +124,9 @@ class SalesOrderService:
             created_to=created_to,
             page=page,
             page_size=page_size,
+            currency_code=currency_code,
+            sort_by=sort_by,
+            sort_order=sort_order,
         )
         items = [
             self._list_item(
@@ -136,7 +148,15 @@ class SalesOrderService:
                 total_amount,
             ) in rows
         ]
-        return SalesOrderListOut(items=items, total=total, page=page, page_size=page_size)
+        return SalesOrderListOut(
+            items=items,
+            total=total,
+            page=page,
+            page_size=page_size,
+            has_more=page * page_size < total,
+            sort_by=sort_by,
+            sort_order=sort_order,
+        )
 
     def get_order(self, order_id: int) -> SalesOrderDetailOut:
         self.auth.require_all(self.context, (PermissionCode.ORDER_READ,))

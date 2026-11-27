@@ -109,7 +109,7 @@ class MultiAgentWorkflow:
         permitted = [
             name
             for name in decision.agents
-            if all(item in permissions for item in self.registry.get(name).required_permissions)
+            if self.registry.get(name).can_run(permissions)
         ][: min(settings.multi_agent_max_agents, settings.multi_agent_max_parallel + 1)]
         mode = decision.mode
         plan_groups = runtime.context.skill_agent_groups
@@ -119,7 +119,7 @@ class MultiAgentWorkflow:
             authorized = {
                 name
                 for name in requested
-                if all(item in permissions for item in self.registry.get(name).required_permissions)
+                if self.registry.get(name).can_run(permissions)
             }
             if authorized != requested:
                 raise AppError("Skill Plan 包含无权限专业 Agent", code=40388, status_code=403)
@@ -489,6 +489,10 @@ class MultiAgentWorkflow:
                         usage = delta.usage
                         finish_reason = delta.finish_reason
             answer = CopilotWorkflow._validate_citations("".join(chunks).strip(), evidences)
+            answer = CopilotWorkflow._guard_global_rank(
+                answer, evidences, str(state.get("query") or ""), runtime.context.intent_resolution,
+                runtime.context.tools.tool_events if runtime.context.tools else (),
+            )
             if not answer:
                 raise AppError("Supervisor 未返回有效内容", code=50287, status_code=502)
         except Exception as exc:

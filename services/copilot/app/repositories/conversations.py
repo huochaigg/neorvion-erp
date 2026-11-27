@@ -370,7 +370,10 @@ class ConversationRepository:
                 document_id=data.get("document_id"),
                 chunk_id=data.get("chunk_id"),
                 title=str(data.get("title") or "来源")[:255],
-                excerpt=str(data.get("excerpt") or "")[: settings.knowledge_evidence_excerpt_chars],
+                excerpt=str(data.get("excerpt") or "")[:
+                    settings.tool_max_result_chars if data.get("source_type") == "ERP"
+                    else settings.knowledge_evidence_excerpt_chars
+                ],
                 source_version=data.get("source_version"),
                 evidence_metadata=data.get("metadata")
                 if isinstance(data.get("metadata"), dict)

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 from typing import cast
 from uuid import uuid4
 
@@ -44,6 +45,7 @@ ActiveSkillSession = ChatSkillSession | MultiSkillChatSession
 PreparedSkill = ActiveSkillSession | PendingSkillPrompt | IntentClarification | None
 
 router = APIRouter(prefix="/chat", tags=["copilot-chat"])
+logger = logging.getLogger(__name__)
 
 
 def _messages(payload: ChatRequest) -> list[ModelMessage]:
@@ -69,6 +71,11 @@ def _skill_still_running(session: ActiveSkillSession) -> bool:
 def _event_data(event: dict) -> dict:
     raw = event.get("data")
     return raw if isinstance(raw, dict) else {}
+
+
+def _intent_payload_for_prompt(session: PendingSkillPrompt | IntentClarification, resolution: IntentResolution | None) -> dict:
+    payload = resolution.public_payload() if resolution is not None else {}
+    return payload | session.public_data if isinstance(session, IntentClarification) else payload or session.public_data
 
 
 def _sse(event: str, data: dict) -> str:
@@ -176,7 +183,7 @@ async def chat(
                     await service.fail_before_run(turn, exc.code)
                     raise
             if isinstance(skill_session, (PendingSkillPrompt, IntentClarification)):
-                await service.complete_without_run(turn, skill_session.answer)
+                await service.complete_without_run(turn, skill_session.answer, runtime)
                 await reservation.release()
                 return ok(
                     ChatResponse(
@@ -186,7 +193,7 @@ async def chat(
                         message_id=turn.message_id,
                         request_id=turn.request_id,
                         skill=skill_session.public_data if isinstance(skill_session, PendingSkillPrompt) else None,
-                        intent=intent_resolution.public_payload() if intent_resolution else skill_session.public_data,
+                        intent=_intent_payload_for_prompt(skill_session, intent_resolution),
                     )
                 )
             answer = ""
@@ -239,7 +246,7 @@ async def chat(
                     ChatResponse(
                         answer=skill_session.answer,
                         model=settings.chat_model,
-                        intent=intent_resolution.public_payload() if intent_resolution else skill_session.public_data,
+                        intent=_intent_payload_for_prompt(skill_session, intent_resolution),
                     )
                 )
             try:
@@ -345,7 +352,9 @@ async def chat_stream(
                             },
                         )
                     if isinstance(skill_session, (PendingSkillPrompt, IntentClarification)):
-                        await service.complete_without_run(turn, skill_session.answer)
+                        await service.complete_without_run(turn, skill_session.answer, runtime)
+                        for preflight in runtime.preflight_events:
+                            yield _sse(preflight["event"], preflight["data"] | {"request_id": turn.request_id, "message_id": turn.message_id})
                         await reservation.release()
                         quota_released = True
                         completed = True
@@ -551,6 +560,13 @@ async def _prepare_with_intent(
     selector_adapter,
     recent_messages: list[dict[str, str]],
 ) -> tuple[PreparedSkill, IntentResolution | None]:
+    from app.intent.flags import intent_mode
+
+    logger.info(
+        "skill_prepare_start request_id=%s message_id=%s conversation_id=%s skill_mode=%s "
+        "intent_v15_mode=%s explicit_skill=%s",
+        request_id, message_id, conversation_id, skill_mode, intent_mode(), explicit_skill_key,
+    )
     resolution = await resolve_chat_intent(
         db=cast(AsyncSession, db),
         context=context,
@@ -564,6 +580,14 @@ async def _prepare_with_intent(
         explicit_skill_key=explicit_skill_key,
     )
     apply_resolution_to_runtime(runtime, resolution)
+    from app.intent.query import describe_query
+
+    if describe_query(text).negative:
+        if conversation_id is not None:
+            from app.skills.pending import PendingSkillService
+
+            await PendingSkillService(cast(AsyncSession, db), context).cancel_active(conversation_id, request_id)
+        return IntentClarification("好的，已停止这项查询。", {"status": "CANCELLED_QUERY", "status_text": "查询已取消", "pending": False}), resolution
     if should_clarify_without_run(resolution):
         return clarification_response(resolution), resolution
     skill_session = await prepare_chat_skill(
@@ -579,4 +603,22 @@ async def _prepare_with_intent(
         selector_adapter=selector_adapter,
         intent_resolution=resolution,
     )
+    if skill_session is None:
+        from app.agents.registry import build_agent_registry
+        from app.intent.query import describe_query
+        from app.tools.registry import build_tool_registry
+
+        query = describe_query(text)
+        if query.shape == "RANK" and query.entity in {"sales_order", "customer"}:
+            required = "list_sales_orders" if query.entity == "sales_order" else "get_top_sales_customers"
+            tool = build_tool_registry().get(required)
+            if tool is not None and tool.permission not in context.permission_codes:
+                raise AppError("当前用户没有该查询所需的数据权限", code=40372, status_code=403)
+            allowed = runtime.tools.allowed_tools if runtime.tools else None
+            agent_tools = build_agent_registry().get("sales_agent").allowed_tools if tool is not None else frozenset()
+            if tool is None or required not in agent_tools or (allowed is not None and required not in allowed):
+                return IntentClarification(
+                    "当前已授权的查询工具无法完成全量金额排名；请联系管理员配置对应的只读能力。",
+                    {"status": "CAPABILITY_UNAVAILABLE", "status_text": "缺少可用的全量排名查询能力", "pending": False, "required_tool": required},
+                ), resolution
     return skill_session, resolution

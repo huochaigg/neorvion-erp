@@ -5,6 +5,7 @@ from concurrent.futures import ThreadPoolExecutor
 from app.core.exceptions import AppError
 from app.core.tenant import TenantContext
 from app.db.session import SessionLocal
+from app.models.sales_order import SalesOrder, SalesOrderStatus
 from app.models.tenant import MemberRole
 from app.repositories.inventory import InventoryRepository
 from app.schemas.sales_order import SalesOrderCancel
@@ -152,6 +153,143 @@ def _inventory(client: TestClient, token: str, tenant_id: int, inventory_id: int
     )
     assert response.status_code == 200, response.text
     return response.json()["data"]
+
+
+def test_amount_rank_sorts_entire_tenant_dataset_before_pagination(client: TestClient) -> None:
+    """最大金额放在默认第一页之外，验证真实 SQL 排序、币种和租户边界。"""
+    owner, _ = register_and_login(client, "rank-owner@example.com")
+    tenant = _create_tenant(client, owner, "RankTenant", "rank-tenant")
+    customer = _customer(client, owner, tenant, "RankCustomer")
+    warehouse = _warehouse(client, owner, tenant, "RankWarehouse")
+    product = _product(client, owner, tenant, "RankProduct", [{"name": "One", "spec_values": {}}])
+    sku_id = product["skus"][0]["id"]
+    created = []
+    for index in range(22):
+        response = _order(
+            client,
+            owner,
+            tenant,
+            customer_id=customer["id"],
+            warehouse_id=warehouse["id"],
+            items=[
+                {"sku_id": sku_id, "quantity": 1, "unit_price": 999 if index == 0 else index + 1}
+            ],
+        )
+        assert response.status_code == 200, response.text
+        created.append(response.json()["data"])
+    with SessionLocal() as db:
+        for order in db.query(SalesOrder).filter(SalesOrder.tenant_id == tenant).all():
+            order.status = SalesOrderStatus.SHIPPED.value
+        db.commit()
+    header = auth_header(owner, tenant)
+    default = client.get("/api/v1/sales-orders", headers=header).json()["data"]
+    assert default["total"] == 22 and default["has_more"] is True
+    assert created[0]["id"] not in {item["id"] for item in default["items"]}
+    exact = client.get(
+        f"/api/v1/sales-orders?order_no_exact={created[0]['order_no']}", headers=header
+    )
+    assert exact.status_code == 200 and exact.json()["data"]["total"] == 1
+    assert exact.json()["data"]["items"][0]["id"] == created[0]["id"]
+    maximum = client.get(
+        "/api/v1/sales-orders?sort_by=total_amount&sort_order=desc&page_size=1", headers=header
+    )
+    assert maximum.status_code == 200, maximum.text
+    assert maximum.json()["data"]["items"][0]["id"] == created[0]["id"]
+    assert maximum.json()["data"]["total"] == 22
+    minimum = client.get(
+        "/api/v1/sales-orders?sort_by=total_amount&sort_order=asc&page_size=1", headers=header
+    )
+    assert minimum.json()["data"]["items"][0]["total_amount"] == 2
+    usd = _order(
+        client,
+        owner,
+        tenant,
+        customer_id=customer["id"],
+        warehouse_id=warehouse["id"],
+        items=[{"sku_id": sku_id, "quantity": 1, "unit_price": 2000}],
+        extra={"currency_code": "USD"},
+    )
+    assert usd.status_code == 200, usd.text
+    with SessionLocal() as db:
+        db.query(SalesOrder).filter(
+            SalesOrder.id == usd.json()["data"]["id"]
+        ).one().status = SalesOrderStatus.SHIPPED.value
+        db.commit()
+    mixed = client.get("/api/v1/sales-orders?sort_by=total_amount", headers=header)
+    assert mixed.status_code == 422
+    filtered = client.get(
+        "/api/v1/sales-orders?sort_by=total_amount&currency_code=CNY&page_size=1", headers=header
+    )
+    assert filtered.json()["data"]["items"][0]["id"] == created[0]["id"]
+    assert filtered.json()["data"]["total"] == 22
+    report_mixed = client.get("/api/v1/analytics/sales/summary", headers=header)
+    assert report_mixed.status_code == 422
+    report_cny = client.get("/api/v1/analytics/sales/summary?currency_code=CNY", headers=header)
+    assert report_cny.status_code == 200, report_cny.text
+    assert report_cny.json()["data"]["order_count"] == 22
+    ranked_customer = client.get(
+        "/api/v1/analytics/sales/top-customers?currency_code=CNY", headers=header
+    )
+    assert (
+        ranked_customer.status_code == 200
+        and ranked_customer.json()["data"][0]["customer_id"] == customer["id"]
+    )
+    zero = _order(
+        client,
+        owner,
+        tenant,
+        customer_id=customer["id"],
+        warehouse_id=warehouse["id"],
+        items=[{"sku_id": sku_id, "quantity": 1, "unit_price": 0}],
+    )
+    missing_price = _order(
+        client,
+        owner,
+        tenant,
+        customer_id=customer["id"],
+        warehouse_id=warehouse["id"],
+        items=[{"sku_id": sku_id, "quantity": 1}],
+    )
+    assert zero.status_code == 200 and missing_price.status_code == 200
+    with SessionLocal() as db:
+        ids = [zero.json()["data"]["id"], missing_price.json()["data"]["id"]]
+        for order in db.query(SalesOrder).filter(SalesOrder.id.in_(ids)).all():
+            order.status = SalesOrderStatus.SHIPPED.value
+        db.commit()
+    minimum_cny = client.get(
+        "/api/v1/sales-orders?sort_by=total_amount&sort_order=asc&currency_code=CNY&page_size=1",
+        headers=header,
+    )
+    assert minimum_cny.json()["data"]["items"][0]["id"] == zero.json()["data"]["id"]
+    assert minimum_cny.json()["data"]["total"] == 23  # 未定价订单不参与金额排名
+    tie = _order(
+        client,
+        owner,
+        tenant,
+        customer_id=customer["id"],
+        warehouse_id=warehouse["id"],
+        items=[{"sku_id": sku_id, "quantity": 1, "unit_price": 999}],
+    )
+    assert tie.status_code == 200
+    with SessionLocal() as db:
+        db.query(SalesOrder).filter(
+            SalesOrder.id == tie.json()["data"]["id"]
+        ).one().status = SalesOrderStatus.SHIPPED.value
+        db.commit()
+    top_two = client.get(
+        "/api/v1/sales-orders?sort_by=total_amount&sort_order=desc&currency_code=CNY&page_size=2",
+        headers=header,
+    )
+    assert [item["id"] for item in top_two.json()["data"]["items"]] == [
+        created[0]["id"],
+        tie.json()["data"]["id"],
+    ]
+    other_owner, _ = register_and_login(client, "rank-other@example.com")
+    other_tenant = _create_tenant(client, other_owner, "OtherRank", "other-rank")
+    isolated = client.get(
+        "/api/v1/sales-orders?sort_by=total_amount", headers=auth_header(other_owner, other_tenant)
+    )
+    assert isolated.status_code == 200 and isolated.json()["data"]["total"] == 0
 
 
 def test_customer_code_unique_per_tenant_and_isolation(client: TestClient) -> None:

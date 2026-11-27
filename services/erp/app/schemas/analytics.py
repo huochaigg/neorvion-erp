@@ -13,6 +13,7 @@ class DateRangeQuery(BaseModel):
 
 
 class SalesSummaryOut(BaseModel):
+    currency_code: str | None = Field(default=None, description="已验证的单一销售币种；无数据时为空")
     order_count: int = Field(
         ...,
         description="有效销售订单数。有效 = 排除 DRAFT、CANCELLED；按 created_at 落入统计区间",
@@ -54,6 +55,7 @@ class SalesSummaryOut(BaseModel):
 
 
 class SalesTrendPoint(BaseModel):
+    currency_code: str | None = Field(default=None, description="本次趋势统计采用的单一币种")
     date: str = Field(..., description="自然日 YYYY-MM-DD，缺失日已补 0")
     order_count: int = Field(..., description="当日有效销售订单数")
     sales_amount: float = Field(..., description="当日有效销售订单金额合计")
@@ -100,6 +102,7 @@ class TopProductOut(BaseModel):
 
 
 class TopCustomerOut(BaseModel):
+    currency_code: str | None = Field(default=None, description="累计销售金额的单一币种")
     customer_id: int
     customer_name: str
     order_count: int = Field(..., description="该客户有效销售订单数")

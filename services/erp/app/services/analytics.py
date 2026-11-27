@@ -18,6 +18,7 @@ from app.core.analytics import (
     money_float,
     resolve_report_range,
 )
+from app.core.exceptions import AppError
 from app.core.tenant import TenantContext
 from app.repositories.analytics_after_sale import AfterSaleAnalyticsRepository
 from app.repositories.analytics_inventory import InventoryAnalyticsRepository
@@ -72,19 +73,54 @@ class AnalyticsService:
     def _range(self, start_date: str | None, end_date: str | None):
         return resolve_report_range(start_date, end_date)
 
+    def _sales_currency(
+        self,
+        start: datetime,
+        end_exclusive: datetime,
+        warehouse_id: int | None,
+        currency_code: str | None,
+    ) -> str | None:
+        """报表金额不可隐式合并多币种；指定币种时各 SQL 都按同一条件过滤。"""
+        if currency_code is not None:
+            if (
+                len(currency_code) != 3
+                or not currency_code.isascii()
+                or not currency_code.isalpha()
+                or not currency_code.isupper()
+            ):
+                raise AppError("币种必须是三个大写字母", code=42273, status_code=422)
+            return currency_code
+        currencies = list(
+            dict.fromkeys(
+                [
+                    *self.sales.report_currencies(start, end_exclusive, warehouse_id),
+                    *self.sales.report_refund_currencies(start, end_exclusive, warehouse_id),
+                ]
+            )
+        )
+        if len(currencies) > 1:
+            raise AppError(
+                "销售报表包含多个币种，请指定 currency_code 后重试", code=42272, status_code=422
+            )
+        return currencies[0] if currencies else None
+
     def sales_summary(
         self,
         start_date: str | None,
         end_date: str | None,
         warehouse_id: int | None = None,
+        currency_code: str | None = None,
     ) -> SalesSummaryOut:
         start, end_ex, _, _ = self._range(start_date, end_date)
-        gross, order_count = self.sales.sales_amount_and_order_count(start, end_ex, warehouse_id)
-        refund = self.sales.success_refund_amount(start, end_ex, warehouse_id)
-        completed, cancelled, draft = self.sales.completed_and_cancelled_counts(
-            start, end_ex, warehouse_id
+        currency_code = self._sales_currency(start, end_ex, warehouse_id, currency_code)
+        gross, order_count = self.sales.sales_amount_and_order_count(
+            start, end_ex, warehouse_id, currency_code
         )
-        after_counts = self.after_sales.summary_counts(start, end_ex, warehouse_id)
+        refund = self.sales.success_refund_amount(start, end_ex, warehouse_id, currency_code)
+        completed, cancelled, draft = self.sales.completed_and_cancelled_counts(
+            start, end_ex, warehouse_id, currency_code
+        )
+        after_counts = self.after_sales.summary_counts(start, end_ex, warehouse_id, currency_code)
         after_sale_sales_orders = after_counts["after_sale_sales_order_count"]
         aov = money(gross / order_count) if order_count else money(0)
         return_rate = (
@@ -93,6 +129,7 @@ class AnalyticsService:
             else money(0)
         )
         return SalesSummaryOut(
+            currency_code=currency_code,
             order_count=order_count,
             completed_order_count=completed,
             cancelled_order_count=cancelled,
@@ -111,11 +148,17 @@ class AnalyticsService:
         start_date: str | None,
         end_date: str | None,
         warehouse_id: int | None = None,
+        currency_code: str | None = None,
     ) -> list[SalesTrendPoint]:
         """返回完整日期序列，缺失日补 0，避免折线图断轴。"""
         start, end_ex, start_d, end_d = self._range(start_date, end_date)
-        sales_rows = _index_by_day(self.sales.daily_sales_trend(start, end_ex, warehouse_id))
-        refund_rows = _index_by_day(self.sales.daily_refund_trend(start, end_ex, warehouse_id))
+        currency_code = self._sales_currency(start, end_ex, warehouse_id, currency_code)
+        sales_rows = _index_by_day(
+            self.sales.daily_sales_trend(start, end_ex, warehouse_id, currency_code)
+        )
+        refund_rows = _index_by_day(
+            self.sales.daily_refund_trend(start, end_ex, warehouse_id, currency_code)
+        )
         points: list[SalesTrendPoint] = []
         for day in iter_dates(start_d, end_d):
             key = day.isoformat()
@@ -123,6 +166,7 @@ class AnalyticsService:
             refund = refund_rows.get(key)
             points.append(
                 SalesTrendPoint(
+                    currency_code=currency_code,
                     date=key,
                     order_count=int(sales[1]) if sales else 0,
                     sales_amount=money_float(sales[2] if sales else 0),
@@ -217,11 +261,15 @@ class AnalyticsService:
         end_date: str | None,
         limit: int | None = None,
         warehouse_id: int | None = None,
+        currency_code: str | None = None,
     ) -> list[TopCustomerOut]:
         start, end_ex, _, _ = self._range(start_date, end_date)
-        rows = self.sales.top_customers(start, end_ex, clamp_top_limit(limit), warehouse_id)
+        currency_code = self._sales_currency(start, end_ex, warehouse_id, currency_code)
+        rows = self.sales.top_customers(
+            start, end_ex, clamp_top_limit(limit), warehouse_id, currency_code
+        )
         refunds = self.sales.success_refund_amount_by_customer(
-            start, end_ex, [int(row[0]) for row in rows], warehouse_id
+            start, end_ex, [int(row[0]) for row in rows], warehouse_id, currency_code
         )
         result: list[TopCustomerOut] = []
         for row in rows:
@@ -230,6 +278,7 @@ class AnalyticsService:
             refund_amount = refunds.get(cid, money(0))
             result.append(
                 TopCustomerOut(
+                    currency_code=currency_code,
                     customer_id=cid,
                     customer_name=str(row[1] or ""),
                     order_count=int(row[2] or 0),

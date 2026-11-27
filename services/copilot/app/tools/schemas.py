@@ -18,13 +18,31 @@ class GetSalesOrderArgs(ToolArgs):
 class ListSalesOrdersArgs(ToolArgs):
     q: str | None = Field(default=None, max_length=64, description="订单号或客户名称关键词")
     order_no: str | None = Field(default=None, max_length=64)
+    order_no_exact: str | None = Field(default=None, max_length=32, description="精确 ERP 销售订单编号；返回真实整数主键，不能从编号推断 ID")
+    external_order_no: str | None = Field(default=None, max_length=64, description="外部平台订单号，不是订单主键")
+    customer_id: int | None = Field(default=None, gt=0)
+    warehouse_id: int | None = Field(default=None, gt=0)
     sku_code: str | None = Field(default=None, max_length=64)
     product_name: str | None = Field(default=None, max_length=128)
     status: str | None = Field(default=None, max_length=24, description="ERP 精确订单状态")
     created_from: datetime | None = None
     created_to: datetime | None = None
+    currency_code: str | None = Field(default=None, pattern="^[A-Z]{3}$", description="金额排名时指定币种；跨币种不能直接比较")
+    sort_by: str = Field(default="created_at", pattern="^(created_at|total_amount)$", description="在数据库全部授权记录中排序")
+    sort_order: str = Field(default="desc", pattern="^(asc|desc)$", description="最大 desc，最小 asc")
     page: int = Field(default=1, ge=1, le=20)
     page_size: int = Field(default=20, ge=1, le=settings.tool_max_page_size)
+
+
+class SalesReportArgs(ToolArgs):
+    start_date: date | None = Field(default=None, description="统计开始日期，含当天")
+    end_date: date | None = Field(default=None, description="统计结束日期，含当天")
+    warehouse_id: int | None = Field(default=None, gt=0)
+    currency_code: str | None = Field(default=None, pattern="^[A-Z]{3}$", description="销售金额的原始币种；不执行隐式汇率转换")
+
+
+class TopSalesCustomersArgs(SalesReportArgs):
+    limit: int = Field(default=10, ge=1, le=20, description="累计销售金额排名返回数量")
 
 
 class GetInventoryArgs(ToolArgs):

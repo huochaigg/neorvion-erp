@@ -22,6 +22,13 @@ class AgentSpec:
     token_budget: int
     concurrency_policy: str = "parallel_safe"
     enabled: bool = True
+    any_of_permissions: tuple[str, ...] = ()
+
+    def can_run(self, permissions: frozenset[str]) -> bool:
+        """Agent 只控制可进入的领域；各工具仍按自身权限、ToolPolicy 和 ERP IAM 单独复核。"""
+        return all(item in permissions for item in self.required_permissions) and (
+            not self.any_of_permissions or any(item in permissions for item in self.any_of_permissions)
+        )
 
 
 class AgentRegistry:
@@ -64,16 +71,24 @@ def build_agent_registry() -> AgentRegistry:
                 {
                     "get_sales_order",
                     "list_sales_orders",
+                    "get_sales_summary",
+                    "get_sales_trend",
+                    "get_top_sales_customers",
                     "get_after_sale",
                     "analyze_inventory_coverage",
                 }
             ),
-            (PermissionCode.ORDER_READ.value,),
+            (),
             "latest_user_query_only",
             20,
             4,
             2,
             3000,
+            any_of_permissions=(
+                PermissionCode.ORDER_READ.value,
+                PermissionCode.ANALYTICS_SALES_READ.value,
+                PermissionCode.AFTER_SALE_READ.value,
+            ),
         ),
         AgentSpec(
             "inventory_agent",

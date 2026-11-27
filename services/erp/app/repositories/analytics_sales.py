@@ -45,6 +45,61 @@ class SalesAnalyticsRepository(BaseRepository):
             return true()
         return SalesOrder.warehouse_id == warehouse_id
 
+    def _currency(self, currency_code: str | None):
+        return SalesOrder.currency_code == currency_code if currency_code else true()
+
+    def report_currencies(
+        self, start: datetime, end_exclusive: datetime, warehouse_id: int | None
+    ) -> list[str]:
+        """仅查询有权限租户的有效销售订单币种，至多读取两种用于阻止隐式跨币种汇总。"""
+        return list(
+            self.session.scalars(
+                select(SalesOrder.currency_code)
+                .where(
+                    self._tenant_orders(),
+                    SalesOrder.created_at >= start,
+                    SalesOrder.created_at < end_exclusive,
+                    self._valid_status(),
+                    self._warehouse(warehouse_id),
+                )
+                .distinct()
+                .limit(2)
+            )
+        )
+
+    def report_refund_currencies(
+        self, start: datetime, end_exclusive: datetime, warehouse_id: int | None
+    ) -> list[str]:
+        """退款按成功时间统计，可能来自区间外创建的订单；也须检查币种。"""
+        from app.models.after_sale import AfterSaleOrder
+
+        refund_at = func.coalesce(RefundRecord.refunded_at, RefundRecord.created_at)
+        return list(
+            self.session.scalars(
+                select(SalesOrder.currency_code)
+                .select_from(RefundRecord)
+                .join(
+                    AfterSaleOrder,
+                    (RefundRecord.tenant_id == AfterSaleOrder.tenant_id)
+                    & (RefundRecord.after_sale_order_id == AfterSaleOrder.id),
+                )
+                .join(
+                    SalesOrder,
+                    (AfterSaleOrder.tenant_id == SalesOrder.tenant_id)
+                    & (AfterSaleOrder.sales_order_id == SalesOrder.id),
+                )
+                .where(
+                    RefundRecord.tenant_id == self.ensure_tenant(),
+                    RefundRecord.status == RefundRecordStatus.SUCCESS.value,
+                    refund_at >= start,
+                    refund_at < end_exclusive,
+                    self._warehouse(warehouse_id),
+                )
+                .distinct()
+                .limit(2)
+            )
+        )
+
     def count_by_status(
         self,
         start: datetime,
@@ -73,6 +128,7 @@ class SalesAnalyticsRepository(BaseRepository):
         start: datetime,
         end_exclusive: datetime,
         warehouse_id: int | None = None,
+        currency_code: str | None = None,
     ) -> tuple[Decimal, int]:
         """
         统计口径：有效销售订单（排除 DRAFT / CANCELLED）。
@@ -98,6 +154,7 @@ class SalesAnalyticsRepository(BaseRepository):
                 created_lt,
                 self._valid_status(),
                 self._warehouse(warehouse_id),
+                self._currency(currency_code),
             )
         )
         count_stmt = select(func.count(SalesOrder.id)).where(
@@ -106,6 +163,7 @@ class SalesAnalyticsRepository(BaseRepository):
             created_lt,
             self._valid_status(),
             self._warehouse(warehouse_id),
+            self._currency(currency_code),
         )
         amount = money(self.session.execute(amount_stmt).scalar_one())
         count = int_or_zero(self.session.execute(count_stmt).scalar_one())
@@ -116,6 +174,7 @@ class SalesAnalyticsRepository(BaseRepository):
         start: datetime,
         end_exclusive: datetime,
         warehouse_id: int | None = None,
+        currency_code: str | None = None,
     ) -> Decimal:
         """
         只统计 SUCCESS 退款。PENDING / FAILED 不扣净销售额。
@@ -147,6 +206,7 @@ class SalesAnalyticsRepository(BaseRepository):
                 refund_at >= start,
                 refund_at < end_exclusive,
                 self._warehouse(warehouse_id),
+                self._currency(currency_code),
             )
         )
         return money(self.session.execute(stmt).scalar_one())
@@ -156,6 +216,7 @@ class SalesAnalyticsRepository(BaseRepository):
         start: datetime,
         end_exclusive: datetime,
         warehouse_id: int | None = None,
+        currency_code: str | None = None,
     ) -> list[tuple]:
         """
         按日 GROUP BY DATE(created_at)。
@@ -182,6 +243,7 @@ class SalesAnalyticsRepository(BaseRepository):
                 created_lt,
                 self._valid_status(),
                 self._warehouse(warehouse_id),
+                self._currency(currency_code),
             )
             .group_by(day)
             .order_by(day)
@@ -193,6 +255,7 @@ class SalesAnalyticsRepository(BaseRepository):
         start: datetime,
         end_exclusive: datetime,
         warehouse_id: int | None = None,
+        currency_code: str | None = None,
     ) -> list[tuple]:
         from app.models.after_sale import AfterSaleOrder
 
@@ -221,6 +284,7 @@ class SalesAnalyticsRepository(BaseRepository):
                 refund_at >= start,
                 refund_at < end_exclusive,
                 self._warehouse(warehouse_id),
+                self._currency(currency_code),
             )
             .group_by(day)
             .order_by(day)
@@ -387,6 +451,7 @@ class SalesAnalyticsRepository(BaseRepository):
         end_exclusive: datetime,
         limit: int,
         warehouse_id: int | None = None,
+        currency_code: str | None = None,
     ) -> list[tuple]:
         """
         Top Customer：按客户聚合有效订单金额。客户名一次 JOIN customers，不循环查。
@@ -417,9 +482,10 @@ class SalesAnalyticsRepository(BaseRepository):
                 created_lt,
                 self._valid_status(),
                 self._warehouse(warehouse_id),
+                self._currency(currency_code),
             )
             .group_by(Customer.id, Customer.name)
-            .order_by(func.coalesce(func.sum(_LINE_AMOUNT), 0).desc())
+            .order_by(func.coalesce(func.sum(_LINE_AMOUNT), 0).desc(), Customer.id.asc())
             .limit(limit)
         )
         return list(self.session.execute(stmt).all())
@@ -430,6 +496,7 @@ class SalesAnalyticsRepository(BaseRepository):
         end_exclusive: datetime,
         customer_ids: list[int],
         warehouse_id: int | None = None,
+        currency_code: str | None = None,
     ) -> dict[int, Decimal]:
         if not customer_ids:
             return {}
@@ -460,6 +527,7 @@ class SalesAnalyticsRepository(BaseRepository):
                 refund_at < end_exclusive,
                 AfterSaleOrder.customer_id.in_(customer_ids),
                 self._warehouse(warehouse_id),
+                self._currency(currency_code),
             )
             .group_by(AfterSaleOrder.customer_id)
         )
@@ -492,6 +560,7 @@ class SalesAnalyticsRepository(BaseRepository):
         start: datetime,
         end_exclusive: datetime,
         warehouse_id: int | None = None,
+        currency_code: str | None = None,
     ) -> tuple[int, int, int]:
         created_ge, created_lt = self._in_range(SalesOrder.created_at, start, end_exclusive)
         stmt = select(
@@ -512,6 +581,7 @@ class SalesAnalyticsRepository(BaseRepository):
             created_ge,
             created_lt,
             self._warehouse(warehouse_id),
+            self._currency(currency_code),
         )
         completed, cancelled, draft = self.session.execute(stmt).one()
         return int_or_zero(completed), int_or_zero(cancelled), int_or_zero(draft)

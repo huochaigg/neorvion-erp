@@ -18,8 +18,10 @@ from app.tools.schemas import (
     ListKnowledgeBasesArgs,
     ListPurchaseOrdersArgs,
     ListSalesOrdersArgs,
+    SalesReportArgs,
     SearchKnowledgeArgs,
     SearchProductsArgs,
+    TopSalesCustomersArgs,
 )
 
 _SAFE_FIELDS = frozenset(
@@ -29,6 +31,28 @@ _SAFE_FIELDS = frozenset(
         "total",
         "page",
         "page_size",
+        "has_more",
+        "sort_by",
+        "sort_order",
+        "customer_id",
+        "customer_name",
+        "order_count",
+        "currency_scope",
+        "report",
+        "sales_amount",
+        "total_sales_amount",
+        "gross_sales_amount",
+        "refund_amount",
+        "net_sales_amount",
+        "average_order_value",
+        "completed_order_count",
+        "cancelled_order_count",
+        "draft_order_count",
+        "after_sale_order_count",
+        "after_sale_sales_order_count",
+        "return_rate",
+        "date",
+        "day",
         "order_no",
         "external_order_no",
         "warehouse_id",
@@ -148,6 +172,13 @@ class ToolSpec:
             tenant_id=tenant_id,
             request_id=request_id,
         )
+        if self.name in {"get_sales_summary", "get_sales_trend", "get_top_sales_customers"}:
+            reported_currency = data.get("currency_code") if isinstance(data, dict) else (data[0].get("currency_code") if isinstance(data, list) and data and isinstance(data[0], dict) else None)
+            return {
+                "currency_code": reported_currency or values.get("currency_code"),
+                "currency_scope": "ERP 已验证单币种；无数据时币种可能为空",
+                "report": _safe_projection(data),
+            }
         return _safe_projection(data)
 
 
@@ -190,6 +221,21 @@ def build_tool_registry() -> ToolRegistry:
                 ListSalesOrdersArgs,
                 PermissionCode.ORDER_READ.value,
                 "/api/v1/sales-orders",
+            ),
+            ToolSpec(
+                "get_sales_summary", "按日期查询销售汇总；金额仅在单一币种内比较。",
+                SalesReportArgs, PermissionCode.ANALYTICS_SALES_READ.value,
+                "/api/v1/analytics/sales/summary",
+            ),
+            ToolSpec(
+                "get_sales_trend", "查询销售趋势；金额不执行隐式汇率转换。",
+                SalesReportArgs, PermissionCode.ANALYTICS_SALES_READ.value,
+                "/api/v1/analytics/sales/trend",
+            ),
+            ToolSpec(
+                "get_top_sales_customers", "查询客户累计销售金额排名，不等于最大单笔订单。",
+                TopSalesCustomersArgs, PermissionCode.ANALYTICS_SALES_READ.value,
+                "/api/v1/analytics/sales/top-customers",
             ),
             ToolSpec(
                 "get_inventory",

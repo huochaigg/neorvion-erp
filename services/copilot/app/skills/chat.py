@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import asyncio
+import json
+import logging
+import re
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
@@ -12,15 +15,17 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.registry import build_agent_registry
-from app.ai.types import ChatAdapter, ModelMessage
+from app.ai.types import ChatAdapter, ModelMessage, ModelToolCall
 from app.core.config import settings
 from app.core.exceptions import AppError
 from app.core.tenant import TenantContext
+from app.erp.client import get_erp_client
 from app.graph.workflow import AgentRuntime
 from app.intent.schemas import IntentResolution
 from app.mcp.security import validate_arguments
 from app.models.ecosystem import SkillRun
 from app.services.skill_execution import SkillExecutionService
+from app.skills.applicability import assess_skill
 from app.skills.catalog import SkillCatalog
 from app.skills.classification import TaskClassifier
 from app.skills.inputs import SkillInputCollector
@@ -33,7 +38,10 @@ from app.skills.pending import (
     ResumedSkillPlan,
 )
 from app.skills.selector import SkillSelection, SkillSelector
+from app.tools.executor import ToolExecutor
 from app.tools.registry import build_tool_registry
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(slots=True)
@@ -200,6 +208,29 @@ async def skill_timeout(
         raise AppError("Chat Skill 执行超时", code=50484, status_code=504) from exc
 
 
+async def _lookup_order_number(code: str, request_id: str, runtime: AgentRuntime) -> int:
+    """经原 ToolExecutor、IAM 和租户门禁精确定位业务订单号，并留下 Tool/Evidence 事件。"""
+    if runtime.tools is None:
+        raise AppError("订单号解析工具不可用", code=50398, status_code=503)
+    lookup = await ToolExecutor(build_tool_registry(), get_erp_client()).execute(
+        ModelToolCall(
+            id=f"pending-order-{request_id[:32]}", name="list_sales_orders",
+            arguments=json.dumps({"order_no_exact": code.upper(), "page_size": 2}),
+        ),
+        runtime.tools,
+    )
+    runtime.preflight_events.extend([
+        {"event": "tool_start", "data": {"tool_call_id": lookup.event["tool_call_id"], "name": "list_sales_orders", "input_summary": "按订单号解析真实主键"}},
+        {"event": "tool_end", "data": lookup.event | {"status": "SUCCEEDED"}},
+        *({"event": "evidence", "data": item} for item in lookup.evidences),
+    ])
+    runtime.tools.tool_events.append(lookup.event | {"status": "SUCCEEDED"})
+    matches = [item for item in lookup.data.get("items", []) if item.get("order_no") == code.upper()]
+    if len(matches) != 1:
+        raise AppError("未找到唯一匹配的销售订单号，请核对订单号。", code=40471, status_code=404)
+    return int(matches[0]["id"])
+
+
 async def prepare_chat_skill(
     db: AsyncSession,
     context: TenantContext,
@@ -230,8 +261,17 @@ async def prepare_chat_skill(
         raise AppError("手动 Skill 模式必须指定 Skill", code=42296, status_code=422)
     resumed: ResumedSkillInput | ResumedSkillPlan | None = None
     if conversation_id is not None and settings.skill_pending_enabled:
+        verified_order_id = None
+        code_match = re.fullmatch(r"SO\d+", task.strip(), re.I)
+        if code_match and await PendingSkillService(db, context).needs_order_id(conversation_id, request_id):
+            try:
+                verified_order_id = await _lookup_order_number(code_match.group(0), request_id, runtime)
+            except AppError as exc:
+                if exc.code != 40471:
+                    raise
+                return PendingSkillPrompt(exc.message, {"status": "COLLECTING_INPUT", "missing_fields": ["order_id"]})
         pending_result = await PendingSkillService(db, context).resume(
-            conversation_id, task, request_id
+            conversation_id, task, request_id, verified_order_id=verified_order_id
         )
         if isinstance(pending_result, PendingSkillPrompt):
             return pending_result
@@ -265,6 +305,36 @@ async def prepare_chat_skill(
             "filtered_reasons": catalog_snapshot.filtered_reasons,
         },
         routing_plan=routing_plan,
+    )
+    if resumed is None and selection.selected_skills:
+        applicable = []
+        reasons = []
+        for candidate in selection.selected_skills:
+            version = await SkillRuntimeLoader(db, context).load(candidate, task)
+            valid, reason = assess_skill(
+                task, version.version.allowed_tools,
+                getattr(version.version, "source_metadata", candidate.metadata),
+                getattr(version.version, "allowed_agents", ()),
+                getattr(version.version, "input_schema", {}),
+            )
+            if valid:
+                applicable.append(candidate)
+            else:
+                reasons.append(f"{candidate.skill_key}: {reason}")
+        if reasons:
+            if mode == "MANUAL" or selection.method == "EXPLICIT":
+                logger.info("skill_applicability request_id=%s mode=%s selected=%s applicable=false reason=%s", request_id, mode, [item.skill_key for item in selection.selected_skills], "; ".join(reasons)[:200])
+                raise AppError("指定 Skill 与当前任务不适用：" + "；".join(reasons), code=42298, status_code=422)
+            selection = SkillSelection(
+                tuple(applicable), "NO_SKILL" if not applicable else selection.method,
+                "能力不匹配，回退普通 Agent：" + "；".join(reasons), selection.confidence,
+                selection.classification, selection.candidates, catalog_trace=selection.catalog_trace,
+            )
+    logger.info(
+        "skill_applicability request_id=%s mode=%s method=%s candidates=%s selected_versions=%s reason=%s",
+        request_id, mode, selection.method,
+        [(item.skill_key, item.score) for item in selection.candidates],
+        [(entry.skill_key, entry.version_id) for entry in selection.selected_skills], selection.reason[:200],
     )
     if isinstance(resumed, ResumedSkillInput):
         selection = SkillSelection(
@@ -334,8 +404,12 @@ async def prepare_chat_skill(
     if entry is None:
         return None
     loaded = await SkillRuntimeLoader(db, context).load(entry, task)
+    lookup_id = None
+    code_match = re.search(r"\bSO\d+\b", task, re.I)
+    if code_match and resumed is None and "order_id" in loaded.version.input_schema.get("required", []):
+        lookup_id = await _lookup_order_number(code_match.group(0), request_id, runtime)
     collected = SkillInputCollector().collect(
-        task,
+        f"订单主键 {lookup_id}" if lookup_id else task,
         loaded.version.input_schema,
         resumed.values if isinstance(resumed, ResumedSkillInput) else None,
     )

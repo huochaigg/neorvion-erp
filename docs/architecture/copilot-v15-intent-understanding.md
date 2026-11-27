@@ -335,3 +335,9 @@ sequenceDiagram
 - 默认 DISABLED，旧测试和旧租户不受影响；打开 ENABLED 会增加一次理解耗时。SHADOW 若打开 `intent_shadow_llm_enabled` 会额外耗 Token。
 - 规则回放 125/125 是当前规则与人工期望对齐后的离线结果，**不是**真实模型 INTENT_LIVE，也不是四服务 E2E。
 - 浏览器联调、真实 PostgreSQL 迁移 `20261123_0017`、Worker 跑评测，都需要本地服务可用；当前仓库测试没有把它们算作已验收。
+
+## V15 查询形态与 Skill 能力匹配（2026-11）
+
+新增结构化查询形态 DETAIL/LIST/AGGREGATE/RANK/COMPARE/TREND，保留原 Intent Registry 与路由。AUTO 候选在固定版本加载后先检查工具、Agent 与任务形态，才进入 InputCollector；无适用 Skill 返回普通 Agent。销售订单列表复用原 API，在 MySQL 完成授权范围过滤、金额排序及分页；跨币种金额需要显式币种。报表工具复用销售汇总、趋势、Top 客户 API，仍由 analytics:sales:read 与 ERP IAM 检查。ERP Evidence E1 表示一次工具结果，带完整性与截断标记。详细案例、测试和待验收项目见 [问题复盘](../copilot/questions/0007-intent-skill-tool-capability-matching.md)。生产 intent_v15_mode 默认仍为 DISABLED，需要灰度与真实模型回放后再决定开启。
+
+V15 评测 Catalog 在原有 125 题基础上追加 7 道订单排名、汇总、客户累计和趋势用例；复用原 run_intent_case 与 evaluate_case，新增 Query Shape 断言。确定性回放只能说明标注和规则一致，不能替代真实模型或浏览器验收。

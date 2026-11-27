@@ -51,7 +51,7 @@ async def resolve_chat_intent(
         ))
     store = IntentContextStore(db, context) if db is not None and conversation_id is not None else None
     row = await store.load(conversation_id) if store is not None and conversation_id is not None else None
-    cancel_requested = _is_cancel(text) or skill_mode == "NONE"
+    cancel_requested = _is_cancel(text)
     if cancel_requested and store is not None and conversation_id is not None:
         await store.cancel(conversation_id, request_id)
     resolved_context = ContextResolver().resolve(
@@ -124,4 +124,4 @@ def clarification_response(resolution: IntentResolution) -> IntentClarification:
 
 def _is_cancel(text: str) -> bool:
     stripped = text.strip()
-    return stripped in {"取消", "算了", "不用了", "停止"} or stripped.startswith("取消本次")
+    return stripped in {"取消", "算了", "不用了", "停止", "取消刚才的查询", "取消刚才的订单查询"} or stripped.startswith("取消本次")

@@ -6,6 +6,7 @@ from functools import lru_cache
 
 from app.intent.catalog import INTENT_DEFINITIONS
 from app.intent.schemas import IntentDefinition, ProblemType
+from app.tools.registry import build_tool_registry
 
 KNOWN_AGENTS = frozenset(
     {
@@ -23,23 +24,7 @@ KNOWN_SKILLS = frozenset(
         "knowledge-research",
     }
 )
-KNOWN_TOOLS = frozenset(
-    {
-        "get_sales_order",
-        "list_sales_orders",
-        "get_inventory",
-        "get_product",
-        "search_products",
-        "list_purchase_orders",
-        "get_warehouse",
-        "get_after_sale",
-        "list_knowledge_bases",
-        "search_knowledge",
-        "analyze_inventory_coverage",
-        "propose_action",
-        "validate_action_proposal",
-    }
-)
+KNOWN_TOOLS = build_tool_registry().names | {"propose_action", "validate_action_proposal"}
 ANALYSIS_SKILLS = frozenset({"inventory-analysis", "sales-order-review"})
 WRITE_TOOLS = frozenset({"propose_action", "validate_action_proposal"})
 

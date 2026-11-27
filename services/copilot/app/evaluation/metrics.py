@@ -85,6 +85,13 @@ def evaluate_case(case: dict[str, Any], result: dict[str, Any]) -> tuple[str, di
         assertions.append({"kind": "plan_steps", "target": int(expected_plan_steps), "actual": actual_steps, "passed": passed})
 
     expected_intents = [str(item) for item in behavior.get("expected_intent_keys", [])]
+    if "expected_query_shapes" in behavior:
+        expected_shapes = [str(item) for item in behavior["expected_query_shapes"]]
+        actual_shapes = [str(item) for item in result.get("query_shapes", [])]
+        assertions.append({
+            "kind": "query_shape", "target": expected_shapes, "actual": actual_shapes,
+            "passed": expected_shapes == actual_shapes,
+        })
     actual_intents = [str(item) for item in result.get("resolved_intents", [])]
     intent_applicable = "expected_intent_keys" in behavior or bool(actual_intents)
     intent_accuracy = None

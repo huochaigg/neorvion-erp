@@ -186,6 +186,9 @@ class SalesOrderListOut(BaseModel):
     total: int
     page: int
     page_size: int
+    has_more: bool = Field(default=False, description="是否还有尚未返回的匹配订单")
+    sort_by: str = Field(default="created_at", description="数据库排序字段")
+    sort_order: str = Field(default="desc", description="数据库排序方向")
 
 
 class SalesOrderDetailOut(SalesOrderListItemOut):

@@ -48,6 +48,39 @@ def runtime(*permissions: str, token: str = "user-token", audience: bool = True)
 
 
 @pytest.mark.asyncio
+async def test_sales_rank_tool_cites_entire_complete_page_and_respects_report_permission() -> None:
+    """单个 ERP Evidence 代表一次完整列表查询，并可支持其中每个真实订单。"""
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.headers["X-Tenant-ID"] == "7"
+        assert request.url.params["sort_by"] == "total_amount"
+        assert request.url.params["sort_order"] == "desc"
+        return httpx.Response(200, json={"code": 0, "data": {
+            "items": [
+                {"id": 1, "order_no": "SO2026000001", "total_amount": 32996, "currency_code": "CNY"},
+                {"id": 2, "order_no": "SO2026000002", "total_amount": 24993, "currency_code": "CNY"},
+            ], "total": 2, "page": 1, "page_size": 2, "has_more": False,
+            "sort_by": "total_amount", "sort_order": "desc",
+        }})
+    erp = make_client(handler)
+    run = runtime(PermissionCode.ORDER_READ.value)
+    result = await ToolExecutor(build_tool_registry(), erp).execute(
+        ModelToolCall(id="sales-rank", name="list_sales_orders", arguments='{"sort_by":"total_amount","sort_order":"desc","page_size":2}'), run,
+    )
+    assert result.event["truncated"] is False
+    assert len(result.evidences) == 1
+    assert result.evidences[0]["citation_id"] == "E1"
+    assert result.evidences[0]["metadata"]["complete"] is True
+    assert all(order in result.evidences[0]["excerpt"] for order in ("SO2026000001", "SO2026000002"))
+    assert 'citation_id="E1"' in result.content
+    assert CopilotWorkflow._validate_citations("SO2026000001 [E1]；SO2026000002 [E1]", run.evidences).count("[E1]") == 2
+    with pytest.raises(AppError):
+        await ToolExecutor(build_tool_registry(), erp).execute(
+            ModelToolCall(id="report", name="get_sales_summary", arguments="{}"), run,
+        )
+    await erp.aclose()
+
+
+@pytest.mark.asyncio
 async def test_inventory_tool_forwards_verified_identity_and_filters_fields() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         assert request.headers["Authorization"] == "Bearer user-token"

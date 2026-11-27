@@ -4,7 +4,7 @@ import re
 import time
 import uuid
 from collections.abc import AsyncGenerator, Awaitable, Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import cast
 
 from langgraph.graph import END, START, StateGraph
@@ -21,6 +21,7 @@ from app.ai.types import (
 from app.core.config import settings
 from app.core.exceptions import AppError
 from app.graph.state import CopilotState
+from app.intent.query import describe_query
 from app.tools.executor import ToolExecutor, ToolRuntime
 
 _SYSTEM_PROMPT = """你是 Neorvion ERP Copilot V5。你可以使用只读 ERP/Knowledge 工具，以及受控的业务草稿 Proposal 工具。
@@ -56,6 +57,7 @@ class AgentRuntime:
     skill_agent_groups: list[list[tuple[str, str]]] | None = None
     intent_resolution: object | None = None
     intent_route: object | None = None
+    preflight_events: list[dict] = field(default_factory=list)
 
 
 class CopilotWorkflow:
@@ -206,6 +208,11 @@ class CopilotWorkflow:
             raise AppError("模型未返回有效内容", code=50267, status_code=502)
         evidence = runtime.context.tools.evidences if runtime.context.tools is not None else []
         text = self._validate_citations(text, evidence)
+        question = next((str(item.get("content") or "") for item in reversed(state["messages"]) if item.get("role") == "user"), "")
+        text = self._guard_global_rank(
+            text, evidence, question, runtime.context.intent_resolution,
+            runtime.context.tools.tool_events if runtime.context.tools else (),
+        )
         runtime.stream_writer(
             {"event": "done", "data": {"answer": text, "usage": usage, "evidence": evidence}}
         )
@@ -226,6 +233,38 @@ class CopilotWorkflow:
             lambda match: match.group(0) if match.group(1) in allowed else "[来源不可验证]",
             text,
         )
+
+    @staticmethod
+    def _guard_global_rank(text: str, evidence: list[dict], question: str, intent_resolution: object | None = None, tool_events: list[dict] | tuple = ()) -> str:
+        """排名结论必须有数据库全量排序的工具证据，不能把默认第一页当作全局结果。"""
+        query = describe_query(question)
+        tasks = getattr(intent_resolution, "tasks", ())
+        ranked = next((task for task in tasks if getattr(task, "query_shape", None) == "RANK"), None)
+        entity = getattr(ranked, "entity", None) or query.entity
+        direction = getattr(ranked, "sort_order", None) or query.sort_order
+        metric = getattr(ranked, "metric", None) or query.metric
+        limit = getattr(ranked, "limit", None) or query.limit or 1
+        if query.negative or metric != "total_amount" or entity not in {"sales_order", "customer"} or (ranked is None and query.shape != "RANK"):
+            return text
+        if any(isinstance(event, dict) and event.get("code") == 42272 for event in tool_events):
+            return "查询范围内存在多个币种，请指定币种后再比较金额。"
+        if any(isinstance(event, dict) and event.get("code") in {40370, 40372} for event in tool_events):
+            return "当前用户没有此项金额排名查询所需的数据权限。"
+        name = "list_sales_orders" if entity == "sales_order" else "get_top_sales_customers"
+        for item in evidence:
+            if item.get("resource_type") != name:
+                continue
+            metadata = item.get("metadata") or {}
+            if metadata.get("truncated"):
+                continue
+            if entity == "customer":
+                return text if f'[{item.get("citation_id")}]' in text else "查询已取得排序结果，但回答缺少可验证的来源引用，请重试。"
+            if (metadata.get("sort_by") == "total_amount" and metadata.get("sort_order") == (direction or "DESC").lower()
+                    and metadata.get("page") == 1 and (metadata.get("returned") or 0) >= min(limit, metadata.get("total") or limit)):
+                return text if f'[{item.get("citation_id")}]' in text else "查询已取得排序结果，但回答缺少可验证的来源引用，请重试。"
+            if metadata.get("total") == 0 and metadata.get("sort_by") == "total_amount":
+                return text
+        return "当前没有取得覆盖授权范围的数据库金额排序结果，无法确认全局排名；请使用可用的金额排序查询后重试。"
 
     @staticmethod
     def _after_agent(state: CopilotState) -> str:

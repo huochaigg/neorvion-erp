@@ -97,6 +97,15 @@ class ResolvedTask(BaseModel):
     name: str
     problem_type: ProblemType
     domain: IntentDomain
+    query_shape: Literal["DETAIL", "LIST", "AGGREGATE", "RANK", "COMPARE", "TREND"] | None = Field(default=None, description="查询结构，不等于意图或执行权限")
+    entity: str | None = Field(default=None, description="查询对象，如 sales_order 或 customer")
+    metric: str | None = Field(default=None, description="金额或订单数等指标")
+    aggregation: str | None = Field(default=None, description="分组指标的聚合方式")
+    group_by: str | None = Field(default=None, description="分组维度")
+    sort_order: str | None = Field(default=None, description="排名方向")
+    limit: int | None = Field(default=None, description="排名条数上限")
+    currency_code: str | None = Field(default=None, description="金额币种；空值不表示可以跨币种比较")
+    time_range: str | None = Field(default=None, description="用户原始相对时间表达")
     slots: dict[str, str] = Field(default_factory=dict)
     missing_slots: tuple[str, ...] = ()
     candidate_agents: tuple[str, ...] = ()
@@ -208,6 +217,7 @@ class IntentResolution(BaseModel):
             "status_text": self.public_status,
             "decision": self.decision,
             "intents": list(self.resolved_intents),
+            "query_shapes": [task.query_shape for task in self.tasks if task.query_shape],
             "problem_types": list(self.problem_types),
             "missing_slots": list(self.missing_slots),
             "pending": self.pending,

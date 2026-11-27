@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -12,8 +13,11 @@ from app.core.exceptions import AppError
 from app.core.tenant import TenantContext
 from app.models.ecosystem import PendingSkillInvocation, Skill, SkillVersion
 from app.services.skill_execution import SkillExecutionService
+from app.skills.applicability import assess_skill, pending_relation
 from app.skills.catalog import SkillCatalogEntry
 from app.skills.inputs import SkillInputCollector
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True, slots=True)
@@ -44,6 +48,16 @@ class PendingSkillService:
         self.context = context
         self.collector = SkillInputCollector()
 
+    async def needs_order_id(self, conversation_id: int, request_id: str) -> bool:
+        """只读检查当前用户会话的 Pending，避免普通订单号查询发生额外 ERP 调用。"""
+        row = await self.session.scalar(select(PendingSkillInvocation).where(
+            PendingSkillInvocation.tenant_id == self.context.tenant_id,
+            PendingSkillInvocation.user_id == self.context.user_id,
+            PendingSkillInvocation.conversation_id == conversation_id,
+            PendingSkillInvocation.status == "COLLECTING_INPUT",
+        ))
+        return bool(row and row.last_client_request_id != request_id[:64] and "order_id" in row.missing_fields and row.expires_at > datetime.now(UTC))
+
     async def cancel_active(self, conversation_id: int, request_id: str) -> bool:
         """NONE/MANUAL 新任务可显式终止旧参数收集，避免把无关消息套入旧 Skill。"""
         row = await self.session.scalar(
@@ -64,7 +78,7 @@ class PendingSkillService:
         return True
 
     async def resume(
-        self, conversation_id: int, task: str, request_id: str
+        self, conversation_id: int, task: str, request_id: str, *, verified_order_id: int | None = None
     ) -> ResumedSkillInput | ResumedSkillPlan | PendingSkillPrompt | None:
         row = await self.session.scalar(
             select(PendingSkillInvocation)
@@ -78,11 +92,26 @@ class PendingSkillService:
         )
         if row is None:
             return None
+        if row.last_client_request_id == request_id[:64]:
+            return PendingSkillPrompt(row.clarification, self._public(row, "pending") | {"relation": "DUPLICATE"})
         if row.expires_at <= datetime.now(UTC):
             row.status = "EXPIRED"
             await self.session.commit()
+            if pending_relation(task, missing_fields=list(row.missing_fields), skill_key="") == "NEW_TASK":
+                return None
             return PendingSkillPrompt("之前的 Skill 参数收集已过期，请重新描述任务。", {"pending_id": row.id, "status": "EXPIRED"})
-        if self.collector.cancelled(task):
+        key = next(iter(row.selection_snapshot.get("selected_skill_keys", [])), "")
+        relation = pending_relation(task, missing_fields=list(row.missing_fields), skill_key=key)
+        logger.info("pending_relation request_id=%s pending_id=%s relation=%s skill=%s version_id=%s", request_id, row.id, relation, key, row.skill_version_id)
+        if relation == "NEW_TASK":
+            row.status = "CANCELLED"
+            row.last_client_request_id = request_id[:64]
+            await self.session.commit()
+            logger.info("pending_replaced request_id=%s pending_id=%s skill=%s version_id=%s", request_id, row.id, key, row.skill_version_id)
+            return None
+        if relation == "AMBIGUOUS":
+            return PendingSkillPrompt("请说明是继续补充之前的参数，还是开始新的查询。", self._public(row, key) | {"relation": relation})
+        if relation == "CANCEL" or self.collector.cancelled(task):
             row.status = "CANCELLED"
             row.last_client_request_id = request_id[:64]
             await self.session.commit()
@@ -112,7 +141,22 @@ class PendingSkillService:
             row.status = "CANCELLED"
             await self.session.commit()
             raise AppError("权限已变化，待补全 Skill 已取消", code=40385, status_code=403)
-        collected = self.collector.collect(task, version.input_schema, row.collected_input)
+        applicable, reason = assess_skill(
+            task, version.allowed_tools, version.source_metadata, version.allowed_agents,
+            version.input_schema,
+        )
+        if not applicable:
+            # Pending 的固定版本也必须先通过适用性检查，不能绕过新候选的门禁直接补参。
+            row.status = "CANCELLED"
+            row.last_client_request_id = request_id[:64]
+            await self.session.commit()
+            logger.info(
+                "pending_inapplicable request_id=%s pending_id=%s skill=%s version_id=%s reason=%s",
+                request_id, row.id, skill.skill_key, version.id, reason[:200],
+            )
+            return None
+        collection_text = f"订单主键 {verified_order_id}" if verified_order_id else (f"订单主键 {task.strip()}" if "order_id" in row.missing_fields and task.strip().isdigit() else task)
+        collected = self.collector.collect(collection_text, version.input_schema, row.collected_input)
         row.collected_input = SkillExecutionService._redact(collected.values)
         row.missing_fields = list(collected.missing)
         row.last_client_request_id = request_id[:64]
@@ -177,7 +221,7 @@ class PendingSkillService:
 
     async def _resume_plan(
         self, row: PendingSkillInvocation, task: str, request_id: str
-    ) -> ResumedSkillPlan | PendingSkillPrompt:
+    ) -> ResumedSkillPlan | PendingSkillPrompt | None:
         snapshots = row.plan_snapshot.get("items", [])
         version_ids = {int(item["version_id"]) for item in snapshots if isinstance(item, dict)}
         pairs = (
@@ -208,6 +252,19 @@ class PendingSkillService:
                 row.status = "CANCELLED"
                 await self.session.commit()
                 raise AppError("权限已变化，待补全 Skill Plan 已取消", code=40385, status_code=403)
+            applicable, reason = assess_skill(
+                task, version.allowed_tools, version.source_metadata, version.allowed_agents,
+                version.input_schema,
+            )
+            if not applicable:
+                row.status = "CANCELLED"
+                row.last_client_request_id = request_id[:64]
+                await self.session.commit()
+                logger.info(
+                    "pending_plan_inapplicable request_id=%s pending_id=%s skill=%s version_id=%s reason=%s",
+                    request_id, row.id, skill.skill_key, version.id, reason[:200],
+                )
+                return None
             collected = self.collector.collect(task, version.input_schema, snapshot.get("input") or {})
             values[skill.skill_key] = collected.values
             if collected.missing:

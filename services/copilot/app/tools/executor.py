@@ -58,6 +58,7 @@ class ToolExecutionResult:
     content: str
     event: dict[str, Any]
     evidences: tuple[dict[str, Any], ...] = ()
+    data: Any = None
 
 
 class ToolExecutor:
@@ -172,14 +173,22 @@ class ToolExecutor:
         except TimeoutError as exc:
             raise AppError("工具执行超时", code=50472, status_code=504) from exc
         evidences = self._build_evidence(spec.source, call, result, runtime)
-        runtime.evidences.extend(evidences)
         serialized = json.dumps(result, ensure_ascii=False, separators=(",", ":"))
         truncated = len(serialized) > settings.tool_max_result_chars
+        if spec.source == "ERP" and evidences:
+            evidence = evidences[0]
+            metadata = evidence["metadata"]
+            metadata["truncated"] = truncated
+            if truncated:
+                metadata["complete"] = False
+        runtime.evidences.extend(evidences)
         if truncated:
             serialized = serialized[: settings.tool_max_result_chars]
+        citation = f' citation_id="{evidences[0]["citation_id"]}"' if spec.source == "ERP" and evidences else ""
         content = (
-            f'<untrusted_{spec.source.lower()}_tool_result queried_at="{datetime.now(UTC).isoformat()}">\n'
+            f'<untrusted_{spec.source.lower()}_tool_result queried_at="{datetime.now(UTC).isoformat()}"{citation}>\n'
             + serialized
+            + ("\n结果已截断，不能声称当前页或全量结果完整。" if truncated else "")
             + f"\n</untrusted_{spec.source.lower()}_tool_result>"
         )
         execution = ToolExecutionResult(
@@ -193,6 +202,7 @@ class ToolExecutor:
                 "evidence_count": len(evidences),
             },
             evidences=tuple(evidences),
+            data=result,
         )
         logger.debug(
             "tool_stage=completed request_id=%s tool=%s agent=%s duration_ms=%s evidence_count=%s",
@@ -501,10 +511,19 @@ class ToolExecutor:
                 "resource_id": resource_id,
                 "title": f"ERP 查询：{call.name}",
                 "excerpt": json.dumps(result, ensure_ascii=False, separators=(",", ":"))[
-                    : settings.knowledge_evidence_excerpt_chars
+                    : settings.tool_max_result_chars
                 ],
                 "source_version": None,
-                "metadata": {},
+                "metadata": {
+                    "total": result.get("total"),
+                    "page": result.get("page"),
+                    "page_size": result.get("page_size"),
+                    "has_more": result.get("has_more"),
+                    "sort_by": result.get("sort_by"),
+                    "sort_order": result.get("sort_order"),
+                    "returned": len(result.get("items", [])) if isinstance(result.get("items"), list) else None,
+                    "complete": result.get("has_more") is False and result.get("page", 1) == 1 if isinstance(result, dict) else False,
+                } if isinstance(result, dict) else {},
                 "observed_at": now,
             }
         ]
