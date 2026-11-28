@@ -32,6 +32,8 @@ class MessageStatus(StrEnum):
     COMPLETED = "COMPLETED"
     FAILED = "FAILED"
     CANCELLED = "CANCELLED"
+    INTERRUPTED = "INTERRUPTED"
+    TIMED_OUT = "TIMED_OUT"
 
 
 class ToolRunStatus(StrEnum):
@@ -86,7 +88,7 @@ class Message(TimestampMixin, TenantMixin, Base):
         Index("ix_copilot_messages_running", "tenant_id", "conversation_id", "status"),
         CheckConstraint("role IN ('user', 'assistant')", name="ck_copilot_messages_role"),
         CheckConstraint(
-            "status IN ('RUNNING', 'COMPLETED', 'FAILED', 'CANCELLED')",
+            "status IN ('RUNNING', 'COMPLETED', 'FAILED', 'CANCELLED', 'INTERRUPTED', 'TIMED_OUT')",
             name="ck_copilot_messages_status",
         ),
     )

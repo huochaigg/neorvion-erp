@@ -58,6 +58,8 @@ class AgentRuntime:
     intent_resolution: object | None = None
     intent_route: object | None = None
     preflight_events: list[dict] = field(default_factory=list)
+    termination_status: str | None = None
+    termination_code: int | None = None
 
 
 class CopilotWorkflow:

@@ -186,6 +186,9 @@ class ConversationRepository:
     async def begin_agent_run(
         self, conversation_id: int, message_id: int, request_id: str
     ) -> AgentRun:
+        now = datetime.now(UTC)
+        from app.services.chat_run import WORKER_INSTANCE_ID
+
         row = AgentRun(
             tenant_id=self.tenant_id,
             user_id=self.user_id,
@@ -194,6 +197,10 @@ class ConversationRepository:
             request_id=request_id,
             graph_type="PENDING",
             status="RUNNING",
+            heartbeat_at=now,
+            last_progress_at=now,
+            lease_until=now + timedelta(seconds=max(30, settings.chat_lease_seconds)),
+            worker_instance_id=WORKER_INSTANCE_ID,
         )
         self.session.add(row)
         await self.session.flush()
@@ -274,12 +281,38 @@ class ConversationRepository:
         )
         if row is None:
             return
+        if row.status != "RUNNING":
+            return
+        from app.services.chat_run import WORKER_INSTANCE_ID
+
+        if row.worker_instance_id and row.worker_instance_id != WORKER_INSTANCE_ID:
+            return
         now = datetime.now(UTC)
         row.status = status
         row.completed_at = now
         row.total_duration_ms = round((now - row.started_at).total_seconds() * 1000)
         row.error_code = error_code
         row.usage = usage
+        row.lease_until = None
+
+    async def heartbeat_agent_run(self, run_id: int, *, event_seq: int = 0, progress: bool = False) -> None:
+        now = datetime.now(UTC)
+        values: dict = {
+            "heartbeat_at": now,
+            "lease_until": now + timedelta(seconds=max(30, settings.chat_lease_seconds)),
+            "event_seq": event_seq,
+        }
+        if progress:
+            values["last_progress_at"] = now
+        await self.session.execute(
+            update(AgentRun)
+            .where(
+                AgentRun.id == run_id,
+                AgentRun.tenant_id == self.tenant_id,
+                AgentRun.status == "RUNNING",
+            )
+            .values(**values)
+        )
 
     async def record_model_event(self, run_id: int, event: str, data: dict) -> None:
         """保存逐次模型调用 Usage；Provider 缢失的 token 保持 null，费用仅使用有效定价快照估算。"""
@@ -384,6 +417,30 @@ class ConversationRepository:
             )
         )
 
+    async def get_owned_message(self, conversation_id: int, message_id: int) -> Message | None:
+        return await self.session.scalar(
+            select(Message).where(
+                Message.tenant_id == self.tenant_id,
+                Message.user_id == self.user_id,
+                Message.conversation_id == conversation_id,
+                Message.id == message_id,
+            )
+        )
+
+    async def previous_user_message(self, conversation_id: int, assistant_id: int) -> Message | None:
+        return await self.session.scalar(
+            select(Message)
+            .where(
+                Message.tenant_id == self.tenant_id,
+                Message.user_id == self.user_id,
+                Message.conversation_id == conversation_id,
+                Message.role == "user",
+                Message.id < assistant_id,
+            )
+            .order_by(Message.id.desc())
+            .limit(1)
+        )
+
     async def running_message(self, conversation_id: int) -> Message | None:
         return await self.session.scalar(
             select(Message).where(
@@ -434,10 +491,27 @@ class ConversationRepository:
         await self.session.flush()
         return user, assistant
 
+    async def begin_retry_assistant(
+        self, conversation_id: int, client_request_id: str, request_id: str
+    ) -> Message:
+        assistant = Message(
+            tenant_id=self.tenant_id,
+            conversation_id=conversation_id,
+            user_id=self.user_id,
+            role="assistant",
+            content="",
+            status=MessageStatus.RUNNING.value,
+            client_request_id=client_request_id,
+            request_id=request_id,
+        )
+        self.session.add(assistant)
+        await self.session.flush()
+        return assistant
+
     async def finish_message(
         self, message_id: int, *, content: str, status: str, protocol_data=None, error_code=None
     ) -> None:
-        await self.session.execute(
+        statement = (
             update(Message)
             .where(
                 Message.id == message_id,
@@ -452,6 +526,9 @@ class ConversationRepository:
                 completed_at=datetime.now(UTC),
             )
         )
+        if status != MessageStatus.RUNNING.value:
+            statement = statement.where(Message.status == MessageStatus.RUNNING.value)
+        await self.session.execute(statement)
 
     async def record_tool_event(
         self, conversation_id: int, message_id: int, event: str, data: dict
@@ -502,41 +579,8 @@ class ConversationRepository:
         )
 
     async def recover_stale(self, seconds: int) -> int:
-        cutoff = datetime.now(UTC) - timedelta(seconds=seconds)
-        # execute 静态类型是 Result（无 rowcount）；Core UPDATE 实际返回 CursorResult。
-        result = cast(
-            CursorResult[tuple[()]],
-            await self.session.execute(
-                update(Message)
-                .where(
-                    Message.tenant_id == self.tenant_id,
-                    Message.user_id == self.user_id,
-                    Message.status == MessageStatus.RUNNING.value,
-                    Message.created_at < cutoff,
-                )
-                .values(
-                    status=MessageStatus.FAILED.value,
-                    error_code=50079,
-                    completed_at=datetime.now(UTC),
-                )
-            ),
-        )
-        owned_message_ids = select(Message.id).where(
-            Message.tenant_id == self.tenant_id,
-            Message.user_id == self.user_id,
-        )
-        await self.session.execute(
-            update(ToolRun)
-            .where(
-                ToolRun.tenant_id == self.tenant_id,
-                ToolRun.message_id.in_(owned_message_ids),
-                ToolRun.status == ToolRunStatus.RUNNING.value,
-                ToolRun.created_at < cutoff,
-            )
-            .values(
-                status=ToolRunStatus.FAILED.value,
-                error_code=50079,
-                completed_at=datetime.now(UTC),
-            )
-        )
-        return int(result.rowcount or 0)
+        """发送新消息前先做租约感知补偿，避免仅按 created_at 误杀断点中的任务。"""
+        del seconds
+        from app.services.chat_reconcile import reconcile_session
+
+        return await reconcile_session(self.session, self.tenant_id, self.user_id)

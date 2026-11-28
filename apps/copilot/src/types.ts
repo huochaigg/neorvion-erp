@@ -16,7 +16,33 @@ export interface IntentStatus {
   skills?: string[]
   mode?: string
 }
-export interface Message {id:number;role:string;content:string;status:string;request_id:string;created_at:string;updated_at:string;tool_runs:ToolRun[];evidences:Evidence[];agent_runs?:AgentRun[];skill_runs?:SkillRunSummary[];analysis_status?:string;intent_status?:IntentStatus|null}
+export type ConnectionState = 'CONNECTING' | 'CONNECTED' | 'RECONNECTING' | 'RECONNECT_FAILED' | 'DISCONNECTED' | 'WAITING_TOO_LONG'
+export interface Message {
+  id: number
+  role: string
+  content: string
+  status: string
+  request_id: string
+  created_at: string
+  updated_at: string
+  tool_runs: ToolRun[]
+  evidences: Evidence[]
+  agent_runs?: AgentRun[]
+  skill_runs?: SkillRunSummary[]
+  analysis_status?: string
+  intent_status?: IntentStatus | null
+  last_event_seq?: number
+  live?: boolean
+  interrupt_reason?: string | null
+  can_retry?: boolean
+  retry_denied_reason?: string | null
+  can_reconnect?: boolean
+  can_cancel?: boolean
+  debug_execution?: boolean
+  connection_state?: ConnectionState
+  connection_attempt?: number
+  connection_max_attempts?: number
+}
 export interface Conversation {id:number;title:string;status:string;created_at:string;updated_at:string}
 export interface ConversationDetail extends Conversation {messages:Message[]}
 export interface ConversationList {items:Conversation[];total:number;page:number;page_size:number}

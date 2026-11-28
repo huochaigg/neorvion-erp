@@ -21,6 +21,11 @@ class ConversationMessageIn(BaseModel):
         default="AUTO", description="本轮 Skill 选择模式"
     )
     skill_key: str | None = Field(default=None, pattern=r"^[a-z][a-z0-9-]{2,79}$")
+    retry_of_message_id: int | None = Field(
+        default=None,
+        gt=0,
+        description="对已终止的助手消息发起新的执行尝试；不创建新的用户消息",
+    )
 
     @model_validator(mode="after")
     def validate_skill_selection(self) -> "ConversationMessageIn":
@@ -84,6 +89,8 @@ class AgentRunOut(BaseModel):
     tasks: list[AgentTaskRunOut] = Field(
         default_factory=list, description="该父运行下的 Agent 子任务"
     )
+    event_seq: int = Field(default=0, description="该 Run 已发布事件的最大序号，用于 SSE 增量订阅")
+    interrupt_reason: str | None = Field(default=None, description="中断或取消请求原因，不含敏感细节")
 
 
 class SkillRunSummaryOut(BaseModel):
@@ -114,6 +121,23 @@ class MessageOut(BaseModel):
     agent_runs: list[AgentRunOut] = Field(default_factory=list)
     skill_runs: list[SkillRunSummaryOut] = Field(default_factory=list)
     intent_status: dict | None = Field(default=None, description="该轮意图识别摘要")
+    last_event_seq: int = Field(default=0, description="快照对应的事件水位，增量订阅应携带 after=该值")
+    live: bool = Field(default=False, description="当前进程或租约证明执行者仍存活")
+    interrupt_reason: str | None = Field(default=None, description="中断原因或 cancel_requested")
+    can_retry: bool = Field(
+        default=False,
+        description="是否允许从该轮用户消息发起新的执行尝试；已成功的写工具默认不允许",
+    )
+    retry_denied_reason: str | None = Field(
+        default=None,
+        description="不允许重试时的用户可读原因；允许重试时为空",
+    )
+    can_reconnect: bool = Field(
+        default=False,
+        description="是否允许订阅原 Agent Run，不创建新消息",
+    )
+    can_cancel: bool = Field(default=False, description="是否允许请求取消仍在 RUNNING 的任务")
+    debug_execution: bool = Field(default=False, description="服务端开发调试模式，前端仅用于提示")
 
 
 class ConversationOut(BaseModel):

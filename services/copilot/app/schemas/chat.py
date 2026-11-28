@@ -33,6 +33,11 @@ class ChatRequest(BaseModel):
     message: str | None = Field(
         default=None, min_length=1, max_length=4000, description="持久化会话中的本轮用户消息"
     )
+    retry_of_message_id: int | None = Field(
+        default=None,
+        gt=0,
+        description="对已终止助手消息发起新执行尝试，关联原用户消息且不重复插入",
+    )
 
     @model_validator(mode="after")
     def validate_context(self) -> "ChatRequest":

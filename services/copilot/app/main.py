@@ -1,3 +1,4 @@
+import asyncio
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
@@ -14,6 +15,14 @@ from app.erp.client import close_erp_client
 from app.graph.action_execution import action_execution_graph
 from app.graph.business_workflow import business_workflow_graph
 from app.knowledge.client import close_knowledge_client
+from app.services.chat_reconcile import reconcile_all
+
+
+async def _chat_reconcile_loop() -> None:
+    await reconcile_all()
+    while True:
+        await asyncio.sleep(max(10, settings.chat_reconcile_interval_seconds))
+        await reconcile_all()
 
 
 @asynccontextmanager
@@ -23,9 +32,18 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     if settings.action_graph_enabled:
         await action_execution_graph.start()
         await business_workflow_graph.start()
+    reconcile_task = None
+    if not settings.is_test:
+        reconcile_task = asyncio.create_task(_chat_reconcile_loop(), name="chat-run-reconcile")
     try:
         yield
     finally:
+        if reconcile_task is not None:
+            reconcile_task.cancel()
+            try:
+                await reconcile_task
+            except asyncio.CancelledError:
+                pass
         if settings.action_graph_enabled:
             await business_workflow_graph.close()
             await action_execution_graph.close()

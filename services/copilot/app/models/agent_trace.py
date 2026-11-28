@@ -44,7 +44,7 @@ class AgentRun(TenantMixin, Base):
         UniqueConstraint("tenant_id", "message_id", name="uq_copilot_agent_run_message"),
         Index("ix_copilot_agent_runs_owner_started", "tenant_id", "user_id", "started_at"),
         CheckConstraint(
-            "status IN ('RUNNING','SUCCEEDED','FAILED','CANCELLED','DEGRADED')",
+            "status IN ('RUNNING','SUCCEEDED','FAILED','CANCELLED','DEGRADED','INTERRUPTED','TIMED_OUT')",
             name="ck_copilot_agent_run_status",
         ),
     )
@@ -64,6 +64,13 @@ class AgentRun(TenantMixin, Base):
     total_duration_ms: Mapped[int | None] = mapped_column()
     error_code: Mapped[int | None] = mapped_column()
     usage: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    heartbeat_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_progress_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    lease_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    worker_instance_id: Mapped[str | None] = mapped_column(String(64))
+    execution_attempt: Mapped[int] = mapped_column(nullable=False, server_default="1")
+    event_seq: Mapped[int] = mapped_column(nullable=False, server_default="0")
+    interrupt_reason: Mapped[str | None] = mapped_column(String(64))
 
 
 class AgentTaskRun(TenantMixin, Base):

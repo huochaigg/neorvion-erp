@@ -78,6 +78,8 @@ def test_conversation_detail_declares_get(client) -> None:
     assert "get" in methods
     assert methods["get"]["summary"] == "加载会话详情"
     assert "post" in spec["paths"]["/api/v1/conversations/{conversation_id}/messages"]
+    assert "get" in spec["paths"]["/api/v1/conversations/{conversation_id}/messages/{message_id}/events"]
+    assert "post" in spec["paths"]["/api/v1/conversations/{conversation_id}/messages/{message_id}/cancel"]
 
 
 def test_get_conversation_is_not_method_not_allowed(client) -> None:

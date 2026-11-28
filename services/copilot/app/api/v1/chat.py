@@ -29,6 +29,7 @@ from app.schemas.chat import ChatRequest, ChatResponse, TokenUsageOut
 from app.schemas.common import ApiResponse, ok
 from app.services.action_proposals import ActionProposalService
 from app.services.chat import ChatService
+from app.services.chat_run import ChatRunAuth, start_persistent_run, subscribe
 from app.services.persistent_chat import PersistentChatService
 from app.services.quotas import (
     RuntimeGovernance,
@@ -78,8 +79,24 @@ def _intent_payload_for_prompt(session: PendingSkillPrompt | IntentClarification
     return payload | session.public_data if isinstance(session, IntentClarification) else payload or session.public_data
 
 
-def _sse(event: str, data: dict) -> str:
-    return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
+def _sse(event: str, data: dict, event_id: int | None = None) -> str:
+    ident = f"id: {event_id}\n" if event_id is not None else ""
+    return f"{ident}event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
+
+
+async def iter_message_sse(
+    tenant_id: int,
+    user_id: int,
+    message_id: int,
+    after: int = 0,
+    *,
+    disconnected=None,
+):
+    """订阅已有 Run 的 SSE；断开只结束本生成器。"""
+    async for seq, event, data in subscribe(
+        tenant_id, user_id, message_id, after, disconnected=disconnected
+    ):
+        yield _sse(event, data, seq)
 
 
 def _runtime(
@@ -123,6 +140,48 @@ def _runtime(
     )
 
 
+def _runtime_from_auth(
+    auth,
+    db: AsyncSession,
+    *,
+    conversation_id: int | None = None,
+    source_message_id: int | None = None,
+    governance: RuntimeGovernance | None = None,
+    mcp_gateway: McpGateway | None = None,
+) -> AgentRuntime:
+    """后台执行使用内存中的授权快照，不把 Access Token 写入 Redis。"""
+    from app.services.action_proposals import ActionProposalService
+    from app.services.chat_run import ChatRunAuth
+
+    assert isinstance(auth, ChatRunAuth)
+    proposal_service = None
+    if conversation_id is not None:
+        proposal_service = ActionProposalService(
+            db,
+            auth.context,
+            erp_client=get_erp_client(),
+            access_token=auth.access_token,
+            request_id=auth.request_id,
+        )
+    return AgentRuntime(
+        tools=ToolRuntime(
+            tenant=auth.context,
+            access_token=auth.access_token,
+            erp_audience_authorized=settings.erp_jwt_audience in auth.jwt_audiences,
+            knowledge_audience_authorized=settings.knowledge_jwt_audience in auth.jwt_audiences,
+            request_id=auth.request_id,
+            proposal_service=proposal_service,
+            conversation_id=conversation_id,
+            source_message_id=source_message_id,
+            allowed_tools=governance.allowed_tools if governance else None,
+            max_calls_override=governance.max_tool_calls if governance else None,
+            global_call_limit=governance.max_tool_calls if governance else None,
+            mcp_gateway=mcp_gateway,
+        ),
+        allow_multi_agent=governance.allow_multi_agent if governance else True,
+    )
+
+
 @router.post("", response_model=ApiResponse[ChatResponse], summary="非流式对话")
 async def chat(
     payload: ChatRequest,
@@ -150,6 +209,7 @@ async def chat(
                 payload.message or "",
                 payload.client_request_id or "",
                 str(getattr(request.state, "request_id", "") or uuid4().hex),
+                retry_of_message_id=payload.retry_of_message_id,
             )
             if turn.duplicate_answer is not None:
                 await reservation.release()
@@ -314,20 +374,31 @@ async def chat_stream(
                     payload.message or "",
                     payload.client_request_id or "",
                     stream_request_id,
+                    retry_of_message_id=payload.retry_of_message_id,
                 )
-                if turn.duplicate_answer is not None:
-                    await reservation.release()
                 persistent_turn = turn
-                runtime = _runtime(
-                    request,
-                    context,
-                    db,
-                    conversation_id=turn.conversation_id,
-                    source_message_id=turn.message_id,
-                    governance=governance,
-                    mcp_gateway=mcp_gateway,
+                auth = ChatRunAuth(
+                    context=context,
+                    access_token=str(getattr(request.state, "access_token", "")),
+                    jwt_audiences=frozenset(getattr(request.state, "jwt_audiences", ())),
+                    request_id=turn.request_id,
+                    skill_mode=payload.skill_mode or "AUTO",
+                    skill_key=payload.skill_key,
+                    user_message=payload.message or "",
                 )
-                if turn.duplicate_answer is None:
+                if turn.duplicate_answer is not None or turn.existing_running:
+                    await reservation.release()
+                    quota_released = True
+                else:
+                    runtime = _runtime(
+                        request,
+                        context,
+                        db,
+                        conversation_id=turn.conversation_id,
+                        source_message_id=turn.message_id,
+                        governance=governance,
+                        mcp_gateway=mcp_gateway,
+                    )
                     skill_session, intent_resolution = await _prepare_with_intent(
                         db,
                         context,
@@ -353,8 +424,6 @@ async def chat_stream(
                         )
                     if isinstance(skill_session, (PendingSkillPrompt, IntentClarification)):
                         await service.complete_without_run(turn, skill_session.answer, runtime)
-                        for preflight in runtime.preflight_events:
-                            yield _sse(preflight["event"], preflight["data"] | {"request_id": turn.request_id, "message_id": turn.message_id})
                         await reservation.release()
                         quota_released = True
                         completed = True
@@ -363,16 +432,48 @@ async def chat_stream(
                             if isinstance(skill_session, PendingSkillPrompt)
                             else "intent_clarification"
                         )
-                        yield _sse(event_name, skill_session.public_data | {"request_id": turn.request_id, "conversation_id": turn.conversation_id, "message_id": turn.message_id})
-                        yield _sse("message", {"request_id": turn.request_id, "conversation_id": turn.conversation_id, "message_id": turn.message_id, "delta": skill_session.answer})
-                        yield _sse("done", {"request_id": turn.request_id, "conversation_id": turn.conversation_id, "message_id": turn.message_id, "answer": skill_session.answer})
+                        ids = {
+                            "request_id": turn.request_id,
+                            "conversation_id": turn.conversation_id,
+                            "message_id": turn.message_id,
+                        }
+                        yield _sse(event_name, skill_session.public_data | ids)
+                        yield _sse("message", ids | {"delta": skill_session.answer})
+                        yield _sse("done", ids | {"answer": skill_session.answer})
                         return
-                events = service.events(
-                    turn,
-                    runtime,
-                    request.is_disconnected,
-                    _active_skill(skill_session),
-                )
+                    await start_persistent_run(
+                        turn=turn,
+                        auth=auth,
+                        reservation=reservation,
+                        skill_session=_active_skill(skill_session),
+                        skip_intent=True,
+                        intent_resolution=intent_resolution,
+                        bound_runtime=runtime if settings.is_test else None,
+                        workflow=workflow,
+                    )
+                    quota_released = True
+                saw_terminal = False
+                async for seq, event, data in subscribe(
+                    context.tenant_id,
+                    context.user_id,
+                    turn.message_id,
+                ):
+                    if event in {"done", "error"}:
+                        saw_terminal = True
+                    yield _sse(event, data, seq)
+                if turn.duplicate_answer is not None and not saw_terminal:
+                    yield _sse(
+                        "done",
+                        {
+                            "request_id": turn.request_id,
+                            "conversation_id": turn.conversation_id,
+                            "message_id": turn.message_id,
+                            "answer": turn.duplicate_answer,
+                            "replayed": True,
+                        },
+                    )
+                completed = True
+                return
             else:
                 messages = _messages(payload)
                 runtime = _runtime(

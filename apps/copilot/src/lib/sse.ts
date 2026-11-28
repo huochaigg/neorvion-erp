@@ -17,6 +17,7 @@ export async function consumeSse(
   const decoder = new TextDecoder();
   let buffer = '';
   let name = 'message';
+  let eventId = '';
   let data: string[] = [];
   const flush = () => {
     if (!data.length) return;
@@ -26,14 +27,23 @@ export async function consumeSse(
     } catch {
       parsed = { message: data.join('\n') };
     }
+    const payload =
+      typeof parsed === 'object' && parsed !== null
+        ? (parsed as Record<string, unknown>)
+        : { value: parsed };
+    if (eventId && payload.event_id == null && payload.sequence == null) {
+      const seq = Number(eventId);
+      if (Number.isFinite(seq)) {
+        payload.event_id = seq;
+        payload.sequence = seq;
+      }
+    }
     onEvent({
       event: name,
-      data:
-        typeof parsed === 'object' && parsed !== null
-          ? (parsed as Record<string, unknown>)
-          : { value: parsed },
+      data: payload,
     });
     name = 'message';
+    eventId = '';
     data = [];
   };
   const cancelReader = () => {
@@ -54,6 +64,8 @@ export async function consumeSse(
           flush();
         } else if (line.startsWith('event:')) {
           name = line.slice(6).trim();
+        } else if (line.startsWith('id:')) {
+          eventId = line.slice(3).trim();
         } else if (line.startsWith('data:')) {
           data.push(line.slice(5).trimStart());
         }

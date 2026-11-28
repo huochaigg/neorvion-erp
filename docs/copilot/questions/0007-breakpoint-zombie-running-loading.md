@@ -1,6 +1,6 @@
 # 0007 断点挂起过久后助手消息永久 RUNNING / loading
 
-- 状态：待修复
+- 状态：已修复（见 [Chat Run 生命周期](../architecture/chat-run-lifecycle.md)）
 - 日期：2026-11-26
 - 范围：debugpy 挂起、`PersistentChatService.prepare` / `events`、SSE 取消、`recover_stale`、前端 `RUNNING` loading
 - 关联：[0004](0004-generation-stuck-cancel-40980.md)（同一把会话锁；0004 是再发消息撞 40980，本文是首轮占位从未写成终态）

@@ -9,7 +9,7 @@
 | [0003](0003-intent-understanding-improvements.md) | 方案整理 | V15 意图理解架构优化与待解决问题清单 |
 | [0004](0004-generation-stuck-cancel-40980.md) | 待修复 | 生成卡住后发「取消」得到 40980，会话 RUNNING 占死 |
 | [0005](0005-conversation-create-and-title.md) | 方案整理 | 会话创建立即落库致空会话；标题仅默认「新对话」；手动重命名已有，自动标题与创建幂等待做 |
-| [0007](0007-breakpoint-zombie-running-loading.md) | 待修复 | 断点挂起过久后助手消息永久 RUNNING / loading |
+| [0007](0007-breakpoint-zombie-running-loading.md) | 已修复 | 断点挂起过久后助手消息永久 RUNNING / loading；补偿与 SSE 重订见 [chat-run-lifecycle](../architecture/chat-run-lifecycle.md) |
 | [性能](copilot-chat-performance-investigation.md) | 已修复（待真机确认死循环） | 流式 `# ` 标题使 Markdown 解析死循环；另有 token 全量重渲染与 smooth 滚动 |
 
 ## V15 意图与能力匹配

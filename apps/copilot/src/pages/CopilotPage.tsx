@@ -3,7 +3,7 @@ import { Skeleton } from 'antd';
 import { AlertCircle, RotateCcw, X } from 'lucide-react';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useLocation } from 'react-router-dom';
-import { streamChat } from '@/api/chat';
+import { cancelChatRun, streamChat, subscribeChatRun } from '@/api/chat';
 import { discoverRunnableSkills } from '@/api/ecosystem';
 import { createConversation, getConversation } from '@/api/conversations';
 import { listProposals } from '@/api/proposals';
@@ -18,6 +18,19 @@ import {
   turnHasTerminalAssistant,
   visibleMessageKey,
 } from '@/lib/chatMessages';
+import {
+  canRetryMessage,
+  hasRunnableDetails,
+  isHeartbeatEvent,
+  isTerminalMessageStatus,
+  isTerminalSseEvent,
+  listenWithReconnect,
+  reconnectBudgetKey,
+  rememberEventSeq,
+  resetReconnectBudget,
+  SSE_MAX_RECONNECT_ATTEMPTS,
+  type ConnectionState,
+} from '@/lib/runConnection';
 import { createStreamFrameQueue, shouldApplyStreamEvent, type StreamFrameQueue } from '@/lib/streamUi';
 import { useCopilotStore } from '@/store';
 import type { AgentRun, ConversationDetail, Evidence, IntentStatus, Message, SkillRunSummary, StreamEvent, ToolRun } from '@/types';
@@ -52,6 +65,10 @@ export function CopilotPage() {
   const [pendingUser, setPendingUser] = useState<Message | null>(null);
   const [pendingFromIndex, setPendingFromIndex] = useState(0);
   const [pendingConversationId, setPendingConversationId] = useState<number | null>(null);
+  const [connection, setConnection] = useState<ConnectionState>('DISCONNECTED');
+  const [cancelRequested, setCancelRequested] = useState(false);
+  const [reconnectGeneration, setReconnectGeneration] = useState(0);
+  const [reconnectAttempt, setReconnectAttempt] = useState(0);
   const scroller = useRef<HTMLElement>(null);
   const bottom = useRef<HTMLDivElement>(null);
   const autoScroll = useRef(true);
@@ -61,6 +78,12 @@ export function CopilotPage() {
   const queueRef = useRef<StreamFrameQueue | null>(null);
   const selectedRef = useRef(selected);
   const pendingConversationRef = useRef(pendingConversationId);
+  const sendInFlightRef = useRef(false);
+  const liveMessageIdRef = useRef<number | null>(null);
+  const seenSeqRef = useRef<Set<number>>(new Set());
+  const terminalRef = useRef(false);
+  const lastProgressRef = useRef(Date.now());
+  const restoredMessageRef = useRef<number | null>(null);
   useLayoutEffect(() => {
     selectedRef.current = selected;
     pendingConversationRef.current = pendingConversationId;
@@ -100,6 +123,13 @@ export function CopilotPage() {
     pendingUser != null && (pendingConversationId == null || pendingConversationId === selected)
       ? pendingUser
       : null;
+  const runningAssistant = useMemo(
+    () =>
+      [...(detail.data?.messages ?? [])]
+        .reverse()
+        .find((item) => item.role === 'assistant' && item.status === 'RUNNING') ?? null,
+    [detail.data?.messages],
+  );
 
   useEffect(() => {
     return () => {
@@ -116,6 +146,78 @@ export function CopilotPage() {
     }
   }, [pendingConversationId, selected]);
 
+  useEffect(() => {
+    if (connection !== 'CONNECTED' && connection !== 'WAITING_TOO_LONG') return;
+    const timer = window.setInterval(() => {
+      if (Date.now() - lastProgressRef.current >= 30_000) {
+        setConnection('WAITING_TOO_LONG');
+      }
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [connection]);
+
+  useEffect(() => {
+    const live = runningAssistant;
+    if (sendInFlightRef.current || live == null || selected == null) return;
+    const abort = new AbortController();
+    const guard = `restore-${live.id}-${reconnectGeneration}`;
+    const budgetKey = reconnectBudgetKey(selected, live.id);
+    const queue = createStreamFrameQueue({
+      onEvent: (event) => handleEvent(event, guard),
+    });
+    runRef.current = guard;
+    seenSeqRef.current = new Set();
+    terminalRef.current = false;
+    liveMessageIdRef.current = live.id;
+    lastProgressRef.current = Date.now();
+    restoredMessageRef.current = live.id;
+    queueRef.current?.close();
+    queueRef.current = queue;
+    setController(abort);
+    setPendingConversationId(selected);
+    setDraft(live.content || '');
+    setTools(live.tool_runs ?? []);
+    setEvidences(live.evidences ?? []);
+    setAgentRun(live.agent_runs?.[0] ?? null);
+    setSkillRuns(live.skill_runs ?? []);
+    setIntentStatus(live.intent_status ?? null);
+    setRunning(true);
+    setConnection('CONNECTING');
+    void listenWithReconnect({
+      signal: abort.signal,
+      budgetKey,
+      shouldRetry: () => !terminalRef.current && !abort.signal.aborted,
+      onState: setConnection,
+      onAttempt: (attempt) => setReconnectAttempt(attempt),
+      subscribe: (signal) =>
+        subscribeChatRun({
+          conversationId: selected,
+          messageId: live.id,
+          after: live.last_event_seq ?? 0,
+          signal,
+          onEvent: (event) => {
+            queue.push(event);
+          },
+        }),
+    }).finally(() => {
+      if (!abort.signal.aborted) {
+        queue.flush();
+      }
+      queue.close();
+      if (queueRef.current === queue) queueRef.current = null;
+      if (runRef.current === guard) {
+        setRunning(false);
+        setController(null);
+        void query.invalidateQueries({
+          queryKey: ['tenant', tenantId, 'copilot-conversation', selected],
+        });
+      }
+    });
+    return () => {
+      abort.abort();
+    };
+  }, [query, runningAssistant?.id, selected, tenantId, reconnectGeneration]);
+
   const visible = useMemo(() => {
     const messages = detail.data?.messages ?? [];
     return composeVisibleMessages({
@@ -123,8 +225,9 @@ export function CopilotPage() {
       pendingUser: pendingForThisChat,
       pendingFromIndex,
       showLiveAssistant:
-        pendingForThisChat != null &&
-        (running || !turnHasTerminalAssistant(messages, pendingFromIndex)),
+        (pendingForThisChat != null &&
+          (running || !turnHasTerminalAssistant(messages, pendingFromIndex))) ||
+        runningAssistant != null,
       draft,
       tools,
       evidences,
@@ -132,10 +235,14 @@ export function CopilotPage() {
       agentRun,
       skillRuns,
       intentStatus,
+      connectionState: connection,
+      connectionAttempt: reconnectAttempt,
+      connectionMaxAttempts: SSE_MAX_RECONNECT_ATTEMPTS,
     });
   }, [
     agentRun,
     analysisStatus,
+    connection,
     detail.data?.messages,
     draft,
     evidences,
@@ -145,6 +252,7 @@ export function CopilotPage() {
     tools,
     skillRuns,
     intentStatus,
+    reconnectAttempt,
   ]);
 
   useEffect(() => {
@@ -168,7 +276,50 @@ export function CopilotPage() {
     ) {
       return;
     }
+    if (isHeartbeatEvent(item.event)) {
+      setConnection((state) =>
+        state === 'WAITING_TOO_LONG' || state === 'RECONNECT_FAILED' ? state : 'CONNECTED',
+      );
+      return;
+    }
+    const seq = item.data.sequence ?? item.data.event_id;
+    if (!rememberEventSeq(seenSeqRef.current, seq)) return;
     const data = item.data;
+    const messageId = Number(data.message_id ?? 0);
+    if (messageId > 0) liveMessageIdRef.current = messageId;
+    if (item.event === 'run_status') return;
+    if (!isHeartbeatEvent(item.event) && !isTerminalSseEvent(item.event)) {
+      lastProgressRef.current = Date.now();
+      setConnection('CONNECTED');
+    }
+    if (isTerminalSseEvent(item.event)) {
+      const eventStatus = String(data.status ?? '');
+      terminalRef.current = eventStatus ? isTerminalMessageStatus(eventStatus) : true;
+      const targetId = messageId > 0 ? messageId : liveMessageIdRef.current;
+      if (terminalRef.current && selectedRef.current != null && targetId != null && targetId > 0) {
+        const key = ['tenant', tenantId, 'copilot-conversation', selectedRef.current] as const;
+        query.setQueryData<ConversationDetail>(key, (old) => {
+          if (!old) return old;
+          return {
+            ...old,
+            messages: old.messages.map((row) =>
+              row.id === targetId
+                ? {
+                    ...row,
+                    status: eventStatus || row.status,
+                    content: String(data.answer ?? row.content),
+                    can_retry: Boolean(data.can_retry),
+                    can_reconnect: Boolean(data.can_reconnect),
+                    can_cancel: Boolean(data.can_cancel),
+                    interrupt_reason: data.reason != null ? String(data.reason) : row.interrupt_reason,
+                    live: false,
+                  }
+                : row,
+            ),
+          };
+        });
+      }
+    }
     if (item.event === 'skill_selected' || item.event === 'skill_start') {
       setSkillRuns((value) => {
         const id = Number(data.skill_run_id ?? 0);
@@ -331,15 +482,23 @@ export function CopilotPage() {
     }
   };
 
-  const send = async (retryText?: string) => {
+  const send = async (retryText?: string, retryOfMessageId?: number) => {
     const text = (retryText ?? input).trim();
     if (!text || running) return;
     const guard = requestId();
+    const retrying = retryOfMessageId != null && retryOfMessageId > 0;
     const user = pendingUserMessage(text, guard);
     const fromIndex = selected != null ? (detail.data?.messages.length ?? 0) : 0;
     const abort = new AbortController();
     autoScroll.current = true;
     runRef.current = guard;
+    sendInFlightRef.current = true;
+    liveMessageIdRef.current = null;
+    seenSeqRef.current = new Set();
+    terminalRef.current = false;
+    lastProgressRef.current = Date.now();
+    setConnection('CONNECTING');
+    setCancelRequested(false);
     queueRef.current?.close();
     const queue = createStreamFrameQueue({
       onEvent: (event) => handleEvent(event, guard),
@@ -356,7 +515,7 @@ export function CopilotPage() {
     setSkillRuns([]);
     setIntentStatus(null);
     setError('');
-    setPendingUser(user);
+    setPendingUser(retrying ? null : user);
     setPendingFromIndex(fromIndex);
     setPendingConversationId(selected);
     setRunning(true);
@@ -370,9 +529,11 @@ export function CopilotPage() {
         setPendingConversationId(conversationId);
       }
       const key = ['tenant', tenantId, 'copilot-conversation', conversationId] as const;
-      query.setQueryData<ConversationDetail>(key, (old) =>
-        seedConversationWithUser(old, conversationId!, user, old?.title),
-      );
+      if (!retrying) {
+        query.setQueryData<ConversationDetail>(key, (old) =>
+          seedConversationWithUser(old, conversationId!, user, old?.title),
+        );
+      }
       if (abort.signal.aborted) {
         setPendingUser(null);
         setPendingConversationId(null);
@@ -388,6 +549,7 @@ export function CopilotPage() {
         },
         skillMode,
         skillKey,
+        retryOfMessageId: retrying ? retryOfMessageId : undefined,
       });
     } catch (cause) {
       if (!abort.signal.aborted) setError(cause instanceof Error ? cause.message : '生成失败');
@@ -404,9 +566,11 @@ export function CopilotPage() {
         queue.close();
       }
       if (queueRef.current === queue) queueRef.current = null;
+      sendInFlightRef.current = false;
       if (runRef.current === guard) {
         setRunning(false);
         setController(null);
+        if (!terminalRef.current) setConnection('DISCONNECTED');
         if (conversationId != null) {
           void query.invalidateQueries({ queryKey: ['tenant', tenantId, 'copilot-conversation', conversationId] });
           void query.invalidateQueries({ queryKey: ['tenant', tenantId, 'copilot-conversations'] });
@@ -444,8 +608,54 @@ export function CopilotPage() {
             {visible.map((message, index) => (
               <ChatMessage
                 key={visibleMessageKey(message, index)}
-                message={message}
+                message={
+                  cancelRequested && message.status === 'RUNNING'
+                    ? { ...message, interrupt_reason: message.interrupt_reason ?? 'cancel_requested' }
+                    : message
+                }
                 onCancelIntent={message.id < 0 && intentStatus?.pending ? () => void send('取消') : undefined}
+                onRetry={
+                  canRetryMessage(message)
+                    ? () => {
+                        const prior = visible[index - 1];
+                        if (prior?.role === 'user') void send(prior.content, message.id);
+                      }
+                    : undefined
+                }
+                onReconnect={
+                  selected != null && message.id > 0
+                    ? () => {
+                        resetReconnectBudget(reconnectBudgetKey(selected, message.id));
+                        setReconnectAttempt(0);
+                        setConnection('CONNECTING');
+                        setReconnectGeneration((value) => value + 1);
+                      }
+                    : undefined
+                }
+                onCancelRun={
+                  selected != null && message.id > 0
+                    ? () => {
+                        setCancelRequested(true);
+                        void cancelChatRun(selected, message.id)
+                          .catch(() => undefined)
+                          .finally(() => {
+                            void query.invalidateQueries({
+                              queryKey: ['tenant', tenantId, 'copilot-conversation', selected],
+                            });
+                          });
+                      }
+                    : undefined
+                }
+                onViewRun={
+                  hasRunnableDetails(message)
+                    ? () => {
+                        document.getElementById(`copilot-run-detail-${message.id}`)?.scrollIntoView({
+                          behavior: 'smooth',
+                          block: 'start',
+                        });
+                      }
+                    : undefined
+                }
               />
             ))}
             {(proposals.data?.items ?? []).map((proposal) => (
@@ -485,6 +695,12 @@ export function CopilotPage() {
         onChange={setInput}
         onSend={() => void send()}
         onStop={() => {
+          setCancelRequested(true);
+          const conversationId = selected ?? pendingConversationId;
+          const messageId = liveMessageIdRef.current;
+          if (conversationId != null && messageId != null && messageId > 0) {
+            void cancelChatRun(conversationId, messageId).catch(() => undefined);
+          }
           queueRef.current?.close();
           controller?.abort();
         }}

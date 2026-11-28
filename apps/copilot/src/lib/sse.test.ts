@@ -46,4 +46,19 @@ describe('consumeSse', () => {
     expect(cancelled).toBe(true);
     expect(items.length).toBeLessThanOrEqual(1);
   });
+
+  it('解析 SSE id 为 sequence，便于断线后去重', async () => {
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode('id: 8\nevent: message\ndata: {"delta":"库"}\n\n'));
+        controller.close();
+      },
+    });
+    const items: Array<{ event: string; data: Record<string, unknown> }> = [];
+    await consumeSse(new Response(body), (item) => items.push(item));
+    expect(items[0]).toEqual({
+      event: 'message',
+      data: { delta: '库', event_id: 8, sequence: 8 },
+    });
+  });
 });

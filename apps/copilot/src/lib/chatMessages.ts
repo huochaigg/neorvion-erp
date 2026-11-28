@@ -1,4 +1,4 @@
-import type { AgentRun, ConversationDetail, Evidence, IntentStatus, Message, SkillRunSummary, ToolRun } from '@/types';
+import type { AgentRun, ConnectionState, ConversationDetail, Evidence, IntentStatus, Message, SkillRunSummary, ToolRun } from '@/types';
 
 export function pendingUserMessage(content: string, requestId: string): Message {
   const now = new Date().toISOString();
@@ -64,28 +64,54 @@ export function composeVisibleMessages(input: {
   agentRun: AgentRun | null;
   skillRuns?: SkillRunSummary[];
   intentStatus?: IntentStatus | null;
+  connectionState?: ConnectionState | null;
+  connectionAttempt?: number;
+  connectionMaxAttempts?: number;
 }): Message[] {
   const hasUser = turnHasUser(input.messages, input.pendingFromIndex, input.pendingUser);
   const list =
     hasUser || input.pendingUser == null ? [...input.messages] : [...input.messages, input.pendingUser];
-  if (!input.showLiveAssistant) return list;
+  if (!input.showLiveAssistant) {
+    return list.map((item) =>
+      item.role === 'assistant' && item.status === 'RUNNING'
+        ? {
+            ...item,
+            connection_state: input.connectionState ?? item.connection_state,
+            connection_attempt: input.connectionAttempt ?? item.connection_attempt,
+            connection_max_attempts: input.connectionMaxAttempts ?? item.connection_max_attempts,
+          }
+        : item,
+    );
+  }
 
-  const streaming: Message = {
-    id: -1,
-    role: 'assistant',
-    content: input.draft,
-    status: 'RUNNING',
-    request_id: input.pendingUser?.request_id ?? '',
-    created_at: '',
-    updated_at: '',
-    tool_runs: input.tools,
-    evidences: input.evidences,
-    analysis_status: input.analysisStatus,
-    agent_runs: input.agentRun ? [input.agentRun] : [],
-    skill_runs: input.skillRuns ?? [],
-    intent_status: input.intentStatus ?? null,
-  };
   const last = list[list.length - 1];
+  const liveId = last?.role === 'assistant' && last.id > 0 ? last.id : -1;
+  const streaming: Message = {
+    id: liveId,
+    role: 'assistant',
+    content: input.draft || (liveId > 0 ? last.content : ''),
+    status: last?.status === 'RUNNING' || liveId < 0 ? 'RUNNING' : (last?.status ?? 'RUNNING'),
+    request_id: last?.request_id || input.pendingUser?.request_id || '',
+    created_at: last?.created_at ?? '',
+    updated_at: last?.updated_at ?? '',
+    tool_runs: input.tools.length ? input.tools : last?.tool_runs ?? [],
+    evidences: input.evidences.length ? input.evidences : last?.evidences ?? [],
+    analysis_status: input.analysisStatus,
+    agent_runs: input.agentRun ? [input.agentRun] : last?.agent_runs ?? [],
+    skill_runs: input.skillRuns?.length ? input.skillRuns : last?.skill_runs ?? [],
+    intent_status: input.intentStatus ?? last?.intent_status ?? null,
+    last_event_seq: last?.last_event_seq,
+    live: last?.live,
+    interrupt_reason: last?.interrupt_reason,
+    can_retry: last?.can_retry,
+    retry_denied_reason: last?.retry_denied_reason,
+    can_reconnect: last?.can_reconnect ?? last?.status === 'RUNNING',
+    can_cancel: last?.can_cancel ?? last?.status === 'RUNNING',
+    debug_execution: last?.debug_execution,
+    connection_state: input.connectionState ?? undefined,
+    connection_attempt: input.connectionAttempt,
+    connection_max_attempts: input.connectionMaxAttempts,
+  };
   if (last?.role === 'assistant' && (last.id < 0 || last.status === 'RUNNING')) {
     return [...list.slice(0, -1), streaming];
   }

@@ -1,7 +1,7 @@
 import axios, { AxiosError, type AxiosAdapter, type AxiosRequestConfig } from 'axios';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { installCopilotAuth } from './client';
-import { streamChat } from './chat';
+import { streamChat, subscribeChatRun } from './chat';
 import { createSessionRefresh } from '@neorvion/shared';
 
 const { state } = vi.hoisted(() => ({
@@ -195,6 +195,27 @@ describe('Copilot axios IAM adapter', () => {
       expect(refresh).toHaveBeenCalledTimes(1);
       expect(fetchMock).toHaveBeenCalledTimes(2);
       expect(onEvent).toHaveBeenCalledTimes(1);
+    } finally { vi.unstubAllGlobals(); }
+  });
+
+  it('重新订阅同一 Run 时 401 后静默刷新，不创建新消息', async () => {
+    const signal = new AbortController().signal;
+    const send = vi.fn(async (_url: string, init: RequestInit) =>
+      (init.headers as Record<string, string>).Authorization === 'Bearer old'
+        ? Response.json({ code: 40103 }, { status: 401 })
+        : new Response('event: done\ndata: {"answer":"ok","replayed":true}\n\n', {
+            status: 200, headers: { 'Content-Type': 'text/event-stream' },
+          }));
+    vi.stubGlobal('fetch', send);
+    try {
+      const onEvent = vi.fn();
+      await subscribeChatRun({ conversationId: 1, messageId: 180, after: 3, signal, onEvent });
+      expect(send).toHaveBeenCalledTimes(2);
+      expect(String(send.mock.calls[0]?.[0])).toContain('/messages/180/events?after=3');
+      expect(send.mock.calls[0]?.[1].method).toBe('GET');
+      expect(send.mock.calls[0]?.[1].body).toBeUndefined();
+      expect((send.mock.calls[1]?.[1].headers as Record<string, string>)['Last-Event-ID']).toBe('3');
+      expect((send.mock.calls[1]?.[1].headers as Record<string, string>).Authorization).toBe('Bearer new');
     } finally { vi.unstubAllGlobals(); }
   });
 });

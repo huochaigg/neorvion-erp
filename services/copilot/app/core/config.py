@@ -52,6 +52,17 @@ class Settings(BaseSettings):
     conversation_page_size_max: int = 100
     conversation_context_tokens: int = 6000
     stale_run_seconds: int = 900
+    chat_heartbeat_seconds: int = 10
+    chat_lease_seconds: int = 90
+    chat_reconcile_interval_seconds: int = 30
+    chat_execution_timeout_seconds: int = 300
+    chat_event_log_max: int = 2000
+    chat_ui_progress_timeout_seconds: int = 30
+    chat_sse_max_reconnect_attempts: int = 5
+    chat_sse_max_reconnect_duration_seconds: int = 60
+    copilot_debug_execution: bool = False
+    copilot_debug_disable_execution_timeout: bool = False
+    copilot_debug_disable_lease_recovery: bool = False
 
     model_provider: str = "openai_compat"
     chat_base_url: str = "https://api.deepseek.com"
@@ -164,6 +175,31 @@ class Settings(BaseSettings):
         return self.app_env.lower() in {"prod", "production"}
 
     @property
+    def is_test(self) -> bool:
+        return self.app_env.lower() in {"test", "testing"}
+
+    def debug_execution_enabled(self) -> bool:
+        """开发机允许断点长时间暂停；测试与生产默认关闭，禁止由客户端开启。"""
+        if self.is_production:
+            return False
+        if self.copilot_debug_execution or self.copilot_debug_disable_lease_recovery:
+            return True
+        return self.app_env.lower() in {"development", "dev"}
+
+    def hold_stale_lease_for_instance(self) -> bool:
+        """同一进程心跳变慢时是否仍视为存活。断点会卡住事件循环，不能当孤儿回收。"""
+        if self.is_production or self.is_test:
+            return self.copilot_debug_disable_lease_recovery
+        return True
+
+    def execution_timeout_enabled(self) -> bool:
+        if self.is_production:
+            return True
+        if self.copilot_debug_disable_execution_timeout or self.debug_execution_enabled():
+            return False
+        return True
+
+    @property
     def cors_origin_list(self) -> list[str]:
         return [item.strip() for item in self.cors_origins.split(",") if item.strip()]
 
@@ -210,6 +246,12 @@ class Settings(BaseSettings):
             raise RuntimeError("生产环境禁止关闭持久化 Action Execution Graph")
         if not self.quota_enforcement_enabled:
             raise RuntimeError("生产环境必须启用 QUOTA_ENFORCEMENT_ENABLED")
+        if (
+            self.copilot_debug_execution
+            or self.copilot_debug_disable_execution_timeout
+            or self.copilot_debug_disable_lease_recovery
+        ):
+            raise RuntimeError("生产环境禁止开启 Copilot 调试超时豁免")
         if self.mcp_remote_execution_enabled and (
             not self.mcp_allowed_host_list
             or not self.mcp_network_isolation_acknowledged

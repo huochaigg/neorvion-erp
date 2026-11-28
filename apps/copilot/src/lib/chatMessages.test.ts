@@ -125,6 +125,43 @@ describe('composeVisibleMessages', () => {
     expect(visibleMessageKey(second[3]!, 3)).toContain('live-assistant-req-9');
   });
 
+  it('恢复订阅时保留真实助手消息 ID，避免重连按钮丢失目标', () => {
+    const visible = composeVisibleMessages({
+      messages: [user(179, '查询 ERP 数据 销售订单 哪个订单金额最大'), assistant(180, '', 'RUNNING')],
+      pendingUser: null,
+      pendingFromIndex: 0,
+      showLiveAssistant: true,
+      draft: '',
+      tools: [],
+      evidences: [],
+      analysisStatus: '',
+      agentRun: { id: 53, graph_type: 'PENDING', status: 'RUNNING', route_reason: null, total_duration_ms: null, tasks: [] },
+      connectionState: 'RECONNECT_FAILED',
+    });
+    expect(visible[1]).toMatchObject({
+      id: 180,
+      status: 'RUNNING',
+      connection_state: 'RECONNECT_FAILED',
+    });
+  });
+
+  it('INTERRUPTED 视为终态，不再用 RUNNING 占位覆盖', () => {
+    expect(turnHasTerminalAssistant([user(179, '查询'), assistant(180, '', 'INTERRUPTED')], 0)).toBe(true);
+    const visible = composeVisibleMessages({
+      messages: [user(179, '查询 ERP 数据 销售订单 哪个订单金额最大'), assistant(180, '', 'INTERRUPTED')],
+      pendingUser: null,
+      pendingFromIndex: 0,
+      showLiveAssistant: false,
+      draft: '',
+      tools: [],
+      evidences: [],
+      analysisStatus: '',
+      agentRun: null,
+      connectionState: 'DISCONNECTED',
+    });
+    expect(visible[1]?.status).toBe('INTERRUPTED');
+  });
+
   it('终态助手到达后停止直播占位', () => {
     expect(turnHasTerminalAssistant([user(1, '你好'), assistant(2, '您好')], 0)).toBe(true);
     const visible = composeVisibleMessages({

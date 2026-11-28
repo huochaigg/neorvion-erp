@@ -471,6 +471,12 @@ def test_existing_pending_auto_chat_entry_switches_to_rank(
         async def commit(self):
             pass
 
+        async def execute(self, _statement):
+            return SimpleNamespace(rowcount=0)
+
+        async def close(self):
+            pass
+
     async def db_override():
         yield Session()
 
@@ -513,6 +519,7 @@ def test_existing_pending_auto_chat_entry_switches_to_rank(
     app.dependency_overrides[get_db] = db_override
     monkeypatch.setattr(settings, "skill_chat_enabled", True)
     monkeypatch.setattr(settings, "intent_v15_mode", "DISABLED")
+    monkeypatch.setattr("app.services.chat_run.open_run_session", lambda _tenant_id: Session())
     monkeypatch.setattr("app.services.persistent_chat.PersistentChatService.prepare", prepare)
     monkeypatch.setattr("app.services.persistent_chat.PersistentChatService.events", events)
     monkeypatch.setattr("app.skills.chat.SkillCatalog.snapshot", snapshot)
@@ -554,6 +561,15 @@ def test_actual_review_request_still_collects_order_id_at_chat_entry(
         async def scalar(self, _statement):
             return None
 
+        async def commit(self):
+            pass
+
+        async def execute(self, _statement):
+            return SimpleNamespace(rowcount=0)
+
+        async def close(self):
+            pass
+
     async def db_override():
         yield EmptySession()
 
@@ -591,6 +607,7 @@ def test_actual_review_request_still_collects_order_id_at_chat_entry(
     app.dependency_overrides[get_db] = db_override
     monkeypatch.setattr(settings, "skill_chat_enabled", True)
     monkeypatch.setattr(settings, "intent_v15_mode", "DISABLED")
+    monkeypatch.setattr("app.services.chat_run.open_run_session", lambda _tenant_id: EmptySession())
     monkeypatch.setattr("app.services.persistent_chat.PersistentChatService.prepare", prepare)
     monkeypatch.setattr("app.services.persistent_chat.PersistentChatService.complete_without_run", complete_without_run)
     monkeypatch.setattr("app.services.persistent_chat.PersistentChatService.events", events)

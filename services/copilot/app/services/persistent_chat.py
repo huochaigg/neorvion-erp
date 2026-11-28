@@ -27,6 +27,7 @@ class PersistentTurn:
     request_id: str
     history: list[ModelMessage]
     duplicate_answer: str | None = None
+    existing_running: bool = False
 
 
 class PersistentChatService:
@@ -38,7 +39,12 @@ class PersistentChatService:
         self.workflow = workflow
 
     async def prepare(
-        self, conversation_id: int, content: str, client_request_id: str, request_id: str
+        self,
+        conversation_id: int,
+        content: str,
+        client_request_id: str,
+        request_id: str,
+        retry_of_message_id: int | None = None,
     ) -> PersistentTurn:
         """短事务锁定会话并建立本轮占位；模型网络调用不持有数据库事务。"""
         try:
@@ -50,7 +56,13 @@ class PersistentChatService:
             if duplicate is not None:
                 await self.session.commit()
                 if duplicate.status == MessageStatus.RUNNING.value:
-                    raise AppError("该请求仍在运行", code=40981, status_code=409)
+                    return PersistentTurn(
+                        conversation_id,
+                        duplicate.id,
+                        duplicate.request_id,
+                        [],
+                        existing_running=True,
+                    )
                 if duplicate.status != MessageStatus.COMPLETED.value:
                     raise AppError(
                         "该请求已终止，请使用新的 client_request_id 重试",
@@ -62,10 +74,16 @@ class PersistentChatService:
                 )
             if await self.repo.running_message(conversation_id) is not None:
                 raise AppError("该会话已有生成任务", code=40980, status_code=409)
-            history = self._build_history(await self.repo.messages(conversation_id))
-            _, assistant = await self.repo.begin_turn(
-                conversation_id, content, client_request_id, request_id
-            )
+            if retry_of_message_id is not None:
+                history, assistant = await self._prepare_retry(
+                    conversation_id, content, client_request_id, request_id, retry_of_message_id
+                )
+            else:
+                history = self._build_history(await self.repo.messages(conversation_id))
+                _, assistant = await self.repo.begin_turn(
+                    conversation_id, content, client_request_id, request_id
+                )
+                history.append({"role": "user", "content": content})
             conversation.updated_at = __import__("datetime").datetime.now(
                 __import__("datetime").UTC
             )
@@ -78,8 +96,51 @@ class PersistentChatService:
             # 让后续详情/聊天请求表现为无期限等待；取消异常也需要走同一清理路径。
             await self.session.rollback()
             raise
-        history.append({"role": "user", "content": content})
         return PersistentTurn(conversation_id, assistant.id, request_id, history)
+
+    async def _prepare_retry(
+        self,
+        conversation_id: int,
+        content: str,
+        client_request_id: str,
+        request_id: str,
+        retry_of_message_id: int,
+    ) -> tuple[list[ModelMessage], object]:
+        from sqlalchemy import select
+
+        from app.models.conversation import ToolRun
+        from app.services.conversations import _can_retry, _retry_denied_reason
+
+        failed = await self.repo.get_owned_message(conversation_id, retry_of_message_id)
+        if failed is None or failed.role != "assistant":
+            raise AppError("原助手消息不存在", code=40481, status_code=404)
+        tool_runs = list(
+            (
+                await self.session.scalars(
+                    select(ToolRun).where(
+                        ToolRun.tenant_id == self.repo.tenant_id,
+                        ToolRun.message_id == failed.id,
+                    )
+                )
+            ).all()
+        )
+        if not _can_retry(failed.status, tool_runs):
+            raise AppError(
+                _retry_denied_reason(failed.status, tool_runs) or "当前任务不允许重新发送",
+                code=40983,
+                status_code=409,
+            )
+        user = await self.repo.previous_user_message(conversation_id, failed.id)
+        if user is None:
+            raise AppError("找不到对应的用户消息", code=40481, status_code=404)
+        question = (content or user.content or "").strip() or user.content
+        history = self._build_history(await self.repo.messages(conversation_id))
+        if not history or history[-1].get("role") != "user" or history[-1].get("content") != question:
+            history.append({"role": "user", "content": question})
+        assistant = await self.repo.begin_retry_assistant(
+            conversation_id, client_request_id, request_id
+        )
+        return history, assistant
 
     async def fail_before_run(self, turn: PersistentTurn, code: int) -> None:
         """Skill 选择或加载在 AgentRun 建立前失败时，收敛已创建的助手占位消息。"""
@@ -198,11 +259,12 @@ class PersistentChatService:
                     },
                 }
             code = exc.code if isinstance(exc, AppError) else 50268
-            status = (
-                MessageStatus.CANCELLED.value
-                if isinstance(exc, AppError) and exc.code == 49900
-                else MessageStatus.FAILED.value
-            )
+            if isinstance(exc, AppError) and exc.code == 49900:
+                status = MessageStatus.CANCELLED.value
+            elif isinstance(exc, AppError) and exc.code == 50482:
+                status = MessageStatus.TIMED_OUT.value
+            else:
+                status = MessageStatus.FAILED.value
             await self.repo.finish_message(
                 turn.message_id, content="", status=status, error_code=code
             )
@@ -213,16 +275,21 @@ class PersistentChatService:
             raise
         finally:
             if not completed and not terminal_written:
+                cancelled = await disconnected()
+                status = runtime.termination_status or (
+                    MessageStatus.CANCELLED.value if cancelled else MessageStatus.INTERRUPTED.value
+                )
+                code = runtime.termination_code or (49900 if cancelled else 50081)
                 if skill_session is not None:
                     await skill_session.fail(asyncio.CancelledError(), runtime, commit=False)
                 await self.repo.finish_message(
                     turn.message_id,
                     content="",
-                    status=MessageStatus.CANCELLED.value,
-                    error_code=49900,
+                    status=status,
+                    error_code=code,
                 )
                 await self.session.commit()
-                await self.repo.finish_agent_run(agent_run.id, status="CANCELLED", error_code=49900)
+                await self.repo.finish_agent_run(agent_run.id, status=status, error_code=code)
                 await self.session.commit()
 
     async def _record_event(
